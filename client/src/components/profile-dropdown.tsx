@@ -1,0 +1,79 @@
+import { Link, useNavigate } from '@tanstack/react-router'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch } from '@/stores/store'
+import { logout } from '@/stores/auth.slice'
+import toast from 'react-hot-toast'
+
+export function ProfileDropdown() {
+  const user = useSelector((state: any) => state.auth.data?.user)
+  const dispatch = useDispatch<AppDispatch>()
+  const navigate = useNavigate()
+  const logoutHandler = async () => {
+    const refreshToken = localStorage.getItem('refreshToken')
+    await dispatch(logout({refreshToken})).then(()=>{
+      toast.success('Logout successfully!')
+      navigate({ to: '/sign-in', replace: true })
+    })
+  }
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant='ghost' className='relative h-8 w-8 rounded-full'>
+          <Avatar className='h-8 w-8'>
+            <AvatarImage src='/avatars/01.png' alt='@shadcn' />
+            <AvatarFallback>SN</AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className='w-56' align='end' forceMount>
+        <DropdownMenuLabel className='font-normal'>
+          <div className='flex flex-col space-y-1'>
+            <p className='text-sm leading-none font-medium'>{user?.name}</p>
+            <p className='text-muted-foreground text-xs leading-none'>
+              {user?.email}
+            </p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link to='/settings'>
+              Profile
+              <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to='/settings'>
+              Billing
+              <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to='/settings'>
+              Settings
+              <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem>New Team</DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={logoutHandler}>
+          Log out
+          <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
