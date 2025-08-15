@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useSuppliers } from '../context/users-context'
 import { User } from '../data/schema'
+import { useLanguage } from '@/context/language-context'
 
 interface DataTableRowActionsProps {
   row: Row<User>
@@ -19,6 +20,8 @@ interface DataTableRowActionsProps {
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useSuppliers()
+  const { t, language } = useLanguage()
+  const isUrdu = language === 'ur'
   return (
     <>
       <DropdownMenu modal={false}>
@@ -31,14 +34,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <span className='sr-only'>Open menu</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end' className='w-[160px]'>
+        <DropdownMenuContent align={isUrdu ? 'start' : 'end'} className='w-[160px]'>
           <DropdownMenuItem
             onClick={() => {
               setCurrentRow(row.original)
               setOpen('edit')
             }}
           >
-            Edit
+            {t('edit')}
             <DropdownMenuShortcut>
               <IconEdit size={16} />
             </DropdownMenuShortcut>
@@ -51,7 +54,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             }}
             className='text-red-500!'
           >
-            Delete
+            {t('delete')}
             <DropdownMenuShortcut>
               <IconTrash size={16} />
             </DropdownMenuShortcut>

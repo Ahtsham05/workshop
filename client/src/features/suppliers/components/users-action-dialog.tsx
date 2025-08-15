@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,16 +26,19 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addSupplier, updateSupplier } from '@/stores/supplier.slice' // Adjusted to supplier slice
 import toast from 'react-hot-toast'
+import { useLanguage } from '@/context/language-context'
+import { cn } from '@/lib/utils'
 
-const formSchema = z.object({
-  name: z.string().min(1, { message: 'Name is required.' }),
+// Define the form schema with translations
+const getFormSchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(1, { 
+    message: t('name_required') || 'Name is required.' 
+  }),
   email: z.string().optional(),
   phone: z.string(),
-  whatsapp: z.string().optional(),  // Added whatsapp field
+  whatsapp: z.string().optional(),
   address: z.string().optional(),
 })
-
-type supplierForm = z.infer<typeof formSchema>
 
 interface Props {
   currentRow?: any
@@ -44,7 +48,14 @@ interface Props {
 }
 
 export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
+  const { t, language } = useLanguage()
   const isEdit = !!currentRow
+  const isUrdu = language === 'ur'
+  
+  // Use the dynamic form schema with translations
+  const formSchema = getFormSchema(t)
+  type supplierForm = z.infer<typeof formSchema>
+  
   const form = useForm<supplierForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
@@ -55,22 +66,33 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
           name: '',
           email: 'supplier@gmail.com',
           phone: '+923',
-          whatsapp: '+923',  // Added whatsapp field
+          whatsapp: '+923',
           address: 'address',
         },
   })
+  
+  // Watch the phone field and update whatsapp field automatically
+  const phoneValue = form.watch('phone')
+  
+  // Update whatsapp field when phone changes
+  useEffect(() => {
+    // Don't update if we're in edit mode and the component just mounted
+    if (phoneValue && (!isEdit || phoneValue !== currentRow?.phone)) {
+      form.setValue('whatsapp', phoneValue)
+    }
+  }, [phoneValue, form, isEdit, currentRow])
 
   const dispatch = useDispatch<AppDispatch>()
 
-  const onSubmit = async (values: supplierForm) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (isEdit) {
       await dispatch(updateSupplier({ ...values, _id: currentRow?.id })).then(() => {
-        toast.success('Supplier updated successfully')
+        toast.success(t('supplier_updated_success'))
         setFetch((prev: any) => !prev)
       })
     } else {
       await dispatch(addSupplier(values)).then(() => {
-        toast.success('Supplier created successfully')
+        toast.success(t('supplier_created_success'))
         setFetch((prev: any) => !prev)
       })
     }
@@ -87,11 +109,11 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
       }}
     >
       <DialogContent className='sm:max-w-lg'>
-        <DialogHeader className='text-left'>
-          <DialogTitle>{isEdit ? 'Edit Supplier' : 'Add New Supplier'}</DialogTitle>
+        <DialogHeader className={cn('text-left', isUrdu && 'text-right')}>
+          <DialogTitle className='mb-3'>{isEdit ? t('edit_supplier') : t('add_supplier')}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update the Supplier here.' : 'Create new Supplier here.'}
-            Click save when you're done.
+            {isEdit ? t('update_supplier') : t('create_supplier')} 
+            {t('click_save')}
           </DialogDescription>
         </DialogHeader>
         <div className='-mr-4 h-[26.25rem] w-full overflow-y-auto py-1 pr-4'>
@@ -106,12 +128,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='name'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
-                      Supplier Name
+                    <FormLabel className={cn('col-span-2', isUrdu ? 'text-left' : 'text-right')}>
+                      {t('supplier_name')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Supplier Name'
+                        placeholder={t('supplier_name')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -126,12 +148,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='email'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
-                      Email
+                    <FormLabel className={cn('col-span-2', isUrdu ? 'text-left' : 'text-right')}>
+                      {t('email')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Supplier Email'
+                        placeholder={`${t('supplier_name')} ${t('email')}`}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -146,12 +168,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='phone'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
-                      Phone
+                    <FormLabel className={cn('col-span-2', isUrdu ? 'text-left' : 'text-right')}>
+                      {t('phone')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Supplier Phone'
+                        placeholder={`${t('supplier_name')} ${t('phone')}`}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -166,12 +188,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='whatsapp'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
-                      Whatsapp
+                    <FormLabel className={cn('col-span-2', isUrdu ? 'text-left' : 'text-right')}>
+                      {t('whatsapp')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Supplier Whatsapp'
+                        placeholder={`${t('supplier_name')} ${t('whatsapp')}`}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -186,12 +208,12 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='address'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
-                      Address
+                    <FormLabel className={cn('col-span-2', isUrdu ? 'text-left' : 'text-right')}>
+                      {t('address')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Supplier Address'
+                        placeholder={`${t('supplier_name')} ${t('address')}`}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -206,7 +228,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
         </div>
         <DialogFooter>
           <Button type='submit' form='supplier-form'>
-            Save changes
+            {t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

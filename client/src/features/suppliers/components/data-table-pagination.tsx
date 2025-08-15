@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Table } from '@tanstack/react-table';
+import { useLanguage } from '@/context/language-context';
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>; // The table instance (usually contains methods like setPageSize, setPageIndex, etc.)
@@ -30,6 +31,7 @@ export function DataTablePagination<TData>({
   paggination,
 }: DataTablePaginationProps<TData>) {
   const { limit, setLimit, currentPage, setCurrentPage, totalPage } = paggination;
+  const { t } = useLanguage();
 
   return (
     <div
@@ -37,22 +39,26 @@ export function DataTablePagination<TData>({
       style={{ overflowClipMargin: 1 }}
     >
       <div className="text-muted-foreground hidden flex-1 text-sm sm:block">
-        {table.getFilteredSelectedRowModel().rows.length} of{' '}
-        {table.getFilteredRowModel().rows.length} row(s) selected.
+        {table.getFilteredSelectedRowModel().rows.length} {t('of')}{' '}
+        {table.getFilteredRowModel().rows.length} {t('row_selected')}
       </div>
       <div className="flex items-center sm:space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
-          <p className="hidden text-sm font-medium sm:block">Rows per page</p>
+          <p className="hidden text-sm font-medium sm:block">{t('rows_per_page')}</p>
           <Select
             value={`${limit}`}
             onValueChange={(value) => {
-              setLimit(Number(value)); // Update the page size (limit)
-              setCurrentPage(1); // Reset to first page when page size changes
-              table.setPageSize(Number(value))
+              // Handle the page size change
+              const newLimit = Number(value);
+              
+              console.log(`DataTablePagination: Changing page size from ${limit} to ${newLimit}`);
+              
+              // Call the provided setLimit function which should handle the API fetch
+              setLimit(newLimit);
             }}
           >
             <SelectTrigger className="h-8 w-[70px]">
-              <SelectValue placeholder={limit} />
+              <SelectValue>{limit}</SelectValue>
             </SelectTrigger>
             <SelectContent side="top">
               {[10, 20, 30, 40, 50].map((pageSize) => (
@@ -64,7 +70,7 @@ export function DataTablePagination<TData>({
           </Select>
         </div>
         <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Page {currentPage} of {totalPage}
+          {t('page')} {currentPage > 0 ? currentPage : 1} {t('of')} {totalPage > 0 ? totalPage : 1}
         </div>
         <div className="flex items-center space-x-2">
           <Button
@@ -89,7 +95,7 @@ export function DataTablePagination<TData>({
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => setCurrentPage(currentPage + 1)} // Go to next page
-            disabled={currentPage === totalPage}
+            disabled={currentPage === totalPage || totalPage === 0}
           >
             <span className="sr-only">Go to next page</span>
             <ChevronRightIcon className="h-4 w-4" />
@@ -98,7 +104,7 @@ export function DataTablePagination<TData>({
             variant="outline"
             className="hidden h-8 w-8 p-0 lg:flex"
             onClick={() => setCurrentPage(totalPage)} // Go to last page
-            disabled={currentPage === totalPage}
+            disabled={currentPage === totalPage || totalPage === 0}
           >
             <span className="sr-only">Go to last page</span>
             <DoubleArrowRightIcon className="h-4 w-4" />

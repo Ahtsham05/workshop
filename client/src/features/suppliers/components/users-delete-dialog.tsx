@@ -11,6 +11,7 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { deleteSupplier } from '@/stores/supplier.slice'  // Changed to deleteSupplier
 import toast from 'react-hot-toast'
+import { useLanguage } from '@/context/language-context'
 
 interface Props {
   open: boolean
@@ -22,13 +23,14 @@ interface Props {
 export function SuppliersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: Props) {
   const [value, setValue] = useState('')
   const dispatch = useDispatch<AppDispatch>()
+  const { t } = useLanguage()
 
   const handleDelete = async () => {
     if (value.trim() !== currentRow.name) return
 
     onOpenChange(false)
     await dispatch(deleteSupplier(currentRow.id)).then(() => {
-      toast.success('Supplier deleted successfully')
+      toast.success(t('supplier_deleted_success'))
       setFetch((prev: any) => !prev)
     })
   }
@@ -45,40 +47,40 @@ export function SuppliersDeleteDialog({ open, onOpenChange, currentRow, setFetch
             className='stroke-destructive mr-1 inline-block'
             size={18}
           />{' '}
-          Delete Supplier
+          {t('delete_supplier')}
         </span>
       }
       desc={
         <div className='space-y-4'>
           <p className='mb-2'>
-            Are you sure you want to delete{' '}
+            {t('delete_confirmation')}{' '}
             <span className='font-bold'>{currentRow.name}</span>?
             <br />
-            This action will permanently remove the supplier{' '}
+            {t('delete_warning')}{' '}
             <span className='font-bold'>
               {currentRow.name.toUpperCase()}
             </span>{' '}
-            from the system. This cannot be undone.
+            {t('from_system')}
           </p>
 
           <Label className='my-2'>
-            Supplier:
+            {t('supplier_name')}:
             <Input
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder='Enter Supplier Name to confirm deletion.'
+              placeholder={t('enter_name_confirm')}
             />
           </Label>
 
           <Alert variant='destructive'>
-            <AlertTitle>Warning!</AlertTitle>
+            <AlertTitle>{t('warning')}</AlertTitle>
             <AlertDescription>
-              Please be careful, this operation cannot be rolled back.
+              {t('operation_warning')}
             </AlertDescription>
           </Alert>
         </div>
       }
-      confirmText='Delete'
+      confirmText={t('delete')}
       destructive
     />
   )

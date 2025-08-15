@@ -11,6 +11,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 // import { handleServerError } from '@/utils/handle-server-error'
 import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
+import { LanguageProvider } from './context/language-context'
 import { Provider } from "react-redux";
 import { store } from './stores/store'
 import './index.css'
@@ -44,9 +45,11 @@ if (!rootElement.innerHTML) {
       <Provider store={store}>
         {/* <QueryClientProvider client={queryClient}> */}
         <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
-          <FontProvider>
-            <RouterProvider router={router} />
-          </FontProvider>
+          <LanguageProvider>
+            <FontProvider>
+              <RouterProvider router={router} />
+            </FontProvider>
+          </LanguageProvider>
         </ThemeProvider>
         {/* </QueryClientProvider> */}
         <Toaster />

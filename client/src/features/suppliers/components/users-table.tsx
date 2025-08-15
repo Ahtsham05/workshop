@@ -25,6 +25,8 @@ import {
 import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { useLanguage } from '@/context/language-context'
+import { cn } from '@/lib/utils'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -44,9 +46,14 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
+  const { t, language } = useLanguage()
 
   // console.log("data", data)
   // console.log("paggination", paggination)
+
+  // For debugging
+  console.log(`Received ${data.length} suppliers in SupplierTable component`);
+  console.log("Pagination settings:", paggination);
 
   const table = useReactTable({
     data,
@@ -56,7 +63,11 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
       columnVisibility,
       rowSelection,
       columnFilters,
+      // We're using server pagination, so don't set pagination state here
     },
+    // We're using server pagination, so manually set page size to match limit
+    manualPagination: true,
+    pageCount: paggination.totalPage,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -64,7 +75,7 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    // Don't use getPaginationRowModel as we're using server-side pagination
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
@@ -108,7 +119,10 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
-                      className={cell.column.columnDef.meta?.className ?? ''}
+                      className={cn(
+                        cell.column.columnDef.meta?.className ?? '',
+                        language === 'ur' ? 'text-right' : ''
+                      )}
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
@@ -124,7 +138,7 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
                   colSpan={columns.length}
                   className='h-24 text-center'
                 >
-                  No results.
+                  {t('no_results')}
                 </TableCell>
               </TableRow>
             )}

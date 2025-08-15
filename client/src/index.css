@@ -3,6 +3,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* We're using LTR for all languages, so no RTL-specific styles needed */
+
+/* Urdu font class (with LTR direction) */
+.font-urdu {
+  font-family: 'Noto Nastaliq Urdu', system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 2.5; /* Increased line height for better readability of Nastaliq script */
+  letter-spacing: 0.02em; /* Added letter spacing for better readability in LTR mode */
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useLanguage } from '@/context/language-context'
 
 interface DataTableColumnHeaderProps<TData, TValue>
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -26,44 +27,59 @@ export function DataTableColumnHeader<TData, TValue>({
   title,
   className,
 }: DataTableColumnHeaderProps<TData, TValue>) {
+  const { t, language } = useLanguage();
+  const isUrdu = language === 'ur';
+  
   if (!column.getCanSort()) {
-    return <div className={cn(className)}>{title}</div>
+    return <div className={cn(className, isUrdu && 'text-right')}>{title}</div>
   }
 
   return (
-    <div className={cn('flex items-center space-x-2', className)}>
+    <div className={cn('flex items-center', isUrdu ? 'justify-end space-x-reverse space-x-2' : 'space-x-2', className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant='ghost'
             size='sm'
-            className='data-[state=open]:bg-accent -ml-3 h-8'
+            className={cn(
+              'data-[state=open]:bg-accent h-8', 
+              isUrdu ? '-mr-3' : '-ml-3'
+            )}
           >
             <span>{title}</span>
             {column.getIsSorted() === 'desc' ? (
-              <ArrowDownIcon className='ml-2 h-4 w-4' />
+              <ArrowDownIcon className={isUrdu ? 'mr-2 h-4 w-4' : 'ml-2 h-4 w-4'} />
             ) : column.getIsSorted() === 'asc' ? (
-              <ArrowUpIcon className='ml-2 h-4 w-4' />
+              <ArrowUpIcon className={isUrdu ? 'mr-2 h-4 w-4' : 'ml-2 h-4 w-4'} />
             ) : (
-              <CaretSortIcon className='ml-2 h-4 w-4' />
+              <CaretSortIcon className={isUrdu ? 'mr-2 h-4 w-4' : 'ml-2 h-4 w-4'} />
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='start'>
+        <DropdownMenuContent align={isUrdu ? 'end' : 'start'}>
           <DropdownMenuItem onClick={() => column.toggleSorting(false)}>
-            <ArrowUpIcon className='text-muted-foreground/70 mr-2 h-3.5 w-3.5' />
-            Asc
+            <ArrowUpIcon className={cn(
+              'text-muted-foreground/70 h-3.5 w-3.5',
+              isUrdu ? 'ml-2' : 'mr-2'
+            )} />
+            {t('asc')}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => column.toggleSorting(true)}>
-            <ArrowDownIcon className='text-muted-foreground/70 mr-2 h-3.5 w-3.5' />
-            Desc
+            <ArrowDownIcon className={cn(
+              'text-muted-foreground/70 h-3.5 w-3.5',
+              isUrdu ? 'ml-2' : 'mr-2'
+            )} />
+            {t('desc')}
           </DropdownMenuItem>
           {column.getCanHide() && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>
-                <EyeNoneIcon className='text-muted-foreground/70 mr-2 h-3.5 w-3.5' />
-                Hide
+                <EyeNoneIcon className={cn(
+                  'text-muted-foreground/70 h-3.5 w-3.5',
+                  isUrdu ? 'ml-2' : 'mr-2'
+                )} />
+                {t('hide')}
               </DropdownMenuItem>
             </>
           )}

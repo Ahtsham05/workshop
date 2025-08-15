@@ -27,26 +27,42 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
+import { useLanguage } from '@/context/language-context'
 
 export function NavGroup({ title, items }: NavGroup) {
   const { state } = useSidebar()
+  const { t } = useLanguage()
   const href = useLocation({ select: (location) => location.href })
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{title}</SidebarGroupLabel>
+      <SidebarGroupLabel>{t(title.toLowerCase())}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
-
+          // Get the translated title
+          const translatedTitle = t(item.title.toLowerCase().replace(/ /g, '_'))
+          
           if (!item.items)
-            return <SidebarMenuLink key={key} item={item} href={href} />
+            return <SidebarMenuLink 
+              key={key} 
+              item={{ ...item, title: translatedTitle }} 
+              href={href} 
+            />
 
           if (state === 'collapsed')
             return (
-              <SidebarMenuCollapsedDropdown key={key} item={item} href={href} />
+              <SidebarMenuCollapsedDropdown 
+                key={key} 
+                item={{ ...item, title: translatedTitle }} 
+                href={href} 
+              />
             )
 
-          return <SidebarMenuCollapsible key={key} item={item} href={href} />
+          return <SidebarMenuCollapsible 
+            key={key} 
+            item={{ ...item, title: translatedTitle }} 
+            href={href} 
+          />
         })}
       </SidebarMenu>
     </SidebarGroup>
@@ -84,6 +100,7 @@ const SidebarMenuCollapsible = ({
   href: string
 }) => {
   const { setOpenMobile } = useSidebar()
+  const { t } = useLanguage()
   return (
     <Collapsible
       asChild
@@ -101,20 +118,23 @@ const SidebarMenuCollapsible = ({
         </CollapsibleTrigger>
         <CollapsibleContent className='CollapsibleContent'>
           <SidebarMenuSub>
-            {item.items.map((subItem) => (
-              <SidebarMenuSubItem key={subItem.title}>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={checkIsActive(href, subItem)}
-                >
-                  <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
-                    {subItem.icon && <subItem.icon />}
-                    <span>{subItem.title}</span>
-                    {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
-                  </Link>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ))}
+            {item.items.map((subItem) => {
+              const translatedSubTitle = t(subItem.title.toLowerCase().replace(/ /g, '_'))
+              return (
+                <SidebarMenuSubItem key={subItem.title}>
+                  <SidebarMenuSubButton
+                    asChild
+                    isActive={checkIsActive(href, subItem)}
+                  >
+                    <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
+                      {subItem.icon && <subItem.icon />}
+                      <span>{translatedSubTitle}</span>
+                      {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              )
+            })}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>
@@ -129,6 +149,7 @@ const SidebarMenuCollapsedDropdown = ({
   item: NavCollapsible
   href: string
 }) => {
+  const { t } = useLanguage()
   return (
     <SidebarMenuItem>
       <DropdownMenu>
@@ -148,20 +169,23 @@ const SidebarMenuCollapsedDropdown = ({
             {item.title} {item.badge ? `(${item.badge})` : ''}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {item.items.map((sub) => (
-            <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
-              <Link
-                to={sub.url}
-                className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
-              >
-                {sub.icon && <sub.icon />}
-                <span className='max-w-52 text-wrap'>{sub.title}</span>
-                {sub.badge && (
-                  <span className='ml-auto text-xs'>{sub.badge}</span>
-                )}
-              </Link>
-            </DropdownMenuItem>
-          ))}
+          {item.items.map((sub) => {
+            const translatedSubTitle = t(sub.title.toLowerCase().replace(/ /g, '_'))
+            return (
+              <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
+                <Link
+                  to={sub.url}
+                  className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
+                >
+                  {sub.icon && <sub.icon />}
+                  <span className='max-w-52 text-wrap'>{translatedSubTitle}</span>
+                  {sub.badge && (
+                    <span className='ml-auto text-xs'>{sub.badge}</span>
+                  )}
+                </Link>
+              </DropdownMenuItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
     </SidebarMenuItem>

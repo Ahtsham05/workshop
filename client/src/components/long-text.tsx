@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useLanguage } from '@/context/language-context'
 
 interface Props {
   children: React.ReactNode
@@ -25,6 +26,8 @@ export default function LongText({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [isOverflown, setIsOverflown] = useState(false)
+  const { language } = useLanguage()
+  const isUrdu = language === 'ur'
 
   useEffect(() => {
     if (checkOverflow(ref.current)) {
@@ -37,7 +40,7 @@ export default function LongText({
 
   if (!isOverflown)
     return (
-      <div ref={ref} className={cn('truncate', className)}>
+      <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
         {children}
       </div>
     )
@@ -48,12 +51,12 @@ export default function LongText({
         <TooltipProvider delayDuration={0}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div ref={ref} className={cn('truncate', className)}>
+              <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
                 {children}
               </div>
             </TooltipTrigger>
-            <TooltipContent>
-              <p className={contentClassName}>{children}</p>
+            <TooltipContent className={isUrdu ? 'text-right' : ''}>
+              <p className={cn(contentClassName, isUrdu ? 'text-right' : '')}>{children}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -61,12 +64,12 @@ export default function LongText({
       <div className='sm:hidden'>
         <Popover>
           <PopoverTrigger asChild>
-            <div ref={ref} className={cn('truncate', className)}>
+            <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
               {children}
             </div>
           </PopoverTrigger>
-          <PopoverContent className={cn('w-fit', contentClassName)}>
-            <p>{children}</p>
+          <PopoverContent className={cn('w-fit', isUrdu ? 'text-right' : '', contentClassName)}>
+            <p className={isUrdu ? 'text-right' : ''}>{children}</p>
           </PopoverContent>
         </Popover>
       </div>

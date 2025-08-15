@@ -27,6 +27,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { logout } from '@/stores/auth.slice'
 import toast from 'react-hot-toast'
+import { useLanguage } from '@/context/language-context'
 
 export function NavUser({
   user,
@@ -39,14 +40,15 @@ export function NavUser({
 }) {
 
   const auth = useSelector((state: any) => state.auth?.data?.user)
-  // console.log('auth', auth)
   const { isMobile } = useSidebar()
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
+  const { t } = useLanguage()
+  
   const logoutHandler = async () => {
     const refreshToken = localStorage.getItem('refreshToken')
     await dispatch(logout({ refreshToken })).then(() => {
-      toast.success('Logout successfully!')
+      toast.success(t('logout_success') || 'Logout successfully!')
       navigate({ to: '/sign-in', replace: true })
     })
   }
@@ -92,7 +94,7 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <Sparkles />
-                Upgrade to Pro
+                {t('upgrade_to_pro') || 'Upgrade to Pro'}
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -100,26 +102,26 @@ export function NavUser({
               <DropdownMenuItem asChild>
                 <Link to='/settings/account'>
                   <BadgeCheck />
-                  Account
+                  {t('account') || 'Account'}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to='/settings'>
                   <CreditCard />
-                  Billing
+                  {t('billing') || 'Billing'}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to='/settings/notifications'>
                   <Bell />
-                  Notifications
+                  {t('notifications') || 'Notifications'}
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logoutHandler}>
               <LogOut />
-              Log out
+              {t('log_out') || 'Log out'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

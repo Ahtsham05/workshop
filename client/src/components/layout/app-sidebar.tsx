@@ -9,8 +9,11 @@ import { NavGroup } from '@/components/layout/nav-group'
 import { NavUser } from '@/components/layout/nav-user'
 import { TeamSwitcher } from '@/components/layout/team-switcher'
 import { sidebarData } from './data/sidebar-data'
+import { useLanguage } from '@/context/language-context'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  // We don't need to explicitly use the language context here,
+  // as the NavGroup component will handle translations
   return (
     <Sidebar collapsible='icon' variant='floating' {...props}>
       <SidebarHeader>

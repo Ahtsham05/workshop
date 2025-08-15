@@ -2,6 +2,8 @@ import { Table } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { DataTableViewOptions } from './data-table-view-options'
 import { useState } from 'react'
+import { useLanguage } from '@/context/language-context'
+import { cn } from '@/lib/utils'
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>
@@ -12,18 +14,20 @@ export function DataTableToolbar<TData>({
 }: DataTableToolbarProps<TData>) {
   // const isFiltered = table.getState().columnFilters.length > 0
   const [filterValue, setFilterValue] = useState('');
+  const { t } = useLanguage();
+  // const isUrdu = language === 'ur';
 
   return (
     <div className='flex items-center justify-between'>
       <div className='flex flex-1 flex-col-reverse items-start gap-y-2 sm:flex-row sm:items-center sm:space-x-2'>
         <Input
-          placeholder='Filter Suppliers...'
+          placeholder={t('search_suppliers')}
           value={filterValue}
           onChange={(event) => {
             setFilterValue(event.target.value)
             table.setGlobalFilter(event.target.value)
           }}
-          className='h-8 w-[150px] lg:w-[250px]'
+          className={cn('h-8 w-[150px] lg:w-[250px]')}
         />
         <div className='flex gap-x-2'>
           {/* {table.getColumn('status') && (

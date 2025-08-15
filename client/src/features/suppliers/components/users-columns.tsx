@@ -4,9 +4,14 @@ import LongText from '@/components/long-text'
 import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
+import { useLanguage } from '@/context/language-context'
 
-export const columns: ColumnDef<Supplier>[] = [
-  {
+export function useSupplierColumns() {
+  const { t, language } = useLanguage();
+  const isUrdu = language === 'ur';
+  
+  // Define all column objects separately so we can reorder them
+  const selectColumn: ColumnDef<Supplier> = {
     id: 'select',
     header: ({ table }) => (
       <Checkbox
@@ -26,37 +31,72 @@ export const columns: ColumnDef<Supplier>[] = [
     ),
     enableSorting: false,
     enableHiding: true,
-  },
-  {
+  };
+
+  const nameColumn: ColumnDef<Supplier> = {
     accessorKey: 'name',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Supplier Name' />,  // Changed to Supplier Name
+    header: ({ column }) => <DataTableColumnHeader column={column} title={t('supplier_name')} />,
     cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('name')}</LongText>,
     enableHiding: true,
-  },
-  {
+  };
+
+  const emailColumn: ColumnDef<Supplier> = {
     accessorKey: 'email',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Email' />,  // Changed to Email
+    header: ({ column }) => <DataTableColumnHeader column={column} title={t('email')} />,
     cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('email')}</LongText>,
     enableHiding: true,
-  },
-  {
+  };
+
+  const phoneColumn: ColumnDef<Supplier> = {
     accessorKey: 'phone',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Phone' />,  // Changed to Phone
+    header: ({ column }) => <DataTableColumnHeader column={column} title={t('phone')} />,
     cell: ({ row }) => <div>{row.getValue('phone')}</div>,
-  },
-  {
+  };
+
+  const whatsappColumn: ColumnDef<Supplier> = {
     accessorKey: 'whatsapp',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Whatsapp' />,  // Changed to Whatsapp
+    header: ({ column }) => <DataTableColumnHeader column={column} title={t('whatsapp')} />,
     cell: ({ row }) => <div>{row.getValue('whatsapp')}</div>,
-  },
-  {
+  };
+
+  const addressColumn: ColumnDef<Supplier> = {
     accessorKey: 'address',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Address' />,  // Changed to Address
+    header: ({ column }) => <DataTableColumnHeader column={column} title={t('address')} />,
     cell: ({ row }) => <div>{row.getValue('address')}</div>,
-  },
-  {
+  };
+
+  const actionsColumn: ColumnDef<Supplier> = {
     id: 'actions',
-    header: "Actions",
+    header: t('actions'),
     cell: DataTableRowActions,
+  };
+  
+  // Define columns in different orders based on language
+  let columns: ColumnDef<Supplier>[];
+  
+  if (isUrdu) {
+    // For Urdu: actions, address, whatsapp, phone, email, name, select (right to left)
+    columns = [
+      selectColumn,
+      actionsColumn,
+      addressColumn,
+      whatsappColumn, 
+      phoneColumn,
+      emailColumn,
+      nameColumn
+    ];
+  } else {
+    // For English: select, name, email, phone, whatsapp, address, actions (left to right)
+    columns = [
+      selectColumn,
+      nameColumn,
+      emailColumn,
+      phoneColumn,
+      whatsappColumn,
+      addressColumn,
+      actionsColumn
+    ];
   }
-];
+  
+  return columns;
+}
