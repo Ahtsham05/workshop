@@ -31,6 +31,18 @@ const translations: Translations = {
     "edit_supplier": "Edit Supplier",
     "delete_supplier": "Delete Supplier",
     "supplier_name": "Supplier Name",
+    
+    // Customers page
+    "customers_list": "Customers List",
+    "manage_customers": "Manage your Customers here.",
+    "search_customers": "Search customers...",
+    "filter_customers": "Filter Customers...",
+    "add_customer": "Add Customer",
+    "edit_customer": "Edit Customer",
+    "delete_customer": "Delete Customer",
+    "customer_name": "Customer Name",
+    
+    // Common fields
     "email": "Email",
     "phone": "Phone",
     "whatsapp": "Whatsapp",
@@ -58,12 +70,16 @@ const translations: Translations = {
     // Dialog content
     "update_supplier": "Update the Supplier here.",
     "create_supplier": "Create new Supplier here.",
+    "update_customer": "Update the Customer here.",
+    "create_customer": "Create new Customer here.",
     "click_save": "Click save when you're done.",
     "save_changes": "Save changes",
     "delete_confirmation": "Are you sure you want to delete",
     "delete_warning": "This action will permanently remove the supplier",
+    "delete_customer_warning": "This action will permanently remove the customer",
     "from_system": "from the system. This cannot be undone.",
     "enter_name_confirm": "Enter Supplier Name to confirm deletion.",
+    "enter_customer_name_confirm": "Enter Customer Name to confirm deletion.",
     "warning": "Warning!",
     "operation_warning": "Please be careful, this operation cannot be rolled back.",
     
@@ -74,6 +90,9 @@ const translations: Translations = {
     "supplier_created_success": "Supplier created successfully",
     "supplier_updated_success": "Supplier updated successfully",
     "supplier_deleted_success": "Supplier deleted successfully",
+    "customer_created_success": "Customer created successfully",
+    "customer_updated_success": "Customer updated successfully",
+    "customer_deleted_success": "Customer deleted successfully",
     
     // Sidebar Navigation
     "general": "General",
@@ -112,6 +131,18 @@ const translations: Translations = {
     "edit_supplier": "سپلائر میں ترمیم کریں",
     "delete_supplier": "سپلائر حذف کریں",
     "supplier_name": "سپلائر کا نام",
+    
+    // Customers page
+    "customers_list": "کسٹمرز کی فہرست",
+    "manage_customers": "اپنے کسٹمرز کو یہاں منظم کریں۔",
+    "search_customers": "کسٹمرز تلاش کریں...",
+    "filter_customers": "کسٹمرز فلٹر کریں...",
+    "add_customer": "کسٹمر شامل کریں",
+    "edit_customer": "کسٹمر میں ترمیم کریں",
+    "delete_customer": "کسٹمر حذف کریں",
+    "customer_name": "کسٹمر کا نام",
+    
+    // Common fields
     "email": "ای میل",
     "phone": "فون",
     "whatsapp": "واٹس ایپ",
@@ -139,12 +170,16 @@ const translations: Translations = {
     // Dialog content
     "update_supplier": "یہاں سپلائر کو اپ ڈیٹ کریں۔",
     "create_supplier": "یہاں نیا سپلائر بنائیں۔",
+    "update_customer": "یہاں کسٹمر کو اپ ڈیٹ کریں۔",
+    "create_customer": "یہاں نیا کسٹمر بنائیں۔",
     "click_save": "جب آپ مکمل کر لیں تو محفوظ کریں پر کلک کریں۔",
     "save_changes": "تبدیلیاں محفوظ کریں",
     "delete_confirmation": "کیا آپ واقعی حذف کرنا چاہتے ہیں",
     "delete_warning": "یہ عمل سپلائر کو مستقل طور پر سسٹم سے ہٹا دے گا",
+    "delete_customer_warning": "یہ عمل کسٹمر کو مستقل طور پر سسٹم سے ہٹا دے گا",
     "from_system": "اسے واپس نہیں کیا جا سکتا۔",
     "enter_name_confirm": "حذف کرنے کی تصدیق کے لیے سپلائر کا نام درج کریں۔",
+    "enter_customer_name_confirm": "حذف کرنے کی تصدیق کے لیے کسٹمر کا نام درج کریں۔",
     "warning": "انتباہ!",
     "operation_warning": "براہ کرم محتاط رہیں، اس آپریشن کو واپس نہیں کیا جا سکتا۔",
     
@@ -155,6 +190,9 @@ const translations: Translations = {
     "supplier_created_success": "سپلائر کامیابی سے بنایا گیا",
     "supplier_updated_success": "سپلائر کامیابی سے اپڈیٹ ہو گیا",
     "supplier_deleted_success": "سپلائر کامیابی سے حذف کر دیا گیا",
+    "customer_created_success": "کسٹمر کامیابی سے بنایا گیا",
+    "customer_updated_success": "کسٹمر کامیابی سے اپڈیٹ ہو گیا",
+    "customer_deleted_success": "کسٹمر کامیابی سے حذف کر دیا گیا",
     
     // Sidebar Navigation
     "general": "عمومی",

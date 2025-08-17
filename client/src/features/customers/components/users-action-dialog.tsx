@@ -25,6 +25,8 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addCustomer, updateCustomer } from '@/stores/customer.slice'
 import toast from 'react-hot-toast'
+import { useLanguage } from '@/context/language-context'
+import { useEffect } from 'react'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -45,6 +47,7 @@ interface Props {
 
 export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
   const isEdit = !!currentRow
+  const { t } = useLanguage()
   const form = useForm<customerForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
@@ -62,15 +65,25 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
 
   const dispatch = useDispatch<AppDispatch>()
 
+  // Auto-copy phone to WhatsApp field
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === 'phone' && value.phone) {
+        form.setValue('whatsapp', value.phone)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [form])
+
   const onSubmit = async (values: customerForm) => {
     if (isEdit) {
       await dispatch(updateCustomer({ ...values, _id: currentRow?.id })).then(() => {
-        toast.success('Customer updated successfully')
+        toast.success(t('customer_updated_success'))
         setFetch((prev: any) => !prev)
       })
     } else {
       await dispatch(addCustomer(values)).then(() => {
-        toast.success('Customer created successfully')
+        toast.success(t('customer_created_success'))
         setFetch((prev: any) => !prev)
       })
     }
@@ -88,10 +101,9 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
     >
       <DialogContent className='sm:max-w-lg'>
         <DialogHeader className='text-left'>
-          <DialogTitle>{isEdit ? 'Edit Customer' : 'Add New Customer'}</DialogTitle>
+          <DialogTitle>{isEdit ? t('edit_customer') : t('add_customer')}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update the Customer here.' : 'Create new Customer here.'}
-            Click save when you're done.
+            {isEdit ? t('update_customer') : t('create_customer')} {t('click_save')}
           </DialogDescription>
         </DialogHeader>
         <div className='-mr-4 h-[26.25rem] w-full overflow-y-auto py-1 pr-4'>
@@ -107,11 +119,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 text-right'>
-                      Customer Name
+                      {t('customer_name')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Customer Name'
+                        placeholder={t('customer_name')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -127,11 +139,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 text-right'>
-                      Email
+                      {t('email')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Customer Email'
+                        placeholder={t('email')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -147,11 +159,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 text-right'>
-                      Phone
+                      {t('phone')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Customer Phone'
+                        placeholder={t('phone')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -167,11 +179,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 text-right'>
-                      Whatsapp
+                      {t('whatsapp')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Customer Whatsapp'
+                        placeholder={t('whatsapp')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -187,11 +199,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 text-right'>
-                      Address
+                      {t('address')}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder='Customer Address'
+                        placeholder={t('address')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}
@@ -206,7 +218,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         </div>
         <DialogFooter>
           <Button type='submit' form='customer-form'>
-            Save changes
+            {t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

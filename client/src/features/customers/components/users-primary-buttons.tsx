@@ -1,9 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { useCustomers } from '../context/users-context'
 import { PlusCircle } from 'lucide-react'
+import { useLanguage } from '@/context/language-context'
 
 export default function UsersPrimaryButtons() {
   const { setOpen } = useCustomers()
+  const { t } = useLanguage()
   return (
     <div className='flex gap-2'>
       {/* <Button
@@ -14,7 +16,7 @@ export default function UsersPrimaryButtons() {
         <span>Invite User</span> <IconMailPlus size={18} />
       </Button> */}
       <Button className='space-x-1' onClick={() => setOpen('add')}>
-        <span>Add Customers</span> <PlusCircle size={18} />
+        <span>{t('add_customer')}</span> <PlusCircle size={18} />
       </Button>
     </div>
   )

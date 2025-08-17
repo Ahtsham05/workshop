@@ -4,8 +4,12 @@ import LongText from '@/components/long-text'
 import { Customer } from '../data/schema'  // Changed from Product to Customer
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
+import { useLanguage } from '@/context/language-context'
 
-export const columns: ColumnDef<Customer>[] = [
+export const useCustomerColumns = (): ColumnDef<Customer>[] => {
+  const { t } = useLanguage()
+  
+  return [
   {
     id: 'select',
     header: ({ table }) => (
@@ -29,34 +33,35 @@ export const columns: ColumnDef<Customer>[] = [
   },
   {
     accessorKey: 'name',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Customer Name' />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='customer_name' />,
     cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('name')}</LongText>,
     enableHiding: true,
   },
   {
     accessorKey: 'email',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Email' />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='email' />,
     cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('email')}</LongText>,
     enableHiding: true,
   },
   {
     accessorKey: 'phone',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Phone' />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='phone' />,
     cell: ({ row }) => <div>{row.getValue('phone')}</div>,
   },
   {
     accessorKey: 'whatsapp',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Whatsapp' />,  // Added whatsapp column
+    header: ({ column }) => <DataTableColumnHeader column={column} title='whatsapp' />,  // Added whatsapp column
     cell: ({ row }) => <div>{row.getValue('whatsapp')}</div>,
   },
   {
     accessorKey: 'address',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Address' />,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
     cell: ({ row }) => <div>{row.getValue('address')}</div>,
   },
   {
     id: 'actions',
-    header: "Actions",
+    header: () => t('actions'),
     cell: DataTableRowActions,
   }
-];
+]
+}

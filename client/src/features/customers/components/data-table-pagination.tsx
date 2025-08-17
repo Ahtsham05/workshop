@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Table } from '@tanstack/react-table';
+import { useLanguage } from '@/context/language-context';
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>; // The table instance (usually contains methods like setPageSize, setPageIndex, etc.)
@@ -30,6 +31,7 @@ export function DataTablePagination<TData>({
   paggination,
 }: DataTablePaginationProps<TData>) {
   const { limit, setLimit, currentPage, setCurrentPage, totalPage } = paggination;
+  const { t } = useLanguage();
 
   return (
     <div
@@ -37,12 +39,12 @@ export function DataTablePagination<TData>({
       style={{ overflowClipMargin: 1 }}
     >
       <div className="text-muted-foreground hidden flex-1 text-sm sm:block">
-        {table.getFilteredSelectedRowModel().rows.length} of{' '}
-        {table.getFilteredRowModel().rows.length} row(s) selected.
+        {table.getFilteredSelectedRowModel().rows.length} {t('of')}{' '}
+        {table.getFilteredRowModel().rows.length} {t('row_selected')}.
       </div>
       <div className="flex items-center sm:space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
-          <p className="hidden text-sm font-medium sm:block">Rows per page</p>
+                      <p className="text-sm font-medium">{t('rows_per_page')}</p>
           <Select
             value={`${limit}`}
             onValueChange={(value) => {
@@ -64,7 +66,7 @@ export function DataTablePagination<TData>({
           </Select>
         </div>
         <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Page {currentPage} of {totalPage}
+          {t('page')} {currentPage} {t('of')} {totalPage}
         </div>
         <div className="flex items-center space-x-2">
           <Button

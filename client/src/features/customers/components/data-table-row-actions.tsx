@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCustomers } from '../context/users-context'
 import { User } from '../data/schema'
+import { useLanguage } from '@/context/language-context'
 
 interface DataTableRowActionsProps {
   row: Row<User>
@@ -19,6 +20,7 @@ interface DataTableRowActionsProps {
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useCustomers()
+  const { t } = useLanguage()
   return (
     <>
       <DropdownMenu modal={false}>
@@ -38,7 +40,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               setOpen('edit')
             }}
           >
-            Edit
+            {t('edit')}
             <DropdownMenuShortcut>
               <IconEdit size={16} />
             </DropdownMenuShortcut>
@@ -51,7 +53,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             }}
             className='text-red-500!'
           >
-            Delete
+            {t('delete')}
             <DropdownMenuShortcut>
               <IconTrash size={16} />
             </DropdownMenuShortcut>
