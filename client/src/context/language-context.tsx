@@ -220,25 +220,35 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Apply font changes based on language (without changing direction)
   useEffect(() => {
     const root = document.documentElement
+    const body = document.body
     
-    // Set language attribute
-    root.setAttribute('lang', language)
+    // Set language attribute properly for each language
+    if (language === 'ur') {
+      root.setAttribute('lang', 'ur')
+      body.setAttribute('lang', 'ur')
+      // Add notranslate class and attributes to prevent Google Translate from translating Urdu content
+      root.classList.add('notranslate')
+      body.classList.add('notranslate')
+      root.setAttribute('translate', 'no')
+      body.setAttribute('translate', 'no')
+      // Apply Urdu font
+      document.body.style.fontFamily = "'Noto Nastaliq Urdu', system-ui, sans-serif"
+    } else {
+      root.setAttribute('lang', 'en')
+      body.setAttribute('lang', 'en')
+      // Remove notranslate class for English
+      root.classList.remove('notranslate')
+      body.classList.remove('notranslate')
+      root.removeAttribute('translate')
+      body.removeAttribute('translate')
+      // For English, use default font
+      document.body.style.fontFamily = "system-ui, sans-serif"
+    }
     
     // Always use LTR direction
     root.setAttribute('dir', 'ltr')
     root.classList.add('ltr')
     root.classList.remove('rtl')
-    
-    if (language === 'ur') {
-      // Apply Urdu font
-      document.body.style.fontFamily = "'Noto Nastaliq Urdu', system-ui, sans-serif"
-    } else {
-      // For English, use default font
-      document.body.style.fontFamily = "system-ui, sans-serif"
-      
-      // Reset to default font
-      document.body.style.fontFamily = "system-ui, sans-serif"
-    }
   }, [language])
   
   return (

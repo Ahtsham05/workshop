@@ -65,8 +65,8 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
       : {
           name: '',
           email: 'supplier@gmail.com',
-          phone: '+923',
-          whatsapp: '+923',
+          phone: '03',
+          whatsapp: '03',
           address: 'address',
         },
   })

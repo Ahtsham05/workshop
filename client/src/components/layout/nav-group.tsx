@@ -28,6 +28,7 @@ import {
 } from '../ui/dropdown-menu'
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
 import { useLanguage } from '@/context/language-context'
+import { NoTranslate } from '@/components/no-translate'
 
 export function NavGroup({ title, items }: NavGroup) {
   const { state } = useSidebar()
@@ -35,7 +36,9 @@ export function NavGroup({ title, items }: NavGroup) {
   const href = useLocation({ select: (location) => location.href })
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{t(title.toLowerCase())}</SidebarGroupLabel>
+      <SidebarGroupLabel>
+        <NoTranslate>{t(title.toLowerCase())}</NoTranslate>
+      </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
@@ -84,7 +87,9 @@ const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
       >
         <Link className='h-12' to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
-          <span className='h-10 flex items-center'>{item.title}</span>
+          <NoTranslate>
+            <span className='h-10 flex items-center'>{item.title}</span>
+          </NoTranslate>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
         </Link>
       </SidebarMenuButton>
@@ -111,7 +116,9 @@ const SidebarMenuCollapsible = ({
         <CollapsibleTrigger asChild>
           <SidebarMenuButton className='h-12' tooltip={item.title}>
             {item.icon && <item.icon />}
-            <span className='h-10 flex items-center'>{item.title}</span>
+            <NoTranslate>
+              <span className='h-10 flex items-center'>{item.title}</span>
+            </NoTranslate>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
@@ -129,7 +136,9 @@ const SidebarMenuCollapsible = ({
                   >
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                       {subItem.icon && <subItem.icon />}
-                      <span className='h-10 flex items-center'>{translatedSubTitle}</span>
+                      <NoTranslate>
+                        <span className='h-10 flex items-center'>{translatedSubTitle}</span>
+                      </NoTranslate>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
                     </Link>
                   </SidebarMenuSubButton>
@@ -160,7 +169,9 @@ const SidebarMenuCollapsedDropdown = ({
             isActive={checkIsActive(href, item)}
           >
             {item.icon && <item.icon />}
-            <span className='h-10 flex items-center'>{item.title}</span>
+            <NoTranslate>
+              <span className='h-10 flex items-center'>{item.title}</span>
+            </NoTranslate>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
@@ -179,7 +190,9 @@ const SidebarMenuCollapsedDropdown = ({
                   className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
                 >
                   {sub.icon && <sub.icon />}
-                  <span className='h-10 flex items-center max-w-52 text-wrap'>{translatedSubTitle}</span>
+                  <NoTranslate>
+                    <span className='h-10 flex items-center max-w-52 text-wrap'>{translatedSubTitle}</span>
+                  </NoTranslate>
                   {sub.badge && (
                     <span className='ml-auto text-xs'>{sub.badge}</span>
                   )}
