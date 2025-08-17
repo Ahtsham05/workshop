@@ -23,9 +23,9 @@ export const sidebarData: SidebarData = {
   },
   teams: [
     {
-      name: 'Shahid Mobiles',
+      name: '786 Engineering Works',
       logo: Command,
-      plan: 'Shahid Mobiles',
+      plan: '786 Engineering Works',
     },
     {
       name: 'Acme Inc',

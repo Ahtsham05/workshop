@@ -121,7 +121,7 @@ const SaleInvoice = () => {
                   src="https://tailwindflex.com/public/images/logos/favicon-32x32.png"
                   alt="Logo"
                 /> */}
-              <div className="text-gray-700 text-center font-bold text-3xl uppercase">Shahid Mobiles</div>
+              <div className="text-gray-700 text-center font-bold text-3xl uppercase">786 Engineering Works</div>
             </div>
             <div className='flex items-center justify-between border-b-2 border-gray-300 pb-8 mb-8'>
               <div className="">

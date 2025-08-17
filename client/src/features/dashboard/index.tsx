@@ -192,12 +192,12 @@ export default function Dashboard() {
           </div>
 
           <div className="text-center">
-            {/* Shahid Mobiles in English */}
+            {/* 786 Engineering Works in English */}
             {/* <h1 className="text-5xl font-semibold text-blue-600 mb-4">
-              Shahid Mobiles
+              786 Engineering Works
             </h1> */}
 
-            {/* Shahid Mobiles in Urdu */}
+            {/* 786 Engineering Works in Urdu */}
             <p className="text-5xl font-semibold text-blue-600 mb-4">
               شاہد موبائل
             </p>

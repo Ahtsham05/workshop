@@ -260,7 +260,7 @@ export function MobileRepairActionDialog({ currentRow, open, onOpenChange, setFe
               style={{ fontFamily: 'Arial, sans-serif', color: '#000', padding: '1rem' }}
             >
               <div className="bg-white border rounded-lg shadow-lg px-6 py-8 max-w-md mx-auto mt-8">
-                <h1 className="font-bold text-2xl my-4 text-center text-blue-600">SHAHID MOBILES</h1>
+                <h1 className="font-bold text-2xl my-4 text-center text-blue-600">786 Engineering Works</h1>
                 <hr className="mb-2" />
                 <div className="flex justify-between mb-6">
                   <h1 className="text-lg font-bold">Invoice</h1>

@@ -82,9 +82,9 @@ const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
       >
-        <Link to={item.url} onClick={() => setOpenMobile(false)}>
+        <Link className='h-12' to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
-          <span>{item.title}</span>
+          <span className='h-10 flex items-center'>{item.title}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
         </Link>
       </SidebarMenuButton>
@@ -109,9 +109,9 @@ const SidebarMenuCollapsible = ({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title}>
+          <SidebarMenuButton className='h-12' tooltip={item.title}>
             {item.icon && <item.icon />}
-            <span>{item.title}</span>
+            <span className='h-10 flex items-center'>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
@@ -125,10 +125,11 @@ const SidebarMenuCollapsible = ({
                   <SidebarMenuSubButton
                     asChild
                     isActive={checkIsActive(href, subItem)}
+                    className='h-12'
                   >
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                       {subItem.icon && <subItem.icon />}
-                      <span>{translatedSubTitle}</span>
+                      <span className='h-10 flex items-center'>{translatedSubTitle}</span>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
                     </Link>
                   </SidebarMenuSubButton>
@@ -159,7 +160,7 @@ const SidebarMenuCollapsedDropdown = ({
             isActive={checkIsActive(href, item)}
           >
             {item.icon && <item.icon />}
-            <span>{item.title}</span>
+            <span className='h-10 flex items-center'>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
@@ -178,7 +179,7 @@ const SidebarMenuCollapsedDropdown = ({
                   className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
                 >
                   {sub.icon && <sub.icon />}
-                  <span className='max-w-52 text-wrap'>{translatedSubTitle}</span>
+                  <span className='h-10 flex items-center max-w-52 text-wrap'>{translatedSubTitle}</span>
                   {sub.badge && (
                     <span className='ml-auto text-xs'>{sub.badge}</span>
                   )}
