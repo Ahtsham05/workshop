@@ -9,6 +9,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
+import { useLanguage } from '@/context/language-context'
 
 interface DataTableViewOptionsProps<TData> {
   table: Table<TData>
@@ -17,6 +18,17 @@ interface DataTableViewOptionsProps<TData> {
 export function DataTableViewOptions<TData>({
   table,
 }: DataTableViewOptionsProps<TData>) {
+  const { t } = useLanguage()
+  
+  // Column translations mapping
+  const columnTranslations: Record<string, string> = {
+    'name': 'product_name',
+    'description': 'description',
+    'price': 'price',
+    'cost': 'cost',
+    'stockQuantity': 'stock_quantity'
+  }
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -26,11 +38,11 @@ export function DataTableViewOptions<TData>({
           className='ml-auto hidden h-8 lg:flex'
         >
           <MixerHorizontalIcon className='mr-2 h-4 w-4' />
-          View
+          {t('view')}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-[150px]'>
-        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+        <DropdownMenuLabel>{t('toggle_columns')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {table
           .getAllColumns()
@@ -46,7 +58,7 @@ export function DataTableViewOptions<TData>({
                 checked={column.getIsVisible()}
                 onCheckedChange={(value) => column.toggleVisibility(!!value)}
               >
-                {column.id}
+                {columnTranslations[column.id] ? t(columnTranslations[column.id]) : column.id}
               </DropdownMenuCheckboxItem>
             )
           })}

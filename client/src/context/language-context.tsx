@@ -42,6 +42,34 @@ const translations: Translations = {
     "delete_customer": "Delete Customer",
     "customer_name": "Customer Name",
     
+    // Products page
+    "products_list": "Products List",
+    "manage_products": "Manage your Products here.",
+    "search_products": "Search products...",
+    "filter_products": "Filter Products...",
+    "add_product": "Add Product",
+    "edit_product": "Edit Product",
+    "delete_product": "Delete Product",
+    "product_name": "Product Name",
+    "description": "Description",
+    "price": "Price",
+    "cost": "Cost",
+    "stock_quantity": "Stock Quantity",
+    
+    // Product CRUD operations
+    "product_created_successfully": "Product created successfully",
+    "product_updated_successfully": "Product updated successfully",
+    "product_deleted_successfully": "Product deleted successfully",
+    "update_product_description": "Update the product here. Click save when you're done.",
+    "create_product_description": "Create new product here. Click save when you're done.",
+    
+    // Delete dialog
+    "delete_product_confirmation": "Are you sure you want to delete",
+    "delete_product_warning": "This action will permanently remove the product of",
+    "delete_product_warning_suffix": "from the system. This cannot be undone.",
+    "delete_product_placeholder": "Enter Product to confirm deletion.",
+    "delete_operation_warning": "Please be careful, this operation can not be rolled back.",
+    
     // Common fields
     "email": "Email",
     "phone": "Phone",
@@ -141,6 +169,34 @@ const translations: Translations = {
     "edit_customer": "کسٹمر میں ترمیم کریں",
     "delete_customer": "کسٹمر حذف کریں",
     "customer_name": "کسٹمر کا نام",
+    
+    // Products page
+    "products_list": "پروڈکٹس کی فہرست",
+    "manage_products": "اپنے پروڈکٹس کو یہاں منظم کریں۔",
+    "search_products": "پروڈکٹس تلاش کریں...",
+    "filter_products": "پروڈکٹس فلٹر کریں...",
+    "add_product": "پروڈکٹ شامل کریں",
+    "edit_product": "پروڈکٹ میں ترمیم کریں",
+    "delete_product": "پروڈکٹ حذف کریں",
+    "product_name": "پروڈکٹ کا نام",
+    "description": "تفصیل",
+    "price": "قیمت",
+    "cost": "لاگت",
+    "stock_quantity": "اسٹاک کی مقدار",
+    
+    // Product CRUD operations
+    "product_created_successfully": "پروڈکٹ کامیابی سے بنایا گیا",
+    "product_updated_successfully": "پروڈکٹ کامیابی سے اپ ڈیٹ ہوگیا",
+    "product_deleted_successfully": "پروڈکٹ کامیابی سے حذف ہوگیا",
+    "update_product_description": "یہاں پروڈکٹ کو اپ ڈیٹ کریں۔ ہو جانے پر محفوظ کریں۔",
+    "create_product_description": "یہاں نیا پروڈکٹ بنائیں۔ ہو جانے پر محفوظ کریں۔",
+    
+    // Delete dialog
+    "delete_product_confirmation": "کیا آپ واقعی حذف کرنا چاہتے ہیں",
+    "delete_product_warning": "یہ عمل پروڈکٹ کو مستقل طور پر ہٹا دے گا",
+    "delete_product_warning_suffix": "سسٹم سے۔ اسے واپس نہیں کیا جا سکتا۔",
+    "delete_product_placeholder": "حذف کرنے کی تصدیق کے لیے پروڈکٹ داخل کریں۔",
+    "delete_operation_warning": "براہ کرم محتاط رہیں، اس آپریشن کو واپس نہیں کیا جا سکتا۔",
     
     // Common fields
     "email": "ای میل",

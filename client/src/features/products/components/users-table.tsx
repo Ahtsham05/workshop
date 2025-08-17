@@ -25,6 +25,7 @@ import {
 import { Product } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { useLanguage } from '@/context/language-context'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -44,6 +45,7 @@ export function ProductTable({ columns, data, paggination }: DataTableProps) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
+  const { t, language } = useLanguage()
 
   // console.log("data",data)
   // console.log("paggination",paggination)
@@ -73,7 +75,7 @@ export function ProductTable({ columns, data, paggination }: DataTableProps) {
     <div className='space-y-4'>
       <DataTableToolbar table={table} />
       <div className='rounded-md border'>
-        <Table>
+        <Table dir={language === 'ur' ? 'rtl' : 'ltr'}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className='group/row'>
@@ -82,7 +84,9 @@ export function ProductTable({ columns, data, paggination }: DataTableProps) {
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
-                      className={header.column.columnDef.meta?.className ?? ''}
+                      className={`${header.column.columnDef.meta?.className ?? ''} ${
+                        language === 'ur' ? 'text-right' : 'text-left'
+                      }`}
                     >
                       {header.isPlaceholder
                         ? null
@@ -107,7 +111,9 @@ export function ProductTable({ columns, data, paggination }: DataTableProps) {
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
-                      className={cell.column.columnDef.meta?.className ?? ''}
+                      className={`${cell.column.columnDef.meta?.className ?? ''} ${
+                        language === 'ur' ? 'text-right' : 'text-left'
+                      }`}
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
@@ -123,7 +129,7 @@ export function ProductTable({ columns, data, paggination }: DataTableProps) {
                   colSpan={columns.length}
                   className='h-24 text-center'
                 >
-                  No results.
+                  {t('no_results')}
                 </TableCell>
               </TableRow>
             )}

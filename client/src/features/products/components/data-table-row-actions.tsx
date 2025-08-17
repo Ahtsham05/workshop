@@ -11,14 +11,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useUsers } from '../context/users-context'
-import { User } from '../data/schema'
+import { Product } from '../data/schema'
+import { useLanguage } from '@/context/language-context'
 
 interface DataTableRowActionsProps {
-  row: Row<User>
+  row: Row<Product>
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
+  const { t } = useLanguage()
+  
   return (
     <>
       <DropdownMenu modal={false}>
@@ -38,7 +41,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               setOpen('edit')
             }}
           >
-            Edit
+            {t('edit')}
             <DropdownMenuShortcut>
               <IconEdit size={16} />
             </DropdownMenuShortcut>
@@ -51,7 +54,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             }}
             className='text-red-500!'
           >
-            Delete
+            {t('delete')}
             <DropdownMenuShortcut>
               <IconTrash size={16} />
             </DropdownMenuShortcut>
