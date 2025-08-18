@@ -60,7 +60,7 @@ export default function Customers() {
         <Main>
           <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
             <div>
-              <h2 className='text-2xl font-bold tracking-tight'>{t('customers_list')}</h2>
+              <h2 className='text-2xl font-bold mb-5 tracking-tight'>{t('customers_list')}</h2>
               <p className='text-muted-foreground'>
                 {t('manage_customers')}
               </p>

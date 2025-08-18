@@ -101,7 +101,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
     >
       <DialogContent className='sm:max-w-lg'>
         <DialogHeader className='text-left'>
-          <DialogTitle>{isEdit ? t('edit_customer') : t('add_customer')}</DialogTitle>
+          <DialogTitle className='mb-2'>{isEdit ? t('edit_customer') : t('add_customer')}</DialogTitle>
           <DialogDescription>
             {isEdit ? t('update_customer') : t('create_customer')} {t('click_save')}
           </DialogDescription>

@@ -101,7 +101,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
     >
       <DialogContent className='sm:max-w-lg'>
         <DialogHeader className='text-left'>
-          <DialogTitle>{isEdit ? t('edit_product') : t('add_product')}</DialogTitle>
+          <DialogTitle className='mb-2'>{isEdit ? t('edit_product') : t('add_product')}</DialogTitle>
           <DialogDescription>
             {isEdit ? t('update_product_description') : t('create_product_description')}
           </DialogDescription>
