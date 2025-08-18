@@ -26,10 +26,12 @@ import { AppDispatch } from '@/stores/store'
 import { addProduct, updateProduct } from '@/stores/product.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
+import InlineBarcodeInput from '@/components/inline-barcode-input'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   description: z.string(),
+  barcode: z.string().optional(),
   price: z.number().min(1, { message: 'Price is required.' }),
   cost: z.number().min(1, { message: 'Cost is required.' }),
   stockQuantity: z.number().min(1, { message: 'Stock quantity is required.' }),
@@ -54,6 +56,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
       ? {
         name: currentRow?.name || '',
         description: currentRow?.description || '',
+        barcode: currentRow?.barcode || '',
         price: typeof currentRow?.price === 'string' ? parseFloat(currentRow.price) : (currentRow?.price || 0),
         cost: typeof currentRow?.cost === 'string' ? parseFloat(currentRow.cost) : (currentRow?.cost || 0),
         stockQuantity: currentRow?.stockQuantity || 0,
@@ -61,6 +64,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
       : {
         name: '',
         description: '',
+        barcode: '',
         stockQuantity: 0,
         price: 0,
         cost: 0,
@@ -148,6 +152,31 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                         autoComplete='off'
                         {...field}
                       />
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='barcode'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 text-right'>
+                      {t('barcode')}
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4'>
+                        <InlineBarcodeInput
+                          onBarcodeEntered={(barcode) => {
+                            field.onChange(barcode)
+                          }}
+                          placeholder={t('enter_or_scan_barcode')}
+                          value={field.value}
+                          onChange={field.onChange}
+                          className="w-full"
+                        />
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

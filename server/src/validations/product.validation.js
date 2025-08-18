@@ -10,6 +10,7 @@ const createProduct = {
     category: Joi.string().default(null),
     supplier: Joi.string().default(null),
     description: Joi.string().default(''),
+    barcode: Joi.string().default(''),
   }),
 };
 
@@ -42,6 +43,7 @@ const updateProduct = {
     name: Joi.string(),
     price: Joi.number(),
     description: Joi.string(),
+    barcode: Joi.string(),
     cost: Joi.number(),
     stockQuantity: Joi.number(),
     sku: Joi.string(),

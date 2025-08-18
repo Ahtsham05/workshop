@@ -4,6 +4,7 @@ const { paginate, toJSON } = require('./plugins');
 const ProductSchema = new mongoose.Schema({
     name: { type: String, required: true },
     description: { type: String },
+    barcode: { type: String },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
     stockQuantity: { type: Number, required: true },

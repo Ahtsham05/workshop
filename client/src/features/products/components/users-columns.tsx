@@ -46,6 +46,12 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     enableHiding: true,
   },
   {
+    accessorKey: 'barcode',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='barcode' />,
+    cell: ({ row }) => <div>{row.getValue('barcode')}</div>,
+    enableHiding: true,
+  },
+  {
     accessorKey: 'price',
     header: ({ column }) => <DataTableColumnHeader column={column} title='price' />,
     cell: ({ row }) => <div>{row.getValue('price')}</div>,

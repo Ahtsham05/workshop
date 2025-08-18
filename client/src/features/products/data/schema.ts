@@ -6,6 +6,7 @@ export const productSchema = z.object({
   _id: z.string().optional(), // optional, for existing products (not required when adding)
   name: z.string().min(1, { message: 'Product name is required.' }), // product name is required
   description: z.string().optional(), // product description is optional
+  barcode: z.string().optional(), // product barcode is optional
   price: z.number().min(0, { message: 'Price must be a positive number.' }), // product price as number
   cost: z.number().min(0, { message: 'Cost must be a positive number.' }), // product cost as number
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }), // stock quantity cannot be negative
