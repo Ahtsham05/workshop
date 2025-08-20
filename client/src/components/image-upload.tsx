@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useLanguage } from '@/context/language-context'
 import { Upload, X, ImageIcon, Loader2, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SimpleImageDisplay } from './simple-image-display'
+// import { SimpleImageDisplay } from './simple-image-display'
 import CameraCapture from './camera-capture'
 
 interface ImageUploadProps {
@@ -31,7 +31,7 @@ export default function ImageUpload({
   const [imageLoading, setImageLoading] = useState(false)
   const [imageKey, setImageKey] = useState(0) // Force re-render
   const fileInputRef = useRef<HTMLInputElement>(null)
-
+  console.log('imageLoading', imageLoading)
   // Reset image loading state when URL changes
   useEffect(() => {
     if (currentImageUrl) {

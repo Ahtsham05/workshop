@@ -12,7 +12,7 @@ interface CameraCaptureProps {
   disabled?: boolean
 }
 
-export default function CameraCapture({ onCapture, trigger, disabled = false }: CameraCaptureProps) {
+export default function CameraCapture({ onCapture, trigger }: CameraCaptureProps) {
   const { t } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
