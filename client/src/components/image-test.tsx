@@ -1,5 +1,4 @@
 // Simple test component to verify Cloudinary images
-import React from 'react'
 
 export default function ImageTest() {
   const testUrl = "https://res.cloudinary.com/da2kbpyuu/image/upload/v1755587937/products/product_temp_1755587922415.png"

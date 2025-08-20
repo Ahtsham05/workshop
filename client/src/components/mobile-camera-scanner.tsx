@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Camera, X, Zap, FlashlightIcon as Flashlight } from 'lucide-react'
+import { Camera, X, FlashlightIcon as Flashlight } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { toast } from 'sonner'
 
