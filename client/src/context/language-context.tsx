@@ -103,6 +103,36 @@ const translations: Translations = {
     "click_scanner_button_to_activate": "Click scanner button to activate",
     "clear": "Clear",
     
+    // Mobile camera scanner
+    "mobile_camera_scanner": "Mobile Camera Scanner",
+    "scan_with_camera": "Scan with Camera",
+    "enter_barcode_manually_for_testing": "Enter barcode manually for testing",
+    "enter_manually_instead": "Enter Manually Instead",
+    "scanning_instructions": "Scanning Instructions",
+    "hold_phone_steady": "Hold phone steady",
+    "ensure_good_lighting": "Ensure good lighting",
+    "barcode_should_fill_frame": "Barcode should fill the frame",
+    "enter_manually": "Enter Manually",
+    
+    // Image upload functionality
+    "product_image": "Product Image",
+    "upload_image": "Upload Image",
+    "remove_image": "Remove Image",
+    "drag_drop_image": "Drag & drop an image here",
+    "or_click_to_select": "or click to select",
+    "or_use_options_below": "or use the options below",
+    "drop_image_here": "Drop image here",
+    "uploading_image": "Uploading image...",
+    "image_upload_failed": "Image upload failed",
+    "image_uploaded_successfully": "Image uploaded successfully",
+    "image_removed_successfully": "Image removed successfully",
+    "image_load_failed": "Failed to load image",
+    "select_file": "Select File",
+    "take_photo": "Take Photo",
+    "capture": "Capture",
+    "switch_camera": "Switch Camera",
+    "retry": "Retry",
+    
     // Common fields
     "email": "Email",
     "phone": "Phone",
@@ -264,6 +294,16 @@ const translations: Translations = {
     "click_scanner_button_to_activate": "فعال کرنے کے لیے اسکینر بٹن پر کلک کریں",
     "clear": "صاف کریں",
     
+    // Mobile camera scanner  
+    "mobile_camera_scanner": "موبائل کیمرہ اسکینر",
+    "enter_barcode_manually_for_testing": "ٹیسٹنگ کے لیے بارکوڈ دستی طور پر داخل کریں",
+    "enter_manually_instead": "اس کے بجائے دستی طور پر داخل کریں",
+    "scanning_instructions": "اسکیننگ کی ہدایات",
+    "hold_phone_steady": "فون کو مستحکم رکھیں",
+    "ensure_good_lighting": "اچھی روشنی کو یقینی بنائیں",
+    "barcode_should_fill_frame": "بارکوڈ فریم کو بھرنا چاہیے",
+    "enter_manually": "دستی طور پر داخل کریں",
+    
     // Barcode demo page
     "barcode_inventory_system": "بارکوڈ انوینٹری سسٹم",
     "barcode_scanning_options": "بارکوڈ اسکیننگ آپشنز",
@@ -283,6 +323,25 @@ const translations: Translations = {
     "hardware_solution": "ہارڈویئر حل",
     "camera_solution": "کیمرہ حل",
     "manual_entry": "دستی انٹری",
+    
+    // Image upload functionality
+    "product_image": "پروڈکٹ کی تصویر",
+    "upload_image": "تصویر اپ لوڈ کریں",
+    "remove_image": "تصویر ہٹائیں",
+    "drag_drop_image": "یہاں تصویر کو گھسیٹ کر چھوڑیں",
+    "or_click_to_select": "یا منتخب کرنے کے لیے کلک کریں",
+    "or_use_options_below": "یا نیچے دیے گئے اختیارات استعمال کریں",
+    "drop_image_here": "تصویر یہاں چھوڑیں",
+    "uploading_image": "تصویر اپ لوڈ ہو رہی ہے...",
+    "image_upload_failed": "تصویر اپ لوڈ ناکام",
+    "image_uploaded_successfully": "تصویر کامیابی سے اپ لوڈ ہوئی",
+    "image_removed_successfully": "تصویر کامیابی سے ہٹا دی گئی",
+    "image_load_failed": "تصویر لوڈ کرنے میں ناکام",
+    "select_file": "فائل منتخب کریں",
+    "take_photo": "تصویر لیں",
+    "capture": "کیپچر",
+    "switch_camera": "کیمرہ تبدیل کریں",
+    "retry": "دوبارہ کوشش",
     
     // Common fields
     "email": "ای میل",

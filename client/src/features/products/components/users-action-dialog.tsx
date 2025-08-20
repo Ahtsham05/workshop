@@ -27,6 +27,9 @@ import { addProduct, updateProduct } from '@/stores/product.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
+import MobileCameraScanner from '@/components/mobile-camera-scanner'
+import ImageUpload from '@/components/image-upload'
+import { Camera } from 'lucide-react'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -35,6 +38,10 @@ const formSchema = z.object({
   price: z.number().min(1, { message: 'Price is required.' }),
   cost: z.number().min(1, { message: 'Cost is required.' }),
   stockQuantity: z.number().min(1, { message: 'Stock quantity is required.' }),
+  image: z.object({
+    url: z.string(),
+    publicId: z.string(),
+  }).optional(),
 })
 
 type productForm = z.infer<typeof formSchema>
@@ -60,6 +67,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         price: typeof currentRow?.price === 'string' ? parseFloat(currentRow.price) : (currentRow?.price || 0),
         cost: typeof currentRow?.cost === 'string' ? parseFloat(currentRow.cost) : (currentRow?.cost || 0),
         stockQuantity: currentRow?.stockQuantity || 0,
+        image: currentRow?.image || undefined,
       }
       : {
         name: '',
@@ -68,6 +76,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         stockQuantity: 0,
         price: 0,
         cost: 0,
+        image: undefined,
       },
   })
 
@@ -94,7 +103,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
     form.setValue(field, Number(value), { shouldValidate: true })
   }
   // const isDirty = !!form.formState.dirtyFields
-
+  
   return (
     <Dialog
       open={open}
@@ -161,12 +170,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 control={form.control}
                 name='barcode'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 text-right items-start mt-3'>
                       {t('barcode')}
                     </FormLabel>
                     <FormControl>
-                      <div className='col-span-4'>
+                      <div className='col-span-4 space-y-2'>
                         <InlineBarcodeInput
                           onBarcodeEntered={(barcode) => {
                             field.onChange(barcode)
@@ -176,11 +185,59 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                           onChange={field.onChange}
                           className="w-full"
                         />
+                        <div className="text-center">
+                          <MobileCameraScanner
+                            onScanResult={(barcode) => {
+                              field.onChange(barcode)
+                            }}
+                            trigger={
+                              <Button type="button" variant="outline" size="sm" className="w-full">
+                                <Camera className="h-4 w-4 mr-2" />
+                                {t('scan_with_camera')}
+                              </Button>
+                            }
+                          />
+                        </div>
                       </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
                 )}
+              />
+              <FormField
+                control={form.control}
+                name='image'
+                render={({ field }) => {
+                  console.log('Form image field:', field.value) // Debug log
+                  return (
+                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 text-right pt-2'>
+                      {t('product_image')}
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4'>
+                        <ImageUpload
+                          onImageUpload={(imageData) => {
+                            console.log('Form received image data:', imageData) // Debug log
+                            field.onChange(imageData)
+                          }}
+                          onImageRemove={() => {
+                            console.log('Form removing image') // Debug log
+                            field.onChange(undefined)
+                          }}
+                          currentImageUrl={field.value?.url}
+                          className="w-full p-0"
+                        />
+                        {/* Debug info - remove in production */}
+                        {/* <div className="mt-2 text-xs text-gray-500">
+                          Field value: {JSON.stringify(field.value)}
+                        </div> */}
+                      </div>
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )
+                }}
               />
               <FormField
                 control={form.control}

@@ -11,6 +11,10 @@ const ProductSchema = new mongoose.Schema({
     sku: { type: String },  // SKU for inventory management
     category: { type: String },
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' }, // Reference to supplier
+    image: {
+        url: { type: String }, // Cloudinary URL
+        publicId: { type: String } // Cloudinary public ID for deletion
+    },
 },{
     timestamps: true
 });

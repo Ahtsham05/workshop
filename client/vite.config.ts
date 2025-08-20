@@ -14,6 +14,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    host: '0.0.0.0', // Allow external access
+    port: 5173,
+    strictPort: false, // Allow port switching if 5173 is busy
+    cors: true, // Enable CORS for all origins in development
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

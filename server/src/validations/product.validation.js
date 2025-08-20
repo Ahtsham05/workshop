@@ -11,6 +11,10 @@ const createProduct = {
     supplier: Joi.string().default(null),
     description: Joi.string().default(''),
     barcode: Joi.string().default(''),
+    image: Joi.object().keys({
+      url: Joi.string(),
+      publicId: Joi.string(),
+    }).optional(),
   }),
 };
 
@@ -48,6 +52,11 @@ const updateProduct = {
     stockQuantity: Joi.number(),
     sku: Joi.string(),
     category: Joi.string(),
+    supplier: Joi.string(),
+    image: Joi.object().keys({
+      url: Joi.string(),
+      publicId: Joi.string(),
+    }).optional(),
   }),
 };
 

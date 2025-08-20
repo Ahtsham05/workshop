@@ -15,6 +15,7 @@ import { fetchCustomers } from '@/stores/customer.slice'
 import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
+import { LanguageSwitch } from '@/components/language-switch'
 
 export default function Customers() {
   const [customers, setCustomers] = useState([])
@@ -52,6 +53,7 @@ export default function Customers() {
         <Header fixed>
           <Search />
           <div className='ml-auto flex items-center space-x-4'>
+            <LanguageSwitch />
             <ThemeSwitch />
             <ProfileDropdown />
           </div>
