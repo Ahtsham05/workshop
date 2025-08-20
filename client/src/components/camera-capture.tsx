@@ -342,8 +342,8 @@ export default function CameraCapture({ onCapture, trigger }: CameraCaptureProps
               {t('switch_camera') || 'Switch'}
             </Button>
             
-            <div className="flex gap-2">
-              <Button onClick={handleClose} variant="outline">
+            <div className="flex gap-2 justify-center w-full">
+              <Button onClick={handleClose} variant="outline" className='w-1/2'>
                 <X className="h-4 w-4 mr-2" />
                 {t('cancel') || 'Cancel'}
               </Button>
