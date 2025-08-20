@@ -265,7 +265,7 @@ export default function ImageUpload({
           <div
             {...getRootProps()}
             className={cn(
-              "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+              "border-2 border-dashed rounded-lg p-2 sm:p-6 text-center cursor-pointer transition-colors",
               isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25",
               disabled || uploading ? "cursor-not-allowed opacity-50" : "hover:border-primary hover:bg-primary/5"
             )}
@@ -288,7 +288,7 @@ export default function ImageUpload({
                 )}
                 
                 <div className="text-center">
-                  <p className="text-sm font-medium">
+                  <p className="text-xs sm:text-sm font-medium">
                     {isDragActive
                       ? t('drop_image_here') || 'Drop image here'
                       : t('drag_drop_image') || 'Drag & drop an image here'}
@@ -302,8 +302,9 @@ export default function ImageUpload({
           </div>
           
           {/* Upload options - outside dropzone */}
-          <div className="flex gap-2 w-full max-w-xs mx-auto">
-            <Button
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+            <div>
+              <Button
               type="button"
               variant="outline"
               size="sm"
@@ -312,11 +313,12 @@ export default function ImageUpload({
                 handleFileSelect()
               }}
               disabled={disabled || uploading}
-              className="flex-1"
+              className="flex-1 w-full text-xs sm:text-sm"
             >
               <Upload className="h-4 w-4 mr-2" />
               {t('select_file') || 'Select File'}
             </Button>
+            </div>
             <CameraCapture
               onCapture={handleCameraCapture}
               disabled={disabled || uploading}
@@ -326,7 +328,7 @@ export default function ImageUpload({
                   variant="outline"
                   size="sm"
                   disabled={disabled || uploading}
-                  className="flex-1"
+                  className="flex-1 w-full text-xs sm:text-sm"
                 >
                   <Camera className="h-4 w-4 mr-2" />
                   {t('take_photo') || 'Take Photo'}

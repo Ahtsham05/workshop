@@ -131,7 +131,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='name'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('product_name')}
                     </FormLabel>
                     <FormControl>
@@ -151,7 +151,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='description'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('description')}
                     </FormLabel>
                     <FormControl>
@@ -171,7 +171,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='barcode'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right items-start mt-3'>
+                    <FormLabel className='col-span-2 md:text-right items-start mt-3'>
                       {t('barcode')}
                     </FormLabel>
                     <FormControl>
@@ -191,8 +191,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                               field.onChange(barcode)
                             }}
                             trigger={
-                              <Button type="button" variant="outline" size="sm" className="w-full">
-                                <Camera className="h-4 w-4 mr-2" />
+                              <Button type="button" variant="outline" size="sm" className="w-full text-xs sm:text-sm">
+                                <Camera className="h-4 w-4 mr-2 text-xs sm:text-sm" />
                                 {t('scan_with_camera')}
                               </Button>
                             }
@@ -211,7 +211,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   console.log('Form image field:', field.value) // Debug log
                   return (
                   <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right pt-2'>
+                    <FormLabel className='col-span-2 md:text-right pt-2'>
                       {t('product_image')}
                     </FormLabel>
                     <FormControl>
@@ -244,7 +244,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='price'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('price')}
                     </FormLabel>
                     <FormControl>
@@ -268,7 +268,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='cost'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('cost')}
                     </FormLabel>
                     <FormControl>
@@ -292,7 +292,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 name='stockQuantity'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('stock_quantity')}
                     </FormLabel>
                     <FormControl>

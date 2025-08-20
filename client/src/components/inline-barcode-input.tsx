@@ -100,7 +100,7 @@ export function InlineBarcodeInput({
           placeholder={placeholder || t('enter_or_scan_barcode')}
           disabled={disabled}
           className={cn(
-            "pr-24 font-mono",
+            "pr-10 font-mono",
             isListening && "border-blue-500 ring-2 ring-blue-200",
             recentlyScanned && "border-green-500 ring-2 ring-green-200"
           )}
@@ -109,7 +109,7 @@ export function InlineBarcodeInput({
         
         <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
           {recentlyScanned && (
-            <Badge variant="outline" className="text-green-600 border-green-600">
+            <Badge variant="outline" className="text-green-600 bg-white border-green-600">
               <Check className="h-3 w-3 mr-1" />
               {t('scanned')}
             </Badge>
