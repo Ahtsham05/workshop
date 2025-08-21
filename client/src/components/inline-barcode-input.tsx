@@ -136,7 +136,7 @@ export function InlineBarcodeInput({
       </div>
       
       <div className="flex justify-between items-center text-xs">
-        <div className="flex items-center gap-2">
+        {/* <div className="flex items-center gap-2">
           {isListening ? (
             <Badge variant="outline" className="text-blue-600 border-blue-600">
               <Zap className="h-3 w-3 mr-1" />
@@ -147,7 +147,7 @@ export function InlineBarcodeInput({
               {t('click_scanner_button_to_activate')}
             </span>
           )}
-        </div>
+        </div> */}
         
         {inputValue && (
           <Button

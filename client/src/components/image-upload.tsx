@@ -327,7 +327,7 @@ export default function ImageUpload({
                       ? t('drop_image_here') || 'Drop image here'
                       : t('drag_drop_image') || 'Drag & drop an image here'}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-3">
                     {t('or_use_options_below') || 'or use the options below'} (PNG, JPG, GIF up to 5MB)
                   </p>
                 </div>

@@ -115,6 +115,24 @@ const translations: Translations = {
     "barcode_should_fill_frame": "Barcode should fill the frame",
     "enter_manually": "Enter Manually",
     
+    // New mobile scanner translations
+    "point_camera_at_qr_or_barcode": "Point camera at QR code or barcode",
+    "ensure_good_lighting_or_use_flashlight": "Ensure good lighting or use flashlight button",
+    "align_code_within_frame": "Align code within the scanning frame",
+    "detection_is_automatic": "Detection is automatic - no need to press capture",
+    "supports_multiple_formats": "Supports QR codes, EAN, Code128, and more",
+    "flashlight_turned_off": "Flashlight turned off",
+    "flashlight_turned_on": "Flashlight turned on",
+    "flashlight_not_available": "Flashlight not available on this device",
+    "turn_off_flashlight": "Turn off flashlight",
+    "turn_on_flashlight": "Turn on flashlight",
+    "make_sure_to": "Make sure to",
+    "allow_camera_permission": "Allow camera permission when prompted",
+    "try_refreshing_page": "Try refreshing the page",
+    "check_camera_not_used_by_other_app": "Check if camera is being used by another app",
+    "initializing_scanner": "Initializing scanner...",
+    "this_will_take_moment": "This will only take a moment",
+    
     // Image upload functionality
     "product_image": "Product Image",
     "upload_image": "Upload Image",
@@ -305,6 +323,24 @@ const translations: Translations = {
     "ensure_good_lighting": "اچھی روشنی کو یقینی بنائیں",
     "barcode_should_fill_frame": "بارکوڈ فریم کو بھرنا چاہیے",
     "enter_manually": "دستی طور پر داخل کریں",
+    
+    // New mobile scanner translations
+    "point_camera_at_qr_or_barcode": "کیمرہ کو QR کوڈ یا بارکوڈ پر لگائیں",
+    "ensure_good_lighting_or_use_flashlight": "اچھی روشنی یا ٹارچ بٹن استعمال کریں",
+    "align_code_within_frame": "کوڈ کو اسکیننگ فریم کے اندر لائیں",
+    "detection_is_automatic": "شناخت خودکار ہے - کیپچر دبانے کی ضرورت نہیں",
+    "supports_multiple_formats": "QR کوڈز، EAN، Code128 اور مزید کو سپورٹ کرتا ہے",
+    "flashlight_turned_off": "ٹارچ بند کر دیا گیا",
+    "flashlight_turned_on": "ٹارچ چالو کر دیا گیا",
+    "flashlight_not_available": "اس ڈیوائس پر ٹارچ دستیاب نہیں",
+    "turn_off_flashlight": "ٹارچ بند کریں",
+    "turn_on_flashlight": "ٹارچ چالو کریں",
+    "make_sure_to": "یقینی بنائیں کہ",
+    "allow_camera_permission": "کیمرہ کی اجازت دیں جب پوچھا جائے",
+    "try_refreshing_page": "صفحہ ریفریش کرنے کی کوشش کریں",
+    "check_camera_not_used_by_other_app": "چیک کریں کہ کیمرہ کسی اور ایپ میں استعمال تو نہیں ہو رہا",
+    "initializing_scanner": "اسکینر شروع کر رہا ہے...",
+    "this_will_take_moment": "اس میں صرف ایک لمحہ لگے گا",
     
     // Barcode demo page
     "barcode_inventory_system": "بارکوڈ انوینٹری سسٹم",

@@ -209,46 +209,6 @@ export function MobileCameraScanner({
     }
   }
 
-  // const checkFlashlightCapability = async () => {
-  //   try {
-  //     // Get available camera devices
-  //     const devices = await navigator.mediaDevices.enumerateDevices()
-  //     const videoDevices = devices.filter(device => device.kind === 'videoinput')
-      
-  //     console.log('Available cameras:', videoDevices.length)
-      
-  //     if (videoDevices.length === 0) {
-  //       console.warn('No camera devices found')
-  //       return
-  //     }
-
-  //     // Try to get camera access to check capabilities
-  //     const stream = await navigator.mediaDevices.getUserMedia({ 
-  //       video: { 
-  //         facingMode: { ideal: 'environment' },
-  //         width: { ideal: 1280 },
-  //         height: { ideal: 720 }
-  //       } 
-  //     })
-      
-  //     const track = stream.getVideoTracks()[0]
-  //     const capabilities = track.getCapabilities?.()
-      
-  //     console.log('Camera capabilities:', capabilities)
-      
-  //     if (capabilities && 'torch' in capabilities) {
-  //       setHasFlashlight(true)
-  //       console.log('Flashlight is available')
-  //     }
-      
-  //     // Store stream for flashlight control
-  //     setStream(stream)
-      
-  //   } catch (error) {
-  //     console.warn('Could not check camera capability:', error)
-  //   }
-  // }
-
   const stopCamera = () => {
     try {
       setIsScanning(false)
@@ -286,28 +246,12 @@ export function MobileCameraScanner({
         advanced: [{ torch: !flashlightOn } as any]
       })
       setFlashlightOn(!flashlightOn)
-      toast.success(flashlightOn ? 'Flashlight turned off' : 'Flashlight turned on')
+      toast.success(flashlightOn ? t('flashlight_turned_off') : t('flashlight_turned_on'))
     } catch (err) {
       console.error('Flashlight toggle failed:', err)
-      toast.error('Flashlight not available on this device')
+      toast.error(t('flashlight_not_available'))
     }
   }
-
-  // const toggleFlashlight = async () => {
-  //   if (!stream) return
-
-  //   const track = stream.getVideoTracks()[0]
-  //   try {
-  //     // Use type assertion for torch constraint since it's not in standard types
-  //     await track.applyConstraints({
-  //       advanced: [{ torch: !flashlightOn } as any]
-  //     })
-  //     setFlashlightOn(!flashlightOn)
-  //   } catch (err) {
-  //     console.error('Flashlight toggle failed:', err)
-  //     toast.error('Flashlight not available on this device')
-  //   }
-  // }
 
   // Manual barcode input as fallback
   const handleManualBarcode = () => {
@@ -349,7 +293,7 @@ export function MobileCameraScanner({
             <Camera className="h-5 w-5" />
             {t('mobile_camera_scanner')}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className='mt-2'>
             {t('point_camera_at_barcode')} {t('hold_phone_steady')}
           </DialogDescription>
         </DialogHeader>
@@ -379,11 +323,11 @@ export function MobileCameraScanner({
                 </Button>
               </div>
               <div className="mt-4 text-sm text-gray-600">
-                <p>Make sure to:</p>
+                <p>{t('make_sure_to')}:</p>
                 <ul className="text-left mt-2 space-y-1">
-                  <li>• Allow camera permission when prompted</li>
-                  <li>• Try refreshing the page</li>
-                  <li>• Check if camera is being used by another app</li>
+                  <li>• {t('allow_camera_permission')}</li>
+                  <li>• {t('try_refreshing_page')}</li>
+                  <li>• {t('check_camera_not_used_by_other_app')}</li>
                 </ul>
               </div>
             </div>
@@ -405,8 +349,8 @@ export function MobileCameraScanner({
                   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
                     <div className="text-white text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-3"></div>
-                      <p className="text-base font-medium">Initializing scanner...</p>
-                      <p className="text-xs mt-1 opacity-80">This will only take a moment</p>
+                      <p className="text-base font-medium">{t('initializing_scanner')}</p>
+                      <p className="text-xs mt-1 opacity-80">{t('this_will_take_moment')}</p>
                     </div>
                   </div>
                 )}
@@ -418,7 +362,7 @@ export function MobileCameraScanner({
                     className="absolute top-4 right-4 z-20"
                     size="sm"
                     variant={flashlightOn ? "default" : "outline"}
-                    title={flashlightOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+                    title={flashlightOn ? t('turn_off_flashlight') : t('turn_on_flashlight')}
                   >
                     <Flashlight className="h-4 w-4" />
                   </Button>
@@ -429,12 +373,12 @@ export function MobileCameraScanner({
               <div className="bg-blue-50 p-3 rounded-lg text-sm">
                 <h4 className="font-semibold text-blue-900 mb-1">{t('scanning_instructions')}:</h4>
                 <ul className="text-blue-800 space-y-1">
-                  <li>• Point camera at QR code or barcode</li>
-                  <li>• {t('hold_phone_steady')}</li>
-                  <li>• {t('ensure_good_lighting')} or use flashlight button</li>
-                  <li>• Align code within the scanning frame</li>
-                  <li>• Detection is automatic - no need to press capture</li>
-                  <li>• Supports QR codes, EAN, Code128, and more</li>
+                  <li className='mt-3'>• {t('point_camera_at_qr_or_barcode')}</li>
+                  <li className='mt-3'>• {t('hold_phone_steady')}</li>
+                  <li className='mt-3'>• {t('ensure_good_lighting_or_use_flashlight')}</li>
+                  <li className='mt-3'>• {t('align_code_within_frame')}</li>
+                  <li className='mt-3'>• {t('detection_is_automatic')}</li>
+                  <li className='mt-3'>• {t('supports_multiple_formats')}</li>
                 </ul>
               </div>
 
@@ -447,7 +391,7 @@ export function MobileCameraScanner({
                 >
                   {t('enter_manually')}
                 </Button>
-                <Button 
+                {/* <Button 
                   onClick={() => {
                     const element = document.getElementById(scannerId)
                     console.log('Debug info:', {
@@ -467,7 +411,7 @@ export function MobileCameraScanner({
                   size="sm"
                 >
                   Debug
-                </Button>
+                </Button> */}
                 <Button 
                   onClick={() => setOpen(false)}
                   variant="outline"
