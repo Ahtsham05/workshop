@@ -38,7 +38,17 @@ export default function ImageUpload({
       setImageLoading(true)
       setError(null)
       setImageKey(prev => prev + 1) // Force image re-render
+    } else {
+      // Reset state when image is removed
+      setImageLoading(false)
+      setError(null)
+      setImageKey(0)
     }
+  }, [currentImageUrl])
+
+  // Debug: Monitor currentImageUrl changes
+  useEffect(() => {
+    console.log('🔄 currentImageUrl prop changed:', currentImageUrl)
   }, [currentImageUrl])
 
   const uploadImage = async (file: File) => {
@@ -130,9 +140,18 @@ export default function ImageUpload({
   })
 
   const handleRemoveImage = () => {
+    console.log('🗑️ handleRemoveImage called')
+    console.log('   - currentImageUrl before:', currentImageUrl)
+    console.log('   - calling onImageRemove()...')
     setError(null)
     setImageLoading(false)
     onImageRemove()
+    console.log('   - onImageRemove() completed')
+    
+    // Force a slight delay to ensure form state updates
+    setTimeout(() => {
+      console.log('   - currentImageUrl after timeout:', currentImageUrl)
+    }, 100)
   }
 
   // Process Cloudinary URL to ensure it loads correctly
@@ -151,7 +170,10 @@ export default function ImageUpload({
     return url
   }
 
+  console.log('ImageUpload conditional check: currentImageUrl =', currentImageUrl, 'type:', typeof currentImageUrl)
+  
   if (currentImageUrl) {
+    console.log('ImageUpload rendering with image, currentImageUrl:', currentImageUrl)
     const processedUrl = processImageUrl(currentImageUrl)
     console.log('Original URL:', currentImageUrl)
     console.log('Processed URL:', processedUrl)
@@ -160,6 +182,18 @@ export default function ImageUpload({
       <Card className={cn("relative py-0", className)}>
         <CardContent className="p-2">
           <div className="relative group">
+            {/* Remove button - always visible on top right */}
+            {/* <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="absolute top-2 right-2 z-10 h-8 w-8 p-0 rounded-full shadow-lg"
+              onClick={handleRemoveImage}
+              disabled={disabled}
+            >
+              <X className="h-4 w-4" />
+            </Button> */}
+            
             <img
               key={imageKey}
               src={currentImageUrl}

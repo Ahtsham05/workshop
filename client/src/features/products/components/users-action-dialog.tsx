@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -56,6 +57,8 @@ interface Props {
 export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
   const isEdit = !!currentRow
   const { t } = useLanguage()
+  const [imageKey, setImageKey] = useState(0) // Force image component re-render
+  const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   
   const form = useForm<productForm>({
     resolver: zodResolver(formSchema),
@@ -109,6 +112,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
       open={open}
       onOpenChange={(state) => {
         form.reset()
+        setImageRemoved(false) // Reset image removed flag when dialog opens/closes
         onOpenChange(state)
       }}
     >
@@ -217,15 +221,37 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                     <FormControl>
                       <div className='col-span-4'>
                         <ImageUpload
+                          key={`image-${imageKey}-${field.value ? 'has-image' : 'no-image'}`} // Force re-render when image changes
                           onImageUpload={(imageData) => {
                             console.log('Form received image data:', imageData) // Debug log
+                            setImageRemoved(false) // Reset removed flag when new image is uploaded
                             field.onChange(imageData)
                           }}
                           onImageRemove={() => {
-                            console.log('Form removing image') // Debug log
+                            console.log('Form removing image, current value:', field.value) // Debug log
+                            
+                            // Set local state to immediately hide image
+                            setImageRemoved(true)
+                            
+                            // Try multiple approaches to ensure field is cleared
                             field.onChange(undefined)
+                            form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
+                            form.resetField('image', { defaultValue: undefined })
+                            form.trigger('image') // Force field validation and re-render
+                            
+                            // Force component re-render
+                            setImageKey(prev => prev + 1)
+                            
+                            console.log('Form after remove, new value:', form.getValues('image'))
+                            console.log("field.value?.url after remove:", field.value?.url)
+                            
+                            // Check if field updates after a short delay
+                            setTimeout(() => {
+                              console.log('Field value after timeout:', field.value)
+                              console.log('Form getValue after timeout:', form.getValues('image'))
+                            }, 100)
                           }}
-                          currentImageUrl={field.value?.url}
+                          currentImageUrl={imageRemoved ? undefined : field.value?.url}
                           className="w-full p-0"
                         />
                         {/* Debug info - remove in production */}
