@@ -106,6 +106,7 @@ const translations: Translations = {
     // Mobile camera scanner
     "mobile_camera_scanner": "Mobile Camera Scanner",
     "scan_with_camera": "Scan with Camera",
+    "scanning_for_barcode": "Scanning for barcode",
     "enter_barcode_manually_for_testing": "Enter barcode manually for testing",
     "enter_manually_instead": "Enter Manually Instead",
     "scanning_instructions": "Scanning Instructions",
@@ -296,6 +297,7 @@ const translations: Translations = {
     
     // Mobile camera scanner  
     "mobile_camera_scanner": "موبائل کیمرہ اسکینر",
+    "scanning_for_barcode": "بارکوڈ اسکین کر رہا ہے",
     "enter_barcode_manually_for_testing": "ٹیسٹنگ کے لیے بارکوڈ دستی طور پر داخل کریں",
     "enter_manually_instead": "اس کے بجائے دستی طور پر داخل کریں",
     "scanning_instructions": "اسکیننگ کی ہدایات",
