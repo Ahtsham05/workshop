@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -22,12 +22,28 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { useDispatch } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
 import { addProduct, updateProduct } from '@/stores/product.slice'
+import { fetchCategories } from '@/stores/category.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
+import { Badge } from '@/components/ui/badge'
+import { X, Search, Check } from 'lucide-react'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
@@ -43,6 +59,14 @@ const formSchema = z.object({
     url: z.string(),
     publicId: z.string(),
   }).optional(),
+  categories: z.array(z.object({
+    _id: z.string(),
+    name: z.string(),
+    image: z.object({
+      url: z.string(),
+      publicId: z.string(),
+    }).optional(),
+  })).optional(),
 })
 
 type productForm = z.infer<typeof formSchema>
@@ -56,9 +80,20 @@ interface Props {
 
 export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
   const isEdit = !!currentRow
-  const { t } = useLanguage()
+  const { t, isRTL } = useLanguage()
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+  
+  const dispatch = useDispatch<AppDispatch>()
+  const { categories } = useSelector((state: RootState) => state.category)
+  
+  // Fetch categories when dialog opens
+  useEffect(() => {
+    if (open && categories.length === 0) {
+      dispatch(fetchCategories({ page: 1, limit: 100 }))
+    }
+  }, [open, dispatch, categories.length])
   
   const form = useForm<productForm>({
     resolver: zodResolver(formSchema),
@@ -67,10 +102,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         name: currentRow?.name || '',
         description: currentRow?.description || '',
         barcode: currentRow?.barcode || '',
-        price: typeof currentRow?.price === 'string' ? parseFloat(currentRow.price) : (currentRow?.price || 0),
-        cost: typeof currentRow?.cost === 'string' ? parseFloat(currentRow.cost) : (currentRow?.cost || 0),
+        price: currentRow?.price || 0,
+        cost: currentRow?.cost || 0,
         stockQuantity: currentRow?.stockQuantity || 0,
         image: currentRow?.image || undefined,
+        categories: currentRow?.categories || [],
       }
       : {
         name: '',
@@ -80,10 +116,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         price: 0,
         cost: 0,
         image: undefined,
+        categories: [],
       },
   })
-
-  const dispatch = useDispatch<AppDispatch>()
 
   const onSubmit = async (values: productForm) => {
     if (isEdit) {
@@ -165,6 +200,117 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                         autoComplete='off'
                         {...field}
                       />
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='categories'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className={`col-span-2 items-start mt-3 ${isRTL ? 'text-right' : 'md:text-right'}`}>
+                      {t('categories')}
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4 space-y-2'>
+                        {/* Category Selection Dropdown */}
+                        <Popover open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={categoriesOpen}
+                              className="w-full justify-between min-h-[2.5rem] h-auto py-0"
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <Search className="w-4 h-4 flex-shrink-0" />
+                                {field.value && field.value.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                                    {field.value.map((category) => (
+                                      <Badge key={category._id} variant="secondary" className="flex items-center gap-1">
+                                        {category.image?.url && (
+                                          <img 
+                                            src={category.image.url} 
+                                            alt={category.name}
+                                            className="w-3 h-3 rounded-full object-cover"
+                                          />
+                                        )}
+                                        <span className="text-xs">{category.name}</span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            const newCategories = field.value?.filter(c => c._id !== category._id) || []
+                                            field.onChange(newCategories)
+                                          }}
+                                          className="ml-1 hover:bg-gray-200 rounded-full p-0.5"
+                                        >
+                                          <X className="w-2 h-2" />
+                                        </button>
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">{t('select_categories')}</span>
+                                )}
+                              </div>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
+                            <Command>
+                              <CommandInput placeholder={t('search_categories')} />
+                              <CommandEmpty>{t('no_categories_found')}</CommandEmpty>
+                              <CommandList>
+                                <CommandGroup>
+                                  {categories.map((category) => {
+                                    const isSelected = field.value?.some(c => c._id === category.id) || false
+                                    return (
+                                      <CommandItem
+                                        key={category.id}
+                                        onSelect={() => {
+                                          const currentCategories = field.value || []
+                                          if (isSelected) {
+                                            // Remove category
+                                            const newCategories = currentCategories.filter(c => c._id !== category.id)
+                                            field.onChange(newCategories)
+                                          } else {
+                                            // Add category
+                                            const newCategories = [...currentCategories, {
+                                              _id: category.id,
+                                              name: category.name,
+                                              image: category.image
+                                            }]
+                                            field.onChange(newCategories)
+                                          }
+                                        }}
+                                        className="flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <div className="flex items-center gap-2 flex-1">
+                                          {category.image?.url && (
+                                            <img 
+                                              src={category.image.url} 
+                                              alt={category.name}
+                                              className="w-6 h-6 rounded-full object-cover"
+                                            />
+                                          )}
+                                          <span>{category.name}</span>
+                                        </div>
+                                        {isSelected && (
+                                          <div className="w-4 h-4 rounded-sm flex items-center justify-center">
+                                            <Check className="w-3 h-3 text-black" />
+                                          </div>
+                                        )}
+                                      </CommandItem>
+                                    )
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

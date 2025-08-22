@@ -59,7 +59,7 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
       const category = row.original
       return (
         <div className={`flex items-center ${language === 'ur' ? 'space-x-reverse space-x-3 flex-row-reverse' : 'space-x-3'}`}>
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-8 w-8">
             <AvatarImage 
               src={category.image?.url || ''} 
               alt={category.name}

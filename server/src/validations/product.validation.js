@@ -6,11 +6,21 @@ const createProduct = {
     price: Joi.number().required(),
     cost: Joi.number().required(),
     stockQuantity: Joi.number().required(),
-    sku: Joi.string().default(null),
-    category: Joi.string().default(null),
-    supplier: Joi.string().default(null),
-    description: Joi.string().default(''),
-    barcode: Joi.string().default(''),
+    sku: Joi.string().allow('').default(null),
+    category: Joi.string().allow('').default(null),
+    categories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().required(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ).default([]),
+    supplier: Joi.string().allow('').default(null),
+    description: Joi.string().allow('').optional(),
+    barcode: Joi.string().allow('').optional(),
     image: Joi.object().keys({
       url: Joi.string(),
       publicId: Joi.string(),
@@ -46,13 +56,23 @@ const updateProduct = {
     _id: Joi.string(),
     name: Joi.string(),
     price: Joi.number(),
-    description: Joi.string(),
-    barcode: Joi.string(),
+    description: Joi.string().allow(''),
+    barcode: Joi.string().allow(''),
     cost: Joi.number(),
     stockQuantity: Joi.number(),
-    sku: Joi.string(),
-    category: Joi.string(),
-    supplier: Joi.string(),
+    sku: Joi.string().allow(''),
+    category: Joi.string().allow(''),
+    categories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().required(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ),
+    supplier: Joi.string().allow(''),
     image: Joi.object().keys({
       url: Joi.string(),
       publicId: Joi.string(),

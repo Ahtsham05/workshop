@@ -253,6 +253,8 @@ const translations: Translations = {
     "saving": "Saving...",
     "deleting": "Deleting...",
     "failed_to_load_categories": "Failed to load categories",
+    "select_categories": "Select Categories",
+    "no_categories_found": "No categories found",
   },
   ur: {
     // User Profile and Authentication
@@ -512,6 +514,8 @@ const translations: Translations = {
     "saving": "محفوظ کر رہے ہیں...",
     "deleting": "حذف کر رہے ہیں...",
     "failed_to_load_categories": "کیٹگریز لوڈ کرنے میں ناکامی",
+    "select_categories": "کیٹگریز منتخب کریں",
+    "no_categories_found": "کوئی کیٹگری نہیں ملی",
     // "category_image": "کیٹگری کی تصویر",
     // "enter_category_name": "کیٹگری کا نام داخل کریں",
     // "enter_category_description": "کیٹگری کی تفصیل داخل کریں",
@@ -562,8 +566,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     () => (localStorage.getItem('language') as Language) || 'en'
   )
   
-  // We're using LTR for all languages
-  const isRTL = false
+  // Determine if current language is RTL
+  const isRTL = language === 'ur'
   
   // Translation function
   const t = (key: string): string => {

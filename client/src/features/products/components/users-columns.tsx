@@ -36,7 +36,27 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
   {
     accessorKey: 'name',
     header: ({ column }) => <DataTableColumnHeader column={column} title='product_name' />,
-    cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('name')}</LongText>,
+    cell: ({ row }) => {
+      const product = row.original
+      return (
+        <div className="flex items-center gap-2">
+          {product.image?.url ? (
+            <img 
+              src={product.image.url} 
+              alt={product.name}
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-medium text-muted-foreground">
+                {product.name?.charAt(0).toUpperCase() || 'P'}
+              </span>
+            </div>
+          )}
+          <LongText className='max-w-36'>{row.getValue('name')}</LongText>
+        </div>
+      )
+    },
     enableHiding: true,
   },
     {

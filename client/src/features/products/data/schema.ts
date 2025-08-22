@@ -14,6 +14,14 @@ export const productSchema = z.object({
     url: z.string(),
     publicId: z.string(),
   }).optional(), // product image is optional
+  categories: z.array(z.object({
+    _id: z.string(),
+    name: z.string(),
+    image: z.object({
+      url: z.string(),
+      publicId: z.string(),
+    }).optional(),
+  })).optional(), // product categories is optional
 })
 
 // Define a schema for a list of products

@@ -36,7 +36,15 @@ export const fetchCategories = createAsyncThunk(
     search?: string
     fieldName?: string
   }) => {
-    const query = new URLSearchParams(params as any).toString()
+    // Filter out empty string parameters
+    const filteredParams = Object.entries(params).reduce((acc, [key, value]) => {
+      if (value !== '' && value !== undefined && value !== null) {
+        acc[key] = value
+      }
+      return acc
+    }, {} as any)
+    
+    const query = new URLSearchParams(filteredParams).toString()
     const response = await Axios({
       ...summery.fetchCategories,
       url: `${summery.fetchCategories.url}?${query}`,

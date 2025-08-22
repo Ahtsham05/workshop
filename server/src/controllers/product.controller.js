@@ -24,8 +24,25 @@ const createProduct = catchAsync(async (req, res) => {
     }
   }
   
-  const product = await productService.createProduct(productData);
-  res.status(httpStatus.CREATED).send(product);
+  try {
+    const product = await productService.createProduct(productData);
+    res.status(httpStatus.CREATED).send(product);
+  } catch (error) {
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+      
+      if (field === 'name') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Please choose a different name.`);
+      } else if (field === 'barcode') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Please use a different barcode.`);
+      } else {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Duplicate value for ${field}: "${value}"`);
+      }
+    }
+    throw error;
+  }
 });
 
 const getProducts = catchAsync(async (req, res) => {
@@ -72,8 +89,25 @@ const updateProduct = catchAsync(async (req, res) => {
     }
   }
   
-  const product = await productService.updateProductById(req.params.productId, productData);
-  res.send(product);
+  try {
+    const product = await productService.updateProductById(req.params.productId, productData);
+    res.send(product);
+  } catch (error) {
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
+      
+      if (field === 'name') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Please choose a different name.`);
+      } else if (field === 'barcode') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Please use a different barcode.`);
+      } else {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Duplicate value for ${field}: "${value}"`);
+      }
+    }
+    throw error;
+  }
 });
 
 const deleteProduct = catchAsync(async (req, res) => {
