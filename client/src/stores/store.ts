@@ -6,6 +6,7 @@ import customerReducer from './customer.slice';
 import supplierReducer from './supplier.slice';
 import accountReducer from './account.slice';
 import mobileRepairReducer from './mobileRepair.slice'
+import categoryReducer from './category.slice';
 
 export const store = configureStore({
   reducer: {
@@ -17,6 +18,7 @@ export const store = configureStore({
     supplier: supplierReducer,
     account: accountReducer,
     mobileRepair: mobileRepairReducer,
+    category: categoryReducer,
   },
 });
 export type RootState = ReturnType<typeof store.getState>;

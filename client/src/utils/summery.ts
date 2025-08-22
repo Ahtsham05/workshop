@@ -105,6 +105,28 @@ const summery = {
     method: 'get'
   },
 
+  // categories
+  addCategory: {
+    url: '/categories',
+    method: 'post',
+  },
+  updateCategory: {
+    url: '/categories',
+    method: 'patch',
+  },
+  deleteCategory: {
+    url: '/categories',
+    method: 'delete',
+  },
+  fetchCategories: {
+    url: '/categories',
+    method: 'get',
+  },
+  fetchAllCategories: {
+    url: '/categories/all',
+    method: 'get'
+  },
+
 
   // purchases
   addPurchase: {

@@ -53,6 +53,7 @@ import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authentic
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedCustomerLedgerIndexImport } from './routes/_authenticated/customer-ledger/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
+import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAccountsIndexImport } from './routes/_authenticated/accounts/index'
 import { Route as AuthenticatedAccountLedgerIndexImport } from './routes/_authenticated/account-ledger/index'
@@ -343,6 +344,13 @@ const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexImport.update({
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
+const AuthenticatedCategoriesIndexRoute =
+  AuthenticatedCategoriesIndexImport.update({
+    id: '/categories/',
+    path: '/categories/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+
 const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   id: '/apps/',
   path: '/apps/',
@@ -585,6 +593,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppsIndexImport
       parentRoute: typeof AuthenticatedRouteImport
     }
+    '/_authenticated/categories/': {
+      id: '/_authenticated/categories/'
+      path: '/categories'
+      fullPath: '/categories'
+      preLoaderRoute: typeof AuthenticatedCategoriesIndexImport
+      parentRoute: typeof AuthenticatedRouteImport
+    }
     '/_authenticated/chats/': {
       id: '/_authenticated/chats/'
       path: '/chats'
@@ -774,6 +789,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountLedgerIndexRoute: typeof AuthenticatedAccountLedgerIndexRoute
   AuthenticatedAccountsIndexRoute: typeof AuthenticatedAccountsIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
+  AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCustomerLedgerIndexRoute: typeof AuthenticatedCustomerLedgerIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
@@ -804,6 +820,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountLedgerIndexRoute: AuthenticatedAccountLedgerIndexRoute,
   AuthenticatedAccountsIndexRoute: AuthenticatedAccountsIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
+  AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCustomerLedgerIndexRoute: AuthenticatedCustomerLedgerIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
@@ -859,6 +876,7 @@ export interface FileRoutesByFullPath {
   '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
   '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -909,6 +927,7 @@ export interface FileRoutesByTo {
   '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
   '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -962,6 +981,7 @@ export interface FileRoutesById {
   '/_authenticated/account-ledger/': typeof AuthenticatedAccountLedgerIndexRoute
   '/_authenticated/accounts/': typeof AuthenticatedAccountsIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
+  '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/customer-ledger/': typeof AuthenticatedCustomerLedgerIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -1016,6 +1036,7 @@ export interface FileRouteTypes {
     | '/account-ledger'
     | '/accounts'
     | '/apps'
+    | '/categories'
     | '/chats'
     | '/customer-ledger'
     | '/customers'
@@ -1065,6 +1086,7 @@ export interface FileRouteTypes {
     | '/account-ledger'
     | '/accounts'
     | '/apps'
+    | '/categories'
     | '/chats'
     | '/customer-ledger'
     | '/customers'
@@ -1116,6 +1138,7 @@ export interface FileRouteTypes {
     | '/_authenticated/account-ledger/'
     | '/_authenticated/accounts/'
     | '/_authenticated/apps/'
+    | '/_authenticated/categories/'
     | '/_authenticated/chats/'
     | '/_authenticated/customer-ledger/'
     | '/_authenticated/customers/'
@@ -1219,6 +1242,7 @@ export const routeTree = rootRoute
         "/_authenticated/account-ledger/",
         "/_authenticated/accounts/",
         "/_authenticated/apps/",
+        "/_authenticated/categories/",
         "/_authenticated/chats/",
         "/_authenticated/customer-ledger/",
         "/_authenticated/customers/",
@@ -1335,6 +1359,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/apps/": {
       "filePath": "_authenticated/apps/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/categories/": {
+      "filePath": "_authenticated/categories/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/chats/": {
