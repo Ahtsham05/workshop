@@ -171,7 +171,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 md:text-right'>
-                      {t('product_name')}
+                      {t('product_name')} *
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -230,12 +230,18 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                                   <div className="flex flex-wrap items-center gap-1 flex-1">
                                     {field.value.map((category) => (
                                       <Badge key={category._id} variant="secondary" className="flex items-center gap-1">
-                                        {category.image?.url && (
+                                        {category.image?.url ? (
                                           <img 
                                             src={category.image.url} 
                                             alt={category.name}
                                             className="w-3 h-3 rounded-full object-cover"
                                           />
+                                        ) : (
+                                          <div className="w-3 h-3 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-[10px] font-medium text-white">
+                                              {category.name?.charAt(0).toUpperCase() || 'C'}
+                                            </span>
+                                          </div>
                                         )}
                                         <span className="text-xs">{category.name}</span>
                                         <button
@@ -288,12 +294,18 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                                         className="flex items-center gap-2 cursor-pointer"
                                       >
                                         <div className="flex items-center gap-2 flex-1">
-                                          {category.image?.url && (
+                                          {category.image?.url ? (
                                             <img 
                                               src={category.image.url} 
                                               alt={category.name}
                                               className="w-6 h-6 rounded-full object-cover"
                                             />
+                                          ) : (
+                                            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                                              <span className="text-sm font-medium text-muted-foreground">
+                                                {category.name?.charAt(0).toUpperCase() || 'C'}
+                                              </span>
+                                            </div>
                                           )}
                                           <span>{category.name}</span>
                                         </div>
@@ -417,7 +429,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 md:text-right'>
-                      {t('price')}
+                      {t('price')} *
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -441,7 +453,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 md:text-right'>
-                      {t('cost')}
+                      {t('cost')} *
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -465,7 +477,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
                     <FormLabel className='col-span-2 md:text-right'>
-                      {t('stock_quantity')}
+                      {t('stock_quantity')} *
                     </FormLabel>
                     <FormControl>
                       <Input
