@@ -27,6 +27,7 @@ import { createCategory, updateCategory } from '@/stores/category.slice'
 import { useEffect, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, 'Category name is required'),
@@ -141,7 +142,21 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
                 <FormItem>
                   <FormLabel>{t('category_name')} *</FormLabel>
                   <FormControl>
-                    <Input placeholder={t('enter_category_name')} {...field} />
+                    <div className="relative">
+                      <Input 
+                        placeholder={t('enter_category_name')} 
+                        className="pr-10"
+                        {...field} 
+                      />
+                      <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                        <VoiceInputButton 
+                          onTranscript={(text) => {
+                            field.onChange(text);
+                          }}
+                          size="sm"
+                        />
+                      </div>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -27,6 +27,7 @@ import { AppDispatch } from '@/stores/store'
 import { addSupplier, updateSupplier } from '@/stores/supplier.slice' // Adjusted to supplier slice
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { cn } from '@/lib/utils'
 
 // Define the form schema with translations
@@ -132,12 +133,22 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('supplier_name')}
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder={t('supplier_name')}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
+                      <div className="relative col-span-4">
+                        <Input
+                          placeholder={t('supplier_name')}
+                          className='pr-10'
+                          autoComplete='off'
+                          {...field}
+                        />
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                          <VoiceInputButton 
+                            onTranscript={(text) => {
+                              field.onChange(text);
+                            }}
+                            size="sm"
+                          />
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
@@ -212,12 +223,22 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('address')}
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder={`${t('supplier_name')} ${t('address')}`}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
+                      <div className="relative col-span-4">
+                        <Input
+                          placeholder={`${t('supplier_name')} ${t('address')}`}
+                          className='pr-10'
+                          autoComplete='off'
+                          {...field}
+                        />
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                          <VoiceInputButton 
+                            onTranscript={(text) => {
+                              field.onChange(text);
+                            }}
+                            size="sm"
+                          />
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

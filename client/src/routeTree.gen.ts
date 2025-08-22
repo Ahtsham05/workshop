@@ -13,6 +13,7 @@
 import { Route as rootRoute } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as reportsTransactionLedgerDetailImport } from './routes/(reports)/transaction-ledger-detail'
 import { Route as reportsSupplierLedgerDetailImport } from './routes/(reports)/supplier-ledger-detail'
@@ -72,6 +73,12 @@ const AuthenticatedRouteRoute = AuthenticatedRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+
+const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
+  id: '/voice-demo',
+  path: '/voice-demo',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
@@ -537,6 +544,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
       parentRoute: typeof AuthenticatedRouteImport
     }
+    '/_authenticated/voice-demo': {
+      id: '/_authenticated/voice-demo'
+      path: '/voice-demo'
+      fullPath: '/voice-demo'
+      preLoaderRoute: typeof AuthenticatedVoiceDemoImport
+      parentRoute: typeof AuthenticatedRouteImport
+    }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
@@ -785,6 +799,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountLedgerIndexRoute: typeof AuthenticatedAccountLedgerIndexRoute
   AuthenticatedAccountsIndexRoute: typeof AuthenticatedAccountsIndexRoute
@@ -816,6 +831,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountLedgerIndexRoute: AuthenticatedAccountLedgerIndexRoute,
   AuthenticatedAccountsIndexRoute: AuthenticatedAccountsIndexRoute,
@@ -868,6 +884,7 @@ export interface FileRoutesByFullPath {
   '/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
   '/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -919,6 +936,7 @@ export interface FileRoutesByTo {
   '/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
   '/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -973,6 +991,7 @@ export interface FileRoutesById {
   '/(reports)/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
   '/(reports)/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -1028,6 +1047,7 @@ export interface FileRouteTypes {
     | '/supplier-ledger-detail'
     | '/transaction-ledger-detail'
     | '/barcode-demo'
+    | '/voice-demo'
     | '/'
     | '/settings/account'
     | '/settings/appearance'
@@ -1078,6 +1098,7 @@ export interface FileRouteTypes {
     | '/supplier-ledger-detail'
     | '/transaction-ledger-detail'
     | '/barcode-demo'
+    | '/voice-demo'
     | '/'
     | '/settings/account'
     | '/settings/appearance'
@@ -1130,6 +1151,7 @@ export interface FileRouteTypes {
     | '/(reports)/supplier-ledger-detail'
     | '/(reports)/transaction-ledger-detail'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/voice-demo'
     | '/_authenticated/'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -1238,6 +1260,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
+        "/_authenticated/voice-demo",
         "/_authenticated/",
         "/_authenticated/account-ledger/",
         "/_authenticated/accounts/",
@@ -1327,6 +1350,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/voice-demo": {
+      "filePath": "_authenticated/voice-demo.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/": {

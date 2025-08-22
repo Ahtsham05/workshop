@@ -29,6 +29,7 @@ import { fetchCategories } from '@/stores/category.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Badge } from '@/components/ui/badge'
 import { X, Search, Check } from 'lucide-react'
 import {
@@ -174,12 +175,22 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       {t('product_name')} *
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder={t('product_name')}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
+                      <div className="relative col-span-4">
+                        <Input
+                          placeholder={t('product_name')}
+                          className='pr-10'
+                          autoComplete='off'
+                          {...field}
+                        />
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                          <VoiceInputButton 
+                            onTranscript={(text) => {
+                              field.onChange(text);
+                            }}
+                            size="sm"
+                          />
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
@@ -194,12 +205,22 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       {t('description')}
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder={t('description')}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
+                      <div className="relative col-span-4">
+                        <Input
+                          placeholder={t('description')}
+                          className='pr-10'
+                          autoComplete='off'
+                          {...field}
+                        />
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                          <VoiceInputButton 
+                            onTranscript={(text) => {
+                              field.onChange(text);
+                            }}
+                            size="sm"
+                          />
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
