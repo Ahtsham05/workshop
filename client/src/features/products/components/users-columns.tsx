@@ -66,6 +66,41 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     enableHiding: true,
   },
   {
+    accessorKey: 'categories',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='categories' />,
+    cell: ({ row }) => {
+      const product = row.original
+      const categories = product.categories || []
+      
+      if (categories.length === 0) {
+        return <span className="text-muted-foreground">-</span>
+      }
+      
+      return (
+        <div className="flex flex-wrap gap-1">
+          {categories.slice(0, 2).map((category) => (
+            <Badge key={category._id} variant="secondary" className="flex items-center gap-1">
+              {category.image?.url && (
+                <img 
+                  src={category.image.url} 
+                  alt={category.name}
+                  className="w-3 h-3 rounded-full object-cover"
+                />
+              )}
+              <span className="text-xs">{category.name}</span>
+            </Badge>
+          ))}
+          {categories.length > 2 && (
+            <Badge variant="outline" className="text-xs">
+              +{categories.length - 2}
+            </Badge>
+          )}
+        </div>
+      )
+    },
+    enableHiding: true,
+  },
+  {
     accessorKey: 'barcode',
     header: ({ column }) => <DataTableColumnHeader column={column} title='barcode' />,
     cell: ({ row }) => <div>{row.getValue('barcode')}</div>,
