@@ -58,8 +58,8 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
       : {
           name: '',
           email: 'customer@gmail.com',
-          phone: '+923',
-          whatsapp: '+923',  // Added whatsapp field
+          phone: '03',
+          whatsapp: '03',  // Added whatsapp field
           address: 'address',
         },
   })
