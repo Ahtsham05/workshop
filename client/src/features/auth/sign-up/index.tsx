@@ -23,6 +23,7 @@ export default function SignUp() {
             Already have an account?{' '}
             <Link
               to='/sign-in'
+              search={{ redirect: "/" }}
               className='hover:text-primary underline underline-offset-4'
             >
               Sign In

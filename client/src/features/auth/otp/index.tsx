@@ -31,6 +31,7 @@ export default function Otp() {
             Haven't received it?{' '}
             <Link
               to='/sign-in'
+              search={{ redirect: "/" }}
               className='hover:text-primary underline underline-offset-4'
             >
               Resend a new code.

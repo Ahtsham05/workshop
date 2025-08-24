@@ -79,7 +79,11 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
     const action = await dispatch(signupWithEmailPassword(newData))
     if(action.payload?.user){
       toast.success("User created Successfully!")
-      navigate({to : "/sign-in", replace: true})
+      navigate({
+        to : "/sign-in", 
+        search: { redirect: "/" },
+        replace: true
+      })
     }
     setIsLoading(false)
   }

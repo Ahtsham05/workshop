@@ -24,7 +24,11 @@ export function ProfileDropdown() {
     const refreshToken = localStorage.getItem('refreshToken')
     await dispatch(logout({refreshToken})).then(()=>{
       toast.success('Logout successfully!')
-      navigate({ to: '/sign-in', replace: true })
+      navigate({ 
+        to: '/sign-in', 
+        search: { redirect: "/" },
+        replace: true 
+      })
     })
   }
   return (
