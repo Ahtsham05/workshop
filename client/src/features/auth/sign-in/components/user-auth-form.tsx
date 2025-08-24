@@ -2,7 +2,7 @@ import { HTMLAttributes, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
+import { Link, useSearch, useNavigate } from '@tanstack/react-router'
 import { IconBrandFacebook, IconBrandGithub } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,6 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useNavigate } from '@tanstack/react-router'
 import { signinWithEmailPassword } from '@/stores/auth.slice'
 import toast from 'react-hot-toast'
 
@@ -41,6 +40,8 @@ const formSchema = z.object({
 
 export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const search = useSearch({ from: '/(auth)/sign-in' })
+  const navigate = useNavigate()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -50,21 +51,33 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
     },
   })
   const dispatch = useDispatch<AppDispatch>()
-  const navigate = useNavigate()
+  
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)
-    // eslint-disable-next-line no-console
-    const action = await dispatch(
-      signinWithEmailPassword(data))
-      // console.log("action signin",action)
-    if (action.payload?.user) {
-      toast.success('Login successful!')
-      localStorage.setItem("accessToken",action.payload?.tokens?.access?.token)
-      localStorage.setItem("refreshToken",action.payload?.tokens?.refresh?.token)
-      localStorage.setItem("user",JSON.stringify(action.payload?.user))
-      navigate({to: '/', replace: true})
+    
+    try {
+      const action = await dispatch(signinWithEmailPassword(data))
+      
+      if (action.payload?.user) {
+        toast.success('Login successful!')
+        
+        // Store authentication data
+        localStorage.setItem("accessToken", action.payload?.tokens?.access?.token)
+        localStorage.setItem("refreshToken", action.payload?.tokens?.refresh?.token)
+        localStorage.setItem("user", JSON.stringify(action.payload?.user))
+        
+        // Navigate to redirect URL or home page
+        const redirectTo = search.redirect || '/'
+        navigate({ to: redirectTo, replace: true })
+      } else {
+        toast.error('Login failed. Please check your credentials.')
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      toast.error('An error occurred during login. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   return (

@@ -12,6 +12,8 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
 import { LanguageProvider } from './context/language-context'
+import { AuthProvider } from './context/auth-context'
+import { AuthErrorBoundary } from './components/auth-error-boundary'
 import { Provider } from "react-redux";
 import { store } from './stores/store'
 import './index.css'
@@ -43,16 +45,18 @@ if (!rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <Provider store={store}>
-        {/* <QueryClientProvider client={queryClient}> */}
-        <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
-          <LanguageProvider>
-            <FontProvider>
-              <RouterProvider router={router} />
-            </FontProvider>
-          </LanguageProvider>
-        </ThemeProvider>
-        {/* </QueryClientProvider> */}
-        <Toaster />
+        <AuthErrorBoundary>
+          <AuthProvider>
+            <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
+              <LanguageProvider>
+                <FontProvider>
+                  <RouterProvider router={router} />
+                  <Toaster />
+                </FontProvider>
+              </LanguageProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </AuthErrorBoundary>
       </Provider>
     </StrictMode>
   )

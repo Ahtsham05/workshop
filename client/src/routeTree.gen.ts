@@ -11,7 +11,7 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated/route'
+import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
@@ -65,7 +65,7 @@ import { Route as AuthenticatedSettingsAccountImport } from './routes/_authentic
 
 // Create/Update Routes
 
-const AuthenticatedRouteRoute = AuthenticatedRouteImport.update({
+const AuthenticatedRoute = AuthenticatedImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRoute,
 } as any)
@@ -73,19 +73,19 @@ const AuthenticatedRouteRoute = AuthenticatedRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
   id: '/voice-demo',
   path: '/voice-demo',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedBarcodeDemoRoute = AuthenticatedBarcodeDemoImport.update({
   id: '/barcode-demo',
   path: '/barcode-demo',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const reportsTransactionLedgerDetailRoute =
@@ -194,48 +194,48 @@ const AuthenticatedSettingsRouteRoute = AuthenticatedSettingsRouteImport.update(
   {
     id: '/settings',
     path: '/settings',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
 
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   id: '/users/',
   path: '/users/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedTransactionsIndexRoute =
   AuthenticatedTransactionsIndexImport.update({
     id: '/transactions/',
     path: '/transactions/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedTransactionLedgerIndexRoute =
   AuthenticatedTransactionLedgerIndexImport.update({
     id: '/transaction-ledger/',
     path: '/transaction-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexImport.update({
   id: '/tasks/',
   path: '/tasks/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedSuppliersIndexRoute =
   AuthenticatedSuppliersIndexImport.update({
     id: '/suppliers/',
     path: '/suppliers/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedSupplierLedgerIndexRoute =
   AuthenticatedSupplierLedgerIndexImport.update({
     id: '/supplier-ledger/',
     path: '/supplier-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
@@ -249,14 +249,14 @@ const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
 const AuthenticatedSaleIndexRoute = AuthenticatedSaleIndexImport.update({
   id: '/sale/',
   path: '/sale/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedSaleViewIndexRoute = AuthenticatedSaleViewIndexImport.update(
   {
     id: '/sale-view/',
     path: '/sale-view/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
 
@@ -264,20 +264,20 @@ const AuthenticatedSaleLedgerIndexRoute =
   AuthenticatedSaleLedgerIndexImport.update({
     id: '/sale-ledger/',
     path: '/sale-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedSaleAddIndexRoute = AuthenticatedSaleAddIndexImport.update({
   id: '/sale-add/',
   path: '/sale-add/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedPurchaseIndexRoute = AuthenticatedPurchaseIndexImport.update(
   {
     id: '/purchase/',
     path: '/purchase/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
 
@@ -285,28 +285,28 @@ const AuthenticatedPurchaseViewIndexRoute =
   AuthenticatedPurchaseViewIndexImport.update({
     id: '/purchase-view/',
     path: '/purchase-view/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedPurchaseLedgerIndexRoute =
   AuthenticatedPurchaseLedgerIndexImport.update({
     id: '/purchase-ledger/',
     path: '/purchase-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedPurchaseAddIndexRoute =
   AuthenticatedPurchaseAddIndexImport.update({
     id: '/purchase-add/',
     path: '/purchase-add/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedProductsIndexRoute = AuthenticatedProductsIndexImport.update(
   {
     id: '/products/',
     path: '/products/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
 
@@ -314,61 +314,61 @@ const AuthenticatedMobileRepairIndexRoute =
   AuthenticatedMobileRepairIndexImport.update({
     id: '/mobile-repair/',
     path: '/mobile-repair/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedMobileLoadIndexRoute =
   AuthenticatedMobileLoadIndexImport.update({
     id: '/mobile-load/',
     path: '/mobile-load/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexImport.update({
     id: '/help-center/',
     path: '/help-center/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexImport.update({
     id: '/customers/',
     path: '/customers/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedCustomerLedgerIndexRoute =
   AuthenticatedCustomerLedgerIndexImport.update({
     id: '/customer-ledger/',
     path: '/customer-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexImport.update({
   id: '/chats/',
   path: '/chats/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedCategoriesIndexRoute =
   AuthenticatedCategoriesIndexImport.update({
     id: '/categories/',
     path: '/categories/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   id: '/apps/',
   path: '/apps/',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 const AuthenticatedAccountsIndexRoute = AuthenticatedAccountsIndexImport.update(
   {
     id: '/accounts/',
     path: '/accounts/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
 
@@ -376,7 +376,7 @@ const AuthenticatedAccountLedgerIndexRoute =
   AuthenticatedAccountLedgerIndexImport.update({
     id: '/account-ledger/',
     path: '/account-ledger/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedSettingsNotificationsRoute =
@@ -415,7 +415,7 @@ declare module '@tanstack/react-router' {
       id: '/_authenticated'
       path: ''
       fullPath: ''
-      preLoaderRoute: typeof AuthenticatedRouteImport
+      preLoaderRoute: typeof AuthenticatedImport
       parentRoute: typeof rootRoute
     }
     '/_authenticated/settings': {
@@ -423,7 +423,7 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/(auth)/forgot-password': {
       id: '/(auth)/forgot-password'
@@ -542,21 +542,21 @@ declare module '@tanstack/react-router' {
       path: '/barcode-demo'
       fullPath: '/barcode-demo'
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/voice-demo': {
       id: '/_authenticated/voice-demo'
       path: '/voice-demo'
       fullPath: '/voice-demo'
       preLoaderRoute: typeof AuthenticatedVoiceDemoImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings/account': {
       id: '/_authenticated/settings/account'
@@ -591,133 +591,133 @@ declare module '@tanstack/react-router' {
       path: '/account-ledger'
       fullPath: '/account-ledger'
       preLoaderRoute: typeof AuthenticatedAccountLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/accounts/': {
       id: '/_authenticated/accounts/'
       path: '/accounts'
       fullPath: '/accounts'
       preLoaderRoute: typeof AuthenticatedAccountsIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/apps/': {
       id: '/_authenticated/apps/'
       path: '/apps'
       fullPath: '/apps'
       preLoaderRoute: typeof AuthenticatedAppsIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/categories/': {
       id: '/_authenticated/categories/'
       path: '/categories'
       fullPath: '/categories'
       preLoaderRoute: typeof AuthenticatedCategoriesIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/chats/': {
       id: '/_authenticated/chats/'
       path: '/chats'
       fullPath: '/chats'
       preLoaderRoute: typeof AuthenticatedChatsIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/customer-ledger/': {
       id: '/_authenticated/customer-ledger/'
       path: '/customer-ledger'
       fullPath: '/customer-ledger'
       preLoaderRoute: typeof AuthenticatedCustomerLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof AuthenticatedCustomersIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
       fullPath: '/help-center'
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-load/': {
       id: '/_authenticated/mobile-load/'
       path: '/mobile-load'
       fullPath: '/mobile-load'
       preLoaderRoute: typeof AuthenticatedMobileLoadIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-repair/': {
       id: '/_authenticated/mobile-repair/'
       path: '/mobile-repair'
       fullPath: '/mobile-repair'
       preLoaderRoute: typeof AuthenticatedMobileRepairIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof AuthenticatedProductsIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-add/': {
       id: '/_authenticated/purchase-add/'
       path: '/purchase-add'
       fullPath: '/purchase-add'
       preLoaderRoute: typeof AuthenticatedPurchaseAddIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-ledger/': {
       id: '/_authenticated/purchase-ledger/'
       path: '/purchase-ledger'
       fullPath: '/purchase-ledger'
       preLoaderRoute: typeof AuthenticatedPurchaseLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-view/': {
       id: '/_authenticated/purchase-view/'
       path: '/purchase-view'
       fullPath: '/purchase-view'
       preLoaderRoute: typeof AuthenticatedPurchaseViewIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase/': {
       id: '/_authenticated/purchase/'
       path: '/purchase'
       fullPath: '/purchase'
       preLoaderRoute: typeof AuthenticatedPurchaseIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/sale-add/': {
       id: '/_authenticated/sale-add/'
       path: '/sale-add'
       fullPath: '/sale-add'
       preLoaderRoute: typeof AuthenticatedSaleAddIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/sale-ledger/': {
       id: '/_authenticated/sale-ledger/'
       path: '/sale-ledger'
       fullPath: '/sale-ledger'
       preLoaderRoute: typeof AuthenticatedSaleLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/sale-view/': {
       id: '/_authenticated/sale-view/'
       path: '/sale-view'
       fullPath: '/sale-view'
       preLoaderRoute: typeof AuthenticatedSaleViewIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/sale/': {
       id: '/_authenticated/sale/'
       path: '/sale'
       fullPath: '/sale'
       preLoaderRoute: typeof AuthenticatedSaleIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
@@ -731,42 +731,42 @@ declare module '@tanstack/react-router' {
       path: '/supplier-ledger'
       fullPath: '/supplier-ledger'
       preLoaderRoute: typeof AuthenticatedSupplierLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/suppliers/': {
       id: '/_authenticated/suppliers/'
       path: '/suppliers'
       fullPath: '/suppliers'
       preLoaderRoute: typeof AuthenticatedSuppliersIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/tasks/': {
       id: '/_authenticated/tasks/'
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof AuthenticatedTasksIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/transaction-ledger/': {
       id: '/_authenticated/transaction-ledger/'
       path: '/transaction-ledger'
       fullPath: '/transaction-ledger'
       preLoaderRoute: typeof AuthenticatedTransactionLedgerIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/transactions/': {
       id: '/_authenticated/transactions/'
       path: '/transactions'
       fullPath: '/transactions'
       preLoaderRoute: typeof AuthenticatedTransactionsIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
-      parentRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
   }
 }
@@ -796,7 +796,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
-interface AuthenticatedRouteRouteChildren {
+interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
@@ -828,7 +828,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
 }
 
-const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
@@ -861,11 +861,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
 }
 
-const AuthenticatedRouteRouteWithChildren =
-  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
 
 export interface FileRoutesByFullPath {
-  '': typeof AuthenticatedRouteRouteWithChildren
+  '': typeof AuthenticatedRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -972,7 +973,7 @@ export interface FileRoutesByTo {
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
-  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/otp': typeof authOtpRoute
@@ -1187,7 +1188,7 @@ export interface FileRouteTypes {
 }
 
 export interface RootRouteChildren {
-  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOtpRoute: typeof authOtpRoute
   authSignInRoute: typeof authSignInRoute
@@ -1207,7 +1208,7 @@ export interface RootRouteChildren {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOtpRoute: authOtpRoute,
   authSignInRoute: authSignInRoute,
@@ -1256,7 +1257,7 @@ export const routeTree = rootRoute
       ]
     },
     "/_authenticated": {
-      "filePath": "_authenticated/route.tsx",
+      "filePath": "_authenticated.tsx",
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",

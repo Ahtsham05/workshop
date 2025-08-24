@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   BadgeCheck,
   Bell,
@@ -23,11 +23,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { useDispatch, useSelector } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
-import { logout } from '@/stores/auth.slice'
-import toast from 'react-hot-toast'
+import { useSelector } from 'react-redux'
 import { useLanguage } from '@/context/language-context'
+import { useLogout } from '@/hooks/use-logout'
 
 export function NavUser({
   user,
@@ -41,16 +39,11 @@ export function NavUser({
 
   const auth = useSelector((state: any) => state.auth?.data?.user)
   const { isMobile } = useSidebar()
-  const dispatch = useDispatch<AppDispatch>()
-  const navigate = useNavigate()
   const { t } = useLanguage()
+  const { logout: handleLogout } = useLogout()
   
-  const logoutHandler = async () => {
-    const refreshToken = localStorage.getItem('refreshToken')
-    await dispatch(logout({ refreshToken })).then(() => {
-      toast.success(t('logout_success') || 'Logout successfully!')
-      navigate({ to: '/sign-in', replace: true })
-    })
+  const logoutHandler = () => {
+    handleLogout()
   }
   return (
     <SidebarMenu>
