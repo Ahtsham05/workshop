@@ -1,20 +1,20 @@
 import { Button } from '@/components/ui/button'
-// import {
-//   Card,
-//   CardContent,
-//   CardDescription,
-//   CardHeader,
-//   CardTitle,
-// } from '@/components/ui/card'
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-// import { Overview } from './components/overview'
-// import { RecentSales } from './components/recent-sales'
+import { Overview } from './components/overview'
+import { RecentSales } from './components/recent-sales'
 
 export default function Dashboard() {
   return (
@@ -37,7 +37,7 @@ export default function Dashboard() {
             <Button>Download</Button>
           </div>
         </div>
-        {/* <Tabs
+        <Tabs
           orientation='vertical'
           defaultValue='overview'
           className='space-y-4'
@@ -182,27 +182,8 @@ export default function Dashboard() {
               </Card>
             </div>
           </TabsContent>
-        </Tabs> */}
-        <div className="flex flex-col items-center justify-center p-8 bg-gray-100">
-          <div className="text-center mb-6">
-            {/* Bismillah in Arabic */}
-            <p className="text-4xl font-bold text-green-600 mb-4">
-              <span className="text-5xl text-green-600">بِسْمِ اللّٰہِ الرَّحْمَنِ الرَّحِیمِ</span>
-            </p>
-          </div>
-
-          <div className="text-center">
-            {/* 786 Engineering Works in English */}
-            {/* <h1 className="text-5xl font-semibold text-blue-600 mb-4">
-              786 Engineering Works
-            </h1> */}
-
-            {/* 786 Engineering Works in Urdu */}
-            <p className="text-5xl font-semibold text-blue-600 mb-4">
-              شاہد موبائل
-            </p>
-          </div>
-        </div>
+        </Tabs>
+        
       </Main>
     </>
   )
