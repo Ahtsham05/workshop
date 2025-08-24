@@ -10,6 +10,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SearchProvider } from '@/context/search-context'
 import { ThemeProvider } from '@/context/theme-context'
 import { AuthProvider } from '@/context/auth-context'
+import { LanguageProvider } from '@/context/language-context'
 import Dashboard from '@/features/dashboard'
 import GeneralError from '@/features/errors/general-error'
 import NotFoundError from '@/features/errors/not-found-error'
@@ -21,17 +22,41 @@ function RootComponent() {
   // If we're at the root path, show the dashboard with sidebar
   if (location.pathname === '/') {
     return (
+      <LanguageProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SearchProvider>
+              <NavigationProgress />
+              <TokenRefreshInitializer />
+              <SidebarProvider>
+                <AppSidebar />
+                <main className="flex-1 overflow-hidden">
+                  <Dashboard />
+                </main>
+              </SidebarProvider>
+              <Toaster duration={50000} />
+              {import.meta.env.MODE === 'development' && (
+                <>
+                  {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
+                  {/* <TanStackRouterDevtools position='bottom-right' /> */}
+                </>
+              )}
+            </SearchProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </LanguageProvider>
+    )
+  }
+  
+  // For all other routes, use the normal outlet
+  return (
+    <LanguageProvider>
       <ThemeProvider>
         <AuthProvider>
           <SearchProvider>
             <NavigationProgress />
             <TokenRefreshInitializer />
-            <SidebarProvider>
-              <AppSidebar />
-              <main className="flex-1 overflow-hidden">
-                <Dashboard />
-              </main>
-            </SidebarProvider>
+            <Outlet />
             <Toaster duration={50000} />
             {import.meta.env.MODE === 'development' && (
               <>
@@ -42,27 +67,7 @@ function RootComponent() {
           </SearchProvider>
         </AuthProvider>
       </ThemeProvider>
-    )
-  }
-  
-  // For all other routes, use the normal outlet
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <SearchProvider>
-          <NavigationProgress />
-          <TokenRefreshInitializer />
-          <Outlet />
-          <Toaster duration={50000} />
-          {import.meta.env.MODE === 'development' && (
-            <>
-              {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
-              {/* <TanStackRouterDevtools position='bottom-right' /> */}
-            </>
-          )}
-        </SearchProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    </LanguageProvider>
   )
 }
 export const Route = createRootRouteWithContext<{

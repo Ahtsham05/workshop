@@ -14,16 +14,19 @@ import {
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { logout } from '@/stores/auth.slice'
+import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 
 export function ProfileDropdown() {
   const user = useSelector((state: any) => state.auth.data?.user)
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
+  const { t } = useLanguage()
+  
   const logoutHandler = async () => {
     const refreshToken = localStorage.getItem('refreshToken')
     await dispatch(logout({refreshToken})).then(()=>{
-      toast.success('Logout successfully!')
+      toast.success(t('logout_success'))
       navigate({ 
         to: '/sign-in', 
         search: { redirect: "/" },
@@ -54,27 +57,27 @@ export function ProfileDropdown() {
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link to='/settings'>
-              Profile
+              {t('profile')}
               <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to='/settings'>
-              Billing
+              {t('billing')}
               <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to='/settings'>
-              Settings
+              {t('settings')}
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>New Team</DropdownMenuItem>
+          <DropdownMenuItem>{t('new_team')}</DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logoutHandler}>
-          Log out
+          {t('log_out')}
           <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>
