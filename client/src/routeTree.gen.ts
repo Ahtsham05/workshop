@@ -51,6 +51,7 @@ import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedMobileRepairIndexImport } from './routes/_authenticated/mobile-repair/index'
 import { Route as AuthenticatedMobileLoadIndexImport } from './routes/_authenticated/mobile-load/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedCustomerLedgerIndexImport } from './routes/_authenticated/customer-ledger/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
@@ -328,6 +329,13 @@ const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexImport.update({
     id: '/help-center/',
     path: '/help-center/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedInvoiceIndexRoute =
+  AuthenticatedInvoiceIndexImport.update({
+    id: '/invoice/',
+    path: '/invoice/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -809,6 +817,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCustomerLedgerIndexRoute: typeof AuthenticatedCustomerLedgerIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedMobileLoadIndexRoute: typeof AuthenticatedMobileLoadIndexRoute
   AuthenticatedMobileRepairIndexRoute: typeof AuthenticatedMobileRepairIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
@@ -841,6 +850,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCustomerLedgerIndexRoute: AuthenticatedCustomerLedgerIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
   AuthenticatedMobileLoadIndexRoute: AuthenticatedMobileLoadIndexRoute,
   AuthenticatedMobileRepairIndexRoute: AuthenticatedMobileRepairIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,

@@ -2,6 +2,7 @@ import { ColumnDef } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Package } from 'lucide-react'
 import LongText from '@/components/long-text'
 import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
@@ -47,10 +48,8 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
               className="w-8 h-8 rounded-full object-cover flex-shrink-0"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-muted-foreground">
-                {product.name?.charAt(0).toUpperCase() || 'P'}
-              </span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center flex-shrink-0">
+              <Package className="h-4 w-4 text-gray-400" />
             </div>
           )}
           <LongText className='max-w-36'>{row.getValue('name')}</LongText>
