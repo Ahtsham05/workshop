@@ -72,6 +72,37 @@ const getAllProducts = async () => {
   return products;
 }
 
+/**
+ * Bulk update products
+ * @param {Array} productsToUpdate - Array of products with updates
+ * @returns {Promise<Array>}
+ */
+const bulkUpdateProducts = async (productsToUpdate) => {
+  const bulkOps = productsToUpdate.map(product => {
+    const updateFields = {};
+    
+    // Only include fields that are provided
+    if (product.price !== undefined) updateFields.price = product.price;
+    if (product.cost !== undefined) updateFields.cost = product.cost;
+    if (product.stockQuantity !== undefined) updateFields.stockQuantity = product.stockQuantity;
+    
+    return {
+      updateOne: {
+        filter: { _id: product.id },
+        update: { $set: updateFields }
+      }
+    };
+  });
+  
+  const result = await Product.bulkWrite(bulkOps);
+  
+  // Return the updated products
+  const productIds = productsToUpdate.map(p => p.id);
+  const updatedProducts = await Product.find({ _id: { $in: productIds } });
+  
+  return updatedProducts;
+};
+
 module.exports = {
   createProduct,
   queryProducts,
@@ -79,4 +110,5 @@ module.exports = {
   updateProductById,
   deleteProductById,
   getAllProducts,
+  bulkUpdateProducts,
 };

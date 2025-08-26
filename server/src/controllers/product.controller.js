@@ -167,6 +167,20 @@ const getAllProducts = catchAsync(async (req, res) => {
   res.send(products);
 });
 
+const bulkUpdateProducts = catchAsync(async (req, res) => {
+  const { products } = req.body;
+  
+  try {
+    const updatedProducts = await productService.bulkUpdateProducts(products);
+    res.send({
+      message: `Successfully updated ${updatedProducts.length} products`,
+      updatedProducts
+    });
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk update failed: ' + error.message);
+  }
+});
+
 module.exports = {
   createProduct,
   getProducts,
@@ -176,4 +190,5 @@ module.exports = {
   getAllProducts,
   uploadProductImage,
   deleteProductImage,
+  bulkUpdateProducts,
 };

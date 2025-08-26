@@ -86,11 +86,25 @@ const deleteProduct = {
   }),
 };
 
+const bulkUpdateProducts = {
+  body: Joi.object().keys({
+    products: Joi.array().items(
+      Joi.object().keys({
+        id: Joi.string().required(),
+        price: Joi.number().optional(),
+        cost: Joi.number().optional(),
+        stockQuantity: Joi.number().optional(),
+      })
+    ).required().min(1)
+  }),
+};
+
 module.exports = {
   createProduct,
   getProducts,
   getProduct,
   updateProduct,
   deleteProduct,
-  getAllProducts
+  getAllProducts,
+  bulkUpdateProducts
 };

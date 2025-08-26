@@ -51,6 +51,10 @@ const summery = {
     url: '/products/all',
     method: 'get'
   },
+  bulkUpdateProducts: {
+    url: '/products/bulk-update',
+    method: 'patch'
+  },
 
   // customers
   addCustomer: {

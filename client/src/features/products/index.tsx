@@ -10,22 +10,28 @@ import { ProductTable } from './components/users-table' // Adjusted for products
 import ProductsProvider from './context/users-context' // Adjusted for products
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useEffect, useState } from 'react'
-import { fetchProducts } from '@/stores/product.slice'
+import { useEffect, useState, useCallback } from 'react'
+import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
 import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { LanguageSwitch } from '@/components/language-switch'
+import { Button } from '@/components/ui/button'
+import { Edit } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function Products() {
   // Parse product list
-  const [products, setProducts] = useState([])
+  const [products, setProducts] = useState<any[]>([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [selectedProducts, setSelectedProducts] = useState<any[]>([])
+  const [inlineEditMode, setInlineEditMode] = useState(false)
+  const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
@@ -40,14 +46,111 @@ export default function Products() {
       ...(search && { search: search }), // Only include 'name' if search exists
       ...(search && { fieldName: 'name' })
     };
-    dispatch(fetchProducts(params)).then((data) => {
-      setProducts(data.payload?.results)
-      setTotalPage(data.payload?.totalPages)
-      setLimit(data.payload?.limit)
-      setLoading(false)
-    })
-    // }, [totalPage, currentPage, limit])
-  }, [totalPage, currentPage, limit, fetch, search])
+    
+    dispatch(fetchProducts(params))
+      .then((data) => {
+        console.log('Products fetched:', data)
+        if (data.payload?.results) {
+          setProducts(data.payload.results)
+          setTotalPage(data.payload.totalPages || 1)
+        } else {
+          setProducts([])
+          setTotalPage(1)
+        }
+        setLoading(false)
+      })
+      .catch((error) => {
+        console.error('Error fetching products:', error)
+        setProducts([])
+        setTotalPage(1)
+        setLoading(false)
+        toast.error('Failed to fetch products')
+      })
+  }, [currentPage, limit, fetch, search, dispatch])
+
+  // Handle bulk product update with individual values
+  const handleBulkUpdate = useCallback(async () => {
+    try {
+      const hasUpdates = Object.values(editValues).some(values => 
+        values.price !== undefined || values.cost !== undefined || values.stockQuantity !== undefined
+      )
+      
+      if (!hasUpdates) {
+        toast.error(t('enter_at_least_one_value'))
+        return
+      }
+
+      // Prepare products array for bulk update API
+      const productsToUpdate = selectedProducts.map((product: any) => {
+        const productId = product._id || product.id || ''
+        const updates = editValues[productId] || {}
+        
+        if (Object.keys(updates).length === 0) return null
+        
+        return {
+          id: productId,
+          ...(updates.price !== undefined && { price: updates.price }),
+          ...(updates.cost !== undefined && { cost: updates.cost }),
+          ...(updates.stockQuantity !== undefined && { stockQuantity: updates.stockQuantity }),
+        }
+      }).filter(Boolean) // Remove null entries
+
+      if (productsToUpdate.length === 0) {
+        toast.error(t('no_changes_to_update'))
+        return
+      }
+
+      console.log('Sending bulk update for products:', productsToUpdate)
+
+      // Call the bulk update API
+      const result = await dispatch(bulkUpdateProducts({ products: productsToUpdate }))
+      
+      if (result.meta.requestStatus === 'fulfilled') {
+        // Reset edit mode and values
+        setInlineEditMode(false)
+        setEditValues({})
+        setSelectedProducts([])
+        
+        // Refresh the products list
+        setFetch(!fetch)
+        
+        toast.success(`${t('bulk_update_success')} ${productsToUpdate.length} products updated`)
+      } else {
+        throw new Error(result.payload || 'Bulk update failed')
+      }
+      
+    } catch (error) {
+      console.error('Bulk update error:', error)
+      toast.error('Failed to update products')
+    }
+  }, [editValues, selectedProducts, t, fetch, dispatch])
+
+  const handleSelectedRowsChange = useCallback((selectedRows: any[]) => {
+    setSelectedProducts(selectedRows)
+  }, [])
+
+  const handleEditValueChange = useCallback((productId: string, field: string, value: number) => {
+    setEditValues(prev => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [field]: value
+      }
+    }))
+  }, [])
+
+  const startInlineEdit = useCallback(() => {
+    if (selectedProducts.length === 0) {
+      toast.error(t('no_products_selected'))
+      return
+    }
+    setInlineEditMode(true)
+  }, [selectedProducts.length, t])
+
+  const cancelInlineEdit = useCallback(() => {
+    setInlineEditMode(false)
+    setEditValues({})
+  }, [])
 
   return (
     <ProductsProvider>
@@ -69,7 +172,36 @@ export default function Products() {
                 {t('manage_products')}
               </p>
             </div>
-            <ProductPrimaryButtons />
+            <div className='flex gap-2'>
+              {selectedProducts.length > 0 && !inlineEditMode && (
+                <Button 
+                  variant="outline" 
+                  onClick={startInlineEdit}
+                  className='space-x-1'
+                >
+                  <Edit size={16} />
+                  <span>{t('bulk_edit_selected')} ({selectedProducts.length})</span>
+                </Button>
+              )}
+              {inlineEditMode && (
+                <>
+                  <Button 
+                    onClick={handleBulkUpdate}
+                    className='space-x-1'
+                  >
+                    <span>{t('update_products')} ({selectedProducts.length})</span>
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={cancelInlineEdit}
+                    className='space-x-1'
+                  >
+                    <span>{t('cancel')}</span>
+                  </Button>
+                </>
+              )}
+              <ProductPrimaryButtons />
+            </div>
           </div>
           <Input
             placeholder={t('search_products')}
@@ -86,6 +218,10 @@ export default function Products() {
                   data={products}
                   columns={columns}
                   paggination={{ totalPage, currentPage, setCurrentPage, limit, setLimit }}
+                  onSelectedRowsChange={handleSelectedRowsChange}
+                  inlineEditMode={inlineEditMode}
+                  editValues={editValues}
+                  onEditValueChange={handleEditValueChange}
                 />
               )
             }

@@ -21,6 +21,11 @@ router
   .route('/all')
   .get(auth('getProducts'), validate(productValidation.getAllProducts), productController.getAllProducts);
 
+// Bulk update route
+router
+  .route('/bulk-update')
+  .patch(auth('manageProducts'), validate(productValidation.bulkUpdateProducts), productController.bulkUpdateProducts);
+
 // Image upload routes
 router
   .route('/upload-image')

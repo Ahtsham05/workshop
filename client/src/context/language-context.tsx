@@ -99,6 +99,23 @@ const translations: Translations = {
     "delete_product_placeholder": "Enter Product to confirm deletion.",
     "delete_operation_warning": "Please be careful, this operation can not be rolled back.",
     
+    // Bulk Edit Products
+    "bulk_edit_products": "Bulk Edit Products",
+    "bulk_edit_selected": "Bulk Edit Selected",
+    "edit_selected_products": "Edit {count} selected products",
+    "enter_new_price": "Enter new price (leave empty to keep current)",
+    "enter_new_cost": "Enter new cost (leave empty to keep current)",
+    "enter_new_quantity": "Enter new quantity (leave empty to keep current)",
+    "update_products": "Update Products",
+    "bulk_update_success": "Successfully updated",
+    "no_products_selected": "No products selected",
+    "select_products_first": "Please select products first",
+    "enter_at_least_one_value": "Please enter at least one value to update",
+    "no_changes_to_update": "No changes to update",
+    "enter_new": "Enter new",
+    "current": "Current",
+    // "bulk_update_success": "Products updated successfully!",
+    
     // Barcode functionality
     "scan_barcode": "Scan Barcode",
     "enter_barcode": "Enter Barcode",
@@ -400,6 +417,23 @@ const translations: Translations = {
     "delete_product_warning_suffix": "سسٹم سے۔ اسے واپس نہیں کیا جا سکتا۔",
     "delete_product_placeholder": "حذف کرنے کی تصدیق کے لیے پروڈکٹ داخل کریں۔",
     "delete_operation_warning": "براہ کرم محتاط رہیں، اس آپریشن کو واپس نہیں کیا جا سکتا۔",
+    
+    // Bulk Edit Products
+    "bulk_edit_products": "بلک ایڈٹ پروڈکٹس",
+    "bulk_edit_selected": "منتخب کردہ بلک ایڈٹ",
+    "edit_selected_products": "{count} منتخب شدہ پروڈکٹس ایڈٹ کریں",
+    "enter_new_price": "نئی قیمت داخل کریں (موجودہ رکھنے کے لیے خالی چھوڑیں)",
+    "enter_new_cost": "نئی لاگت داخل کریں (موجودہ رکھنے کے لیے خالی چھوڑیں)",
+    "enter_new_quantity": "نئی مقدار داخل کریں (موجودہ رکھنے کے لیے خالی چھوڑیں)",
+    "update_products": "پروڈکٹس اپ ڈیٹ کریں",
+    "bulk_update_success": "کامیابی سے {count} پروڈکٹس اپ ڈیٹ کیے گئے",
+    "no_products_selected": "کوئی پروڈکٹ منتخب نہیں",
+    "select_products_first": "پہلے پروڈکٹس منتخب کریں",
+    "enter_at_least_one_value": "اپ ڈیٹ کرنے کے لیے کم از کم ایک قیمت داخل کریں",
+    "no_changes_to_update": "اپ ڈیٹ کرنے کے لیے کوئی تبدیلی نہیں",
+    "enter_new": "نئی داخل کریں",
+    "current": "موجودہ",
+    // "bulk_update_success": "پروڈکٹس کامیابی سے اپ ڈیٹ ہوگئے!",
     
     // Barcode functionality
     "scan_barcode": "بارکوڈ اسکین کریں",
