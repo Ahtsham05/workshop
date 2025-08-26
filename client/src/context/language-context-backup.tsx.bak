@@ -234,7 +234,7 @@ const translations: Translations = {
     
     // Sidebar Navigation
     "general": "General",
-    "dashboard": "Dashboard",
+    // "dashboard": "Dashboard",
     "suppliers": "Suppliers",
     "customers": "Customers",
     "products": "Products",
@@ -244,7 +244,7 @@ const translations: Translations = {
     "transactions": "Transactions",
     "mobile_repairing": "Mobile Repairing",
     "jazz_cash_load": "Jazz Cash & Load",
-    "reports": "Reports",
+    // "reports": "Reports",
     "customers_ledger": "Customers Ledger",
     "suppliers_ledger": "Suppliers Ledger",
     "transaction_ledger": "Transaction Ledger",
@@ -555,7 +555,7 @@ const translations: Translations = {
     
     // Sidebar Navigation
     "general": "عمومی",
-    "dashboard": "ڈیش بورڈ",
+    // "dashboard": "ڈیش بورڈ",
     "suppliers": "سپلائرز",
     "customers": "کسٹمرز",
     "products": "پروڈکٹس",
@@ -565,7 +565,7 @@ const translations: Translations = {
     "transactions": "ٹرانزیکشنز",
     "mobile_repairing": "موبائل ریپیئرنگ",
     "jazz_cash_load": "جاز کیش اور لوڈ",
-    "reports": "رپورٹس",
+    // "reports": "رپورٹس",
     "customers_ledger": "کسٹمر لیجر",
     "suppliers_ledger": "سپلائر لیجر",
     "transaction_ledger": "ٹرانزیکشن لیجر",
