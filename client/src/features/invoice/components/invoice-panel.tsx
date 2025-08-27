@@ -6,12 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2 } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
+// import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import {
   Command,
   CommandEmpty,
@@ -65,6 +66,247 @@ export function InvoicePanel({
   // RTK Query mutation
   const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
 
+  // Print functionality
+  const generateInvoicePrint = useCallback((invoiceData: any) => {
+    const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Invoice ${invoiceData.invoiceNumber}</title>
+      <style>
+        @media print {
+          @page { margin: 0; size: 80mm auto; }
+          body { margin: 0; padding: 0; }
+        }
+        
+        body {
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          line-height: 1.4;
+          margin: 0;
+          padding: 10px;
+          width: 300px;
+          background: white;
+        }
+        
+        .receipt-header {
+          text-align: center;
+          margin-bottom: 15px;
+          border-bottom: 2px solid #000;
+          padding-bottom: 10px;
+        }
+        
+        .business-name {
+          font-size: 18px;
+          font-weight: bold;
+          margin-bottom: 5px;
+        }
+        
+        .business-info {
+          font-size: 10px;
+          margin-bottom: 2px;
+        }
+        
+        .invoice-info {
+          margin-bottom: 15px;
+          border-bottom: 1px dashed #000;
+          padding-bottom: 10px;
+        }
+        
+        .invoice-info div {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 3px;
+        }
+        
+        .items-table {
+          width: 100%;
+          margin-bottom: 15px;
+        }
+        
+        .item-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 5px;
+          padding-bottom: 3px;
+          border-bottom: 1px dotted #ccc;
+        }
+        
+        .item-name {
+          font-weight: bold;
+        }
+        
+        .item-details {
+          font-size: 10px;
+          color: #666;
+          margin-left: 10px;
+        }
+        
+        .totals {
+          border-top: 2px solid #000;
+          padding-top: 10px;
+          margin-bottom: 15px;
+        }
+        
+        .total-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 3px;
+        }
+        
+        .total-final {
+          font-weight: bold;
+          font-size: 14px;
+          border-top: 1px solid #000;
+          padding-top: 5px;
+        }
+        
+        .payment-info {
+          margin-bottom: 15px;
+          border-top: 1px dashed #000;
+          padding-top: 10px;
+        }
+        
+        .barcode-section {
+          text-align: center;
+          margin: 15px 0;
+          padding: 10px 0;
+          border-top: 1px dashed #000;
+        }
+        
+        .barcode {
+          font-family: 'Libre Barcode 39', monospace;
+          font-size: 24px;
+          letter-spacing: 2px;
+          margin: 10px 0;
+        }
+        
+        .footer {
+          text-align: center;
+          font-size: 10px;
+          margin-top: 15px;
+          border-top: 2px solid #000;
+          padding-top: 10px;
+        }
+        
+        .no-print {
+          display: none;
+        }
+        
+        @media screen {
+          body {
+            max-width: 350px;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 20px;
+          }
+          
+          .no-print {
+            display: block;
+            text-align: center;
+            margin: 20px 0;
+          }
+        }
+      </style>
+      <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
+    </head>
+    <body>
+      <div class="receipt-header">
+        <div class="business-name">Your Business Name</div>
+        <div class="business-info">123 Business Street, City, State 12345</div>
+        <div class="business-info">Phone: (555) 123-4567</div>
+        <div class="business-info">Email: info@yourbusiness.com</div>
+      </div>
+      
+      <div class="invoice-info">
+        <div><span>Invoice #:</span><span>${invoiceData.invoiceNumber}</span></div>
+        <div><span>Date:</span><span>${new Date().toLocaleDateString()}</span></div>
+        <div><span>Time:</span><span>${new Date().toLocaleTimeString()}</span></div>
+        <div><span>Type:</span><span>${invoiceData.type.toUpperCase()}</span></div>
+        ${invoiceData.customerId !== 'walk-in' ? `<div><span>Customer:</span><span>${invoiceData.customerName || 'N/A'}</span></div>` : '<div><span>Customer:</span><span>Walk-in</span></div>'}
+        ${invoiceData.type === 'credit' && invoiceData.dueDate ? `<div><span>Due Date:</span><span>${new Date(invoiceData.dueDate).toLocaleDateString()}</span></div>` : ''}
+      </div>
+      
+      <div class="items-table">
+        ${invoiceData.items.map((item: any) => `
+          <div class="item-row">
+            <div style="flex: 1;">
+              <div class="item-name">${item.name}</div>
+              <div class="item-details">${item.quantity} × Rs${item.unitPrice.toFixed(2)} = Rs${item.subtotal.toFixed(2)}</div>
+            </div>
+            <div style="font-weight: bold;">Rs${item.subtotal.toFixed(2)}</div>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div class="totals">
+        <div class="total-row"><span>Subtotal:</span><span>Rs${invoiceData.subtotal.toFixed(2)}</span></div>
+        ${invoiceData.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>-Rs${invoiceData.discount.toFixed(2)}</span></div>` : ''}
+        ${invoiceData.tax > 0 ? `<div class="total-row"><span>Tax:</span><span>Rs${invoiceData.tax.toFixed(2)}</span></div>` : ''}
+        ${invoiceData.deliveryCharge > 0 ? `<div class="total-row"><span>Delivery:</span><span>Rs${invoiceData.deliveryCharge.toFixed(2)}</span></div>` : ''}
+        ${invoiceData.serviceCharge > 0 ? `<div class="total-row"><span>Service:</span><span>Rs${invoiceData.serviceCharge.toFixed(2)}</span></div>` : ''}
+        <div class="total-row total-final"><span>TOTAL:</span><span>Rs${invoiceData.total.toFixed(2)}</span></div>
+      </div>
+      
+      ${invoiceData.type !== 'pending' ? `
+        <div class="payment-info">
+          <div class="total-row"><span>Paid:</span><span>Rs${invoiceData.paidAmount.toFixed(2)}</span></div>
+          ${invoiceData.balance > 0 ? `<div class="total-row" style="color: #d32f2f;"><span>Balance:</span><span>Rs${invoiceData.balance.toFixed(2)}</span></div>` : ''}
+        </div>
+      ` : ''}
+      
+      <div class="barcode-section">
+        <div>Invoice Number:</div>
+        <div class="barcode">*${invoiceData.invoiceNumber}*</div>
+        <div style="font-size: 10px;">${invoiceData.invoiceNumber}</div>
+      </div>
+      
+      ${invoiceData.notes ? `
+        <div style="margin: 15px 0; padding: 10px 0; border-top: 1px dashed #000; font-size: 10px;">
+          <strong>Notes:</strong><br>
+          ${invoiceData.notes}
+        </div>
+      ` : ''}
+      
+      <div class="footer">
+        <div>Thank you for your business!</div>
+        <div>Visit us again soon</div>
+        <div style="margin-top: 5px; font-size: 8px;">
+          Powered by Your POS System
+        </div>
+      </div>
+      
+      <div class="no-print">
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Print Receipt</button>
+        <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">Close</button>
+      </div>
+    </body>
+    </html>
+    `
+
+    return printContent
+  }, [])
+
+  const printInvoice = useCallback((invoiceData: any) => {
+    const printContent = generateInvoicePrint(invoiceData)
+    const printWindow = window.open('', '_blank', 'width=400,height=600,scrollbars=yes')
+    
+    if (printWindow) {
+      printWindow.document.write(printContent)
+      printWindow.document.close()
+      
+      // Auto print after content loads
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print()
+        }, 250)
+      }
+    } else {
+      toast.error('Unable to open print window. Please check your popup blocker.')
+    }
+  }, [generateInvoicePrint])
+
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
     if (!customerSearchQuery) return true
@@ -85,10 +327,6 @@ export function InvoicePanel({
 
   // Handle product selection for manual entries
   const handleProductSelect = useCallback((itemId: string, product: any) => {
-    console.log('Product selected:', product)
-    console.log('Product ID:', product._id || product.id)
-    console.log('Item ID to update:', itemId)
-    
     const productId = product._id || product.id
     if (!productId) {
       console.error('Product has no valid ID:', product)
@@ -111,8 +349,6 @@ export function InvoicePanel({
           }
         : item
     )
-    
-    console.log('Updated items after product selection:', newItems)
     
     if (calculateTotals) {
       // Use parent's calculateTotals function
@@ -169,7 +405,7 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  const handleSaveInvoice = useCallback(async () => {
+  const handleSaveInvoice = useCallback(async (shouldPrint: boolean = false) => {
     if (invoice.items.length === 0) {
       toast.error('Please add items to the invoice')
       return
@@ -200,9 +436,6 @@ export function InvoicePanel({
         // Include items that have productId and name (completed items)
         return item.productId && item.name
       })
-
-      console.log('Invoice items before filtering:', invoice.items)
-      console.log('Valid items after filtering:', validItems)
 
       // Validate that we have valid items
       if (validItems.length === 0) {
@@ -248,8 +481,15 @@ export function InvoicePanel({
       
       toast.success(`Invoice ${result.invoiceNumber} saved successfully!`)
       
-      // Optionally reset the invoice or redirect
-      console.log('Invoice saved:', result)
+      // Print if requested
+      if (shouldPrint) {
+        const printData = {
+          ...invoiceData,
+          invoiceNumber: result.invoiceNumber,
+          items: validItems
+        }
+        printInvoice(printData)
+      }
       
     } catch (error: any) {
       console.error('Error saving invoice:', error)
@@ -260,7 +500,7 @@ export function InvoicePanel({
         toast.error(error?.data?.message || 'Failed to save invoice')
       }
     }
-  }, [invoice, createInvoice])
+  }, [invoice, createInvoice, t, printInvoice])
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -801,25 +1041,47 @@ export function InvoicePanel({
             />
           </div>
 
-          {/* Save Button */}
-          <Button 
-            onClick={handleSaveInvoice}
-            className='w-full'
-            size="lg"
-            disabled={invoice.items.length === 0 || isSaving}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                {t('saving')}...
-              </>
-            ) : (
-              <>
-                <Save className='h-4 w-4 mr-2' />
-                {t('save_invoice')}
-              </>
-            )}
-          </Button>
+          {/* Save Buttons */}
+          <div className='grid grid-cols-2 gap-3'>
+            <Button 
+              onClick={() => handleSaveInvoice(false)}
+              className='w-full'
+              size="lg"
+              disabled={invoice.items.length === 0 || isSaving}
+              variant="outline"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                  {t('saving')}...
+                </>
+              ) : (
+                <>
+                  <Save className='h-4 w-4 mr-2' />
+                  {t('save_invoice')}
+                </>
+              )}
+            </Button>
+            
+            <Button 
+              onClick={() => handleSaveInvoice(true)}
+              className='w-full'
+              size="lg"
+              disabled={invoice.items.length === 0 || isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                  {t('saving')}...
+                </>
+              ) : (
+                <>
+                  <Printer className='h-4 w-4 mr-2' />
+                  {t('save_and_print')}
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

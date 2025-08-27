@@ -60,7 +60,7 @@ export const invoiceApi = createApi({
     // Get invoice by ID
     getInvoiceById: builder.query({
       query: (id) => `/${id}`,
-      providesTags: (result, error, id) => [{ type: 'Invoice', id }],
+      providesTags: (id) => [{ type: 'Invoice', id }],
     }),
 
     // Update invoice
@@ -70,7 +70,7 @@ export const invoiceApi = createApi({
         method: 'PATCH',
         body: patch,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Invoice', id }],
+      invalidatesTags: ({ id }) => [{ type: 'Invoice', id }],
     }),
 
     // Delete invoice
@@ -88,7 +88,7 @@ export const invoiceApi = createApi({
         url: `/${id}/finalize`,
         method: 'PATCH',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'Invoice', id }],
+      invalidatesTags: ( id) => [{ type: 'Invoice', id }],
     }),
 
     // Process payment
@@ -98,7 +98,7 @@ export const invoiceApi = createApi({
         method: 'POST',
         body: paymentData,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Invoice', id }],
+      invalidatesTags: ( { id }) => [{ type: 'Invoice', id }],
     }),
 
     // Cancel invoice
@@ -107,7 +107,7 @@ export const invoiceApi = createApi({
         url: `/${id}/cancel`,
         method: 'PATCH',
       }),
-      invalidatesTags: (result, error, id) => [{ type: 'Invoice', id }],
+      invalidatesTags: (id) => [{ type: 'Invoice', id }],
     }),
 
     // Duplicate invoice
