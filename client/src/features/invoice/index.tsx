@@ -23,6 +23,7 @@ export interface InvoiceItem {
   cost: number
   subtotal: number
   profit: number
+  isManualEntry?: boolean
 }
 
 export interface Invoice {
@@ -405,6 +406,7 @@ export default function InvoicePage() {
               taxRate={taxRate}
               setTaxRate={setTaxRate}
               customers={customers}
+              products={products}
             />
           </div>
 

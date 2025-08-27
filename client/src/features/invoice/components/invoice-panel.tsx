@@ -35,6 +35,7 @@ interface InvoicePanelProps {
   taxRate: number
   setTaxRate: (rate: number) => void
   customers: any[]
+  products: any[]
 }
 
 export function InvoicePanel({
@@ -46,7 +47,8 @@ export function InvoicePanel({
   updateDiscount,
   taxRate,
   setTaxRate,
-  customers
+  customers,
+  products
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const [discountInput, setDiscountInput] = useState('0')
@@ -54,6 +56,8 @@ export function InvoicePanel({
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [productSelectOpen, setProductSelectOpen] = useState<string>('')
+  const [productSearchQuery, setProductSearchQuery] = useState('')
 
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
@@ -63,6 +67,40 @@ export function InvoicePanel({
     const phone = customer.phone?.toLowerCase() || ''
     return name.includes(query) || phone.includes(query)
   })
+
+  // Filter products by name or barcode
+  const filteredProducts = products.filter(product => {
+    if (!productSearchQuery) return true
+    const query = productSearchQuery.toLowerCase()
+    const name = product.name?.toLowerCase() || ''
+    const barcode = product.barcode?.toLowerCase() || ''
+    return name.includes(query) || barcode.includes(query)
+  })
+
+  // Handle product selection for manual entries
+  const handleProductSelect = useCallback((itemId: string, product: any) => {
+    const newItems = invoice.items.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            productId: product._id,
+            name: product.name,
+            image: product.image,
+            unitPrice: product.price,
+            cost: product.cost,
+            subtotal: product.price * item.quantity,
+            profit: item.quantity * (product.price - product.cost),
+            isManualEntry: false
+          }
+        : item
+    )
+    setInvoice(prev => ({
+      ...prev,
+      items: newItems
+    }))
+    setProductSelectOpen('')
+    setProductSearchQuery('')
+  }, [invoice.items, setInvoice])
 
   const handleDiscountChange = useCallback((value: string) => {
     setDiscountInput(value)
@@ -261,7 +299,36 @@ export function InvoicePanel({
       {/* Invoice Items */}
       <Card className='flex-1 flex flex-col'>
         <CardHeader>
-          <CardTitle>{t('invoice_items')} ({invoice.items.length})</CardTitle>
+          <div className='flex items-center justify-between'>
+            <CardTitle>{t('invoice_items')} ({invoice.items.length})</CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                // Add a new empty row for manual product selection
+                const newItem = {
+                  id: `manual-${Date.now()}`,
+                  productId: '',
+                  name: '',
+                  image: undefined,
+                  quantity: 1,
+                  unitPrice: 0,
+                  cost: 0,
+                  subtotal: 0,
+                  profit: 0,
+                  isManualEntry: true
+                }
+                setInvoice(prev => ({
+                  ...prev,
+                  items: [...prev.items, newItem]
+                }))
+              }}
+              className='flex items-center gap-1'
+            >
+              <Plus className='h-4 w-4' />
+              {t('add_item')}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className='flex-1 overflow-hidden'>
           <div className='space-y-2 h-full overflow-y-auto'>
@@ -272,6 +339,7 @@ export function InvoicePanel({
             ) : (
               invoice.items.map((item) => (
                 <div key={item.id} className='flex items-center gap-2 p-2 bg-muted/30 rounded-lg'>
+                  {/* Product Image */}
                   {item.image?.url ? (
                     <img 
                       src={item.image.url} 
@@ -283,11 +351,81 @@ export function InvoicePanel({
                       <Package className='h-6 w-6 text-gray-400' />
                     </div>
                   )}
+                  
+                  {/* Product Info / Selection */}
                   <div className='flex-1 min-w-0'>
-                    <p className='font-medium truncate'>{item.name}</p>
-                    <p className='text-xs text-muted-foreground'>
-                      Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
-                    </p>
+                    {item.isManualEntry ? (
+                      <div className='space-y-1'>
+                        <Popover 
+                          open={productSelectOpen === item.id} 
+                          onOpenChange={(open) => setProductSelectOpen(open ? item.id : '')}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-full justify-between h-8 text-xs"
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <Search className="w-3 h-3 flex-shrink-0" />
+                                <span className="text-muted-foreground truncate">
+                                  {item.name || t('select_product')}
+                                </span>
+                              </div>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput 
+                                placeholder={t('search_products')} 
+                                value={productSearchQuery}
+                                onValueChange={setProductSearchQuery}
+                              />
+                              <CommandEmpty>{t('no_products_found')}</CommandEmpty>
+                              <CommandList>
+                                <CommandGroup>
+                                  {filteredProducts.map((product) => (
+                                    <CommandItem
+                                      key={product._id}
+                                      onSelect={() => handleProductSelect(item.id, product)}
+                                      className="flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <div className="flex items-center gap-2 flex-1">
+                                        {product.image?.url ? (
+                                          <img 
+                                            src={product.image.url} 
+                                            alt={product.name}
+                                            className="w-6 h-6 object-cover rounded"
+                                          />
+                                        ) : (
+                                          <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
+                                            <Package className="w-3 h-3 text-muted-foreground" />
+                                          </div>
+                                        )}
+                                        <div className="flex flex-col flex-1">
+                                          <span className="text-sm">{product.name}</span>
+                                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <span>Rs{product.price}</span>
+                                            <span>Stock: {product.stockQuantity}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className='font-medium truncate'>{item.name}</p>
+                        <p className='text-xs text-muted-foreground'>
+                          Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Quantity Controls */}
