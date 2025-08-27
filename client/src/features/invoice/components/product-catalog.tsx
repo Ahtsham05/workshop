@@ -289,12 +289,12 @@ export function ProductCatalog({
                             {product.name}
                           </h4>
                           <div className={`flex ${showImages ? 'flex-col items-center gap-0' : 'items-center gap-2'} text-xs text-muted-foreground`}>
-                            <span className='font-medium text-foreground text-sm'>
+                            <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
                               Rs{product.price.toFixed(2)}
                             </span>
-                            <span>Stock: {product.stockQuantity}</span>
+                            <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
                             {!showImages && product.barcode && (
-                              <span className='text-xs bg-muted px-1 py-0.5 rounded'>
+                              <span key={`barcode-${product._id}`} className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}
                               </span>
                             )}

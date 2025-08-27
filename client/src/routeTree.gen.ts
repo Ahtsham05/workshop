@@ -50,8 +50,8 @@ import { Route as AuthenticatedPurchaseAddIndexImport } from './routes/_authenti
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedMobileRepairIndexImport } from './routes/_authenticated/mobile-repair/index'
 import { Route as AuthenticatedMobileLoadIndexImport } from './routes/_authenticated/mobile-load/index'
-import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
+import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedCustomerLedgerIndexImport } from './routes/_authenticated/customer-ledger/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
@@ -63,6 +63,7 @@ import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_aut
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 
 // Create/Update Routes
 
@@ -325,17 +326,16 @@ const AuthenticatedMobileLoadIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedInvoiceIndexRoute = AuthenticatedInvoiceIndexImport.update({
+  id: '/invoice/',
+  path: '/invoice/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexImport.update({
     id: '/help-center/',
     path: '/help-center/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedInvoiceIndexRoute =
-  AuthenticatedInvoiceIndexImport.update({
-    id: '/invoice/',
-    path: '/invoice/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -413,6 +413,13 @@ const AuthenticatedSettingsAccountRoute =
     id: '/account',
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedProductsBulkEditIndexRoute =
+  AuthenticatedProductsBulkEditIndexImport.update({
+    id: '/products/bulk-edit/',
+    path: '/products/bulk-edit/',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 // Populate the FileRoutesByPath interface
@@ -650,6 +657,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/invoice/': {
+      id: '/_authenticated/invoice/'
+      path: '/invoice'
+      fullPath: '/invoice'
+      preLoaderRoute: typeof AuthenticatedInvoiceIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/mobile-load/': {
       id: '/_authenticated/mobile-load/'
       path: '/mobile-load'
@@ -776,6 +790,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/products/bulk-edit/': {
+      id: '/_authenticated/products/bulk-edit/'
+      path: '/products/bulk-edit'
+      fullPath: '/products/bulk-edit'
+      preLoaderRoute: typeof AuthenticatedProductsBulkEditIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
   }
 }
 
@@ -835,6 +856,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTransactionLedgerIndexRoute: typeof AuthenticatedTransactionLedgerIndexRoute
   AuthenticatedTransactionsIndexRoute: typeof AuthenticatedTransactionsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedProductsBulkEditIndexRoute: typeof AuthenticatedProductsBulkEditIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -869,6 +891,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedTransactionLedgerIndexRoute,
   AuthenticatedTransactionsIndexRoute: AuthenticatedTransactionsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedProductsBulkEditIndexRoute:
+    AuthenticatedProductsBulkEditIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -909,6 +933,7 @@ export interface FileRoutesByFullPath {
   '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/mobile-load': typeof AuthenticatedMobileLoadIndexRoute
   '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -927,6 +952,7 @@ export interface FileRoutesByFullPath {
   '/transaction-ledger': typeof AuthenticatedTransactionLedgerIndexRoute
   '/transactions': typeof AuthenticatedTransactionsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
 
 export interface FileRoutesByTo {
@@ -961,6 +987,7 @@ export interface FileRoutesByTo {
   '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/mobile-load': typeof AuthenticatedMobileLoadIndexRoute
   '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -979,6 +1006,7 @@ export interface FileRoutesByTo {
   '/transaction-ledger': typeof AuthenticatedTransactionLedgerIndexRoute
   '/transactions': typeof AuthenticatedTransactionsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
 
 export interface FileRoutesById {
@@ -1016,6 +1044,7 @@ export interface FileRoutesById {
   '/_authenticated/customer-ledger/': typeof AuthenticatedCustomerLedgerIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/mobile-load/': typeof AuthenticatedMobileLoadIndexRoute
   '/_authenticated/mobile-repair/': typeof AuthenticatedMobileRepairIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
@@ -1034,6 +1063,7 @@ export interface FileRoutesById {
   '/_authenticated/transaction-ledger/': typeof AuthenticatedTransactionLedgerIndexRoute
   '/_authenticated/transactions/': typeof AuthenticatedTransactionsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
 }
 
 export interface FileRouteTypes {
@@ -1072,6 +1102,7 @@ export interface FileRouteTypes {
     | '/customer-ledger'
     | '/customers'
     | '/help-center'
+    | '/invoice'
     | '/mobile-load'
     | '/mobile-repair'
     | '/products'
@@ -1090,6 +1121,7 @@ export interface FileRouteTypes {
     | '/transaction-ledger'
     | '/transactions'
     | '/users'
+    | '/products/bulk-edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -1123,6 +1155,7 @@ export interface FileRouteTypes {
     | '/customer-ledger'
     | '/customers'
     | '/help-center'
+    | '/invoice'
     | '/mobile-load'
     | '/mobile-repair'
     | '/products'
@@ -1141,6 +1174,7 @@ export interface FileRouteTypes {
     | '/transaction-ledger'
     | '/transactions'
     | '/users'
+    | '/products/bulk-edit'
   id:
     | '__root__'
     | '/_authenticated'
@@ -1176,6 +1210,7 @@ export interface FileRouteTypes {
     | '/_authenticated/customer-ledger/'
     | '/_authenticated/customers/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/invoice/'
     | '/_authenticated/mobile-load/'
     | '/_authenticated/mobile-repair/'
     | '/_authenticated/products/'
@@ -1194,6 +1229,7 @@ export interface FileRouteTypes {
     | '/_authenticated/transaction-ledger/'
     | '/_authenticated/transactions/'
     | '/_authenticated/users/'
+    | '/_authenticated/products/bulk-edit/'
   fileRoutesById: FileRoutesById
 }
 
@@ -1281,6 +1317,7 @@ export const routeTree = rootRoute
         "/_authenticated/customer-ledger/",
         "/_authenticated/customers/",
         "/_authenticated/help-center/",
+        "/_authenticated/invoice/",
         "/_authenticated/mobile-load/",
         "/_authenticated/mobile-repair/",
         "/_authenticated/products/",
@@ -1297,7 +1334,8 @@ export const routeTree = rootRoute
         "/_authenticated/tasks/",
         "/_authenticated/transaction-ledger/",
         "/_authenticated/transactions/",
-        "/_authenticated/users/"
+        "/_authenticated/users/",
+        "/_authenticated/products/bulk-edit/"
       ]
     },
     "/_authenticated/settings": {
@@ -1419,6 +1457,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/help-center/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/invoice/": {
+      "filePath": "_authenticated/invoice/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/mobile-load/": {
       "filePath": "_authenticated/mobile-load/index.tsx",
       "parent": "/_authenticated"
@@ -1489,6 +1531,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/users/": {
       "filePath": "_authenticated/users/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/products/bulk-edit/": {
+      "filePath": "_authenticated/products/bulk-edit/index.tsx",
       "parent": "/_authenticated"
     }
   }

@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2 } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
+import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import {
   Command,
   CommandEmpty,
@@ -36,6 +37,7 @@ interface InvoicePanelProps {
   setTaxRate: (rate: number) => void
   customers: any[]
   products: any[]
+  calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
 }
 
 export function InvoicePanel({
@@ -48,7 +50,8 @@ export function InvoicePanel({
   taxRate,
   setTaxRate,
   customers,
-  products
+  products,
+  calculateTotals
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const [discountInput, setDiscountInput] = useState('0')
@@ -58,6 +61,9 @@ export function InvoicePanel({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+
+  // RTK Query mutation
+  const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
 
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
@@ -79,11 +85,22 @@ export function InvoicePanel({
 
   // Handle product selection for manual entries
   const handleProductSelect = useCallback((itemId: string, product: any) => {
+    console.log('Product selected:', product)
+    console.log('Product ID:', product._id || product.id)
+    console.log('Item ID to update:', itemId)
+    
+    const productId = product._id || product.id
+    if (!productId) {
+      console.error('Product has no valid ID:', product)
+      toast.error('Selected product has no valid ID')
+      return
+    }
+    
     const newItems = invoice.items.map(item => 
       item.id === itemId 
         ? { 
             ...item, 
-            productId: product._id,
+            productId: productId,
             name: product.name,
             image: product.image,
             unitPrice: product.price,
@@ -94,13 +111,47 @@ export function InvoicePanel({
           }
         : item
     )
-    setInvoice(prev => ({
-      ...prev,
-      items: newItems
-    }))
+    
+    console.log('Updated items after product selection:', newItems)
+    
+    if (calculateTotals) {
+      // Use parent's calculateTotals function
+      const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+      setInvoice(prev => ({
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        balance: totals.total - prev.paidAmount
+      }))
+    } else {
+      // Fallback calculation
+      const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
+      const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+      const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
+      const discountAmount = invoice.discount || 0
+      const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
+      const total = subtotal - discountAmount + taxAmount
+      const balance = total - invoice.paidAmount
+      
+      setInvoice(prev => ({
+        ...prev,
+        items: newItems,
+        subtotal,
+        totalCost,
+        totalProfit,
+        tax: taxAmount,
+        total,
+        balance
+      }))
+    }
+    
     setProductSelectOpen('')
     setProductSearchQuery('')
-  }, [invoice.items, setInvoice])
+  }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice])
 
   const handleDiscountChange = useCallback((value: string) => {
     setDiscountInput(value)
@@ -118,9 +169,16 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  const handleSaveInvoice = useCallback(() => {
+  const handleSaveInvoice = useCallback(async () => {
     if (invoice.items.length === 0) {
       toast.error('Please add items to the invoice')
+      return
+    }
+
+    // Check if any manual entries don't have a product selected
+    const incompleteItems = invoice.items.filter(item => item.isManualEntry && !item.productId)
+    if (incompleteItems.length > 0) {
+      toast.error(t('select_product_for_manual_entries'))
       return
     }
 
@@ -129,10 +187,80 @@ export function InvoicePanel({
       return
     }
 
-    // Here you would typically call an API to save the invoice
-    console.log('Saving invoice:', invoice)
-    toast.success('Invoice saved successfully!')
-  }, [invoice])
+    // Check if user is authenticated
+    const token = localStorage.getItem('accessToken')
+    if (!token) {
+      toast.error('Please login to save invoice')
+      return
+    }
+
+    try {
+      // Prepare invoice data for API
+      const validItems = invoice.items.filter(item => {
+        // Include items that have productId and name (completed items)
+        return item.productId && item.name
+      })
+
+      console.log('Invoice items before filtering:', invoice.items)
+      console.log('Valid items after filtering:', validItems)
+
+      // Validate that we have valid items
+      if (validItems.length === 0) {
+        toast.error('Please select products for all items before saving')
+        return
+      }
+
+      const invoiceData = {
+        items: validItems.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          image: item.image,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          cost: item.cost,
+          subtotal: item.subtotal,
+          profit: item.profit,
+          isManualEntry: item.isManualEntry || false
+        })),
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        discount: invoice.discount,
+        total: invoice.total,
+        totalProfit: invoice.totalProfit,
+        totalCost: invoice.totalCost,
+        paidAmount: invoice.paidAmount,
+        balance: invoice.balance,
+        dueDate: invoice.dueDate,
+        deliveryCharge: invoice.deliveryCharge,
+        serviceCharge: invoice.serviceCharge,
+        roundingAdjustment: invoice.roundingAdjustment,
+        splitPayment: invoice.splitPayment,
+        loyaltyPoints: invoice.loyaltyPoints,
+        couponCode: invoice.couponCode,
+        returnPolicy: invoice.returnPolicy,
+        notes: invoice.notes
+      }
+
+      const result = await createInvoice(invoiceData).unwrap()
+      
+      toast.success(`Invoice ${result.invoiceNumber} saved successfully!`)
+      
+      // Optionally reset the invoice or redirect
+      console.log('Invoice saved:', result)
+      
+    } catch (error: any) {
+      console.error('Error saving invoice:', error)
+      
+      if (error?.status === 401) {
+        toast.error('Authentication failed. Please login again.')
+      } else {
+        toast.error(error?.data?.message || 'Failed to save invoice')
+      }
+    }
+  }, [invoice, createInvoice])
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -364,12 +492,17 @@ export function InvoicePanel({
                             <Button
                               variant="outline"
                               role="combobox"
-                              className="w-full justify-between h-8 text-xs"
+                              className={`w-full justify-between h-8 text-xs ${
+                                !item.productId ? 'border-red-500 bg-red-50' : ''
+                              }`}
                             >
                               <div className="flex items-center gap-2 flex-1">
                                 <Search className="w-3 h-3 flex-shrink-0" />
-                                <span className="text-muted-foreground truncate">
+                                <span className={`truncate ${
+                                  !item.productId ? 'text-red-500' : 'text-muted-foreground'
+                                }`}>
                                   {item.name || t('select_product')}
+                                  {!item.productId && ' *'}
                                 </span>
                               </div>
                             </Button>
@@ -405,8 +538,8 @@ export function InvoicePanel({
                                         <div className="flex flex-col flex-1">
                                           <span className="text-sm">{product.name}</span>
                                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span>Rs{product.price}</span>
-                                            <span>Stock: {product.stockQuantity}</span>
+                                            <span key={`price-${product._id}`}>Rs{product.price}</span>
+                                            <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
                                           </div>
                                         </div>
                                       </div>
@@ -476,10 +609,41 @@ export function InvoicePanel({
                             ? { ...i, unitPrice: newPrice, subtotal: newPrice * i.quantity, profit: i.quantity * (newPrice - i.cost) }
                             : i
                         )
-                        setInvoice(prev => ({
-                          ...prev,
-                          items: newItems
-                        }))
+                        
+                        if (calculateTotals) {
+                          // Use parent's calculateTotals function
+                          const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                          setInvoice(prev => ({
+                            ...prev,
+                            items: newItems,
+                            subtotal: totals.subtotal,
+                            tax: totals.tax,
+                            total: totals.total,
+                            totalProfit: totals.totalProfit,
+                            totalCost: totals.totalCost,
+                            balance: totals.total - prev.paidAmount
+                          }))
+                        } else {
+                          // Fallback calculation
+                          const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
+                          const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+                          const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
+                          const discountAmount = invoice.discount || 0
+                          const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
+                          const total = subtotal - discountAmount + taxAmount
+                          const balance = total - invoice.paidAmount
+                          
+                          setInvoice(prev => ({
+                            ...prev,
+                            items: newItems,
+                            subtotal,
+                            totalCost,
+                            totalProfit,
+                            tax: taxAmount,
+                            total,
+                            balance
+                          }))
+                        }
                       }}
                       className='h-6 w-16 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                     />
@@ -642,10 +806,19 @@ export function InvoicePanel({
             onClick={handleSaveInvoice}
             className='w-full'
             size="lg"
-            disabled={invoice.items.length === 0}
+            disabled={invoice.items.length === 0 || isSaving}
           >
-            <Save className='h-4 w-4 mr-2' />
-            {t('save_invoice')}
+            {isSaving ? (
+              <>
+                <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                {t('saving')}...
+              </>
+            ) : (
+              <>
+                <Save className='h-4 w-4 mr-2' />
+                {t('save_invoice')}
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>

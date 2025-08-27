@@ -407,6 +407,7 @@ export default function InvoicePage() {
               setTaxRate={setTaxRate}
               customers={customers}
               products={products}
+              calculateTotals={calculateTotals}
             />
           </div>
 

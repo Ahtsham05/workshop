@@ -1,23 +1,89 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 
+// Sub-schema for split payments
+const splitPaymentSchema = new mongoose.Schema({
+    method: {
+        type: String,
+        enum: ['cash', 'card', 'digital', 'check'],
+        required: true
+    },
+    amount: { type: Number, required: true },
+    reference: { type: String }
+}, { _id: false });
+
+// Sub-schema for invoice items
+const invoiceItemSchema = new mongoose.Schema({
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+    name: { type: String, required: true },
+    image: {
+        url: { type: String },
+        publicId: { type: String }
+    },
+    quantity: { type: Number, required: true, min: 1 },
+    unitPrice: { type: Number, required: true, min: 0 },
+    cost: { type: Number, required: true, min: 0 },
+    subtotal: { type: Number, required: true, min: 0 },
+    profit: { type: Number, required: true },
+    isManualEntry: { type: Boolean, default: false }
+}, { _id: false });
+
 const InvoiceSchema = new mongoose.Schema({
-    sale: { type: mongoose.Schema.Types.ObjectId, ref: 'Sale', required: true }, // Reference to the Sale
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true }, // Reference to the Customer
-    items: [
-        {
-            product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true }, // Product from the sale
-            quantity: { type: Number, required: true }, // Quantity of the product in the sale
-            salePrice: { type: Number, required: true }, // Sale price of the product
-            purchasePrice: { type: Number, required: true }, // Purchase price of the product
-            totalSale: { type: Number, required: true }, // Sale price * quantity
-            totalProfit: { type: Number, required: true } // Profit = (Sale price - Purchase price) * quantity
-        }
-    ],
-    totalAmount: { type: Number, required: true }, // Total amount of the invoice (sum of item totals)
-    totalProfit: { type: Number, required: true }, // Total profit from the sale (sum of item profits)
+    // Invoice items
+    items: [invoiceItemSchema],
+    
+    // Customer information
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+    customerName: { type: String },
+    
+    // Invoice type and status
+    type: { 
+        type: String, 
+        enum: ['cash', 'credit', 'pending'], 
+        required: true,
+        default: 'cash'
+    },
+    
+    // Financial calculations
+    subtotal: { type: Number, required: true, min: 0 },
+    tax: { type: Number, default: 0, min: 0 },
+    discount: { type: Number, default: 0, min: 0 },
+    total: { type: Number, required: true, min: 0 },
+    totalProfit: { type: Number, required: true },
+    totalCost: { type: Number, required: true, min: 0 },
+    
+    // Payment information
+    paidAmount: { type: Number, default: 0, min: 0 },
+    balance: { type: Number, default: 0 },
+    dueDate: { type: Date },
+    
+    // Additional charges
+    deliveryCharge: { type: Number, default: 0, min: 0 },
+    serviceCharge: { type: Number, default: 0, min: 0 },
+    roundingAdjustment: { type: Number, default: 0 },
+    
+    // POS features
+    splitPayment: [splitPaymentSchema],
+    loyaltyPoints: { type: Number, default: 0, min: 0 },
+    couponCode: { type: String },
+    returnPolicy: { type: String },
+    
+    // Additional information
+    notes: { type: String },
+    
+    // System fields
+    invoiceNumber: { type: String, unique: true },
     invoiceDate: { type: Date, default: Date.now },
-},{
+    status: { 
+        type: String, 
+        enum: ['draft', 'finalized', 'paid', 'cancelled', 'refunded'], 
+        default: 'draft' 
+    },
+    
+    // Audit fields
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, {
     timestamps: true
 });
 
@@ -25,17 +91,123 @@ const InvoiceSchema = new mongoose.Schema({
 InvoiceSchema.plugin(toJSON);
 InvoiceSchema.plugin(paginate);
 
-// Method to calculate the total profit for the invoice
-InvoiceSchema.methods.calculateProfit = function() {
-    let totalProfit = 0;
-    this.items.forEach(item => {
-        totalProfit += item.totalProfit; // Sum of item profits
-    });
-    this.totalProfit = totalProfit;
-    this.totalAmount = this.items.reduce((acc, item) => acc + item.totalSale, 0);
-    return totalProfit;
+// Generate invoice number before saving
+InvoiceSchema.pre('save', async function(next) {
+    if (this.isNew && !this.invoiceNumber) {
+        const count = await mongoose.models.Invoice.countDocuments();
+        const year = new Date().getFullYear();
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        this.invoiceNumber = `INV-${year}${month}-${String(count + 1).padStart(6, '0')}`;
+    }
+    next();
+});
+
+// Method to calculate totals
+InvoiceSchema.methods.calculateTotals = function() {
+    // Calculate subtotal from items
+    this.subtotal = this.items.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    // Calculate total profit and cost
+    this.totalProfit = this.items.reduce((sum, item) => sum + item.profit, 0);
+    this.totalCost = this.items.reduce((sum, item) => sum + (item.cost * item.quantity), 0);
+    
+    // Calculate total with tax, discount, and charges
+    const discountedSubtotal = this.subtotal - this.discount;
+    const taxableAmount = discountedSubtotal + this.deliveryCharge + this.serviceCharge;
+    this.total = taxableAmount + this.tax + this.roundingAdjustment;
+    
+    // Calculate balance
+    this.balance = this.total - this.paidAmount;
+    
+    return {
+        subtotal: this.subtotal,
+        total: this.total,
+        totalProfit: this.totalProfit,
+        totalCost: this.totalCost,
+        balance: this.balance
+    };
+};
+
+// Method to finalize invoice
+InvoiceSchema.methods.finalize = function() {
+    this.status = 'finalized';
+    if (this.type === 'cash' && this.paidAmount >= this.total) {
+        this.status = 'paid';
+    }
+    return this;
+};
+
+// Method to mark as paid
+InvoiceSchema.methods.markAsPaid = function(amount, paymentMethod = 'cash', reference = null) {
+    this.paidAmount += amount;
+    
+    // Add to split payments if not cash or if there are existing split payments
+    if (paymentMethod !== 'cash' || this.splitPayment.length > 0) {
+        this.splitPayment.push({
+            method: paymentMethod,
+            amount: amount,
+            reference: reference
+        });
+    }
+    
+    // Update balance
+    this.balance = this.total - this.paidAmount;
+    
+    // Update status
+    if (this.balance <= 0) {
+        this.status = 'paid';
+        this.balance = 0;
+    }
+    
+    return this;
+};
+
+// Static method to get invoice statistics
+InvoiceSchema.statics.getStatistics = async function(dateFrom, dateTo) {
+    const match = {};
+    if (dateFrom || dateTo) {
+        match.createdAt = {};
+        if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
+        if (dateTo) match.createdAt.$lte = new Date(dateTo);
+    }
+    
+    const stats = await this.aggregate([
+        { $match: match },
+        {
+            $group: {
+                _id: null,
+                totalInvoices: { $sum: 1 },
+                totalAmount: { $sum: '$total' },
+                totalProfit: { $sum: '$totalProfit' },
+                totalCost: { $sum: '$totalCost' },
+                avgInvoiceValue: { $avg: '$total' },
+                cashInvoices: {
+                    $sum: { $cond: [{ $eq: ['$type', 'cash'] }, 1, 0] }
+                },
+                creditInvoices: {
+                    $sum: { $cond: [{ $eq: ['$type', 'credit'] }, 1, 0] }
+                },
+                pendingInvoices: {
+                    $sum: { $cond: [{ $eq: ['$type', 'pending'] }, 1, 0] }
+                }
+            }
+        }
+    ]);
+    
+    return stats[0] || {
+        totalInvoices: 0,
+        totalAmount: 0,
+        totalProfit: 0,
+        totalCost: 0,
+        avgInvoiceValue: 0,
+        cashInvoices: 0,
+        creditInvoices: 0,
+        pendingInvoices: 0
+    };
 };
 
 const Invoice = mongoose.model('Invoice', InvoiceSchema);
+
+module.exports = Invoice;
 
 module.exports = Invoice;

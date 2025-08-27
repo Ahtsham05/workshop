@@ -7,6 +7,7 @@ import supplierReducer from './supplier.slice';
 import accountReducer from './account.slice';
 import mobileRepairReducer from './mobileRepair.slice'
 import categoryReducer from './category.slice';
+import { invoiceApi } from './invoice.api';
 
 export const store = configureStore({
   reducer: {
@@ -19,7 +20,11 @@ export const store = configureStore({
     account: accountReducer,
     mobileRepair: mobileRepairReducer,
     category: categoryReducer,
+    // Add RTK Query API reducers
+    [invoiceApi.reducerPath]: invoiceApi.reducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(invoiceApi.middleware),
 });
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
