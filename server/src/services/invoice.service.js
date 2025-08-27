@@ -14,8 +14,8 @@ const createInvoice = async (invoiceBody, userId) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invoice must have at least one item');
   }
 
-  // Validate customer if provided
-  if (invoiceBody.customerId) {
+  // Validate customer if provided (but not for walk-in customers)
+  if (invoiceBody.customerId && invoiceBody.customerId !== 'walk-in') {
     const customer = await Customer.findById(invoiceBody.customerId);
     if (!customer) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
@@ -85,12 +85,18 @@ const createInvoice = async (invoiceBody, userId) => {
     );
   }
 
-  // Populate references
-  await invoice.populate([
-    { path: 'customerId', select: 'name phone email' },
+  // Populate references conditionally
+  const populateOptions = [
     { path: 'items.productId', select: 'name barcode category' },
     { path: 'createdBy', select: 'name email' }
-  ]);
+  ];
+
+  // Only populate customer if it's not a walk-in customer
+  if (invoice.customerId && invoice.customerId !== 'walk-in') {
+    populateOptions.unshift({ path: 'customerId', select: 'name phone email' });
+  }
+
+  await invoice.populate(populateOptions);
 
   return invoice;
 };
@@ -105,14 +111,24 @@ const createInvoice = async (invoiceBody, userId) => {
  * @returns {Promise<QueryResult>}
  */
 const queryInvoices = async (filter, options) => {
+  // First get invoices without population
   const invoices = await Invoice.paginate(filter, {
     ...options,
     populate: [
-      { path: 'customerId', select: 'name phone email' },
       { path: 'items.productId', select: 'name barcode category' },
       { path: 'createdBy updatedBy', select: 'name email' }
     ]
   });
+
+  // Then conditionally populate customer for each invoice
+  if (invoices.results) {
+    for (const invoice of invoices.results) {
+      if (invoice.customerId && invoice.customerId !== 'walk-in') {
+        await invoice.populate({ path: 'customerId', select: 'name phone email' });
+      }
+    }
+  }
+
   return invoices;
 };
 
@@ -122,15 +138,25 @@ const queryInvoices = async (filter, options) => {
  * @returns {Promise<Invoice>}
  */
 const getInvoiceById = async (id) => {
-  const invoice = await Invoice.findById(id).populate([
-    { path: 'customerId', select: 'name phone email address' },
-    { path: 'items.productId', select: 'name barcode category description' },
-    { path: 'createdBy updatedBy', select: 'name email' }
-  ]);
+  const invoice = await Invoice.findById(id);
   
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
+
+  // Populate references conditionally
+  const populateOptions = [
+    { path: 'items.productId', select: 'name barcode category description' },
+    { path: 'createdBy updatedBy', select: 'name email' }
+  ];
+
+  // Only populate customer if it's not a walk-in customer
+  if (invoice.customerId && invoice.customerId !== 'walk-in') {
+    populateOptions.unshift({ path: 'customerId', select: 'name phone email address' });
+  }
+
+  await invoice.populate(populateOptions);
+  
   return invoice;
 };
 
@@ -317,11 +343,25 @@ const getDailySalesReport = async (date = new Date()) => {
   const invoices = await Invoice.find({
     invoiceDate: { $gte: startOfDay, $lte: endOfDay },
     status: { $in: ['finalized', 'paid'] }
-  }).populate('customerId items.productId');
+  });
+
+  // Manually populate items.productId and conditionally populate customerId
+  const populatedInvoices = [];
+  for (const invoice of invoices) {
+    const populateOptions = [{ path: 'items.productId' }];
+    
+    // Only populate customer if it's not a walk-in customer
+    if (invoice.customerId && invoice.customerId !== 'walk-in') {
+      populateOptions.push({ path: 'customerId' });
+    }
+    
+    await invoice.populate(populateOptions);
+    populatedInvoices.push(invoice);
+  }
   
   const report = {
     date: date.toISOString().split('T')[0],
-    totalInvoices: invoices.length,
+    totalInvoices: populatedInvoices.length,
     totalSales: 0,
     totalProfit: 0,
     totalCost: 0,
@@ -331,7 +371,7 @@ const getDailySalesReport = async (date = new Date()) => {
     customerBreakdown: {}
   };
   
-  invoices.forEach(invoice => {
+  populatedInvoices.forEach(invoice => {
     report.totalSales += invoice.total;
     report.totalProfit += invoice.totalProfit;
     report.totalCost += invoice.totalCost;

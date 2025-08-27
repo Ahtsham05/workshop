@@ -69,6 +69,7 @@ const translations: Translations = {
     "edit_customer": "Edit Customer",
     "delete_customer": "Delete Customer",
     "customer_name": "Customer Name",
+    "enter_customer_name": "Enter customer name",
     "no_customers_found": "No customers found",
     
     // Products page
@@ -173,6 +174,8 @@ const translations: Translations = {
     "add_notes": "Add notes or comments...",
     "save_invoice": "Save Invoice",
     "save_and_print": "Save & Print",
+    "print_success": "Invoice sent to printer",
+    "print_error": "Failed to print invoice",
     "saving": "Saving",
     "loading_products": "Loading products...",
     "with_images": "With Images",
@@ -434,6 +437,7 @@ const translations: Translations = {
     "edit_customer": "کسٹمر میں ترمیم کریں",
     "delete_customer": "کسٹمر حذف کریں",
     "customer_name": "کسٹمر کا نام",
+    "enter_customer_name": "کسٹمر کا نام درج کریں",
     "no_customers_found": "کوئی کسٹمر نہیں ملا",
     
     // Products page
@@ -538,6 +542,8 @@ const translations: Translations = {
     "add_notes": "نوٹس یا تبصرے شامل کریں...",
     "save_invoice": "انوائس محفوظ کریں",
     "save_and_print": "محفوظ کریں اور پرنٹ کریں",
+    "print_success": "انوائس پرنٹر کو بھیج دی گئی",
+    "print_error": "انوائس پرنٹ کرنے میں ناکام",
     "saving": "محفوظ کر رہا ہے",
     "loading_products": "پروڈکٹس لوڈ ہو رہے ہیں...",
     "with_images": "تصاویر کے ساتھ",

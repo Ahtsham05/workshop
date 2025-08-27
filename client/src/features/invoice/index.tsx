@@ -30,6 +30,7 @@ export interface Invoice {
   items: InvoiceItem[]
   customerId?: string
   customerName?: string
+  walkInCustomerName?: string
   type: 'cash' | 'credit' | 'pending'
   subtotal: number
   tax: number

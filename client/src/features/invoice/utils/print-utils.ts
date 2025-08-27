@@ -8,6 +8,7 @@ export interface PrintInvoiceData {
   }>
   customerId?: string
   customerName?: string
+  walkInCustomerName?: string
   type: 'cash' | 'credit' | 'pending'
   subtotal: number
   tax: number
@@ -36,6 +37,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     items,
     customerId,
     customerName,
+    walkInCustomerName,
     type,
     subtotal,
     tax,
@@ -289,7 +291,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
     <div class="info-row">
       <span class="info-label">Customer:</span>
-      <span>${customerId === 'walk-in' ? 'Walk-in Customer' : (customerName || 'N/A')}</span>
+      <span>${customerId === 'walk-in' ? (walkInCustomerName || 'Walk-in Customer') : (customerName || 'N/A')}</span>
     </div>
     ${type === 'credit' && dueDate ? `
     <div class="info-row">

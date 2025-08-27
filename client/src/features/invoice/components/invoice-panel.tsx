@@ -12,7 +12,7 @@ import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
-// import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import {
   Command,
   CommandEmpty,
@@ -66,246 +66,42 @@ export function InvoicePanel({
   // RTK Query mutation
   const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
 
-  // Print functionality
-  const generateInvoicePrint = useCallback((invoiceData: any) => {
-    const printContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Invoice ${invoiceData.invoiceNumber}</title>
-      <style>
-        @media print {
-          @page { margin: 0; size: 80mm auto; }
-          body { margin: 0; padding: 0; }
-        }
-        
-        body {
-          font-family: 'Courier New', monospace;
-          font-size: 12px;
-          line-height: 1.4;
-          margin: 0;
-          padding: 10px;
-          width: 300px;
-          background: white;
-        }
-        
-        .receipt-header {
-          text-align: center;
-          margin-bottom: 15px;
-          border-bottom: 2px solid #000;
-          padding-bottom: 10px;
-        }
-        
-        .business-name {
-          font-size: 18px;
-          font-weight: bold;
-          margin-bottom: 5px;
-        }
-        
-        .business-info {
-          font-size: 10px;
-          margin-bottom: 2px;
-        }
-        
-        .invoice-info {
-          margin-bottom: 15px;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 10px;
-        }
-        
-        .invoice-info div {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 3px;
-        }
-        
-        .items-table {
-          width: 100%;
-          margin-bottom: 15px;
-        }
-        
-        .item-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 5px;
-          padding-bottom: 3px;
-          border-bottom: 1px dotted #ccc;
-        }
-        
-        .item-name {
-          font-weight: bold;
-        }
-        
-        .item-details {
-          font-size: 10px;
-          color: #666;
-          margin-left: 10px;
-        }
-        
-        .totals {
-          border-top: 2px solid #000;
-          padding-top: 10px;
-          margin-bottom: 15px;
-        }
-        
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 3px;
-        }
-        
-        .total-final {
-          font-weight: bold;
-          font-size: 14px;
-          border-top: 1px solid #000;
-          padding-top: 5px;
-        }
-        
-        .payment-info {
-          margin-bottom: 15px;
-          border-top: 1px dashed #000;
-          padding-top: 10px;
-        }
-        
-        .barcode-section {
-          text-align: center;
-          margin: 15px 0;
-          padding: 10px 0;
-          border-top: 1px dashed #000;
-        }
-        
-        .barcode {
-          font-family: 'Libre Barcode 39', monospace;
-          font-size: 24px;
-          letter-spacing: 2px;
-          margin: 10px 0;
-        }
-        
-        .footer {
-          text-align: center;
-          font-size: 10px;
-          margin-top: 15px;
-          border-top: 2px solid #000;
-          padding-top: 10px;
-        }
-        
-        .no-print {
-          display: none;
-        }
-        
-        @media screen {
-          body {
-            max-width: 350px;
-            margin: 20px auto;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            padding: 20px;
-          }
-          
-          .no-print {
-            display: block;
-            text-align: center;
-            margin: 20px 0;
-          }
-        }
-      </style>
-      <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
-    </head>
-    <body>
-      <div class="receipt-header">
-        <div class="business-name">Your Business Name</div>
-        <div class="business-info">123 Business Street, City, State 12345</div>
-        <div class="business-info">Phone: (555) 123-4567</div>
-        <div class="business-info">Email: info@yourbusiness.com</div>
-      </div>
-      
-      <div class="invoice-info">
-        <div><span>Invoice #:</span><span>${invoiceData.invoiceNumber}</span></div>
-        <div><span>Date:</span><span>${new Date().toLocaleDateString()}</span></div>
-        <div><span>Time:</span><span>${new Date().toLocaleTimeString()}</span></div>
-        <div><span>Type:</span><span>${invoiceData.type.toUpperCase()}</span></div>
-        ${invoiceData.customerId !== 'walk-in' ? `<div><span>Customer:</span><span>${invoiceData.customerName || 'N/A'}</span></div>` : '<div><span>Customer:</span><span>Walk-in</span></div>'}
-        ${invoiceData.type === 'credit' && invoiceData.dueDate ? `<div><span>Due Date:</span><span>${new Date(invoiceData.dueDate).toLocaleDateString()}</span></div>` : ''}
-      </div>
-      
-      <div class="items-table">
-        ${invoiceData.items.map((item: any) => `
-          <div class="item-row">
-            <div style="flex: 1;">
-              <div class="item-name">${item.name}</div>
-              <div class="item-details">${item.quantity} × Rs${item.unitPrice.toFixed(2)} = Rs${item.subtotal.toFixed(2)}</div>
-            </div>
-            <div style="font-weight: bold;">Rs${item.subtotal.toFixed(2)}</div>
-          </div>
-        `).join('')}
-      </div>
-      
-      <div class="totals">
-        <div class="total-row"><span>Subtotal:</span><span>Rs${invoiceData.subtotal.toFixed(2)}</span></div>
-        ${invoiceData.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>-Rs${invoiceData.discount.toFixed(2)}</span></div>` : ''}
-        ${invoiceData.tax > 0 ? `<div class="total-row"><span>Tax:</span><span>Rs${invoiceData.tax.toFixed(2)}</span></div>` : ''}
-        ${invoiceData.deliveryCharge > 0 ? `<div class="total-row"><span>Delivery:</span><span>Rs${invoiceData.deliveryCharge.toFixed(2)}</span></div>` : ''}
-        ${invoiceData.serviceCharge > 0 ? `<div class="total-row"><span>Service:</span><span>Rs${invoiceData.serviceCharge.toFixed(2)}</span></div>` : ''}
-        <div class="total-row total-final"><span>TOTAL:</span><span>Rs${invoiceData.total.toFixed(2)}</span></div>
-      </div>
-      
-      ${invoiceData.type !== 'pending' ? `
-        <div class="payment-info">
-          <div class="total-row"><span>Paid:</span><span>Rs${invoiceData.paidAmount.toFixed(2)}</span></div>
-          ${invoiceData.balance > 0 ? `<div class="total-row" style="color: #d32f2f;"><span>Balance:</span><span>Rs${invoiceData.balance.toFixed(2)}</span></div>` : ''}
-        </div>
-      ` : ''}
-      
-      <div class="barcode-section">
-        <div>Invoice Number:</div>
-        <div class="barcode">*${invoiceData.invoiceNumber}*</div>
-        <div style="font-size: 10px;">${invoiceData.invoiceNumber}</div>
-      </div>
-      
-      ${invoiceData.notes ? `
-        <div style="margin: 15px 0; padding: 10px 0; border-top: 1px dashed #000; font-size: 10px;">
-          <strong>Notes:</strong><br>
-          ${invoiceData.notes}
-        </div>
-      ` : ''}
-      
-      <div class="footer">
-        <div>Thank you for your business!</div>
-        <div>Visit us again soon</div>
-        <div style="margin-top: 5px; font-size: 8px;">
-          Powered by Your POS System
-        </div>
-      </div>
-      
-      <div class="no-print">
-        <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Print Receipt</button>
-        <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">Close</button>
-      </div>
-    </body>
-    </html>
-    `
-
-    return printContent
-  }, [])
-
+  // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
-    const printContent = generateInvoicePrint(invoiceData)
-    const printWindow = window.open('', '_blank', 'width=400,height=600,scrollbars=yes')
-    
-    if (printWindow) {
-      printWindow.document.write(printContent)
-      printWindow.document.close()
-      
-      // Auto print after content loads
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print()
-        }, 250)
+    try {
+      const printData: PrintInvoiceData = {
+        invoiceNumber: invoiceData.invoiceNumber,
+        items: invoice.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.quantity * item.unitPrice
+        })),
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        walkInCustomerName: invoice.walkInCustomerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        discount: invoice.discount,
+        total: invoice.total,
+        paidAmount: invoice.paidAmount,
+        balance: invoice.balance,
+        dueDate: invoice.dueDate,
+        notes: invoice.notes,
+        deliveryCharge: invoice.deliveryCharge,
+        serviceCharge: invoice.serviceCharge
       }
-    } else {
-      toast.error('Unable to open print window. Please check your popup blocker.')
+
+      const htmlContent = generateInvoiceHTML(printData)
+      openPrintWindow(htmlContent)
+      
+      toast.success(t('print_success') || 'Invoice sent to printer')
+    } catch (error) {
+      console.error('Print error:', error)
+      toast.error(t('print_error') || 'Failed to print invoice')
     }
-  }, [generateInvoicePrint])
+  }, [invoice, t])
 
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
@@ -457,6 +253,7 @@ export function InvoicePanel({
         })),
         customerId: invoice.customerId,
         customerName: invoice.customerName,
+        walkInCustomerName: invoice.walkInCustomerName,
         type: invoice.type,
         subtotal: invoice.subtotal,
         tax: invoice.tax,
@@ -658,6 +455,20 @@ export function InvoicePanel({
                 type="date"
                 value={invoice.dueDate || new Date().toISOString().split('T')[0]}
                 onChange={(e) => setInvoice(prev => ({ ...prev, dueDate: e.target.value }))}
+              />
+            </div>
+          )}
+
+          {invoice.customerId === 'walk-in' && (
+            <div>
+              <Label htmlFor="walkInCustomerName">{t('customer_name')}</Label>
+              <Input
+                id="walkInCustomerName"
+                type="text"
+                placeholder={t('enter_customer_name')}
+                value={invoice.walkInCustomerName || ''}
+                onChange={(e) => setInvoice(prev => ({ ...prev, walkInCustomerName: e.target.value }))}
+                className="w-full"
               />
             </div>
           )}

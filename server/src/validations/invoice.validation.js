@@ -25,8 +25,12 @@ const splitPayment = Joi.object({
 const createInvoice = {
   body: Joi.object({
     items: Joi.array().items(invoiceItem).min(1).required(),
-    customerId: Joi.string().custom(objectId).optional(),
+    customerId: Joi.alternatives().try(
+      Joi.string().custom(objectId),
+      Joi.string().valid('walk-in')
+    ).optional(),
     customerName: Joi.string().optional(),
+    walkInCustomerName: Joi.string().optional(),
     type: Joi.string().valid('cash', 'credit', 'pending').default('cash'),
     subtotal: Joi.number().min(0).required(),
     tax: Joi.number().min(0).default(0),
@@ -79,8 +83,12 @@ const updateInvoice = {
   }),
   body: Joi.object({
     items: Joi.array().items(invoiceItem).min(1).optional(),
-    customerId: Joi.string().custom(objectId).optional(),
+    customerId: Joi.alternatives().try(
+      Joi.string().custom(objectId),
+      Joi.string().valid('walk-in')
+    ).optional(),
     customerName: Joi.string().optional(),
+    walkInCustomerName: Joi.string().optional(),
     type: Joi.string().valid('cash', 'credit', 'pending').optional(),
     subtotal: Joi.number().min(0).optional(),
     tax: Joi.number().min(0).optional(),

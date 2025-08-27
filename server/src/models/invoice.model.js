@@ -33,8 +33,12 @@ const InvoiceSchema = new mongoose.Schema({
     items: [invoiceItemSchema],
     
     // Customer information
-    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+    customerId: { 
+        type: mongoose.Schema.Types.Mixed, // Allow both ObjectId and string for walk-in customers
+        ref: 'Customer' 
+    },
     customerName: { type: String },
+    walkInCustomerName: { type: String }, // New field for walk-in customer names
     
     // Invoice type and status
     type: { 
