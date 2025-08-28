@@ -378,7 +378,7 @@ export default function InvoicePage() {
   }, [invoice, calculateTotals])
 
   return (
-    <div dir={language === 'ur' ? 'rtl' : 'ltr'}>
+    <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
       <Header fixed>
         <Search />
         <div className='ml-auto flex items-center space-x-4'>

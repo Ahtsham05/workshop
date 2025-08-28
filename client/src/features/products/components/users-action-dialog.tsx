@@ -287,7 +287,23 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                           </PopoverTrigger>
                           <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
                             <Command>
-                              <CommandInput placeholder={t('search_categories')} />
+                              <div className="relative">
+                                <CommandInput placeholder={t('search_categories')} />
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                                  <VoiceInputButton 
+                                    onTranscript={(text) => {
+                                      // Since CommandInput doesn't expose direct access to its input value,
+                                      // we can simulate typing by dispatching input events
+                                      const input = document.querySelector('[cmdk-input]') as HTMLInputElement;
+                                      if (input) {
+                                        input.value = text;
+                                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                                      }
+                                    }}
+                                    size="sm"
+                                  />
+                                </div>
+                              </div>
                               <CommandEmpty>{t('no_categories_found')}</CommandEmpty>
                               <CommandList>
                                 <CommandGroup>

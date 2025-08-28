@@ -12,7 +12,8 @@ import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
-import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import {
   Command,
   CommandEmpty,
@@ -62,9 +63,10 @@ export function InvoicePanel({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
 
   // RTK Query mutation
-  const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
+  const [createInvoice] = useCreateInvoiceMutation()
 
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
@@ -100,6 +102,43 @@ export function InvoicePanel({
     } catch (error) {
       console.error('Print error:', error)
       toast.error(t('print_error') || 'Failed to print invoice')
+    }
+  }, [invoice, t])
+
+  // A4 Print functionality using utility
+  const printA4Invoice = useCallback((invoiceData: any) => {
+    try {
+      const printData: PrintInvoiceData = {
+        invoiceNumber: invoiceData.invoiceNumber,
+        items: invoice.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.quantity * item.unitPrice
+        })),
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        walkInCustomerName: invoice.walkInCustomerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        discount: invoice.discount,
+        total: invoice.total,
+        paidAmount: invoice.paidAmount,
+        balance: invoice.balance,
+        dueDate: invoice.dueDate,
+        notes: invoice.notes,
+        deliveryCharge: invoice.deliveryCharge,
+        serviceCharge: invoice.serviceCharge
+      }
+
+      const htmlContent = generateA4InvoiceHTML(printData)
+      openA4PrintWindow(htmlContent)
+      
+      toast.success(t('print_success') || 'A4 Invoice sent to printer')
+    } catch (error) {
+      console.error('A4 Print error:', error)
+      toast.error(t('print_error') || 'Failed to print A4 invoice')
     }
   }, [invoice, t])
 
@@ -201,7 +240,7 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  const handleSaveInvoice = useCallback(async (shouldPrint: boolean = false) => {
+  const handleSaveInvoice = useCallback(async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
     if (invoice.items.length === 0) {
       toast.error('Please add items to the invoice')
       return
@@ -225,6 +264,9 @@ export function InvoicePanel({
       toast.error('Please login to save invoice')
       return
     }
+
+    // Set the saving state for the specific button
+    setSavingType(printType)
 
     try {
       // Prepare invoice data for API
@@ -279,13 +321,18 @@ export function InvoicePanel({
       toast.success(`Invoice ${result.invoiceNumber} saved successfully!`)
       
       // Print if requested
-      if (shouldPrint) {
+      if (printType !== 'none') {
         const printData = {
           ...invoiceData,
           invoiceNumber: result.invoiceNumber,
           items: validItems
         }
-        printInvoice(printData)
+        
+        if (printType === 'receipt') {
+          printInvoice(printData)
+        } else if (printType === 'a4') {
+          printA4Invoice(printData)
+        }
       }
       
     } catch (error: any) {
@@ -296,8 +343,11 @@ export function InvoicePanel({
       } else {
         toast.error(error?.data?.message || 'Failed to save invoice')
       }
+    } finally {
+      // Reset saving state
+      setSavingType(null)
     }
-  }, [invoice, createInvoice, t, printInvoice])
+  }, [invoice, createInvoice, t, printInvoice, printA4Invoice])
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -363,11 +413,22 @@ export function InvoicePanel({
                 </PopoverTrigger>
                 <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
                   <Command shouldFilter={false}>
-                    <CommandInput 
-                      placeholder={t('search_customers_by_name_or_phone')} 
-                      value={customerSearchQuery}
-                      onValueChange={setCustomerSearchQuery}
-                    />
+                    <div className="relative">
+                      <CommandInput 
+                        placeholder={t('search_customers_by_name_or_phone')} 
+                        value={customerSearchQuery}
+                        onValueChange={setCustomerSearchQuery}
+                        className="pr-10"
+                      />
+                      <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                        <VoiceInputButton 
+                          onTranscript={(text) => {
+                            setCustomerSearchQuery(text);
+                          }}
+                          size="sm"
+                        />
+                      </div>
+                    </div>
                     <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
                     <CommandList>
                       <CommandGroup>
@@ -560,11 +621,19 @@ export function InvoicePanel({
                           </PopoverTrigger>
                           <PopoverContent className="w-[300px] p-0" align="start">
                             <Command shouldFilter={false}>
-                              <CommandInput 
-                                placeholder={t('search_products')} 
-                                value={productSearchQuery}
-                                onValueChange={setProductSearchQuery}
-                              />
+                              <div className="relative">
+                                <CommandInput 
+                                  placeholder={t('search_products')} 
+                                  value={productSearchQuery}
+                                  onValueChange={setProductSearchQuery}
+                                />
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                                  <VoiceInputButton 
+                                    onTranscript={setProductSearchQuery}
+                                    size="sm"
+                                  />
+                                </div>
+                              </div>
                               <CommandEmpty>{t('no_products_found')}</CommandEmpty>
                               <CommandList>
                                 <CommandGroup>
@@ -853,15 +922,16 @@ export function InvoicePanel({
           </div>
 
           {/* Save Buttons */}
-          <div className='grid grid-cols-2 gap-3'>
+          <div className='grid grid-cols-1 gap-3'>
+            {/* Save Only Button */}
             <Button 
-              onClick={() => handleSaveInvoice(false)}
+              onClick={() => handleSaveInvoice('none')}
               className='w-full'
               size="lg"
-              disabled={invoice.items.length === 0 || isSaving}
+              disabled={invoice.items.length === 0 || savingType !== null}
               variant="outline"
             >
-              {isSaving ? (
+              {savingType === 'none' ? (
                 <>
                   <Loader2 className='h-4 w-4 mr-2 animate-spin' />
                   {t('saving')}...
@@ -874,24 +944,50 @@ export function InvoicePanel({
               )}
             </Button>
             
-            <Button 
-              onClick={() => handleSaveInvoice(true)}
-              className='w-full'
-              size="lg"
-              disabled={invoice.items.length === 0 || isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                  {t('saving')}...
-                </>
-              ) : (
-                <>
-                  <Printer className='h-4 w-4 mr-2' />
-                  {t('save_and_print')}
-                </>
-              )}
-            </Button>
+            {/* Print Buttons Row */}
+            <div className='grid grid-cols-2 gap-3'>
+              {/* Save & Print Receipt Button */}
+              <Button 
+                onClick={() => handleSaveInvoice('receipt')}
+                className='w-full'
+                size="lg"
+                disabled={invoice.items.length === 0 || savingType !== null}
+                variant="default"
+              >
+                {savingType === 'receipt' ? (
+                  <>
+                    <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                    {t('saving')}...
+                  </>
+                ) : (
+                  <>
+                    <Printer className='h-4 w-4 mr-2' />
+                    {t('save_and_print_receipt') || 'Save & Print Receipt'}
+                  </>
+                )}
+              </Button>
+              
+              {/* Save & Print A4 Button */}
+              <Button 
+                onClick={() => handleSaveInvoice('a4')}
+                className='w-full'
+                size="lg"
+                disabled={invoice.items.length === 0 || savingType !== null}
+                variant="default"
+              >
+                {savingType === 'a4' ? (
+                  <>
+                    <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                    {t('saving')}...
+                  </>
+                ) : (
+                  <>
+                    <Package className='h-4 w-4 mr-2' />
+                    {t('save_and_print_a4') || 'Save & Print A4'}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
