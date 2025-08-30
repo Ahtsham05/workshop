@@ -85,7 +85,7 @@ const getDailySalesReport = catchAsync(async (req, res) => {
   const date = req.query.date ? new Date(req.query.date) : new Date();
   const report = await invoiceService.getDailySalesReport(date);
   res.send(report);
-});
+}); 
 
 const getInvoicesByCustomer = catchAsync(async (req, res) => {
   const filter = { customerId: req.params.customerId };

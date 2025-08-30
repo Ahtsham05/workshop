@@ -12,6 +12,7 @@ import {
   // IconUserCog,
   IconUsers,
   IconCategory,
+  IconRefresh,
 } from '@tabler/icons-react'
 import { AudioWaveform, Command, GalleryVerticalEnd } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -79,9 +80,14 @@ export const sidebarData: SidebarData = {
           icon: IconPackages,
         },
         {
-          title: 'Sale',
-          url: '/sale',
+          title: 'Invoices',
+          url: '/invoice',
           icon: IconPackages,
+        },
+        {
+          title: 'Returns',
+          url: '/returns',
+          icon: IconRefresh,
         },
         {
           title: 'Accounts',

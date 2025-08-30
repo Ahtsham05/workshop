@@ -10,6 +10,7 @@ const supplierRoute = require('./supplier.route');
 const purchaseRoute = require('./purchase.route');
 const saleRoute = require('./sale.route');
 const invoiceRoute = require('./invoice.route');
+const returnRoute = require('./return.route');
 const transactionRoute = require('./transaction.route');
 const accountRoute = require('./account.route');
 const mobileRepairRoute = require('./mobileRepair.route')
@@ -52,6 +53,10 @@ const defaultRoutes = [
   {
     path: '/invoices',
     route: invoiceRoute
+  },
+  {
+    path: '/returns',
+    route: returnRoute
   },
   {
     path: '/accounts',

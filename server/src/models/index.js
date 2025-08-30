@@ -7,6 +7,7 @@ module.exports.Category = require('./category.model');
 module.exports.Purchase = require('./purchase.model');
 module.exports.Sale = require('./sale.model');
 module.exports.Invoice = require('./invoice.model');
+module.exports.Return = require('./return.model');
 module.exports.Account = require('./account.model');
 module.exports.Transaction = require('./transaction.model');
 module.exports.GeneralLedger = require('./generalLedger.model');

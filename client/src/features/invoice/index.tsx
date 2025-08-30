@@ -4,13 +4,13 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
-import { useLanguage } from '@/context/language-context'
+// import { useLanguage } from '@/context/language-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
-import { InvoicePanel, ProductCatalog } from './components'
+import { InvoicePanel, ProductCatalog, InvoiceList } from './components'
 import { toast } from 'sonner'
 
 export interface InvoiceItem {
@@ -32,6 +32,7 @@ export interface Invoice {
   customerName?: string
   walkInCustomerName?: string
   type: 'cash' | 'credit' | 'pending'
+  status?: 'draft' | 'finalized' | 'paid' | 'cancelled' | 'refunded'
   subtotal: number
   tax: number
   discount: number
@@ -80,9 +81,13 @@ export interface Category {
 }
 
 export default function InvoicePage() {
-  const { t, language } = useLanguage()
+  // const { t, language } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
   
+  // View state management
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit'>('list')
+  const [editingInvoice, setEditingInvoice] = useState<any>(null)
+
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
     items: [],
@@ -377,8 +382,93 @@ export default function InvoicePage() {
     }))
   }, [invoice, calculateTotals])
 
+  const handleCreateNew = () => {
+    setCurrentView('create')
+    setEditingInvoice(null)
+    // Reset invoice state
+    setInvoice({
+      items: [],
+      type: 'cash',
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      totalProfit: 0,
+      totalCost: 0,
+      paidAmount: 0,
+      balance: 0,
+      splitPayment: [],
+      loyaltyPoints: 0,
+      deliveryCharge: 0,
+      serviceCharge: 0,
+      roundingAdjustment: 0,
+      notes: '',
+      dueDate: undefined
+    })
+  }
+
+  const handleEdit = (invoiceData: any) => {
+    setCurrentView('edit')
+    setEditingInvoice(invoiceData)
+    
+    // Map invoice data to form state
+    setInvoice({
+      items: invoiceData.items || [],
+      type: invoiceData.type || 'cash',
+      subtotal: invoiceData.subtotal || 0,
+      tax: invoiceData.tax || 0,
+      discount: invoiceData.discount || 0,
+      total: invoiceData.total || 0,
+      totalProfit: invoiceData.totalProfit || 0,
+      totalCost: invoiceData.totalCost || 0,
+      paidAmount: invoiceData.paidAmount || 0,
+      balance: invoiceData.balance || 0,
+      splitPayment: invoiceData.splitPayment || [],
+      loyaltyPoints: invoiceData.loyaltyPoints || 0,
+      deliveryCharge: invoiceData.deliveryCharge || 0,
+      serviceCharge: invoiceData.serviceCharge || 0,
+      roundingAdjustment: invoiceData.roundingAdjustment || 0,
+      customerId: invoiceData.customerId,
+      customerName: invoiceData.customerName,
+      walkInCustomerName: invoiceData.walkInCustomerName,
+      notes: invoiceData.notes || '',
+      dueDate: invoiceData.dueDate,
+      couponCode: invoiceData.couponCode,
+      returnPolicy: invoiceData.returnPolicy,
+      status: invoiceData.status
+    })
+  }
+
+  const handleBackToList = () => {
+    setCurrentView('list')
+    setEditingInvoice(null)
+  }
+
+  // Render based on current view
+  if (currentView === 'list') {
+    return (
+      <div className='flex-1 flex flex-col'>
+        <Header fixed>
+          <Search />
+          <div className='ml-auto flex items-center space-x-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ProfileDropdown />
+          </div>
+        </Header>
+        <Main>
+          <InvoiceList 
+            onCreateNew={handleCreateNew}
+            onEdit={handleEdit}
+          />
+        </Main>
+      </div>
+    )
+  }
+
+  // Create/Edit view
   return (
-    <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
+    <div className='flex-1 flex flex-col'>
       <Header fixed>
         <Search />
         <div className='ml-auto flex items-center space-x-4'>
@@ -387,16 +477,10 @@ export default function InvoicePage() {
           <ProfileDropdown />
         </div>
       </Header>
-
-      <Main className='overflow-y-auto relative mt-24'>
-        <div className='mb-4'>
-          <h1 className='text-3xl font-bold tracking-tight'>{t('create_invoice')}</h1>
-          <p className='text-muted-foreground'>{t('create_new_invoice')}</p>
-        </div>
-
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]'>
+      <Main>
+        <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen'>
           {/* Left Panel - Invoice */}
-          <div className='space-y-4'>
+          <div className='space-y-4 max-h-screen overflow-y-auto pb-6'>
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}
@@ -409,11 +493,14 @@ export default function InvoicePage() {
               customers={customers}
               products={products}
               calculateTotals={calculateTotals}
+              onBackToList={handleBackToList}
+              isEditing={currentView === 'edit'}
+              editingInvoice={editingInvoice}
             />
           </div>
 
           {/* Right Panel - Product Catalog */}
-          <div className='space-y-4'>
+          <div className='space-y-4 max-h-screen overflow-y-auto pb-6'>
             <ProductCatalog
               categorizedProducts={categorizedProducts}
               loading={loading}

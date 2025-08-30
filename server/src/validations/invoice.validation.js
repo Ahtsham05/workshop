@@ -29,8 +29,8 @@ const createInvoice = {
       Joi.string().custom(objectId),
       Joi.string().valid('walk-in')
     ).optional(),
-    customerName: Joi.string().optional(),
-    walkInCustomerName: Joi.string().optional(),
+    customerName: Joi.string().allow('').optional(),
+    walkInCustomerName: Joi.string().allow('').optional(),
     type: Joi.string().valid('cash', 'credit', 'pending').default('cash'),
     subtotal: Joi.number().min(0).required(),
     tax: Joi.number().min(0).default(0),
@@ -50,9 +50,9 @@ const createInvoice = {
     roundingAdjustment: Joi.number().default(0),
     splitPayment: Joi.array().items(splitPayment).optional(),
     loyaltyPoints: Joi.number().min(0).default(0),
-    couponCode: Joi.string().optional(),
-    returnPolicy: Joi.string().optional(),
-    notes: Joi.string().optional()
+    couponCode: Joi.string().allow('').optional(),
+    returnPolicy: Joi.string().allow('').optional(),
+    notes: Joi.string().allow('').optional()
   })
 };
 
@@ -87,8 +87,8 @@ const updateInvoice = {
       Joi.string().custom(objectId),
       Joi.string().valid('walk-in')
     ).optional(),
-    customerName: Joi.string().optional(),
-    walkInCustomerName: Joi.string().optional(),
+    customerName: Joi.string().allow('').optional(),
+    walkInCustomerName: Joi.string().allow('').optional(),
     type: Joi.string().valid('cash', 'credit', 'pending').optional(),
     subtotal: Joi.number().min(0).optional(),
     tax: Joi.number().min(0).optional(),
@@ -104,9 +104,9 @@ const updateInvoice = {
     roundingAdjustment: Joi.number().optional(),
     splitPayment: Joi.array().items(splitPayment).optional(),
     loyaltyPoints: Joi.number().min(0).optional(),
-    couponCode: Joi.string().optional(),
-    returnPolicy: Joi.string().optional(),
-    notes: Joi.string().optional(),
+    couponCode: Joi.string().allow('').optional(),
+    returnPolicy: Joi.string().allow('').optional(),
+    notes: Joi.string().allow('').optional(),
     status: Joi.string().valid('draft', 'finalized', 'paid', 'cancelled', 'refunded').optional(),
     allowUpdateFinalized: Joi.boolean().optional()
   })

@@ -6,7 +6,7 @@ export interface PrintInvoiceData {
     unitPrice: number
     subtotal: number
   }>
-  customerId?: string
+  customerId?: string | { name: string; id: string; _id?: string }
   customerName?: string
   walkInCustomerName?: string
   type: 'cash' | 'credit' | 'pending'
@@ -50,6 +50,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     deliveryCharge = 0,
     serviceCharge = 0
   } = data
+  console.log("data",data)
 
   return `
 <!DOCTYPE html>

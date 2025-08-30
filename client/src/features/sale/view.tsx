@@ -13,19 +13,26 @@ import { Search } from '@/components/search';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { ProfileDropdown } from '@/components/profile-dropdown';
 import { getCustomerSalesAndTransactions } from '@/stores/customer.slice';
+import { ReturnForm } from '@/features/returns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { RotateCcw } from 'lucide-react';
 
 const SaleInvoice = () => {
 
   const [data, setData] = React.useState({
+    _id: '',
     customer: {
       name: '',
       phone: '',
       id: '',
     },
+    customerName: '',
+    walkInCustomerName: '',
     invoiceNumber: '',
     saleDate: '',
     items: [
       {
+        productId: '',
         product: {
           name: '',
         },
@@ -38,6 +45,7 @@ const SaleInvoice = () => {
   });
 
   const [previousBalance, setPreviousBalance] = useState(0);
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
 
   const location = useLocation();
   const urlParams = new URLSearchParams(location.search);
@@ -104,11 +112,43 @@ const SaleInvoice = () => {
       </Header>
       <Main>
         <div className="bg-white rounded-lg shadow-lg px-8 py-10 max-w-xl mx-auto">
-          {/* Print button */}
-          <div className="flex justify-end mb-8">
-            <Button
-              onClick={printInvoice}
-            >
+          {/* Action buttons */}
+          <div className="flex justify-end gap-2 mb-8">
+            <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <RotateCcw className="h-4 w-4" />
+                  Create Return
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create Return for Invoice #{data.invoiceNumber}</DialogTitle>
+                </DialogHeader>
+                <ReturnForm
+                  invoice={{
+                    _id: data._id,
+                    invoiceNumber: data.invoiceNumber,
+                    customerId: data.customer?.id,
+                    customerName: data.customer?.name || data.customerName,
+                    walkInCustomerName: data.walkInCustomerName,
+                    items: data.items?.map(item => ({
+                      productId: item.productId || 'unknown',
+                      name: item.product?.name || '',
+                      quantity: item.quantity,
+                      price: item.priceAtSale,
+                      cost: 0, // Default cost
+                    })),
+                  }}
+                  onSuccess={() => {
+                    setShowReturnDialog(false)
+                    // You can add success notification here
+                  }}
+                  onCancel={() => setShowReturnDialog(false)}
+                />
+              </DialogContent>
+            </Dialog>
+            <Button onClick={printInvoice}>
               Print Invoice
             </Button>
           </div>

@@ -43,6 +43,7 @@ import { Route as AuthenticatedSaleIndexImport } from './routes/_authenticated/s
 import { Route as AuthenticatedSaleViewIndexImport } from './routes/_authenticated/sale-view/index'
 import { Route as AuthenticatedSaleLedgerIndexImport } from './routes/_authenticated/sale-ledger/index'
 import { Route as AuthenticatedSaleAddIndexImport } from './routes/_authenticated/sale-add/index'
+import { Route as AuthenticatedReturnsIndexImport } from './routes/_authenticated/returns/index'
 import { Route as AuthenticatedPurchaseIndexImport } from './routes/_authenticated/purchase/index'
 import { Route as AuthenticatedPurchaseViewIndexImport } from './routes/_authenticated/purchase-view/index'
 import { Route as AuthenticatedPurchaseLedgerIndexImport } from './routes/_authenticated/purchase-ledger/index'
@@ -272,6 +273,12 @@ const AuthenticatedSaleLedgerIndexRoute =
 const AuthenticatedSaleAddIndexRoute = AuthenticatedSaleAddIndexImport.update({
   id: '/sale-add/',
   path: '/sale-add/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedReturnsIndexRoute = AuthenticatedReturnsIndexImport.update({
+  id: '/returns/',
+  path: '/returns/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -713,6 +720,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPurchaseIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/returns/': {
+      id: '/_authenticated/returns/'
+      path: '/returns'
+      fullPath: '/returns'
+      preLoaderRoute: typeof AuthenticatedReturnsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/sale-add/': {
       id: '/_authenticated/sale-add/'
       path: '/sale-add'
@@ -846,6 +860,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPurchaseLedgerIndexRoute: typeof AuthenticatedPurchaseLedgerIndexRoute
   AuthenticatedPurchaseViewIndexRoute: typeof AuthenticatedPurchaseViewIndexRoute
   AuthenticatedPurchaseIndexRoute: typeof AuthenticatedPurchaseIndexRoute
+  AuthenticatedReturnsIndexRoute: typeof AuthenticatedReturnsIndexRoute
   AuthenticatedSaleAddIndexRoute: typeof AuthenticatedSaleAddIndexRoute
   AuthenticatedSaleLedgerIndexRoute: typeof AuthenticatedSaleLedgerIndexRoute
   AuthenticatedSaleViewIndexRoute: typeof AuthenticatedSaleViewIndexRoute
@@ -880,6 +895,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPurchaseLedgerIndexRoute: AuthenticatedPurchaseLedgerIndexRoute,
   AuthenticatedPurchaseViewIndexRoute: AuthenticatedPurchaseViewIndexRoute,
   AuthenticatedPurchaseIndexRoute: AuthenticatedPurchaseIndexRoute,
+  AuthenticatedReturnsIndexRoute: AuthenticatedReturnsIndexRoute,
   AuthenticatedSaleAddIndexRoute: AuthenticatedSaleAddIndexRoute,
   AuthenticatedSaleLedgerIndexRoute: AuthenticatedSaleLedgerIndexRoute,
   AuthenticatedSaleViewIndexRoute: AuthenticatedSaleViewIndexRoute,
@@ -941,6 +957,7 @@ export interface FileRoutesByFullPath {
   '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
   '/purchase': typeof AuthenticatedPurchaseIndexRoute
+  '/returns': typeof AuthenticatedReturnsIndexRoute
   '/sale-add': typeof AuthenticatedSaleAddIndexRoute
   '/sale-ledger': typeof AuthenticatedSaleLedgerIndexRoute
   '/sale-view': typeof AuthenticatedSaleViewIndexRoute
@@ -995,6 +1012,7 @@ export interface FileRoutesByTo {
   '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
   '/purchase': typeof AuthenticatedPurchaseIndexRoute
+  '/returns': typeof AuthenticatedReturnsIndexRoute
   '/sale-add': typeof AuthenticatedSaleAddIndexRoute
   '/sale-ledger': typeof AuthenticatedSaleLedgerIndexRoute
   '/sale-view': typeof AuthenticatedSaleViewIndexRoute
@@ -1052,6 +1070,7 @@ export interface FileRoutesById {
   '/_authenticated/purchase-ledger/': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/_authenticated/purchase-view/': typeof AuthenticatedPurchaseViewIndexRoute
   '/_authenticated/purchase/': typeof AuthenticatedPurchaseIndexRoute
+  '/_authenticated/returns/': typeof AuthenticatedReturnsIndexRoute
   '/_authenticated/sale-add/': typeof AuthenticatedSaleAddIndexRoute
   '/_authenticated/sale-ledger/': typeof AuthenticatedSaleLedgerIndexRoute
   '/_authenticated/sale-view/': typeof AuthenticatedSaleViewIndexRoute
@@ -1110,6 +1129,7 @@ export interface FileRouteTypes {
     | '/purchase-ledger'
     | '/purchase-view'
     | '/purchase'
+    | '/returns'
     | '/sale-add'
     | '/sale-ledger'
     | '/sale-view'
@@ -1163,6 +1183,7 @@ export interface FileRouteTypes {
     | '/purchase-ledger'
     | '/purchase-view'
     | '/purchase'
+    | '/returns'
     | '/sale-add'
     | '/sale-ledger'
     | '/sale-view'
@@ -1218,6 +1239,7 @@ export interface FileRouteTypes {
     | '/_authenticated/purchase-ledger/'
     | '/_authenticated/purchase-view/'
     | '/_authenticated/purchase/'
+    | '/_authenticated/returns/'
     | '/_authenticated/sale-add/'
     | '/_authenticated/sale-ledger/'
     | '/_authenticated/sale-view/'
@@ -1325,6 +1347,7 @@ export const routeTree = rootRoute
         "/_authenticated/purchase-ledger/",
         "/_authenticated/purchase-view/",
         "/_authenticated/purchase/",
+        "/_authenticated/returns/",
         "/_authenticated/sale-add/",
         "/_authenticated/sale-ledger/",
         "/_authenticated/sale-view/",
@@ -1487,6 +1510,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/purchase/": {
       "filePath": "_authenticated/purchase/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/returns/": {
+      "filePath": "_authenticated/returns/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/sale-add/": {

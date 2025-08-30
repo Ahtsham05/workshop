@@ -6,12 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer } from 'lucide-react'
-import { useState, useCallback } from 'react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
-import { useCreateInvoiceMutation } from '@/stores/invoice.api'
+import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import {
@@ -40,6 +40,9 @@ interface InvoicePanelProps {
   customers: any[]
   products: any[]
   calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
+  onBackToList?: () => void
+  isEditing?: boolean
+  editingInvoice?: any
 }
 
 export function InvoicePanel({
@@ -53,7 +56,10 @@ export function InvoicePanel({
   setTaxRate,
   customers,
   products,
-  calculateTotals
+  calculateTotals,
+  onBackToList,
+  isEditing = false,
+  editingInvoice
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const [discountInput, setDiscountInput] = useState('0')
@@ -65,34 +71,35 @@ export function InvoicePanel({
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
 
-  // RTK Query mutation
+  // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
-
+  const [updateInvoice] = useUpdateInvoiceMutation()
+  console.log("invoice",invoice)
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
     try {
       const printData: PrintInvoiceData = {
         invoiceNumber: invoiceData.invoiceNumber,
-        items: invoice.items.map(item => ({
+        items: invoiceData.items.map((item: any) => ({
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.quantity * item.unitPrice
         })),
-        customerId: invoice.customerId,
-        customerName: invoice.customerName,
-        walkInCustomerName: invoice.walkInCustomerName,
-        type: invoice.type,
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        total: invoice.total,
-        paidAmount: invoice.paidAmount,
-        balance: invoice.balance,
-        dueDate: invoice.dueDate,
-        notes: invoice.notes,
-        deliveryCharge: invoice.deliveryCharge,
-        serviceCharge: invoice.serviceCharge
+        customerId: invoiceData.customerId,
+        customerName: invoice.customerName || invoiceData.customerName,
+        walkInCustomerName: invoiceData.walkInCustomerName,
+        type: invoiceData.type,
+        subtotal: invoiceData.subtotal,
+        tax: invoiceData.tax,
+        discount: invoiceData.discount,
+        total: invoiceData.total,
+        paidAmount: invoiceData.paidAmount,
+        balance: invoiceData.balance,
+        dueDate: invoiceData.dueDate,
+        notes: invoiceData.notes,
+        deliveryCharge: invoiceData.deliveryCharge,
+        serviceCharge: invoiceData.serviceCharge
       }
 
       const htmlContent = generateInvoiceHTML(printData)
@@ -103,33 +110,33 @@ export function InvoicePanel({
       console.error('Print error:', error)
       toast.error(t('print_error') || 'Failed to print invoice')
     }
-  }, [invoice, t])
+  }, [t])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
     try {
       const printData: PrintInvoiceData = {
         invoiceNumber: invoiceData.invoiceNumber,
-        items: invoice.items.map(item => ({
+        items: invoiceData.items.map((item: any) => ({
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.quantity * item.unitPrice
         })),
-        customerId: invoice.customerId,
-        customerName: invoice.customerName,
-        walkInCustomerName: invoice.walkInCustomerName,
-        type: invoice.type,
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        total: invoice.total,
-        paidAmount: invoice.paidAmount,
-        balance: invoice.balance,
-        dueDate: invoice.dueDate,
-        notes: invoice.notes,
-        deliveryCharge: invoice.deliveryCharge,
-        serviceCharge: invoice.serviceCharge
+        customerId: invoiceData.customerId,
+        customerName: invoiceData.customerName,
+        walkInCustomerName: invoiceData.walkInCustomerName,
+        type: invoiceData.type,
+        subtotal: invoiceData.subtotal,
+        tax: invoiceData.tax,
+        discount: invoiceData.discount,
+        total: invoiceData.total,
+        paidAmount: invoiceData.paidAmount,
+        balance: invoiceData.balance,
+        dueDate: invoiceData.dueDate,
+        notes: invoiceData.notes,
+        deliveryCharge: invoiceData.deliveryCharge,
+        serviceCharge: invoiceData.serviceCharge
       }
 
       const htmlContent = generateA4InvoiceHTML(printData)
@@ -140,7 +147,23 @@ export function InvoicePanel({
       console.error('A4 Print error:', error)
       toast.error(t('print_error') || 'Failed to print A4 invoice')
     }
-  }, [invoice, t])
+  }, [t])
+
+  // Initialize form values when in edit mode
+  useEffect(() => {
+    if (isEditing && editingInvoice) {
+      setDiscountInput(editingInvoice.discount?.toString() || '0')
+      setPaidAmountInput(editingInvoice.paidAmount?.toString() || '0')
+      
+      // Set the invoice type and status independently
+      setInvoice(prev => ({
+        ...prev,
+        // Keep original type - don't change it based on status
+        type: editingInvoice.type || 'cash',
+        status: editingInvoice.status
+      }))
+    }
+  }, [isEditing, editingInvoice, setInvoice])
 
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
@@ -241,6 +264,12 @@ export function InvoicePanel({
   }, [setInvoice])
 
   const handleSaveInvoice = useCallback(async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
+    // Validate required fields
+    if (!invoice.customerId) {
+      toast.error('Please select a customer')
+      return
+    }
+
     if (invoice.items.length === 0) {
       toast.error('Please add items to the invoice')
       return
@@ -316,16 +345,51 @@ export function InvoicePanel({
         notes: invoice.notes
       }
 
-      const result = await createInvoice(invoiceData).unwrap()
+      // Don't include status in the payload as it's not allowed in updates
+      // Status is likely managed by the backend
+
+      console.log('Saving invoice - isEditing:', isEditing, 'editingInvoice._id:', editingInvoice?._id)
+      console.log('Invoice data being sent:', invoiceData)
       
-      toast.success(`Invoice ${result.invoiceNumber} saved successfully!`)
+      const result = isEditing && editingInvoice?._id 
+        ? await updateInvoice({ id: editingInvoice._id, ...invoiceData }).unwrap()
+        : await createInvoice(invoiceData).unwrap()
+      
+      console.log('Save result:', result)
+      
+      const successMessage = isEditing 
+        ? `Invoice ${editingInvoice?.invoiceNumber || result.invoiceNumber} updated successfully!`
+        : `Invoice ${result.invoiceNumber} created successfully!`
+      
+      toast.success(successMessage)
       
       // Print if requested
       if (printType !== 'none') {
+        // Enhanced customer name resolution for both create and edit scenarios
+        let resolvedCustomerName = null
+        let resolvedWalkInCustomerName = null
+        
+        if (result.customerId === 'walk-in') {
+          resolvedWalkInCustomerName = result.walkInCustomerName || 
+                                     invoice.walkInCustomerName || 
+                                     editingInvoice?.walkInCustomerName
+        } else {
+          // For regular customers, try multiple sources
+          resolvedCustomerName = result.customerName || 
+                               invoice.customerName || 
+                               editingInvoice?.customerName ||
+                               (result.customerId || invoice.customerId || editingInvoice?.customerId 
+                                 ? customers.find(c => (c._id || c.id) === (result.customerId || invoice.customerId || editingInvoice?.customerId))?.name 
+                                 : null)
+        }
+        
         const printData = {
-          ...invoiceData,
-          invoiceNumber: result.invoiceNumber,
-          items: validItems
+          ...result, // Use the API response data
+          invoiceNumber: result.invoiceNumber || editingInvoice?.invoiceNumber,
+          items: validItems,
+          customerId: result.customerId || invoice.customerId || editingInvoice?.customerId,
+          customerName: resolvedCustomerName,
+          walkInCustomerName: resolvedWalkInCustomerName
         }
         
         if (printType === 'receipt') {
@@ -347,7 +411,7 @@ export function InvoicePanel({
       // Reset saving state
       setSavingType(null)
     }
-  }, [invoice, createInvoice, t, printInvoice, printA4Invoice])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers])
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -358,60 +422,140 @@ export function InvoicePanel({
     }
   }
 
+  // const getStatusColor = (status: string) => {
+  //   switch (status) {
+  //     case 'paid': return 'bg-green-100 text-green-800'
+  //     case 'finalized': return 'bg-purple-100 text-purple-800'
+  //     case 'draft': return 'bg-blue-100 text-blue-800'
+  //     case 'cancelled': return 'bg-gray-100 text-gray-800'
+  //     case 'overdue': return 'bg-red-100 text-red-800'
+  //     case 'pending': return 'bg-yellow-100 text-yellow-800'
+  //     default: return 'bg-gray-100 text-gray-800'
+  //   }
+  // }
+
   return (
-    <div className='space-y-4 h-full flex flex-col'>
+    <div className='space-y-4'>
       {/* Customer and Type Selection */}
       <Card>
         <CardHeader>
           <CardTitle className='flex items-center gap-2'>
+            {onBackToList && (
+              <Button variant="ghost" size="sm" onClick={onBackToList}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             <DollarSign className='h-5 w-5' />
             {t('invoice_details')}
           </CardTitle>
         </CardHeader>
         <CardContent className='space-y-4'>
-          <div className='grid grid-cols-2 gap-4'>
+          {/* Show invoice number in edit mode */}
+          {isEditing && editingInvoice?.invoiceNumber && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 min-w-0">
+                <Label className="font-medium text-blue-800 flex-shrink-0">Invoice Number:</Label>
+                <span 
+                  className="font-bold text-blue-900 truncate" 
+                  title={editingInvoice.invoiceNumber}
+                >
+                  {editingInvoice.invoiceNumber}
+                </span>
+              </div>
+            </div>
+          )}
+          
+          <div className={`grid gap-4 ${editingInvoice ? 'grid-cols-2' : 'grid-cols-2'}`}>
             <div>
-              <Label htmlFor="customer" className='mb-2'>{t('customer')}</Label>
+              <Label htmlFor="customer" className='mb-2'>
+                {t('customer')} <span className="text-red-500">*</span>
+              </Label>
               <Popover open={customerSelectOpen} onOpenChange={setCustomerSelectOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={customerSelectOpen}
-                    className="w-full justify-between min-h-[2.5rem] h-auto py-0"
+                    className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
+                      !invoice.customerId ? 'border-red-500 bg-red-50' : ''
+                    }`}
                   >
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       <Search className="w-4 h-4 flex-shrink-0" />
                       {invoice.customerId ? (
-                        <div className="flex items-center gap-2 flex-1">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           {invoice.customerId === 'walk-in' ? (
-                            <Badge variant="secondary" className="flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              <span className="text-xs">{t('walk_in_customer')}</span>
+                            <Badge variant="secondary" className="flex items-center gap-1 max-w-full min-w-0">
+                              <User className="w-3 h-3 flex-shrink-0" />
+                              <span className="text-xs truncate" title={t('walk_in_customer')}>
+                                {t('walk_in_customer')}
+                              </span>
                             </Badge>
                           ) : (
                             (() => {
                               const selectedCustomer = customers.find(c => (c._id || c.id) === invoice.customerId)
-                              return selectedCustomer ? (
-                                <Badge variant="secondary" className="flex items-center gap-1">
-                                  <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-[10px] font-medium text-white">
-                                      {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
+                              console.log('Customer search:', { 
+                                customerId: invoice.customerId, 
+                                customerName: invoice.customerName,
+                                walkInCustomerName: invoice.walkInCustomerName,
+                                selectedCustomer,
+                                customersLength: customers.length 
+                              })
+                              
+                              if (selectedCustomer) {
+                                return (
+                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-[10px] font-medium text-white">
+                                        {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs truncate" title={selectedCustomer.name}>
+                                      {selectedCustomer.name}
                                     </span>
-                                  </div>
-                                  <span className="text-xs">{selectedCustomer.name}</span>
-                                </Badge>
-                              ) : null
+                                  </Badge>
+                                )
+                              } else if (invoice.customerName) {
+                                // Fallback to showing the stored customer name if customer not found in list
+                                return (
+                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                                    <div className="w-3 h-3 rounded-full bg-gray-500 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-[10px] font-medium text-white">
+                                        {invoice.customerName.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs truncate" title={invoice.customerName}>
+                                      {invoice.customerName}
+                                    </span>
+                                  </Badge>
+                                )
+                              } else if (invoice.walkInCustomerName) {
+                                // Show walk-in customer name
+                                return (
+                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                                    <User className="w-3 h-3 flex-shrink-0" />
+                                    <span className="text-xs truncate" title={invoice.walkInCustomerName}>
+                                      {invoice.walkInCustomerName}
+                                    </span>
+                                  </Badge>
+                                )
+                              }
+                              return null
                             })()
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">{t('select_customer')}</span>
+                        <span className={`truncate ${
+                          !invoice.customerId ? 'text-red-500' : 'text-muted-foreground'
+                        }`} title={t('select_customer')}>
+                          {t('select_customer')} {!invoice.customerId && '*'}
+                        </span>
                       )}
                     </div>
+                    <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
+                <PopoverContent className="w-[400px] p-0" align={isRTL ? "end" : "start"} side="bottom" sideOffset={4}>
                   <Command shouldFilter={false}>
                     <div className="relative">
                       <CommandInput 
@@ -430,7 +574,7 @@ export function InvoicePanel({
                       </div>
                     </div>
                     <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
-                    <CommandList>
+                    <CommandList className="max-h-[300px] overflow-y-auto">
                       <CommandGroup>
                         <CommandItem
                           onSelect={() => {
@@ -461,23 +605,27 @@ export function InvoicePanel({
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
                               }}
-                              className="flex items-center gap-2 cursor-pointer"
+                              className="flex items-center gap-3 cursor-pointer p-3"
                             >
-                              <div className="flex items-center gap-2 flex-1">
-                                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                                   <span className="text-sm font-medium text-white">
                                     {customer.name?.charAt(0).toUpperCase() || 'C'}
                                   </span>
                                 </div>
-                                <div className="flex flex-col">
-                                  <span>{customer.name}</span>
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <span className="truncate font-medium" title={customer.name}>
+                                    {customer.name}
+                                  </span>
                                   {customer.phone && (
-                                    <span className="text-xs text-muted-foreground">{customer.phone}</span>
+                                    <span className="text-xs text-muted-foreground truncate" title={customer.phone}>
+                                      {customer.phone}
+                                    </span>
                                   )}
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="w-4 h-4 rounded-sm flex items-center justify-center">
+                                <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
                                   <Check className="w-3 h-3 text-black" />
                                 </div>
                               )}
@@ -507,6 +655,17 @@ export function InvoicePanel({
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* {isEditing && invoice.status && (
+              <div>
+                <Label className='mb-2'>{t('status') || 'Status'}</Label>
+                <div className="flex items-center h-10 w-full">
+                  <Badge className={getStatusColor(invoice.status)}>
+                    {(invoice.status || 'draft').toUpperCase()}
+                  </Badge>
+                </div>
+              </div>
+            )} */}
           </div>
 
           {invoice.type === 'credit' && (
@@ -537,7 +696,7 @@ export function InvoicePanel({
       </Card>
 
       {/* Invoice Items */}
-      <Card className='flex-1 flex flex-col'>
+      <Card>
         <CardHeader>
           <div className='flex items-center justify-between'>
             <CardTitle>{t('invoice_items')} ({invoice.items.length})</CardTitle>
@@ -570,8 +729,8 @@ export function InvoicePanel({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className='flex-1 overflow-hidden'>
-          <div className='space-y-2 h-full overflow-y-auto'>
+        <CardContent className='p-4'>
+          <div className='space-y-2 max-h-96 overflow-y-auto'>
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
@@ -606,20 +765,24 @@ export function InvoicePanel({
                               role="combobox"
                               className={`w-full justify-between h-8 text-xs ${
                                 !item.productId ? 'border-red-500 bg-red-50' : ''
-                              }`}
+                              } mt-4`}
                             >
-                              <div className="flex items-center gap-2 flex-1">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <Search className="w-3 h-3 flex-shrink-0" />
-                                <span className={`truncate ${
-                                  !item.productId ? 'text-red-500' : 'text-muted-foreground'
-                                }`}>
+                                <span 
+                                  className={`truncate ${
+                                    !item.productId ? 'text-red-500' : 'text-muted-foreground'
+                                  }`}
+                                  title={item.name || t('select_product')}
+                                >
                                   {item.name || t('select_product')}
                                   {!item.productId && ' *'}
                                 </span>
                               </div>
+                              <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="start">
+                          <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
                             <Command shouldFilter={false}>
                               <div className="relative">
                                 <CommandInput 
@@ -635,28 +798,30 @@ export function InvoicePanel({
                                 </div>
                               </div>
                               <CommandEmpty>{t('no_products_found')}</CommandEmpty>
-                              <CommandList>
+                              <CommandList className="max-h-[300px] overflow-y-auto">
                                 <CommandGroup>
                                   {filteredProducts.map((product) => (
                                     <CommandItem
                                       key={product._id}
                                       onSelect={() => handleProductSelect(item.id, product)}
-                                      className="flex items-center gap-2 cursor-pointer"
+                                      className="flex items-center gap-2 cursor-pointer p-3"
                                     >
-                                      <div className="flex items-center gap-2 flex-1">
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
                                         {product.image?.url ? (
                                           <img 
                                             src={product.image.url} 
                                             alt={product.name}
-                                            className="w-6 h-6 object-cover rounded"
+                                            className="w-8 h-8 object-cover rounded flex-shrink-0"
                                           />
                                         ) : (
-                                          <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
-                                            <Package className="w-3 h-3 text-muted-foreground" />
+                                          <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                            <Package className="w-4 h-4 text-muted-foreground" />
                                           </div>
                                         )}
-                                        <div className="flex flex-col flex-1">
-                                          <span className="text-sm">{product.name}</span>
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                          <span className="text-sm font-medium truncate" title={product.name}>
+                                            {product.name}
+                                          </span>
                                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                             <span key={`price-${product._id}`}>Rs{product.price}</span>
                                             <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
@@ -672,8 +837,8 @@ export function InvoicePanel({
                         </Popover>
                       </div>
                     ) : (
-                      <div>
-                        <p className='font-medium truncate'>{item.name}</p>
+                      <div className="min-w-0">
+                        <p className='font-medium truncate' title={item.name}>{item.name}</p>
                         <p className='text-xs text-muted-foreground'>
                           Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
                         </p>
@@ -928,7 +1093,7 @@ export function InvoicePanel({
               onClick={() => handleSaveInvoice('none')}
               className='w-full'
               size="lg"
-              disabled={invoice.items.length === 0 || savingType !== null}
+              disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
               variant="outline"
             >
               {savingType === 'none' ? (
@@ -939,7 +1104,7 @@ export function InvoicePanel({
               ) : (
                 <>
                   <Save className='h-4 w-4 mr-2' />
-                  {t('save_invoice')}
+                  {isEditing ? 'Update Invoice' : 'Save Invoice'}
                 </>
               )}
             </Button>
@@ -951,7 +1116,7 @@ export function InvoicePanel({
                 onClick={() => handleSaveInvoice('receipt')}
                 className='w-full'
                 size="lg"
-                disabled={invoice.items.length === 0 || savingType !== null}
+                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
                 variant="default"
               >
                 {savingType === 'receipt' ? (
@@ -962,7 +1127,10 @@ export function InvoicePanel({
                 ) : (
                   <>
                     <Printer className='h-4 w-4 mr-2' />
-                    {t('save_and_print_receipt') || 'Save & Print Receipt'}
+                    {isEditing 
+                      ? 'Update & Print Receipt'
+                      : 'Save & Print Receipt'
+                    }
                   </>
                 )}
               </Button>
@@ -972,7 +1140,7 @@ export function InvoicePanel({
                 onClick={() => handleSaveInvoice('a4')}
                 className='w-full'
                 size="lg"
-                disabled={invoice.items.length === 0 || savingType !== null}
+                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
                 variant="default"
               >
                 {savingType === 'a4' ? (
@@ -983,7 +1151,10 @@ export function InvoicePanel({
                 ) : (
                   <>
                     <Package className='h-4 w-4 mr-2' />
-                    {t('save_and_print_a4') || 'Save & Print A4'}
+                    {isEditing 
+                      ? 'Update & Print A4'
+                      : 'Save & Print A4'
+                    }
                   </>
                 )}
               </Button>
