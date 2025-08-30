@@ -49,11 +49,10 @@ interface InvoiceListProps {
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
-  pending: 'bg-yellow-100 text-yellow-800',
-  overdue: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
   draft: 'bg-blue-100 text-blue-800',
   finalized: 'bg-purple-100 text-purple-800',
+  cancelled: 'bg-gray-100 text-gray-800',
+  refunded: 'bg-red-100 text-red-800',
 }
 
 export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
@@ -241,12 +240,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="overdue">Overdue</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="finalized">Finalized</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="refunded">Refunded</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -316,8 +314,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
                     </TableCell>
                     <TableCell>${invoice.total?.toFixed(2) || '0.00'}</TableCell>
                     <TableCell>
-                      <Badge className={statusColors[invoice.status || 'pending']}>
-                        {(invoice.status || 'pending').toUpperCase()}
+                      <Badge className={statusColors[invoice.status || 'draft']}>
+                        {(invoice.status || 'draft').toUpperCase()}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -482,8 +480,8 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
         </div>
         <div>
           <Label>Status</Label>
-          <Badge className={statusColors[invoice.status || 'pending']}>
-            {(invoice.status || 'pending').toUpperCase()}
+          <Badge className={statusColors[invoice.status || 'draft']}>
+            {(invoice.status || 'draft').toUpperCase()}
           </Badge>
         </div>
       </div>

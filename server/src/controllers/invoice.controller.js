@@ -13,6 +13,21 @@ const getInvoices = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['customerId', 'type', 'status', 'invoiceNumber']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   
+  // Set default options if not provided
+  if (!options.limit) {
+    options.limit = 100; // Increase default limit to show more results
+  }
+  if (!options.page) {
+    options.page = 1;
+  }
+  if (!options.sortBy) {
+    options.sortBy = 'createdAt:desc'; // Default sort by newest first
+  }
+  
+  console.log('Invoice search - Query params:', req.query);
+  console.log('Invoice search - Filter:', filter);
+  console.log('Invoice search - Options:', options);
+  
   // Add date range filter if provided
   if (req.query.dateFrom || req.query.dateTo) {
     filter.invoiceDate = {};
@@ -24,16 +39,76 @@ const getInvoices = catchAsync(async (req, res) => {
     }
   }
   
-  // Add search functionality
+  // Enhanced search functionality
   if (req.query.search) {
+    const searchTerm = req.query.search.trim();
+    console.log('Searching for term:', searchTerm);
+    
+    // First, find customers that match the search term
+    const { Customer } = require('../models');
+    const matchingCustomers = await Customer.find({
+      $or: [
+        { name: { $regex: searchTerm, $options: 'i' } },
+        { phone: { $regex: searchTerm, $options: 'i' } },
+        { email: { $regex: searchTerm, $options: 'i' } }
+      ]
+    }).select('_id name');
+    
+    console.log('Found matching customers:', matchingCustomers.length);
+    matchingCustomers.forEach(customer => {
+      console.log('Customer:', customer.name, 'ID:', customer._id);
+    });
+    
+    const customerIds = matchingCustomers.map(customer => customer._id);
+    const customerIdsString = customerIds.map(id => id.toString());
+    
+    // Debug: Let's see what invoices exist for this customer
+    if (customerIds.length > 0) {
+      const { Invoice } = require('../models');
+      const allInvoicesForCustomer = await Invoice.find({ 
+        customerId: { $in: customerIds } 
+      }).select('_id invoiceNumber customerId customerName');
+      
+      console.log('All invoices for matching customers (direct ID match):', allInvoicesForCustomer.length);
+      allInvoicesForCustomer.forEach(inv => {
+        console.log('Invoice:', inv.invoiceNumber, 'CustomerID:', inv.customerId, 'CustomerName:', inv.customerName);
+      });
+      
+      // Also check for string version of IDs
+      const allInvoicesForCustomerString = await Invoice.find({ 
+        customerId: { $in: customerIdsString } 
+      }).select('_id invoiceNumber customerId customerName');
+      
+      console.log('All invoices for matching customers (string ID match):', allInvoicesForCustomerString.length);
+    }
+    
+    // Build comprehensive search filter
     filter.$or = [
-      { invoiceNumber: { $regex: req.query.search, $options: 'i' } },
-      { customerName: { $regex: req.query.search, $options: 'i' } },
-      { 'items.name': { $regex: req.query.search, $options: 'i' } }
+      { invoiceNumber: { $regex: searchTerm, $options: 'i' } },
+      { walkInCustomerName: { $regex: searchTerm, $options: 'i' } },
+      { customerName: { $regex: searchTerm, $options: 'i' } }, // Add direct customer name search
+      { 'items.name': { $regex: searchTerm, $options: 'i' } },
+      { notes: { $regex: searchTerm, $options: 'i' } }
     ];
+    
+    // Add customer ID search if we found matching customers (try both ObjectId and string versions)
+    if (customerIds.length > 0) {
+      filter.$or.push({ customerId: { $in: customerIds } });
+      filter.$or.push({ customerId: { $in: customerIdsString } });
+    }
+    
+    console.log('Final search filter:', JSON.stringify(filter, null, 2));
   }
   
   const result = await invoiceService.queryInvoices(filter, options);
+  console.log('Search results:', {
+    total: result.totalResults,
+    page: result.page,
+    limit: result.limit,
+    totalPages: result.totalPages,
+    resultsCount: result.results?.length
+  });
+  
   res.send(result);
 });
 
