@@ -38,8 +38,9 @@ import {
   Download,
   Receipt,
 } from 'lucide-react'
-import { useGetInvoicesQuery, useDeleteInvoiceMutation } from '@/stores/invoice.api'
+import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
+import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -55,6 +56,12 @@ const statusColors: Record<string, string> = {
   refunded: 'bg-red-100 text-red-800',
 }
 
+const typeColors: Record<string, string> = {
+  cash: 'bg-green-100 text-green-800',
+  credit: 'bg-blue-100 text-blue-800',
+  pending: 'bg-yellow-100 text-yellow-800',
+}
+
 export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -62,6 +69,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
 
   // Debounce search term
   useEffect(() => {
@@ -79,7 +88,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
     ...(statusFilter !== 'all' && { status: statusFilter })
   })
   const { data: customersData } = useGetAllCustomersQuery(undefined)
-  const [deleteInvoice] = useDeleteInvoiceMutation()
+  // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
   const customerMap = new Map()
@@ -141,17 +150,34 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
     return 'Unknown Customer'
   }
 
+  // Helper function to get customer phone number
+  const getCustomerPhone = (invoice: any) => {
+    // For walk-in customers, they don't have stored phone numbers
+    if (invoice.customerId === 'walk-in') {
+      return '-'
+    }
+    
+    // Check if backend populated customer info with phone
+    if (invoice.customer && invoice.customer.phone) {
+      return invoice.customer.phone
+    }
+    
+    // Look up customer phone in our fetched customers data
+    if (invoice.customerId && customerMap.has(invoice.customerId)) {
+      const customer = customerMap.get(invoice.customerId)
+      return customer.phone || '-'
+    }
+    
+    // If no phone number found
+    return '-'
+  }
+
   // Debug logging
   console.log('Invoice API Response:', { invoicesResponse, isLoading, error })
 
-  const handleDelete = async (invoiceId: string) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        await deleteInvoice(invoiceId).unwrap()
-      } catch (error) {
-        console.error('Failed to delete invoice:', error)
-      }
-    }
+  const handleDelete = (invoice: any) => {
+    setInvoiceToDelete(invoice)
+    setDeleteDialogOpen(true)
   }
 
   // Handle server response with pagination info
@@ -294,6 +320,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
                 <TableRow>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
@@ -308,6 +336,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
                     </TableCell>
                     <TableCell>
                       {getCustomerName(invoice)}
+                    </TableCell>
+                    <TableCell>
+                      {getCustomerPhone(invoice)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={typeColors[invoice.type || 'cash']}>
+                        {(invoice.type || 'cash').toUpperCase()}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
@@ -360,7 +396,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(invoice._id)}
+                          onClick={() => handleDelete(invoice)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -453,6 +489,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit }: InvoiceListProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Dialog */}
+      {invoiceToDelete && (
+        <InvoiceDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          currentRow={invoiceToDelete}
+        />
+      )}
     </div>
   )
 }
