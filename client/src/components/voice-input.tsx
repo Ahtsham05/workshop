@@ -49,8 +49,8 @@ export function VoiceInput({
         recognition.maxAlternatives = 1
         
         // Set language based on current language context
-        recognition.lang = language === 'ur' ? 'ur-PK' : 'en-PK'
-        
+        // recognition.lang = language === 'ur' ? 'ur-PK' : 'en-PK'
+        recognition.lang = language === 'ur' ? 'ur-PK' : 'ur-PK'
         recognition.onstart = () => {
           setIsListening(true)
           toast.success(t('voice_recording_started'))
@@ -125,7 +125,7 @@ export function VoiceInput({
   // Update language when language context changes
   useEffect(() => {
     if (recognitionRef.current) {
-      recognitionRef.current.lang = language === 'ur' ? 'ur-PK' : 'en-PK'
+      recognitionRef.current.lang = language === 'ur' ? 'ur-PK' : 'ur-PK'
     }
   }, [language])
 
@@ -138,7 +138,7 @@ export function VoiceInput({
         }
         
         // Update language before starting
-        recognitionRef.current.lang = language === 'ur' ? 'ur-PK' : 'en-PK'
+        recognitionRef.current.lang = language === 'ur' ? 'ur-PK' : 'ur-PK'
         
         recognitionRef.current.start()
       } catch (error) {

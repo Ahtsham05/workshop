@@ -314,7 +314,12 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
  * @returns {Promise<Invoice>}
  */
 const deleteInvoiceById = async (invoiceId) => {
-  const invoice = await getInvoiceById(invoiceId);
+  // Get the actual Mongoose document, not the plain object
+  const invoice = await Invoice.findById(invoiceId);
+  
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
   
   // Prevent deleting finalized invoices
   if (invoice.status === 'finalized' || invoice.status === 'paid') {

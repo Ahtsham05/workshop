@@ -480,7 +480,7 @@ export default function InvoicePage() {
       <Main>
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen'>
           {/* Left Panel - Invoice */}
-          <div className='space-y-4 max-h-screen overflow-y-auto pb-6'>
+          <div className='space-y-4 pb-6'>
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}
@@ -500,7 +500,7 @@ export default function InvoicePage() {
           </div>
 
           {/* Right Panel - Product Catalog */}
-          <div className='space-y-4 max-h-screen overflow-y-auto pb-6'>
+          <div className='space-y-4 max-h-[2000px] overflow-y-auto pb-6'>
             <ProductCatalog
               categorizedProducts={categorizedProducts}
               loading={loading}

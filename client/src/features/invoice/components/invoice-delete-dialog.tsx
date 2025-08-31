@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useDeleteInvoiceMutation } from '@/stores/invoice.api'
 import toast from 'react-hot-toast'
-import { useLanguage } from '@/context/language-context'
+// import { useLanguage } from '@/context/language-context'
 
 interface Props {
   open: boolean
@@ -19,7 +19,7 @@ interface Props {
 export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
   const [value, setValue] = useState('')
   const [deleteInvoice, { isLoading }] = useDeleteInvoiceMutation()
-  const { t } = useLanguage()
+  // const { t } = useLanguage()
 
   const handleDelete = async () => {
     if (value.trim() !== currentRow.invoiceNumber) return

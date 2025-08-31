@@ -165,6 +165,16 @@ export function InvoicePanel({
     }
   }, [isEditing, editingInvoice, setInvoice])
 
+  // Auto-set due date when invoice type changes to credit
+  useEffect(() => {
+    if (invoice.type === 'credit' && !invoice.dueDate) {
+      setInvoice(prev => ({ 
+        ...prev, 
+        dueDate: new Date().toISOString().split('T')[0] 
+      }))
+    }
+  }, [invoice.type, setInvoice])
+
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
     if (!customerSearchQuery) return true
@@ -279,11 +289,6 @@ export function InvoicePanel({
     const incompleteItems = invoice.items.filter(item => item.isManualEntry && !item.productId)
     if (incompleteItems.length > 0) {
       toast.error(t('select_product_for_manual_entries'))
-      return
-    }
-
-    if (invoice.type === 'credit' && !invoice.dueDate) {
-      toast.error('Please set a due date for credit invoice')
       return
     }
 
