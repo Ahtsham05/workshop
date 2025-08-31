@@ -70,7 +70,7 @@ export const invoiceApi = createApi({
         method: 'PATCH',
         body: patch,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Invoice', id }, 'Invoice'],
+      invalidatesTags: ( { id }) => [{ type: 'Invoice', id }, 'Invoice'],
     }),
 
     // Delete invoice
