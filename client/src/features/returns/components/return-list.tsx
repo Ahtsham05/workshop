@@ -288,7 +288,7 @@ export function ReturnList({ onBack }: ReturnListProps) {
                               <Eye className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl">
+                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle>Return Details - {returnItem.returnNumber}</DialogTitle>
                             </DialogHeader>
@@ -380,111 +380,165 @@ export function ReturnList({ onBack }: ReturnListProps) {
 function ReturnDetails({ returnItem }: { returnItem: Return }) {
   return (
     <div className="space-y-6">
-      {/* Return Info */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Return Info - Responsive Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
-          <Label>Return Number</Label>
-          <p className="font-medium">{returnItem.returnNumber}</p>
+          <Label className="text-xs text-muted-foreground">Return Number</Label>
+          <p className="font-medium text-sm">{returnItem.returnNumber}</p>
         </div>
         <div>
-          <Label>Original Invoice</Label>
-          <p className="font-medium">{returnItem.originalInvoiceNumber}</p>
+          <Label className="text-xs text-muted-foreground">Original Invoice</Label>
+          <p className="font-medium text-sm">{returnItem.originalInvoiceNumber}</p>
         </div>
         <div>
-          <Label>Customer</Label>
-          <p className="font-medium">
+          <Label className="text-xs text-muted-foreground">Customer</Label>
+          <p className="font-medium text-sm">
             {returnItem.customerName || returnItem.walkInCustomerName || 'Walk-in Customer'}
           </p>
         </div>
         <div>
-          <Label>Return Date</Label>
-          <p className="font-medium">
+          <Label className="text-xs text-muted-foreground">Return Date</Label>
+          <p className="font-medium text-sm">
             {format(new Date(returnItem.returnDate), 'MMM dd, yyyy HH:mm')}
           </p>
         </div>
         <div>
-          <Label>Status</Label>
-          <Badge className={statusColors[returnItem.status]}>
-            {returnItem.status.toUpperCase()}
-          </Badge>
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <div className="mt-1">
+            <Badge className={statusColors[returnItem.status]}>
+              {returnItem.status.toUpperCase()}
+            </Badge>
+          </div>
         </div>
         <div>
-          <Label>Return Type</Label>
-          <Badge className={returnTypeColors[returnItem.returnType]}>
-            {returnItem.returnType.replace('_', ' ').toUpperCase()}
-          </Badge>
+          <Label className="text-xs text-muted-foreground">Return Type</Label>
+          <div className="mt-1">
+            <Badge className={returnTypeColors[returnItem.returnType]}>
+              {returnItem.returnType.replace('_', ' ').toUpperCase()}
+            </Badge>
+          </div>
         </div>
       </div>
 
-      {/* Return Items */}
+      {/* Return Items - Mobile Responsive */}
       <div>
-        <Label>Return Items</Label>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Product</TableHead>
-              <TableHead>Original Qty</TableHead>
-              <TableHead>Return Qty</TableHead>
-              <TableHead>Unit Price</TableHead>
-              <TableHead>Return Amount</TableHead>
-              <TableHead>Reason</TableHead>
-              <TableHead>Condition</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {returnItem.items.map((item, index) => (
-              <TableRow key={index}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {item.image && (
-                      <img 
-                        src={item.image.url} 
-                        alt={item.name}
-                        className="w-8 h-8 rounded object-cover"
-                      />
-                    )}
-                    {item.name}
+        <Label className="text-sm font-medium">Return Items</Label>
+        
+        {/* Mobile View - Card Layout */}
+        <div className="block sm:hidden space-y-3 mt-3">
+          {returnItem.items.map((item, index) => (
+            <div key={index} className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-start gap-3">
+                {item.image && (
+                  <img 
+                    src={item.image.url} 
+                    alt={item.name}
+                    className="w-10 h-10 rounded object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{item.name}</p>
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Original Qty:</span>
+                      <span className="ml-1 font-medium">{item.originalQuantity}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Return Qty:</span>
+                      <span className="ml-1 font-medium">{item.returnedQuantity}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Unit Price:</span>
+                      <span className="ml-1 font-medium">${item.unitPrice.toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Amount:</span>
+                      <span className="ml-1 font-medium">${item.returnAmount.toFixed(2)}</span>
+                    </div>
                   </div>
-                </TableCell>
-                <TableCell>{item.originalQuantity}</TableCell>
-                <TableCell>{item.returnedQuantity}</TableCell>
-                <TableCell>${item.unitPrice.toFixed(2)}</TableCell>
-                <TableCell>${item.returnAmount.toFixed(2)}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">
-                    {item.reason.replace('_', ' ').toUpperCase()}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={item.condition === 'new' ? 'default' : 'secondary'}>
-                    {item.condition.toUpperCase()}
-                  </Badge>
-                </TableCell>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {item.reason.replace('_', ' ').toUpperCase()}
+                    </Badge>
+                    <Badge variant={item.condition === 'new' ? 'default' : 'secondary'} className="text-xs">
+                      {item.condition.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View - Table Layout */}
+        <div className="hidden sm:block overflow-x-auto">
+          <Table className="mt-3">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[200px]">Product</TableHead>
+                <TableHead className="text-center w-[80px]">Orig Qty</TableHead>
+                <TableHead className="text-center w-[80px]">Ret Qty</TableHead>
+                <TableHead className="text-right w-[90px]">Price</TableHead>
+                <TableHead className="text-right w-[90px]">Amount</TableHead>
+                <TableHead className="text-center w-[100px]">Reason</TableHead>
+                <TableHead className="text-center w-[80px]">Condition</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {returnItem.items.map((item, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {item.image && (
+                        <img 
+                          src={item.image.url} 
+                          alt={item.name}
+                          className="w-8 h-8 rounded object-cover"
+                        />
+                      )}
+                      <span className="truncate text-sm">{item.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">{item.originalQuantity}</TableCell>
+                  <TableCell className="text-center">{item.returnedQuantity}</TableCell>
+                  <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">${item.returnAmount.toFixed(2)}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant="outline" className="text-xs">
+                      {item.reason.replace('_', ' ').toUpperCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={item.condition === 'new' ? 'default' : 'secondary'} className="text-xs">
+                      {item.condition.toUpperCase()}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
-      {/* Financial Summary */}
-      <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-        <div>
-          <Label>Total Return Amount</Label>
-          <p className="text-lg font-bold">${returnItem.totalReturnAmount.toFixed(2)}</p>
+      {/* Financial Summary - Responsive */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+        <div className="text-center sm:text-left">
+          <Label className="text-sm text-muted-foreground">Total Return Amount</Label>
+          <p className="text-lg font-bold text-blue-600">${returnItem.totalReturnAmount.toFixed(2)}</p>
         </div>
-        <div>
-          <Label>Refund Amount</Label>
+        <div className="text-center sm:text-right">
+          <Label className="text-sm text-muted-foreground">Refund Amount</Label>
           <p className="text-lg font-bold text-green-600">${returnItem.refundAmount.toFixed(2)}</p>
         </div>
         {returnItem.restockingFee > 0 && (
-          <div>
-            <Label>Restocking Fee</Label>
+          <div className="text-center sm:text-left">
+            <Label className="text-sm text-muted-foreground">Restocking Fee</Label>
             <p className="text-lg font-bold text-red-600">-${returnItem.restockingFee.toFixed(2)}</p>
           </div>
         )}
         {returnItem.processingFee > 0 && (
-          <div>
-            <Label>Processing Fee</Label>
+          <div className="text-center sm:text-right">
+            <Label className="text-sm text-muted-foreground">Processing Fee</Label>
             <p className="text-lg font-bold text-red-600">-${returnItem.processingFee.toFixed(2)}</p>
           </div>
         )}
@@ -493,15 +547,15 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
       {/* Notes and Reason */}
       {returnItem.returnReason && (
         <div>
-          <Label>Return Reason</Label>
-          <p className="text-sm">{returnItem.returnReason}</p>
+          <Label className="text-sm font-medium">Return Reason</Label>
+          <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded">{returnItem.returnReason}</p>
         </div>
       )}
 
       {returnItem.notes && (
         <div>
-          <Label>Notes</Label>
-          <p className="text-sm">{returnItem.notes}</p>
+          <Label className="text-sm font-medium">Notes</Label>
+          <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded">{returnItem.notes}</p>
         </div>
       )}
 
@@ -509,7 +563,7 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
         <div className="p-4 bg-red-50 rounded-lg border border-red-200">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="h-4 w-4 text-red-500" />
-            <Label className="text-red-700">Rejection Reason</Label>
+            <Label className="text-red-700 text-sm font-medium">Rejection Reason</Label>
           </div>
           <p className="text-sm text-red-600">{returnItem.rejectionReason}</p>
         </div>

@@ -11,6 +11,7 @@ import { AppDispatch } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { InvoicePanel, ProductCatalog, InvoiceList } from './components'
+import { ReturnForm } from '../returns/components/return-form'
 import { toast } from 'sonner'
 
 export interface InvoiceItem {
@@ -85,8 +86,9 @@ export default function InvoicePage() {
   const dispatch = useDispatch<AppDispatch>()
   
   // View state management
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit'>('list')
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'return'>('list')
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
+  const [returningInvoice, setReturningInvoice] = useState<any>(null)
 
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
@@ -442,6 +444,12 @@ export default function InvoicePage() {
   const handleBackToList = () => {
     setCurrentView('list')
     setEditingInvoice(null)
+    setReturningInvoice(null)
+  }
+
+  const handleReturn = (invoiceData: any) => {
+    setCurrentView('return')
+    setReturningInvoice(invoiceData)
   }
 
   // Render based on current view
@@ -460,6 +468,30 @@ export default function InvoicePage() {
           <InvoiceList 
             onCreateNew={handleCreateNew}
             onEdit={handleEdit}
+            onReturn={handleReturn}
+          />
+        </Main>
+      </div>
+    )
+  }
+
+  // Return view
+  if (currentView === 'return') {
+    return (
+      <div className='flex-1 flex flex-col'>
+        <Header fixed>
+          <Search />
+          <div className='ml-auto flex items-center space-x-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ProfileDropdown />
+          </div>
+        </Header>
+        <Main>
+          <ReturnForm
+            invoice={returningInvoice}
+            onSuccess={handleBackToList}
+            onCancel={handleBackToList}
           />
         </Main>
       </div>

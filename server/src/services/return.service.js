@@ -15,9 +15,9 @@ const createReturn = async (returnBody, user) => {
         throw new ApiError(httpStatus.NOT_FOUND, 'Original invoice not found');
     }
 
-    // Verify that the invoice is finalized or paid
-    if (!['finalized', 'paid'].includes(originalInvoice.status)) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Can only create returns for finalized or paid invoices');
+    // Verify that the invoice is in a returnable state
+    if (!['draft', 'finalized', 'paid'].includes(originalInvoice.status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Can only create returns for draft, finalized, or paid invoices');
     }
 
     // Validate return items against original invoice items

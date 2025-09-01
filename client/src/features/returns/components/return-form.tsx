@@ -27,9 +27,25 @@ import {
 //   DialogTitle,
 //   DialogTrigger,
 // } from '@/components/ui/dialog'
-import { X, Plus, Minus, AlertCircle, ShoppingCart, Search } from 'lucide-react'
+import { X, Plus, Minus, AlertCircle, ShoppingCart, Search, ChevronDown, Package } from 'lucide-react'
 import { useCreateReturnMutation } from '@/stores/return.api'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
+import { useDispatch } from 'react-redux'
+import { AppDispatch } from '@/stores/store'
+import { fetchAllProducts } from '@/stores/product.slice'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { CreateReturnRequest } from '../types'
 
 interface ReturnFormItem {
@@ -70,10 +86,15 @@ interface ReturnFormProps {
 
 export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
   const [createReturn, { isLoading }] = useCreateReturnMutation()
-  const { data: invoices } = useGetInvoicesQuery({})
+  const { data: invoicesResponse } = useGetInvoicesQuery({})
+  const invoices = invoicesResponse?.results || invoicesResponse?.data || []
   const [selectedInvoice, setSelectedInvoice] = useState(invoice || null)
   const [showInvoiceSearch, setShowInvoiceSearch] = useState(!invoice)
   const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('')
+  const [products, setProducts] = useState<any[]>([])
+  const [productSelectOpen, setProductSelectOpen] = useState<string>('')
+  const [productSearchQuery, setProductSearchQuery] = useState('')
+  const dispatch = useDispatch<AppDispatch>()
   
   const [formData, setFormData] = useState<ReturnFormData>({
     originalInvoiceId: selectedInvoice?._id || '',
@@ -89,21 +110,73 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
     receiptProvided: false,
     restockingFee: 0,
     processingFee: 0,
-    items: selectedInvoice?.items?.map((item: any) => ({
-      productId: item.productId || item._id,
-      name: item.name,
-      image: item.image,
-      originalQuantity: item.quantity,
-      returnedQuantity: 1,
-      unitPrice: item.price,
-      cost: item.cost || 0,
-      reason: 'customer_request' as const,
-      condition: 'new' as const,
-      restockable: true,
-    })) || [],
+    items: [],
   })
 
+  // Initialize form data when invoice prop changes
+  useEffect(() => {
+    if (selectedInvoice?.items) {
+      const items = selectedInvoice.items.map((item: any) => ({
+        productId: item.productId || item._id,
+        name: item.name,
+        image: item.image,
+        originalQuantity: item.quantity,
+        returnedQuantity: 1,
+        unitPrice: item.unitPrice || item.price || 0,
+        cost: item.cost || 0,
+        reason: 'customer_request' as const,
+        condition: 'new' as const,
+        restockable: true,
+      }))
+      
+      setFormData(prev => ({
+        ...prev,
+        originalInvoiceId: selectedInvoice._id || '',
+        originalInvoiceNumber: selectedInvoice.invoiceNumber || '',
+        customerId: selectedInvoice.customerId || '',
+        customerName: selectedInvoice.customerName || '',
+        walkInCustomerName: selectedInvoice.walkInCustomerName || '',
+        items
+      }))
+    }
+  }, [selectedInvoice])
+
   const [totalReturnAmount, setTotalReturnAmount] = useState(0)
+
+  // Fetch products for manual item selection
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await dispatch(fetchAllProducts({}))
+        let productsData = []
+        
+        if (response.payload?.results) {
+          productsData = response.payload.results
+        } else if (response.payload) {
+          productsData = Array.isArray(response.payload) ? response.payload : []
+        }
+        
+        setProducts(productsData)
+      } catch (error) {
+        console.error('Error fetching products:', error)
+        setProducts([])
+      }
+    }
+
+    // Only fetch products if we don't have an invoice (manual return creation)
+    if (!invoice) {
+      fetchProducts()
+    }
+  }, [dispatch, invoice])
+
+  // Filter products by name or barcode
+  const filteredProducts = products.filter(product => {
+    if (!productSearchQuery) return true
+    const query = productSearchQuery.toLowerCase()
+    const name = product.name?.toLowerCase() || ''
+    const barcode = product.barcode?.toLowerCase() || ''
+    return name.includes(query) || barcode.includes(query)
+  })
 
   // Calculate total return amount
   useEffect(() => {
@@ -173,6 +246,27 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
     }))
   }
 
+  // Handle product selection for manual entries
+  const handleProductSelect = (itemIndex: string, product: any) => {
+    const index = parseInt(itemIndex)
+    const productId = product._id || product.id
+    if (!productId) {
+      console.error('Product has no valid ID:', product)
+      return
+    }
+    
+    updateItem(index, {
+      productId: productId,
+      name: product.name,
+      image: product.image,
+      unitPrice: product.price || 0,
+      cost: product.cost || 0,
+    })
+    
+    setProductSelectOpen('')
+    setProductSearchQuery('')
+  }
+
   const filteredInvoices = invoices?.filter((inv: any) => 
     inv.invoiceNumber.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
     inv.customerName?.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
@@ -182,12 +276,54 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (formData.items.length === 0) return
-    if (!formData.returnReason.trim()) return
+    console.log('=== RETURN FORM SUBMISSION STARTED ===')
+    console.log('Button clicked! onSubmit function is being called')
+    console.log('Form submission started', { formData, isLoading })
+    
+    // Enhanced validation with detailed logging
+    console.log('Validating items - count:', formData.items.length)
+    if (formData.items.length === 0) {
+      console.log('Validation failed: No items')
+      alert('Please add items to return')
+      return
+    }
+    console.log('Items validation passed ✓')
+    
+    console.log('Validating return reason:', formData.returnReason)
+    if (!formData.returnReason.trim()) {
+      console.log('Validation failed: No return reason')
+      alert('Please enter a return reason')
+      return
+    }
+    console.log('Return reason validation passed ✓')
+
+    // Validate that all items have required fields
+    console.log('Validating item fields...')
+    const invalidItems = formData.items.filter(item => !item.productId || !item.name)
+    if (invalidItems.length > 0) {
+      console.log('Validation failed: Invalid items', invalidItems)
+      alert('Please ensure all items have valid product information')
+      return
+    }
+    console.log('All item fields validation passed ✓')
 
     try {
+      console.log('Creating return with data:', formData)
+      
       const returnData: CreateReturnRequest = {
-        ...formData,
+        originalInvoiceId: formData.originalInvoiceId || '000000000000000000000000', // Default ObjectId for manual returns
+        originalInvoiceNumber: formData.originalInvoiceNumber || 'MANUAL-RETURN',
+        customerId: formData.customerId || undefined,
+        customerName: formData.customerName || undefined,
+        walkInCustomerName: formData.walkInCustomerName || undefined,
+        returnType: formData.returnType,
+        refundMethod: formData.refundMethod,
+        returnReason: formData.returnReason,
+        notes: formData.notes || '',
+        receiptRequired: formData.receiptRequired,
+        receiptProvided: formData.receiptProvided,
+        restockingFee: formData.restockingFee || 0,
+        processingFee: formData.processingFee || 0,
         items: formData.items.map(item => ({
           productId: item.productId,
           name: item.name,
@@ -195,19 +331,63 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
           originalQuantity: item.originalQuantity,
           returnedQuantity: item.returnedQuantity,
           unitPrice: item.unitPrice,
-          cost: item.cost,
+          cost: item.cost || 0,
+          returnAmount: item.returnedQuantity * item.unitPrice, // Calculate return amount for each item
           reason: item.reason,
           condition: item.condition,
           restockable: item.restockable,
         })),
       }
       
-      await createReturn(returnData).unwrap()
-      onSuccess?.()
-    } catch (error) {
+      console.log('=== ALL VALIDATIONS PASSED ===')
+      console.log('About to call API with return data:', returnData)
+      
+      console.log('Calling createReturn API...')
+      const result = await createReturn(returnData).unwrap()
+      console.log('Return created successfully:', result)
+      console.log('Return ID from response:', result?._id || result?.id)
+      
+      alert('Return created successfully!')
+      
+      // Make sure onSuccess is called properly
+      if (onSuccess) {
+        console.log('Calling onSuccess callback...')
+        onSuccess()
+      } else {
+        console.log('No onSuccess callback provided')
+      }
+    } catch (error: any) {
       console.error('Failed to create return:', error)
+      console.error('Error details:', {
+        status: error?.status,
+        data: error?.data,
+        message: error?.message,
+        originalStatus: error?.originalStatus
+      })
+      
+      // More detailed error handling
+      let errorMessage = 'Failed to create return'
+      if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      }
+      
+      alert(`Error: ${errorMessage}`)
     }
   }
+
+  // Debug button state
+  const buttonDisabled = isLoading || formData.items.length === 0 || !formData.returnReason.trim()
+  console.log('=== BUTTON STATE DEBUG ===')
+  console.log('isLoading:', isLoading)
+  console.log('formData.items.length:', formData.items.length)
+  console.log('formData.returnReason:', `"${formData.returnReason}"`)
+  console.log('formData.returnReason.trim():', `"${formData.returnReason.trim()}"`)
+  console.log('!formData.returnReason.trim():', !formData.returnReason.trim())
+  console.log('Button disabled:', buttonDisabled)
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -215,6 +395,11 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
       <Card>
         <CardHeader>
           <CardTitle>Invoice Information</CardTitle>
+          {invoice && (
+            <p className="text-sm text-muted-foreground">
+              Invoice details are pre-filled and cannot be modified
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {showInvoiceSearch ? (
@@ -289,11 +474,13 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                     value={formData.originalInvoiceNumber} 
                     onChange={(e) => setFormData(prev => ({ ...prev, originalInvoiceNumber: e.target.value }))}
                     placeholder="Enter invoice number"
+                    disabled={!!invoice} // Disable if invoice is pre-selected
                   />
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setShowInvoiceSearch(true)}
+                    disabled={!invoice} // Disable if invoice is pre-selected
                   >
                     <Search className="h-4 w-4" />
                   </Button>
@@ -310,6 +497,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                     walkInCustomerName: e.target.value 
                   }))}
                   placeholder="Enter customer name"
+                  disabled={!!invoice} // Disable if invoice is pre-selected
                 />
               </div>
             </div>
@@ -407,12 +595,20 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Return Items</CardTitle>
+              <div>
+                <CardTitle>Return Items</CardTitle>
+                {invoice && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Items from Invoice #{formData.originalInvoiceNumber}
+                  </p>
+                )}
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addManualItem}
+                disabled={!invoice} // Disable if invoice is pre-selected
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
@@ -447,12 +643,82 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                               className="w-8 h-8 rounded object-cover"
                             />
                           )}
-                          <Input
-                            value={item.name}
-                            onChange={(e) => updateItem(index, { name: e.target.value })}
-                            placeholder="Product name"
-                            className="min-w-40"
-                          />
+                          {!invoice && !item.name ? (
+                            // Show product selector for empty manual items
+                            <Popover 
+                              open={productSelectOpen === index.toString()} 
+                              onOpenChange={(open) => setProductSelectOpen(open ? index.toString() : '')}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full justify-between h-9 text-sm border-red-500 bg-red-50"
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Search className="w-3 h-3 flex-shrink-0" />
+                                    <span className="truncate text-red-500">
+                                      Select product *
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
+                                <Command shouldFilter={false}>
+                                  <CommandInput 
+                                    placeholder="Search products..." 
+                                    value={productSearchQuery}
+                                    onValueChange={setProductSearchQuery}
+                                  />
+                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  <CommandList className="max-h-[300px] overflow-y-auto">
+                                    <CommandGroup>
+                                      {filteredProducts.map((product) => (
+                                        <CommandItem
+                                          key={product._id}
+                                          onSelect={() => handleProductSelect(index.toString(), product)}
+                                          className="flex items-center gap-2 cursor-pointer p-3"
+                                        >
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            {product.image?.url ? (
+                                              <img 
+                                                src={product.image.url} 
+                                                alt={product.name}
+                                                className="w-8 h-8 object-cover rounded flex-shrink-0"
+                                              />
+                                            ) : (
+                                              <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                                <Package className="w-4 h-4 text-muted-foreground" />
+                                              </div>
+                                            )}
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                              <span className="text-sm font-medium truncate" title={product.name}>
+                                                {product.name}
+                                              </span>
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span>Rs{product.price}</span>
+                                                <span>Stock: {product.stockQuantity}</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            // Show input for invoice items or selected products
+                            <Input
+                              value={item.name}
+                              onChange={(e) => updateItem(index, { name: e.target.value })}
+                              placeholder="Product name"
+                              className="min-w-40"
+                              disabled={!!invoice} // Disable if invoice is pre-selected
+                            />
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -462,6 +728,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                           value={item.originalQuantity}
                           onChange={(e) => updateItem(index, { originalQuantity: parseInt(e.target.value) || 1 })}
                           className="w-20"
+                          disabled={!!invoice} // Disable if invoice is pre-selected
                         />
                       </TableCell>
                       <TableCell>
@@ -508,6 +775,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, { unitPrice: parseFloat(e.target.value) || 0 })}
                           className="w-24"
+                          disabled={!!invoice} // Disable if invoice is pre-selected
                         />
                       </TableCell>
                       <TableCell>
@@ -562,6 +830,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                           size="sm"
                           onClick={() => removeItem(index)}
                           className="text-red-600 hover:text-red-700"
+                          disabled={!invoice} // Disable if invoice is pre-selected
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -660,7 +929,11 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isLoading || formData.items.length === 0}>
+          <Button 
+            type="submit" 
+            disabled={buttonDisabled}
+            onClick={() => console.log('Create Return button clicked!')}
+          >
             {isLoading ? 'Creating Return...' : 'Create Return'}
           </Button>
         </div>
