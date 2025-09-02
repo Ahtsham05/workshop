@@ -37,11 +37,12 @@ import {
   Filter,
   Eye,
   AlertCircle,
-  Plus,
+  // Plus,
 } from 'lucide-react'
 import { useGetReturnsQuery, useApproveReturnMutation, useRejectReturnMutation, useProcessReturnMutation } from '@/stores/return.api'
 import { Return, ReturnFilters } from '../types'
 import { ReturnForm } from './return-form'
+import { useLanguage } from '@/context/language-context'
 
 const statusColors: Record<Return['status'], string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -63,6 +64,7 @@ interface ReturnListProps {
 }
 
 export function ReturnList({ onBack }: ReturnListProps) {
+  const { t } = useLanguage()
   const [filters, setFilters] = useState<ReturnFilters>({})
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
@@ -119,11 +121,11 @@ export function ReturnList({ onBack }: ReturnListProps) {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Create Return</h1>
-            <p className="text-muted-foreground">Create a new return request</p>
+            <h1 className="text-2xl font-bold">{t('create_return')}</h1>
+            <p className="text-muted-foreground">{t('new_return_request')}</p>
           </div>
         </div>
-        <ReturnForm 
+        <ReturnForm
           onSuccess={handleCreateSuccess}
           onCancel={() => setShowCreateForm(false)}
         />
@@ -136,7 +138,7 @@ export function ReturnList({ onBack }: ReturnListProps) {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading returns...</p>
+          <p className="mt-4 text-muted-foreground">{t('loading_returns')}</p>
         </div>
       </div>
     )
@@ -153,14 +155,14 @@ export function ReturnList({ onBack }: ReturnListProps) {
             </Button>
           )}
           <div>
-            <h1 className="text-2xl font-bold">Returns Management</h1>
-            <p className="text-muted-foreground">Manage customer returns and refunds</p>
+            <h1 className="text-2xl font-bold">{t('returns_management')}</h1>
+            <p className="text-muted-foreground mt-2">{t('manage_returns')}</p>
           </div>
         </div>
-        <Button onClick={() => setShowCreateForm(true)}>
+        {/* <Button onClick={() => setShowCreateForm(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          Create Return
-        </Button>
+          {t('create_return')}
+        </Button> */}
       </div>
 
       {/* Filters */}
@@ -168,52 +170,52 @@ export function ReturnList({ onBack }: ReturnListProps) {
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <Label htmlFor="search">Search</Label>
-              <div className="relative">
+              <Label htmlFor="search">{t('search')}</Label>
+              <div className="relative mt-2">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search"
-                  placeholder="Return #, Invoice #, Customer..."
+                  placeholder={`${t('return_number')}, ${t('original_invoice')}, ${t('customer')}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
             </div>
-            
+
             <div>
-              <Label>Status</Label>
-              <Select value={filters.status || 'all'} onValueChange={(value) => 
+              <Label>{t('return_status')}</Label>
+              <Select value={filters.status || 'all'} onValueChange={(value) =>
                 setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value as any }))
               }>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
+                <SelectTrigger className='mt-2 w-full'>
+                  <SelectValue placeholder={t('return_all_statuses')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="processed">Processed</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="all">{t('return_all_statuses')}</SelectItem>
+                  <SelectItem value="pending">{t('return_pending')}</SelectItem>
+                  <SelectItem value="approved">{t('return_approved')}</SelectItem>
+                  <SelectItem value="rejected">{t('return_rejected')}</SelectItem>
+                  <SelectItem value="processed">{t('return_processed')}</SelectItem>
+                  <SelectItem value="completed">{t('return_completed')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Return Type</Label>
-              <Select value={filters.returnType || 'all'} onValueChange={(value) => 
+              <Label>{t('return_type')}</Label>
+              <Select value={filters.returnType || 'all'} onValueChange={(value) =>
                 setFilters(prev => ({ ...prev, returnType: value === 'all' ? undefined : value as any }))
               }>
-                <SelectTrigger>
-                  <SelectValue placeholder="All types" />
+                <SelectTrigger className='mt-2 w-full'>
+                  <SelectValue placeholder={t('return_all_types')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  <SelectItem value="full_refund">Full Refund</SelectItem>
-                  <SelectItem value="partial_refund">Partial Refund</SelectItem>
-                  <SelectItem value="exchange">Exchange</SelectItem>
-                  <SelectItem value="store_credit">Store Credit</SelectItem>
+                  <SelectItem value="all">{t('return_all_types')}</SelectItem>
+                  <SelectItem value="full_refund">{t('full_refund')}</SelectItem>
+                  <SelectItem value="partial_refund">{t('partial_refund')}</SelectItem>
+                  <SelectItem value="exchange">{t('exchange')}</SelectItem>
+                  <SelectItem value="store_credit">{t('store_credit')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -225,7 +227,7 @@ export function ReturnList({ onBack }: ReturnListProps) {
                 className="w-full"
               >
                 <Filter className="h-4 w-4 mr-2" />
-                Clear Filters
+                {t('return_clear_filters')}
               </Button>
             </div>
           </div>
@@ -235,21 +237,21 @@ export function ReturnList({ onBack }: ReturnListProps) {
       {/* Returns Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Returns List ({filteredReturns.length})</CardTitle>
+          <CardTitle>{t('returns_list')} ({filteredReturns.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Return #</TableHead>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Return Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t('return_number')}</TableHead>
+                  <TableHead>{t('original_invoice')}</TableHead>
+                  <TableHead>{t('customer')}</TableHead>
+                  <TableHead>{t('return_date')}</TableHead>
+                  <TableHead>{t('return_type')}</TableHead>
+                  <TableHead>{t('refund_amount')}</TableHead>
+                  <TableHead>{t('return_status')}</TableHead>
+                  <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,37 +262,37 @@ export function ReturnList({ onBack }: ReturnListProps) {
                     </TableCell>
                     <TableCell>{returnItem.originalInvoiceNumber}</TableCell>
                     <TableCell>
-                      {returnItem.customerName || returnItem.walkInCustomerName || 'Walk-in Customer'}
+                      {returnItem.customerName || returnItem.walkInCustomerName || t('walk_in_customer')}
                     </TableCell>
                     <TableCell>
                       {format(new Date(returnItem.returnDate), 'MMM dd, yyyy')}
                     </TableCell>
                     <TableCell>
                       <Badge className={returnTypeColors[returnItem.returnType]}>
-                        {returnItem.returnType.replace('_', ' ').toUpperCase()}
+                        {t(returnItem.returnType)}
                       </Badge>
                     </TableCell>
-                    <TableCell>${returnItem.totalReturnAmount.toFixed(2)}</TableCell>
+                    <TableCell>Rs{returnItem.totalReturnAmount.toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge className={statusColors[returnItem.status]}>
-                        {returnItem.status.toUpperCase()}
+                        {t(`return_${returnItem.status}`)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="sm"
                               onClick={() => setSelectedReturn(returnItem)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                          <DialogContent className="max-h-[90vh] w-[95vw] max-w-none overflow-y-auto">
                             <DialogHeader>
-                              <DialogTitle>Return Details - {returnItem.returnNumber}</DialogTitle>
+                              <DialogTitle>{t('return_details')} - {returnItem.returnNumber}</DialogTitle>
                             </DialogHeader>
                             {selectedReturn && <ReturnDetails returnItem={selectedReturn} />}
                           </DialogContent>
@@ -318,27 +320,27 @@ export function ReturnList({ onBack }: ReturnListProps) {
                               </DialogTrigger>
                               <DialogContent>
                                 <DialogHeader>
-                                  <DialogTitle>Reject Return</DialogTitle>
+                                  <DialogTitle>{t('reject_return')}</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4">
                                   <div>
-                                    <Label htmlFor="reason">Rejection Reason</Label>
+                                    <Label htmlFor="reason">{t('rejection_reason')}</Label>
                                     <Textarea
                                       id="reason"
                                       value={rejectionReason}
                                       onChange={(e) => setRejectionReason(e.target.value)}
-                                      placeholder="Enter reason for rejection..."
+                                      placeholder={t('enter_rejection_reason')}
                                       rows={3}
                                     />
                                   </div>
                                   <div className="flex justify-end gap-2">
-                                    <Button variant="outline">Cancel</Button>
+                                    <Button variant="outline">{t('cancel')}</Button>
                                     <Button
                                       variant="destructive"
                                       onClick={() => handleReject(returnItem._id)}
                                       disabled={!rejectionReason.trim()}
                                     >
-                                      Reject Return
+                                      {t('reject_return')}
                                     </Button>
                                   </div>
                                 </div>
@@ -368,7 +370,7 @@ export function ReturnList({ onBack }: ReturnListProps) {
           {filteredReturns.length === 0 && (
             <div className="text-center py-8">
               <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No returns found</p>
+              <p className="text-muted-foreground">{t('no_returns_found')}</p>
             </div>
           )}
         </CardContent>
@@ -378,43 +380,45 @@ export function ReturnList({ onBack }: ReturnListProps) {
 }
 
 function ReturnDetails({ returnItem }: { returnItem: Return }) {
+  const { t, language } = useLanguage()
+  
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${language === 'ur' ? 'rtl' : 'ltr'}`}>
       {/* Return Info - Responsive Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
-          <Label className="text-xs text-muted-foreground">Return Number</Label>
+          <Label className="text-xs text-muted-foreground">{t('return_number')}</Label>
           <p className="font-medium text-sm">{returnItem.returnNumber}</p>
         </div>
         <div>
-          <Label className="text-xs text-muted-foreground">Original Invoice</Label>
+          <Label className="text-xs text-muted-foreground">{t('original_invoice')}</Label>
           <p className="font-medium text-sm">{returnItem.originalInvoiceNumber}</p>
         </div>
         <div>
-          <Label className="text-xs text-muted-foreground">Customer</Label>
+          <Label className="text-xs text-muted-foreground">{t('customer')}</Label>
           <p className="font-medium text-sm">
-            {returnItem.customerName || returnItem.walkInCustomerName || 'Walk-in Customer'}
+            {returnItem.customerName || returnItem.walkInCustomerName || t('walk_in_customer')}
           </p>
         </div>
         <div>
-          <Label className="text-xs text-muted-foreground">Return Date</Label>
+          <Label className="text-xs text-muted-foreground">{t('return_date')}</Label>
           <p className="font-medium text-sm">
             {format(new Date(returnItem.returnDate), 'MMM dd, yyyy HH:mm')}
           </p>
         </div>
         <div>
-          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Label className="text-xs text-muted-foreground">{t('return_status')}</Label>
           <div className="mt-1">
             <Badge className={statusColors[returnItem.status]}>
-              {returnItem.status.toUpperCase()}
+              {t(`return_${returnItem.status}`)}
             </Badge>
           </div>
         </div>
         <div>
-          <Label className="text-xs text-muted-foreground">Return Type</Label>
+          <Label className="text-xs text-muted-foreground">{t('return_type')}</Label>
           <div className="mt-1">
             <Badge className={returnTypeColors[returnItem.returnType]}>
-              {returnItem.returnType.replace('_', ' ').toUpperCase()}
+              {t(returnItem.returnType)}
             </Badge>
           </div>
         </div>
@@ -422,16 +426,16 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
 
       {/* Return Items - Mobile Responsive */}
       <div>
-        <Label className="text-sm font-medium">Return Items</Label>
+        <Label className="text-sm font-medium">{t('return_items')}</Label>
         
         {/* Mobile View - Card Layout */}
-        <div className="block sm:hidden space-y-3 mt-3">
+        <div className="block lg:hidden space-y-3 mt-3">
           {returnItem.items.map((item, index) => (
             <div key={index} className="border rounded-lg p-3 space-y-2">
               <div className="flex items-start gap-3">
                 {item.image && (
-                  <img 
-                    src={item.image.url} 
+                  <img
+                    src={item.image.url}
                     alt={item.name}
                     className="w-10 h-10 rounded object-cover flex-shrink-0"
                   />
@@ -440,28 +444,36 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
                   <p className="font-medium text-sm truncate">{item.name}</p>
                   <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
                     <div>
-                      <span className="text-muted-foreground">Original Qty:</span>
+                      <span className="text-muted-foreground">{t('original_qty')}:</span>
                       <span className="ml-1 font-medium">{item.originalQuantity}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Return Qty:</span>
+                      <span className="text-muted-foreground">{t('return_qty')}:</span>
                       <span className="ml-1 font-medium">{item.returnedQuantity}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Unit Price:</span>
-                      <span className="ml-1 font-medium">${item.unitPrice.toFixed(2)}</span>
+                      <span className="text-muted-foreground">{t('unit_price')}:</span>
+                      <span className="ml-1 font-medium">Rs{item.unitPrice.toFixed(2)}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Amount:</span>
-                      <span className="ml-1 font-medium">${item.returnAmount.toFixed(2)}</span>
+                      <span className="text-muted-foreground">{t('return_amount')}:</span>
+                      <span className="ml-1 font-medium">Rs{item.returnAmount.toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge variant="outline" className="text-xs">
-                      {item.reason.replace('_', ' ').toUpperCase()}
+                      {t(item.reason === 'defective' ? 'reason_defective' :
+                        item.reason === 'wrong_item' ? 'wrong_item' :
+                        item.reason === 'customer_request' ? 'customer_request' :
+                        item.reason === 'damaged' ? 'reason_damaged' :
+                        item.reason === 'expired' ? 'reason_expired' :
+                        item.reason === 'other' ? 'reason_other' : item.reason)}
                     </Badge>
                     <Badge variant={item.condition === 'new' ? 'default' : 'secondary'} className="text-xs">
-                      {item.condition.toUpperCase()}
+                      {t(item.condition === 'new' ? 'condition_new' :
+                        item.condition === 'used' ? 'condition_used' :
+                        item.condition === 'damaged' ? 'condition_damaged' :
+                        item.condition === 'defective' ? 'condition_defective' : item.condition)}
                     </Badge>
                   </div>
                 </div>
@@ -471,48 +483,60 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
         </div>
 
         {/* Desktop View - Table Layout */}
-        <div className="hidden sm:block overflow-x-auto">
-          <Table className="mt-3">
+        <div className="hidden lg:block">
+          <Table className={`mt-3 ${language === 'ur' ? 'rtl' : 'ltr'}`}>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">Product</TableHead>
-                <TableHead className="text-center w-[80px]">Orig Qty</TableHead>
-                <TableHead className="text-center w-[80px]">Ret Qty</TableHead>
-                <TableHead className="text-right w-[90px]">Price</TableHead>
-                <TableHead className="text-right w-[90px]">Amount</TableHead>
-                <TableHead className="text-center w-[100px]">Reason</TableHead>
-                <TableHead className="text-center w-[80px]">Condition</TableHead>
+                <TableHead className="min-w-[150px]">{t('product')}</TableHead>
+                <TableHead className="text-center w-[70px]">{t('original_qty')}</TableHead>
+                <TableHead className="text-center w-[70px]">{t('return_qty')}</TableHead>
+                <TableHead className={`w-[80px] ${language === 'ur' ? 'text-left' : 'text-right'}`}>{t('unit_price')}</TableHead>
+                <TableHead className={`w-[80px] ${language === 'ur' ? 'text-left' : 'text-right'}`}>{t('return_amount')}</TableHead>
+                {/* <TableHead className="text-center w-[110px]">Reason</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
               {returnItem.items.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell>
+                  <TableCell className="min-w-[150px]">
                     <div className="flex items-center gap-2">
                       {item.image && (
-                        <img 
-                          src={item.image.url} 
+                        <img
+                          src={item.image.url}
                           alt={item.name}
-                          className="w-8 h-8 rounded object-cover"
+                          className="w-8 h-8 rounded object-cover flex-shrink-0"
                         />
                       )}
-                      <span className="truncate text-sm">{item.name}</span>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm block truncate" title={item.name}>{item.name}</span>
+                        {/* <Badge variant={item.condition === 'new' ? 'default' : 'secondary'} className="text-xs mt-1">
+                          {t(item.condition === 'new' ? 'condition_new' :
+                            item.condition === 'used' ? 'condition_used' :
+                            item.condition === 'damaged' ? 'condition_damaged' :
+                            item.condition === 'defective' ? 'condition_defective' : item.condition)}
+                        </Badge> */}
+                      </div>
+                    </div>
+                    <div>
+                      <Badge variant="outline" className="text-xs mt-1">
+                        {t(item.reason === 'defective' ? 'reason_defective' :
+                          item.reason === 'wrong_item' ? 'wrong_item' :
+                          item.reason === 'customer_request' ? 'customer_request' :
+                          item.reason === 'damaged' ? 'reason_damaged' :
+                          item.reason === 'expired' ? 'reason_expired' :
+                          item.reason === 'other' ? 'reason_other' : item.reason)}
+                      </Badge>
                     </div>
                   </TableCell>
                   <TableCell className="text-center">{item.originalQuantity}</TableCell>
                   <TableCell className="text-center">{item.returnedQuantity}</TableCell>
-                  <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">${item.returnAmount.toFixed(2)}</TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className={`${language === 'ur' ? 'text-left' : 'text-right'}`}>Rs{item.unitPrice.toFixed(2)}</TableCell>
+                  <TableCell className={`${language === 'ur' ? 'text-left' : 'text-right'}`}>Rs{item.returnAmount.toFixed(2)}</TableCell>
+                  {/* <TableCell className="text-center">
                     <Badge variant="outline" className="text-xs">
                       {item.reason.replace('_', ' ').toUpperCase()}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={item.condition === 'new' ? 'default' : 'secondary'} className="text-xs">
-                      {item.condition.toUpperCase()}
-                    </Badge>
-                  </TableCell>
+                  </TableCell> */}
                 </TableRow>
               ))}
             </TableBody>
@@ -523,23 +547,23 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
       {/* Financial Summary - Responsive */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
         <div className="text-center sm:text-left">
-          <Label className="text-sm text-muted-foreground">Total Return Amount</Label>
-          <p className="text-lg font-bold text-blue-600">${returnItem.totalReturnAmount.toFixed(2)}</p>
+          <Label className="text-sm text-muted-foreground">{t('total_return_amount')}</Label>
+          <p className="text-lg font-bold text-blue-600">Rs{returnItem.totalReturnAmount.toFixed(2)}</p>
         </div>
-        <div className="text-center sm:text-right">
-          <Label className="text-sm text-muted-foreground">Refund Amount</Label>
-          <p className="text-lg font-bold text-green-600">${returnItem.refundAmount.toFixed(2)}</p>
+        <div className={`text-center ${language === 'ur' ? 'sm:text-left' : 'sm:text-right'}`}>
+          <Label className="text-sm text-muted-foreground">{t('refund_amount')}</Label>
+          <p className="text-lg font-bold text-green-600">Rs{returnItem.refundAmount.toFixed(2)}</p>
         </div>
         {returnItem.restockingFee > 0 && (
-          <div className="text-center sm:text-left">
-            <Label className="text-sm text-muted-foreground">Restocking Fee</Label>
-            <p className="text-lg font-bold text-red-600">-${returnItem.restockingFee.toFixed(2)}</p>
+          <div className={`text-center ${language === 'ur' ? 'sm:text-right' : 'sm:text-left'}`}>
+            <Label className="text-sm text-muted-foreground">{t('restocking_fee')}</Label>
+            <p className="text-lg font-bold text-red-600">-Rs{returnItem.restockingFee.toFixed(2)}</p>
           </div>
         )}
         {returnItem.processingFee > 0 && (
-          <div className="text-center sm:text-right">
-            <Label className="text-sm text-muted-foreground">Processing Fee</Label>
-            <p className="text-lg font-bold text-red-600">-${returnItem.processingFee.toFixed(2)}</p>
+          <div className={`text-center ${language === 'ur' ? 'sm:text-left' : 'sm:text-right'}`}>
+            <Label className="text-sm text-muted-foreground">{t('processing_fee')}</Label>
+            <p className="text-lg font-bold text-red-600">-Rs{returnItem.processingFee.toFixed(2)}</p>
           </div>
         )}
       </div>
@@ -547,25 +571,25 @@ function ReturnDetails({ returnItem }: { returnItem: Return }) {
       {/* Notes and Reason */}
       {returnItem.returnReason && (
         <div>
-          <Label className="text-sm font-medium">Return Reason</Label>
-          <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded">{returnItem.returnReason}</p>
+          <Label className="text-sm font-medium">{t('return_reason')}</Label>
+          <p className={`text-sm text-muted-foreground mt-1 p-3 bg-muted rounded ${language === 'ur' ? 'text-right' : 'text-left'}`}>{returnItem.returnReason}</p>
         </div>
       )}
 
       {returnItem.notes && (
         <div>
-          <Label className="text-sm font-medium">Notes</Label>
-          <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded">{returnItem.notes}</p>
+          <Label className="text-sm font-medium">{t('additional_notes')}</Label>
+          <p className={`text-sm text-muted-foreground mt-1 p-3 bg-muted rounded ${language === 'ur' ? 'text-right' : 'text-left'}`}>{returnItem.notes}</p>
         </div>
       )}
 
       {returnItem.rejectionReason && (
         <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-          <div className="flex items-center gap-2 mb-2">
+          <div className={`flex items-center gap-2 mb-2 ${language === 'ur' ? 'flex-row-reverse' : 'flex-row'}`}>
             <AlertCircle className="h-4 w-4 text-red-500" />
-            <Label className="text-red-700 text-sm font-medium">Rejection Reason</Label>
+            <Label className="text-red-700 text-sm font-medium">{t('rejection_reason')}</Label>
           </div>
-          <p className="text-sm text-red-600">{returnItem.rejectionReason}</p>
+          <p className={`text-sm text-red-600 ${language === 'ur' ? 'text-right' : 'text-left'}`}>{returnItem.rejectionReason}</p>
         </div>
       )}
     </div>

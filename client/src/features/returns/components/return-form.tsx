@@ -47,6 +47,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { CreateReturnRequest } from '../types'
+import { useLanguage } from '@/context/language-context'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 
 interface ReturnFormItem {
   productId: string
@@ -85,6 +87,7 @@ interface ReturnFormProps {
 }
 
 export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
+  const { t } = useLanguage()
   const [createReturn, { isLoading }] = useCreateReturnMutation()
   const { data: invoicesResponse } = useGetInvoicesQuery({})
   const invoices = invoicesResponse?.results || invoicesResponse?.data || []
@@ -394,10 +397,10 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
       {/* Invoice Information */}
       <Card>
         <CardHeader>
-          <CardTitle>Invoice Information</CardTitle>
+          <CardTitle>{t('original_invoice_information')}</CardTitle>
           {invoice && (
-            <p className="text-sm text-muted-foreground">
-              Invoice details are pre-filled and cannot be modified
+            <p className="text-sm text-muted-foreground mt-2">
+              {t('invoice_details_prefilled')}
             </p>
           )}
         </CardHeader>
@@ -405,11 +408,11 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
           {showInvoiceSearch ? (
             <div className="space-y-4">
               <div>
-                <Label>Search Invoice</Label>
-                <div className="relative">
+                <Label>{t('search_invoice')}</Label>
+                <div className="relative mt-2">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search by invoice number or customer name..."
+                    placeholder={t('search_by_invoice_or_customer')}
                     value={invoiceSearchTerm}
                     onChange={(e) => setInvoiceSearchTerm(e.target.value)}
                     className="pl-10"
@@ -429,11 +432,11 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                         <div>
                           <p className="font-medium">{inv.invoiceNumber}</p>
                           <p className="text-sm text-muted-foreground">
-                            {inv.customerName || inv.walkInCustomerName || 'Walk-in Customer'}
+                            {inv.customerName || inv.walkInCustomerName || t('walk_in_customer')}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium">${inv.totalAmount?.toFixed(2)}</p>
+                          <p className="font-medium">Rs{inv.totalAmount?.toFixed(2)}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(inv.createdAt).toLocaleDateString()}
                           </p>
@@ -461,19 +464,19 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                     }))
                   }}
                 >
-                  Skip Invoice Selection
+                  {t('skip_invoice_selection')}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Invoice Number</Label>
-                <div className="flex gap-2">
+                <Label>{t('invoice_number')}</Label>
+                <div className="flex gap-2 mt-2">
                   <Input 
                     value={formData.originalInvoiceNumber} 
                     onChange={(e) => setFormData(prev => ({ ...prev, originalInvoiceNumber: e.target.value }))}
-                    placeholder="Enter invoice number"
+                    placeholder={t('enter_invoice_number')}
                     disabled={!!invoice} // Disable if invoice is pre-selected
                   />
                   <Button
@@ -488,7 +491,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
               </div>
               
               <div>
-                <Label>Customer</Label>
+                <Label>{t('customer')}</Label>
                 <Input
                   value={formData.customerName || formData.walkInCustomerName || ''}
                   onChange={(e) => setFormData(prev => ({ 
@@ -496,8 +499,9 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                     customerName: e.target.value,
                     walkInCustomerName: e.target.value 
                   }))}
-                  placeholder="Enter customer name"
-                  disabled={!!invoice} // Disable if invoice is pre-selected
+                  placeholder={t('enter_customer_name')}
+                  disabled={!!invoice} // Disable if invoice is pre-selecte
+                  className='mt-2'
                 />
               </div>
             </div>
@@ -508,65 +512,87 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
       {/* Return Details */}
       <Card>
         <CardHeader>
-          <CardTitle>Return Details</CardTitle>
+          <CardTitle>{t('return_details')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Return Type</Label>
+              <Label>{t('return_type')}</Label>
               <Select 
                 value={formData.returnType} 
                 onValueChange={(value) => updateFormData({ returnType: value as any })}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select return type" />
+                <SelectTrigger className='w-full mt-2'>
+                  <SelectValue placeholder={t('select_return_type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="full_refund">Full Refund</SelectItem>
-                  <SelectItem value="partial_refund">Partial Refund</SelectItem>
-                  <SelectItem value="exchange">Exchange</SelectItem>
-                  <SelectItem value="store_credit">Store Credit</SelectItem>
+                  <SelectItem value="full_refund">{t('full_refund')}</SelectItem>
+                  <SelectItem value="partial_refund">{t('partial_refund')}</SelectItem>
+                  <SelectItem value="exchange">{t('exchange')}</SelectItem>
+                  <SelectItem value="store_credit">{t('store_credit')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Refund Method</Label>
+              <Label>{t('refund_method')}</Label>
               <Select 
                 value={formData.refundMethod} 
                 onValueChange={(value) => updateFormData({ refundMethod: value as any })}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select refund method" />
+                <SelectTrigger className='w-full mt-2'>
+                  <SelectValue placeholder={t('select_refund_method')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="original_payment">Original Payment Method</SelectItem>
-                  <SelectItem value="store_credit">Store Credit</SelectItem>
+                  <SelectItem value="cash">{t('refund_cash')}</SelectItem>
+                  <SelectItem value="card">{t('refund_card')}</SelectItem>
+                  <SelectItem value="original_payment">{t('original_payment')}</SelectItem>
+                  <SelectItem value="store_credit">{t('store_credit')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div>
-            <Label>Return Reason</Label>
-            <Textarea
-              value={formData.returnReason}
-              onChange={(e) => updateFormData({ returnReason: e.target.value })}
-              placeholder="Enter the reason for return..."
-              rows={3}
-            />
+            <Label>{t('return_reason')}</Label>
+            <div className="relative">
+              <Textarea
+                value={formData.returnReason}
+                onChange={(e) => updateFormData({ returnReason: e.target.value })}
+                placeholder={t('enter_return_reason')}
+                rows={3}
+                className='mt-2 pr-10'
+              />
+              <div className="absolute right-2 top-4 z-10">
+                <VoiceInputButton 
+                  onTranscript={(text: string) => {
+                    updateFormData({ returnReason: text });
+                  }}
+                  size="sm"
+                />
+              </div>
+            </div>
           </div>
 
           <div>
-            <Label>Additional Notes</Label>
-            <Textarea
-              value={formData.notes}
-              onChange={(e) => updateFormData({ notes: e.target.value })}
-              placeholder="Enter any additional notes..."
-              rows={2}
-            />
+            <Label>{t('additional_notes')}</Label>
+            <div className="relative">
+              <Textarea
+                value={formData.notes}
+                onChange={(e) => updateFormData({ notes: e.target.value })}
+                placeholder={t('enter_additional_notes')}
+                rows={2}
+                className='mt-2 pr-10'
+              />
+              <div className="absolute right-2 top-4 z-10">
+                <VoiceInputButton 
+                  onTranscript={(text: string) => {
+                    updateFormData({ notes: text });
+                  }}
+                  size="sm"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -576,7 +602,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                 checked={formData.receiptRequired}
                 onCheckedChange={(checked) => updateFormData({ receiptRequired: !!checked })}
               />
-              <Label htmlFor="receiptRequired">Receipt Required</Label>
+              <Label htmlFor="receiptRequired">{t('receipt_required')}</Label>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -585,7 +611,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                 checked={formData.receiptProvided}
                 onCheckedChange={(checked) => updateFormData({ receiptProvided: !!checked })}
               />
-              <Label htmlFor="receiptProvided">Receipt Provided</Label>
+              <Label htmlFor="receiptProvided">{t('receipt_provided')}</Label>
             </div>
           </div>
         </CardContent>
@@ -596,14 +622,14 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
           <CardHeader>
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle>Return Items</CardTitle>
+                <CardTitle>{t('return_items')}</CardTitle>
                 {invoice && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Items from Invoice #{formData.originalInvoiceNumber}
+                  <p className="text-sm text-muted-foreground mt-3  ">
+                    {t('items_from_invoice')} #{formData.originalInvoiceNumber}
                   </p>
                 )}
               </div>
-              <Button
+              {/* <Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -611,8 +637,8 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                 disabled={!invoice} // Disable if invoice is pre-selected
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Button>
+                {t('add_item')}
+              </Button> */}
             </div>
           </CardHeader>
           <CardContent>
@@ -620,15 +646,15 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Original Qty</TableHead>
-                    <TableHead>Return Qty</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Return Amount</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Condition</TableHead>
-                    <TableHead>Restock</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t('product')}</TableHead>
+                    <TableHead>{t('original_qty')}</TableHead>
+                    <TableHead>{t('return_qty')}</TableHead>
+                    <TableHead>{t('unit_price')}</TableHead>
+                    <TableHead>{t('return_amount')}</TableHead>
+                    <TableHead>{t('reason')}</TableHead>
+                    <TableHead>{t('condition')}</TableHead>
+                    <TableHead>{t('restock')}</TableHead>
+                    <TableHead>{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -658,7 +684,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <Search className="w-3 h-3 flex-shrink-0" />
                                     <span className="truncate text-red-500">
-                                      Select product *
+                                      {t('select_product')} *
                                     </span>
                                   </div>
                                   <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
@@ -667,11 +693,11 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                               <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
                                 <Command shouldFilter={false}>
                                   <CommandInput 
-                                    placeholder="Search products..." 
+                                    placeholder={t('search_products') + '...'} 
                                     value={productSearchQuery}
                                     onValueChange={setProductSearchQuery}
                                   />
-                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  <CommandEmpty>{t('no_products_found')}.</CommandEmpty>
                                   <CommandList className="max-h-[300px] overflow-y-auto">
                                     <CommandGroup>
                                       {filteredProducts.map((product) => (
@@ -714,7 +740,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                             <Input
                               value={item.name}
                               onChange={(e) => updateItem(index, { name: e.target.value })}
-                              placeholder="Product name"
+                              placeholder={t('product_name')}
                               className="min-w-40"
                               disabled={!!invoice} // Disable if invoice is pre-selected
                             />
@@ -770,7 +796,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                       <TableCell>
                         <Input
                           type="number"
-                          step="0.01"
+                          step="1"
                           min="0"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, { unitPrice: parseFloat(e.target.value) || 0 })}
@@ -780,7 +806,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm font-medium">
-                          ${(item.returnedQuantity * item.unitPrice).toFixed(2)}
+                          Rs{(item.returnedQuantity * item.unitPrice).toFixed(2)}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -789,15 +815,24 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                           onValueChange={(value) => updateItem(index, { reason: value as any })}
                         >
                           <SelectTrigger className="w-32">
-                            <SelectValue />
+                            <SelectValue placeholder={t('select_reason')}>
+                              {item.reason && (
+                                item.reason === 'defective' ? t('reason_defective') :
+                                item.reason === 'wrong_item' ? t('wrong_item') :
+                                item.reason === 'customer_request' ? t('customer_request') :
+                                item.reason === 'damaged' ? t('reason_damaged') :
+                                item.reason === 'expired' ? t('reason_expired') :
+                                item.reason === 'other' ? t('reason_other') : item.reason
+                              )}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="defective">Defective</SelectItem>
-                            <SelectItem value="wrong_item">Wrong Item</SelectItem>
-                            <SelectItem value="customer_request">Customer Request</SelectItem>
-                            <SelectItem value="damaged">Damaged</SelectItem>
-                            <SelectItem value="expired">Expired</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="defective">{t('reason_defective')}</SelectItem>
+                            <SelectItem value="wrong_item">{t('wrong_item')}</SelectItem>
+                            <SelectItem value="customer_request">{t('customer_request')}</SelectItem>
+                            <SelectItem value="damaged">{t('reason_damaged')}</SelectItem>
+                            <SelectItem value="expired">{t('reason_expired')}</SelectItem>
+                            <SelectItem value="other">{t('reason_other')}</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -807,13 +842,20 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                           onValueChange={(value) => updateItem(index, { condition: value as any })}
                         >
                           <SelectTrigger className="w-24">
-                            <SelectValue />
+                            <SelectValue placeholder={t('select_condition')}>
+                              {item.condition && (
+                                item.condition === 'new' ? t('condition_new') :
+                                item.condition === 'used' ? t('condition_used') :
+                                item.condition === 'damaged' ? t('condition_damaged') :
+                                item.condition === 'defective' ? t('condition_defective') : item.condition
+                              )}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="new">New</SelectItem>
-                            <SelectItem value="used">Used</SelectItem>
-                            <SelectItem value="damaged">Damaged</SelectItem>
-                            <SelectItem value="defective">Defective</SelectItem>
+                            <SelectItem value="new">{t('condition_new')}</SelectItem>
+                            <SelectItem value="used">{t('condition_used')}</SelectItem>
+                            <SelectItem value="damaged">{t('condition_damaged')}</SelectItem>
+                            <SelectItem value="defective">{t('condition_defective')}</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -844,14 +886,14 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
             {formData.items.length === 0 && (
               <div className="text-center py-8">
                 <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-4">No items selected for return</p>
+                <p className="text-muted-foreground mb-4">{t('no_items_selected_for_return')}</p>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={addManualItem}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Item
+                  {t('add_your_first_item')}
                 </Button>
               </div>
             )}
@@ -861,29 +903,31 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
         {/* Fees and Summary */}
         <Card>
           <CardHeader>
-            <CardTitle>Fees and Summary</CardTitle>
+            <CardTitle>{t('fees_and_summary')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Restocking Fee ($)</Label>
+                <Label>{t('restocking_fee')} (Rs)</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="1"
                   min="0"
                   value={formData.restockingFee}
                   onChange={(e) => updateFormData({ restockingFee: parseFloat(e.target.value) || 0 })}
+                  className='mt-2'
                 />
               </div>
 
               <div>
-                <Label>Processing Fee ($)</Label>
+                <Label>{t('processing_fee')} (Rs)</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="1"
                   min="0"
                   value={formData.processingFee}
                   onChange={(e) => updateFormData({ processingFee: parseFloat(e.target.value) || 0 })}
+                  className='mt-2'
                 />
               </div>
             </div>
@@ -891,24 +935,24 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
             <div className="border-t pt-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Return Amount:</span>
-                  <span>${totalReturnAmount.toFixed(2)}</span>
+                  <span>{t('return_amount')}:</span>
+                  <span>Rs{totalReturnAmount.toFixed(2)}</span>
                 </div>
                 {formData.restockingFee > 0 && (
                   <div className="flex justify-between text-sm text-red-600">
-                    <span>Restocking Fee:</span>
-                    <span>-${formData.restockingFee.toFixed(2)}</span>
+                    <span>{t('restocking_fee')}:</span>
+                    <span>-Rs{formData.restockingFee.toFixed(2)}</span>
                   </div>
                 )}
                 {formData.processingFee > 0 && (
                   <div className="flex justify-between text-sm text-red-600">
-                    <span>Processing Fee:</span>
-                    <span>-${formData.processingFee.toFixed(2)}</span>
+                    <span>{t('processing_fee')}:</span>
+                    <span>-Rs{formData.processingFee.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Final Refund Amount:</span>
-                  <span className="text-green-600">${finalRefundAmount.toFixed(2)}</span>
+                  <span>{t('final_refund_amount')}:</span>
+                  <span className="text-green-600">Rs{finalRefundAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -917,7 +961,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500" />
                 <span className="text-sm text-red-700">
-                  Warning: Fees exceed return amount. Customer may owe money.
+                  {t('warning')}: {t('fees_exceed_return_amount')}. {t('customer_may_owe_money')}.
                 </span>
               </div>
             )}
@@ -927,14 +971,14 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
         {/* Actions */}
         <div className="flex justify-end gap-4">
           <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button 
             type="submit" 
             disabled={buttonDisabled}
             onClick={() => console.log('Create Return button clicked!')}
           >
-            {isLoading ? 'Creating Return...' : 'Create Return'}
+            {isLoading ? t('creating_return') + '...' : t('create_return')}
           </Button>
         </div>
       </form>
