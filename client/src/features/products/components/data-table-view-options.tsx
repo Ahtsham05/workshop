@@ -22,11 +22,15 @@ export function DataTableViewOptions<TData>({
   
   // Column translations mapping
   const columnTranslations: Record<string, string> = {
+    'select': 'select',
     'name': 'product_name',
     'description': 'description',
+    'categories': 'categories',
+    'barcode': 'barcode',
     'price': 'price',
     'cost': 'cost',
-    'stockQuantity': 'stock_quantity'
+    'stockQuantity': 'stock_quantity',
+    'actions': 'actions'
   }
 
   return (
