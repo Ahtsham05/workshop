@@ -121,7 +121,7 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
                       key={cell.id}
                       className={cn(
                         cell.column.columnDef.meta?.className ?? '',
-                        language === 'ur' ? 'text-right' : ''
+                        language === 'ur' ? 'text-left' : ''
                       )}
                     >
                       {flexRender(

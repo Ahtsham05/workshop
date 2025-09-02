@@ -31,11 +31,11 @@ export function DataTableColumnHeader<TData, TValue>({
   const isUrdu = language === 'ur';
   
   if (!column.getCanSort()) {
-    return <div className={cn(className, isUrdu && 'text-right')}>{title}</div>
+    return <div className={cn(className, isUrdu && 'text-left')}>{title}</div>
   }
 
   return (
-    <div className={cn('flex items-center', isUrdu ? 'justify-end space-x-reverse space-x-2' : 'space-x-2', className)}>
+    <div className={cn('flex items-center', isUrdu ? 'space-x-reverse space-x-2' : 'space-x-2', className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

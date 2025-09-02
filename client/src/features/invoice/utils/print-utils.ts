@@ -22,6 +22,9 @@ export interface PrintInvoiceData {
   serviceCharge?: number
 }
 
+// Translation function type
+export type TranslationFunction = (key: string) => string
+
 export const generateBarcodeText = (text: string): string => {
   // Generate Code 39 barcode format - requires * start/stop characters
   return `*${text}*`
@@ -31,7 +34,7 @@ export const formatCurrency = (amount: number): string => {
   return `Rs${amount.toFixed(2)}`
 }
 
-export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
+export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFunction, isRTL: boolean = false): string => {
   const {
     invoiceNumber,
     items,
@@ -54,10 +57,10 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 
   return `
 <!DOCTYPE html>
-<html>
+<html dir="${isRTL ? 'rtl' : 'ltr'}" lang="${isRTL ? 'ur' : 'en'}">
 <head>
   <meta charset="UTF-8">
-  <title>Invoice ${invoiceNumber}</title>
+  <title>${t('print_invoice_title')} ${invoiceNumber}</title>
   <style>
     @media print {
       @page { 
@@ -75,7 +78,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Courier New', monospace;
+      font-family: ${isRTL ? "'Noto Sans Arabic', 'Arial Unicode MS'" : "'Courier New', monospace"};
       font-size: 12px;
       line-height: 1.3;
       margin: 0;
@@ -83,6 +86,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       width: 300px;
       background: white;
       color: #000;
+      direction: ${isRTL ? 'rtl' : 'ltr'};
     }
     
     .receipt-header {
@@ -263,47 +267,47 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
-    <div class="business-name">Your Business Name</div>
-    <div class="business-info">123 Business Street, City, State 12345</div>
-    <div class="business-info">Phone: (555) 123-4567 | Email: info@business.com</div>
-    <div class="business-info">Tax ID: 123-456-789</div>
+    <div class="business-name">${t('print_business_name')}</div>
+    <div class="business-info">${t('print_business_address')}</div>
+    <div class="business-info">${t('print_business_phone')} | ${t('print_business_email')}</div>
+    <div class="business-info">${t('print_tax_id')}</div>
   </div>
   
   <div class="invoice-info">
     <div class="info-row">
-      <span class="info-label">Invoice #:</span>
+      <span class="info-label">${t('invoice_number')}:</span>
       <span class="highlight">${invoiceNumber}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">Date:</span>
+      <span class="info-label">${t('date')}:</span>
       <span>${new Date().toLocaleDateString()}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">Time:</span>
+      <span class="info-label">${t('print_time')}:</span>
       <span>${new Date().toLocaleTimeString()}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">Type:</span>
-      <span>${type.toUpperCase()}</span>
+      <span class="info-label">${t('type')}:</span>
+      <span>${t(type)}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">Customer:</span>
-      <span>${customerId === 'walk-in' ? (walkInCustomerName || 'Walk-in Customer') : (customerName || 'N/A')}</span>
+      <span class="info-label">${t('customer')}:</span>
+      <span>${customerId === 'walk-in' ? (walkInCustomerName || t('walk_in_customer')) : (customerName || 'N/A')}</span>
     </div>
     ${type === 'credit' && dueDate ? `
     <div class="info-row">
-      <span class="info-label">Due Date:</span>
+      <span class="info-label">${t('due_date')}:</span>
       <span>${new Date(dueDate).toLocaleDateString()}</span>
     </div>
     ` : ''}
   </div>
   
   <div class="items-section">
-    <div class="items-header">ITEMS PURCHASED</div>
+    <div class="items-header">${t('print_items_purchased')}</div>
     ${items.map((item, index) => `
       <div class="item-row">
         <div class="item-name">${index + 1}. ${item.name}</div>
@@ -317,35 +321,35 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="totals-section">
     <div class="total-row">
-      <span>Subtotal:</span>
+      <span>${t('subtotal')}:</span>
       <span>${formatCurrency(subtotal)}</span>
     </div>
     ${discount > 0 ? `
     <div class="total-row">
-      <span>Discount:</span>
+      <span>${t('discount')}:</span>
       <span>-${formatCurrency(discount)}</span>
     </div>
     ` : ''}
     ${deliveryCharge > 0 ? `
     <div class="total-row">
-      <span>Delivery:</span>
+      <span>${t('print_delivery_charge')}:</span>
       <span>${formatCurrency(deliveryCharge)}</span>
     </div>
     ` : ''}
     ${serviceCharge > 0 ? `
     <div class="total-row">
-      <span>Service:</span>
+      <span>${t('print_service_charge')}:</span>
       <span>${formatCurrency(serviceCharge)}</span>
     </div>
     ` : ''}
     ${tax > 0 ? `
     <div class="total-row">
-      <span>Tax:</span>
+      <span>${t('tax')}:</span>
       <span>${formatCurrency(tax)}</span>
     </div>
     ` : ''}
     <div class="total-row total-final">
-      <span>TOTAL:</span>
+      <span>${t('total')}:</span>
       <span>${formatCurrency(total)}</span>
     </div>
   </div>
@@ -353,18 +357,18 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   ${type !== 'pending' ? `
     <div class="payment-section">
       <div class="total-row">
-        <span>Paid:</span>
+        <span>${t('print_paid')}:</span>
         <span class="highlight">${formatCurrency(paidAmount)}</span>
       </div>
       ${balance > 0 ? `
       <div class="total-row" style="color: #d32f2f;">
-        <span><strong>Balance Due:</strong></span>
+        <span><strong>${t('print_balance_due')}:</strong></span>
         <span><strong>${formatCurrency(balance)}</strong></span>
       </div>
       ` : ''}
       ${balance === 0 ? `
       <div class="total-row" style="color: #2e7d32;">
-        <span><strong>PAID IN FULL</strong></span>
+        <span><strong>${t('print_paid_in_full')}</strong></span>
         <span>✓</span>
       </div>
       ` : ''}
@@ -372,40 +376,40 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   ` : ''}
   
   <div class="barcode-section">
-    <div style="font-size: 10px; margin-bottom: 4px;">Invoice Number</div>
+    <div style="font-size: 10px; margin-bottom: 4px;">${t('invoice_number')}</div>
     <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
     <div class="barcode-text">${invoiceNumber}</div>
   </div>
   
   ${notes ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 3px;">Notes:</div>
+      <div style="font-weight: bold; margin-bottom: 3px;">${t('notes')}:</div>
       <div>${notes}</div>
     </div>
   ` : ''}
   
   <div class="footer">
-    <div class="footer-line"><strong>Thank you for your business!</strong></div>
-    <div class="footer-line">Please keep this receipt for your records</div>
-    <div class="footer-line">Visit us again soon</div>
+    <div class="footer-line"><strong>${t('print_thank_you_message')}</strong></div>
+    <div class="footer-line">${t('print_keep_receipt')}</div>
+    <div class="footer-line">${t('print_visit_again')}</div>
     <div style="margin-top: 6px; font-size: 7px; color: #666;">
-      Powered by Your POS System - ${new Date().toLocaleString()}
+      ${t('print_powered_by')} - ${new Date().toLocaleString()}
     </div>
   </div>
   
   <div class="no-print">
-    <div style="margin-bottom: 10px; font-weight: bold;">Print Options</div>
+    <div style="margin-bottom: 10px; font-weight: bold;">${t('print_options')}</div>
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
     >
-      🖨️ Print Receipt
+      🖨️ ${t('print_receipt_btn')}
     </button>
     <button 
       onclick="window.close()" 
       class="print-btn print-btn-secondary"
     >
-      ✕ Close
+      ✕ ${t('print_close')}
     </button>
   </div>
 </body>
@@ -414,7 +418,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 }
 
 // Generate A4 Invoice HTML with table layout
-export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
+export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunction, isRTL: boolean = false): string => {
   const {
     invoiceNumber,
     items,
@@ -436,10 +440,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 
   return `
 <!DOCTYPE html>
-<html>
+<html dir="${isRTL ? 'rtl' : 'ltr'}" lang="${isRTL ? 'ur' : 'en'}">
 <head>
   <meta charset="UTF-8">
-  <title>Invoice ${invoiceNumber}</title>
+  <title>${t('print_invoice_title')} ${invoiceNumber}</title>
   <style>
     @media print {
       @page { 
@@ -457,13 +461,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Arial', sans-serif;
+      font-family: ${isRTL ? "'Noto Sans Arabic', 'Arial Unicode MS'" : "'Arial', sans-serif"};
       font-size: 14px;
       line-height: 1.4;
       margin: 0;
       padding: 20px;
       background: white;
       color: #000;
+      direction: ${isRTL ? 'rtl' : 'ltr'};
     }
     
     .invoice-header {
@@ -493,7 +498,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .invoice-details {
-      text-align: right;
+      text-align: ${isRTL ? 'left' : 'right'};
       flex: 1;
     }
     
@@ -554,18 +559,18 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       background: #007bff;
       color: white;
       padding: 12px 8px;
-      text-align: left;
+      text-align: ${isRTL ? 'right' : 'left'};
       font-weight: 600;
       border: none;
     }
     
     .items-table th:first-child {
-      border-radius: 8px 0 0 0;
+      border-radius: ${isRTL ? '0 8px 0 0' : '8px 0 0 0'};
     }
     
     .items-table th:last-child {
-      border-radius: 0 8px 0 0;
-      text-align: right;
+      border-radius: ${isRTL ? '8px 0 0 0' : '0 8px 0 0'};
+      text-align: ${isRTL ? 'left' : 'right'};
     }
     
     .items-table td {
@@ -583,7 +588,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .items-table .text-right {
-      text-align: right;
+      text-align: ${isRTL ? 'left' : 'right'};
     }
     
     .items-table .text-center {
@@ -592,7 +597,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .totals-section {
       display: flex;
-      justify-content: flex-end;
+      justify-content: ${isRTL ? 'flex-start' : 'flex-end'};
       margin-bottom: 30px;
     }
     
@@ -608,11 +613,11 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .totals-table .total-label {
       font-weight: 600;
-      text-align: right;
+      text-align: ${isRTL ? 'left' : 'right'};
     }
     
     .totals-table .total-amount {
-      text-align: right;
+      text-align: ${isRTL ? 'right' : 'left'};
       font-weight: 500;
     }
     
@@ -656,8 +661,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       margin: 30px 0;
       padding: 15px;
       background: #f8f9fa;
-      border-left: 4px solid #007bff;
-      border-radius: 0 8px 8px 0;
+      border-${isRTL ? 'right' : 'left'}: 4px solid #007bff;
+      border-radius: ${isRTL ? '8px 0 0 8px' : '0 8px 8px 0'};
     }
     
     .footer {
@@ -736,60 +741,59 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="invoice-header">
     <div class="company-info">
-      <div class="company-name">Your Business Name</div>
+      <div class="company-name">${t('print_business_name')}</div>
       <div class="company-details">
-        123 Business Street<br>
-        City, State 12345<br>
-        Phone: (555) 123-4567<br>
-        Email: info@business.com<br>
-        Tax ID: 123-456-789
+        ${t('print_business_address')}<br>
+        ${t('print_business_phone')}<br>
+        ${t('print_business_email')}<br>
+        ${t('print_tax_id')}
       </div>
     </div>
     <div class="invoice-details">
-      <div class="invoice-title">INVOICE</div>
+      <div class="invoice-title">${t('print_invoice_title')}</div>
       <div class="invoice-meta">
         <div><strong>#${invoiceNumber}</strong></div>
-        <div>Date: ${new Date().toLocaleDateString()}</div>
-        <div>Time: ${new Date().toLocaleTimeString()}</div>
+        <div>${t('date')}: ${new Date().toLocaleDateString()}</div>
+        <div>${t('print_time')}: ${new Date().toLocaleTimeString()}</div>
       </div>
     </div>
   </div>
   
   <div class="invoice-info">
     <div class="info-section">
-      <div class="info-title">Bill To:</div>
+      <div class="info-title">${t('print_bill_to')}:</div>
       <div class="info-row">
-        <span class="info-label">Customer:</span>
-        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || 'Walk-in Customer') : (customerName || 'N/A')}</strong></span>
+        <span class="info-label">${t('customer')}:</span>
+        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || t('walk_in_customer')) : (customerName || 'N/A')}</strong></span>
       </div>
       <div class="info-row">
-        <span class="info-label">Type:</span>
-        <span class="status-badge status-${type}">${type.toUpperCase()}</span>
+        <span class="info-label">${t('type')}:</span>
+        <span class="status-badge status-${type}">${t(type)}</span>
       </div>
       ${type === 'credit' && dueDate ? `
       <div class="info-row">
-        <span class="info-label">Due Date:</span>
+        <span class="info-label">${t('due_date')}:</span>
         <span><strong style="color: #d32f2f;">${new Date(dueDate).toLocaleDateString()}</strong></span>
       </div>
       ` : ''}
     </div>
     <div class="info-section">
-      <div class="info-title">Invoice Details:</div>
+      <div class="info-title">${t('print_invoice_details')}:</div>
       <div class="info-row">
-        <span class="info-label">Invoice Number:</span>
+        <span class="info-label">${t('invoice_number')}:</span>
         <span><strong>${invoiceNumber}</strong></span>
       </div>
       <div class="info-row">
-        <span class="info-label">Issue Date:</span>
+        <span class="info-label">${t('print_issue_date')}:</span>
         <span>${new Date().toLocaleDateString()}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Items Count:</span>
+        <span class="info-label">${t('print_items_count')}:</span>
         <span>${items.length}</span>
       </div>
     </div>
@@ -799,10 +803,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     <thead>
       <tr>
         <th style="width: 5%;">#</th>
-        <th style="width: 45%;">Product Name</th>
-        <th style="width: 15%;" class="text-center">Quantity</th>
-        <th style="width: 15%;" class="text-right">Unit Price</th>
-        <th style="width: 20%;" class="text-right">Total</th>
+        <th style="width: 45%;">${t('print_product_name')}</th>
+        <th style="width: 15%;" class="text-center">${t('print_quantity')}</th>
+        <th style="width: 15%;" class="text-right">${t('print_unit_price')}</th>
+        <th style="width: 20%;" class="text-right">${t('total')}</th>
       </tr>
     </thead>
     <tbody>
@@ -821,35 +825,35 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="totals-section">
     <table class="totals-table">
       <tr>
-        <td class="total-label">Subtotal:</td>
+        <td class="total-label">${t('subtotal')}:</td>
         <td class="total-amount">${formatCurrency(subtotal)}</td>
       </tr>
       ${discount > 0 ? `
       <tr>
-        <td class="total-label">Discount:</td>
+        <td class="total-label">${t('discount')}:</td>
         <td class="total-amount" style="color: #d32f2f;">-${formatCurrency(discount)}</td>
       </tr>
       ` : ''}
       ${deliveryCharge > 0 ? `
       <tr>
-        <td class="total-label">Delivery Charge:</td>
+        <td class="total-label">${t('print_delivery_charge')}:</td>
         <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
       </tr>
       ` : ''}
       ${serviceCharge > 0 ? `
       <tr>
-        <td class="total-label">Service Charge:</td>
+        <td class="total-label">${t('print_service_charge')}:</td>
         <td class="total-amount">${formatCurrency(serviceCharge)}</td>
       </tr>
       ` : ''}
       ${tax > 0 ? `
       <tr>
-        <td class="total-label">Tax:</td>
+        <td class="total-label">${t('tax')}:</td>
         <td class="total-amount">${formatCurrency(tax)}</td>
       </tr>
       ` : ''}
       <tr class="final-total">
-        <td class="total-label">TOTAL AMOUNT:</td>
+        <td class="total-label">${t('total')} ${t('amount')}:</td>
         <td class="total-amount">${formatCurrency(total)}</td>
       </tr>
     </table>
@@ -858,68 +862,68 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   ${type !== 'pending' ? `
     <div class="payment-info">
       <div>
-        <div class="info-title">Payment Information:</div>
+        <div class="info-title">${t('print_payment_information')}:</div>
         <div class="info-row">
-          <span class="info-label">Amount Paid:</span>
+          <span class="info-label">${t('print_amount_paid')}:</span>
           <span style="color: #2e7d32; font-weight: bold;">${formatCurrency(paidAmount)}</span>
         </div>
         ${balance > 0 ? `
         <div class="info-row">
-          <span class="info-label"><strong>Balance Due:</strong></span>
+          <span class="info-label"><strong>${t('print_balance_due')}:</strong></span>
           <span style="color: #d32f2f; font-weight: bold; font-size: 16px;">${formatCurrency(balance)}</span>
         </div>
         ` : ''}
         ${balance === 0 ? `
         <div class="info-row">
-          <span style="color: #2e7d32; font-weight: bold;">✓ PAID IN FULL</span>
+          <span style="color: #2e7d32; font-weight: bold;">✓ ${t('print_paid_in_full')}</span>
           <span></span>
         </div>
         ` : ''}
       </div>
       <div>
-        <div class="info-title">Payment Status:</div>
+        <div class="info-title">${t('print_payment_status')}:</div>
         <div style="font-size: 16px; font-weight: bold; ${balance === 0 ? 'color: #2e7d32;' : 'color: #d32f2f;'}">
-          ${balance === 0 ? '✓ COMPLETED' : '⚠ PENDING PAYMENT'}
+          ${balance === 0 ? `✓ ${t('print_completed')}` : `⚠ ${t('print_pending_payment')}`}
         </div>
       </div>
     </div>
   ` : ''}
   
   <div class="barcode-section">
-    <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">Invoice Barcode</div>
+    <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${t('print_invoice_barcode')}</div>
     <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
-    <div class="barcode-text">Scan to verify invoice: ${invoiceNumber}</div>
+    <div class="barcode-text">${t('print_scan_to_verify')}: ${invoiceNumber}</div>
   </div>
   
   ${notes ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">Additional Notes:</div>
+      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${t('print_additional_notes')}:</div>
       <div style="font-size: 14px;">${notes}</div>
     </div>
   ` : ''}
   
   <div class="footer">
-    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">Thank you for your business!</div>
-    <div class="footer-line">Please keep this invoice for your records</div>
+    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${t('print_thank_you_message')}</div>
+    <div class="footer-line">${t('print_keep_receipt')}</div>
     <div class="footer-line">For any questions regarding this invoice, please contact us</div>
     <div style="margin-top: 15px; font-size: 10px; color: #999;">
-      Generated on ${new Date().toLocaleString()} | Powered by Your POS System
+      ${t('print_generated_on')} ${new Date().toLocaleString()} | ${t('print_powered_by')}
     </div>
   </div>
   
   <div class="no-print">
-    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">Print Options</div>
+    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${t('print_options')}</div>
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
     >
-      🖨️ Print Invoice
+      🖨️ ${t('print_invoice_btn')}
     </button>
     <button 
       onclick="window.close()" 
       class="print-btn print-btn-secondary"
     >
-      ✕ Close
+      ✕ ${t('print_close')}
     </button>
   </div>
 </body>

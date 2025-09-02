@@ -76,14 +76,23 @@ export function useSupplierColumns() {
   
   if (isUrdu) {
     // For Urdu: actions, address, whatsapp, phone, email, name, select (right to left)
+    // columns = [
+    //   selectColumn,
+    //   actionsColumn,
+    //   addressColumn,
+    //   whatsappColumn, 
+    //   phoneColumn,
+    //   emailColumn,
+    //   nameColumn
+    // ];
     columns = [
       selectColumn,
-      actionsColumn,
-      addressColumn,
-      whatsappColumn, 
-      phoneColumn,
+      nameColumn,
       emailColumn,
-      nameColumn
+      phoneColumn,
+      whatsappColumn,
+      addressColumn,
+      actionsColumn
     ];
   } else {
     // For English: select, name, email, phone, whatsapp, address, actions (left to right)

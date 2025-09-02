@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useLanguage } from '@/context/language-context'
 import {
   Select,
   SelectContent,
@@ -35,7 +36,7 @@ import {
   Plus,
   Search,
   Filter,
-  Download,
+  // Download,
   Receipt,
   RotateCcw,
 } from 'lucide-react'
@@ -65,6 +66,7 @@ const typeColors: Record<string, string> = {
 }
 
 export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceListProps) {
+  const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -124,7 +126,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
     
     // For walk-in customers
     if (invoice.customerId === 'walk-in') {
-      return invoice.walkInCustomerName || 'Walk-in Customer'
+      return invoice.walkInCustomerName || t('walk_in_customer')
     }
     
     // For regular customers - check if backend populated customer info
@@ -145,11 +147,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
     
     // If we have customerId but no customer name, show partial ID (backend issue)
     if (invoice.customerId && invoice.customerId !== 'walk-in') {
-      return `Customer ID: ${invoice.customerId.substring(0, 8)}...`
+      return `${t('customer_id')}: ${invoice.customerId.substring(0, 8)}...`
     }
     
     // Final fallback
-    return 'Unknown Customer'
+    return t('unknown_customer')
   }
 
   // Helper function to get customer phone number
@@ -206,7 +208,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading invoices...</p>
+          <p className="mt-4 text-muted-foreground">{t('loading_invoices')}</p>
         </div>
       </div>
     )
@@ -216,9 +218,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p className="text-red-600">Error loading invoices: {'Unknown error'}</p>
+          <p className="text-red-600">{t('error_loading_invoices')}: {t('unknown_error')}</p>
           <Button onClick={() => window.location.reload()} className="mt-4">
-            Retry
+            {t('retry')}
           </Button>
         </div>
       </div>
@@ -236,13 +238,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
             </Button>
           )}
           <div>
-            <h1 className="text-2xl font-bold">Invoice Management</h1>
-            <p className="text-muted-foreground">Manage customer invoices and payments</p>
+            <h1 className="text-2xl font-bold">{t('invoice_management')}</h1>
+            <p className="text-muted-foreground mt-4">{t('manage_customer_invoices')}</p>
           </div>
         </div>
         <Button onClick={onCreateNew}>
           <Plus className="h-4 w-4 mr-2" />
-          Create Invoice
+          {t('create_invoice')}
         </Button>
       </div>
 
@@ -251,12 +253,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="search">Search</Label>
-              <div className="relative">
+              <Label htmlFor="search">{t('search')}</Label>
+              <div className="relative mt-2">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search"
-                  placeholder="Invoice #, Phone #, Customer..."
+                  placeholder={t('search_invoices_placeholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -265,18 +267,18 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
             </div>
             
             <div>
-              <Label>Status</Label>
+              <Label>{t('status')}</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className='w-full'>
-                  <SelectValue placeholder="All statuses" />
+                <SelectTrigger className='w-full mt-2'>
+                  <SelectValue placeholder={t('all_statuses')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="finalized">Finalized</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="refunded">Refunded</SelectItem>
+                  <SelectItem value="all">{t('all_statuses')}</SelectItem>
+                  <SelectItem value="draft">{t('draft')}</SelectItem>
+                  <SelectItem value="finalized">{t('finalized')}</SelectItem>
+                  <SelectItem value="paid">{t('paid')}</SelectItem>
+                  <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                  <SelectItem value="refunded">{t('refunded')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -291,7 +293,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                 className="w-full"
               >
                 <Filter className="h-4 w-4 mr-2" />
-                Clear Filters
+                {t('clear_filters')}
               </Button>
             </div>
           </div>
@@ -302,9 +304,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Invoices List ({totalItems})</CardTitle>
+            <CardTitle>{t('invoices_list')} ({totalItems})</CardTitle>
             <div className="flex items-center gap-2">
-              <Label htmlFor="itemsPerPage" className="text-sm">Show:</Label>
+              <Label htmlFor="itemsPerPage" className="text-sm">{t('show')}:</Label>
               <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
                 <SelectTrigger className="w-20">
                   <SelectValue />
@@ -324,14 +326,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t('invoice_number')}</TableHead>
+                  <TableHead>{t('customer')}</TableHead>
+                  <TableHead>{t('phone')}</TableHead>
+                  <TableHead>{t('type')}</TableHead>
+                  <TableHead>{t('date')}</TableHead>
+                  <TableHead>{t('amount')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                  <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -348,16 +350,16 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                     </TableCell>
                     <TableCell>
                       <Badge className={typeColors[invoice.type || 'cash']}>
-                        {(invoice.type || 'cash').toUpperCase()}
+                        {t(invoice.type || 'cash')}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
                     </TableCell>
-                    <TableCell>${invoice.total?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell>Rs{invoice.total?.toFixed(2) || '0.00'}</TableCell>
                     <TableCell>
                       <Badge className={statusColors[invoice.status || 'draft']}>
-                        {(invoice.status || 'draft').toUpperCase()}
+                        {t(invoice.status || 'draft')}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -374,7 +376,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                           </DialogTrigger>
                           <DialogContent className="max-w-4xl">
                             <DialogHeader>
-                              <DialogTitle>Invoice Details - {invoice.invoiceNumber}</DialogTitle>
+                              <DialogTitle>{t('invoice_details')} - {invoice.invoiceNumber}</DialogTitle>
                             </DialogHeader>
                             {selectedInvoice && <InvoiceDetails invoice={selectedInvoice} getCustomerName={getCustomerName} />}
                           </DialogContent>
@@ -388,7 +390,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                           <Edit className="h-4 w-4" />
                         </Button>
 
-                        <Button
+                        {/* <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => {
@@ -397,14 +399,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                           }}
                         >
                           <Download className="h-4 w-4" />
-                        </Button>
+                        </Button> */}
 
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReturn(invoice)}
                           className="text-orange-600 hover:text-orange-700"
-                          title="Return Items"
+                          title={t('return_items')}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </Button>
@@ -428,7 +430,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
           {currentInvoices.length === 0 && (
             <div className="text-center py-8">
               <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No invoices found</p>
+              <p className="text-muted-foreground">{t('no_invoices_found')}</p>
             </div>
           )}
 
@@ -437,7 +439,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
             <div className="space-y-4 px-2 py-4">
               {/* Pagination info - always visible */}
               <div className="text-sm text-muted-foreground text-center md:text-left">
-                Showing {startIndex + 1} to {endIndex} of {totalItems} entries
+                {t('showing')} {startIndex + 1} {t('to')} {endIndex} {t('of')} {totalItems} {t('entries')}
               </div>
               
               {/* Mobile pagination - simplified */}
@@ -449,12 +451,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                   disabled={currentPage === 1}
                   className="px-2"
                 >
-                  Previous
+                  {t('previous')}
                 </Button>
                 
                 <div className="flex items-center gap-1 px-3 py-1 bg-muted rounded">
                   <span className="text-sm">{currentPage}</span>
-                  <span className="text-sm text-muted-foreground">of</span>
+                  <span className="text-sm text-muted-foreground">{t('of')}</span>
                   <span className="text-sm">{totalPages}</span>
                 </div>
 
@@ -465,7 +467,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                   disabled={currentPage === totalPages}
                   className="px-2"
                 >
-                  Next
+                  {t('next')}
                 </Button>
               </div>
 
@@ -479,7 +481,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                     onClick={() => setCurrentPage(1)}
                     disabled={currentPage === 1}
                   >
-                    First
+                    {t('first')}
                   </Button>
                   <Button
                     variant="outline"
@@ -487,7 +489,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                     onClick={() => setCurrentPage(currentPage - 1)}
                     disabled={currentPage === 1}
                   >
-                    Previous
+                    {t('previous')}
                   </Button>
                   
                   {/* Page numbers */}
@@ -524,7 +526,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
                   >
-                    Next
+                    {t('next')}
                   </Button>
                   <Button
                     variant="outline"
@@ -532,7 +534,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
                     onClick={() => setCurrentPage(totalPages)}
                     disabled={currentPage === totalPages}
                   >
-                    Last
+                    {t('last')}
                   </Button>
                 </div>
               </div>
@@ -554,44 +556,46 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
 }
 
 function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustomerName: (invoice: any) => string }) {
+  const { t } = useLanguage()
+  
   return (
     <div className="space-y-6">
       {/* Invoice Info */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Invoice Number</Label>
+          <Label>{t('invoice_number')}</Label>
           <p className="font-medium">{invoice.invoiceNumber}</p>
         </div>
         <div>
-          <Label>Date</Label>
+          <Label>{t('date')}</Label>
           <p className="font-medium">
             {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy HH:mm')}
           </p>
         </div>
         <div>
-          <Label>Customer</Label>
+          <Label>{t('customer')}</Label>
           <p className="font-medium">
             {getCustomerName(invoice)}
           </p>
         </div>
         <div>
-          <Label>Status</Label>
+          <Label>{t('status')}</Label>
           <Badge className={statusColors[invoice.status || 'draft']}>
-            {(invoice.status || 'draft').toUpperCase()}
+            {t(invoice.status || 'draft')}
           </Badge>
         </div>
       </div>
 
       {/* Invoice Items */}
       <div>
-        <Label>Invoice Items</Label>
+        <Label>{t('invoice_items')}</Label>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Product</TableHead>
-              <TableHead>Quantity</TableHead>
-              <TableHead>Unit Price</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead>{t('product_name')}</TableHead>
+              <TableHead>{t('qty')}</TableHead>
+              <TableHead>{t('unit_price')}</TableHead>
+              <TableHead>{t('total')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -610,8 +614,8 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
                   </div>
                 </TableCell>
                 <TableCell>{item.quantity}</TableCell>
-                <TableCell>${item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
-                <TableCell>${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
+                <TableCell>Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
+                <TableCell>Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -621,27 +625,27 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
       {/* Invoice Summary */}
       <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
         <div>
-          <Label>Subtotal</Label>
-          <p className="text-lg font-bold">${invoice.subtotal?.toFixed(2) || '0.00'}</p>
+          <Label>{t('subtotal')}</Label>
+          <p className="text-lg font-bold">Rs{invoice.subtotal?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>Tax</Label>
-          <p className="text-lg font-bold">${invoice.tax?.toFixed(2) || '0.00'}</p>
+          <Label>{t('tax')}</Label>
+          <p className="text-lg font-bold">Rs{invoice.tax?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>Discount</Label>
-          <p className="text-lg font-bold text-red-600">-${invoice.discount?.toFixed(2) || '0.00'}</p>
+          <Label>{t('discount')}</Label>
+          <p className="text-lg font-bold text-red-600">-Rs{invoice.discount?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>Total Amount</Label>
-          <p className="text-lg font-bold text-green-600">${invoice.total?.toFixed(2) || '0.00'}</p>
+          <Label>{t('total')} {t('amount')}</Label>
+          <p className="text-lg font-bold text-green-600">Rs{invoice.total?.toFixed(2) || '0.00'}</p>
         </div>
       </div>
 
       {/* Notes */}
       {invoice.notes && (
         <div>
-          <Label>Notes</Label>
+          <Label>{t('notes')}</Label>
           <p className="text-sm">{invoice.notes}</p>
         </div>
       )}

@@ -75,7 +75,7 @@ export function CustomerTable({ columns, data, paggination }: DataTableProps) {
     <div className='space-y-4'>
       <DataTableToolbar table={table} />
       <div className='rounded-md border'>
-        <Table dir={language === 'ur' ? 'rtl' : 'ltr'}>
+        <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className='group/row'>
@@ -85,7 +85,7 @@ export function CustomerTable({ columns, data, paggination }: DataTableProps) {
                       key={header.id}
                       colSpan={header.colSpan}
                       className={`${header.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-right' : 'text-left'
+                        language === 'ur' ? 'text-left' : 'text-left'
                       }`}
                     >
                       {header.isPlaceholder
@@ -112,7 +112,7 @@ export function CustomerTable({ columns, data, paggination }: DataTableProps) {
                     <TableCell
                       key={cell.id}
                       className={`${cell.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-right' : 'text-left'
+                        language === 'ur' ? 'text-left' : 'text-left'
                       }`}
                     >
                       {flexRender(

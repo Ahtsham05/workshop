@@ -58,7 +58,7 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
     cell: ({ row }) => {
       const category = row.original
       return (
-        <div className={`flex items-center ${language === 'ur' ? 'space-x-reverse space-x-3 flex-row-reverse' : 'space-x-3'}`}>
+        <div className={`flex items-center ${language === 'ur' ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
           <Avatar className="h-8 w-8">
             <AvatarImage 
               src={category.image?.url || ''} 
@@ -117,7 +117,8 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
 
   // Return columns in different order based on language
   if (language === 'ur') {
-    return [selectColumn, actionsColumn, nameColumn]
+    // return [selectColumn, actionsColumn, nameColumn]
+    return [selectColumn, nameColumn, actionsColumn]
   } else {
     return [selectColumn, nameColumn, actionsColumn]
   }

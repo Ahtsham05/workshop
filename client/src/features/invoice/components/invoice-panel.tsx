@@ -51,9 +51,9 @@ export function InvoicePanel({
   updateQuantity,
   removeFromInvoice,
   updateInvoiceType,
-  updateDiscount,
+  // updateDiscount,
   taxRate,
-  setTaxRate,
+  // setTaxRate,
   customers,
   products,
   calculateTotals,
@@ -62,7 +62,7 @@ export function InvoicePanel({
   editingInvoice
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
-  const [discountInput, setDiscountInput] = useState('0')
+  // const [discountInput, setDiscountInput] = useState('0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
@@ -102,7 +102,7 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge
       }
 
-      const htmlContent = generateInvoiceHTML(printData)
+      const htmlContent = generateInvoiceHTML(printData, t, isRTL)
       openPrintWindow(htmlContent)
       
       toast.success(t('print_success') || 'Invoice sent to printer')
@@ -139,7 +139,7 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge
       }
 
-      const htmlContent = generateA4InvoiceHTML(printData)
+      const htmlContent = generateA4InvoiceHTML(printData, t, isRTL)
       openA4PrintWindow(htmlContent)
       
       toast.success(t('print_success') || 'A4 Invoice sent to printer')
@@ -152,7 +152,7 @@ export function InvoicePanel({
   // Initialize form values when in edit mode
   useEffect(() => {
     if (isEditing && editingInvoice) {
-      setDiscountInput(editingInvoice.discount?.toString() || '0')
+      // setDiscountInput(editingInvoice.discount?.toString() || '0')
       setPaidAmountInput(editingInvoice.paidAmount?.toString() || '0')
       
       // Set the invoice type and status independently
@@ -257,11 +257,11 @@ export function InvoicePanel({
     setProductSearchQuery('')
   }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice])
 
-  const handleDiscountChange = useCallback((value: string) => {
-    setDiscountInput(value)
-    const discountAmount = parseFloat(value) || 0
-    updateDiscount(discountAmount)
-  }, [updateDiscount])
+  // const handleDiscountChange = useCallback((value: string) => {
+  //   setDiscountInput(value)
+  //   const discountAmount = parseFloat(value) || 0
+  //   updateDiscount(discountAmount)
+  // }, [updateDiscount])
 
   const handlePaidAmountChange = useCallback((value: string) => {
     setPaidAmountInput(value)
@@ -967,7 +967,7 @@ export function InvoicePanel({
       <Card>
         <CardContent className='p-4 space-y-4'>
           {/* Tax and Discount Controls */}
-          <div className='grid grid-cols-2 gap-4'>
+          {/* <div className='grid grid-cols-2 gap-4'>
             <div>
               <Label htmlFor="taxRate">{t('tax_rate')} (%)</Label>
               <Input
@@ -988,9 +988,9 @@ export function InvoicePanel({
                 placeholder="0.00"
               />
             </div>
-          </div>
+          </div> */}
 
-          <Separator />
+          {/* <Separator /> */}
 
           {/* Totals Display */}
           <div className='space-y-2'>
@@ -1109,7 +1109,7 @@ export function InvoicePanel({
               ) : (
                 <>
                   <Save className='h-4 w-4 mr-2' />
-                  {isEditing ? 'Update Invoice' : 'Save Invoice'}
+                  {isEditing ? t('update_invoice') : t('save_invoice')}
                 </>
               )}
             </Button>
@@ -1133,8 +1133,8 @@ export function InvoicePanel({
                   <>
                     <Printer className='h-4 w-4 mr-2' />
                     {isEditing 
-                      ? 'Update & Print Receipt'
-                      : 'Save & Print Receipt'
+                      ? t('update_and_print_receipt')
+                      : t('save_and_print_receipt')
                     }
                   </>
                 )}
@@ -1157,8 +1157,8 @@ export function InvoicePanel({
                   <>
                     <Package className='h-4 w-4 mr-2' />
                     {isEditing 
-                      ? 'Update & Print A4'
-                      : 'Save & Print A4'
+                      ? t('update_and_print_a4')
+                      : t('save_and_print_a4')
                     }
                   </>
                 )}

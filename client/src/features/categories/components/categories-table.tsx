@@ -82,7 +82,7 @@ export function CategoriesTable({ categories, paggination }: CategoriesTableProp
                       key={header.id}
                       colSpan={header.colSpan}
                       className={`${header.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-right' : 'text-left'
+                        language === 'ur' ? 'text-left' : 'text-left'
                       }`}
                     >
                       {header.isPlaceholder
@@ -109,7 +109,7 @@ export function CategoriesTable({ categories, paggination }: CategoriesTableProp
                     <TableCell
                       key={cell.id}
                       className={`${cell.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-right' : 'text-left'
+                        language === 'ur' ? 'text-left' : 'text-left'
                       }`}
                     >
                       {flexRender(
