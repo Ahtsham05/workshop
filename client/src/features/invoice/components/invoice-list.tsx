@@ -38,7 +38,7 @@ import {
   Filter,
   // Download,
   Receipt,
-  RotateCcw,
+  // RotateCcw,
   Clock,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
@@ -67,7 +67,9 @@ const typeColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
 }
 
-export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn, onConvertPending }: InvoiceListProps) {
+export function InvoiceList({ onBack, onCreateNew, onEdit, 
+  // onReturn, 
+  onConvertPending }: InvoiceListProps) {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -186,9 +188,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn, onConvertPe
     setDeleteDialogOpen(true)
   }
 
-  const handleReturn = (invoice: any) => {
-    onReturn?.(invoice)
-  }
+  // const handleReturn = (invoice: any) => {
+  //   onReturn?.(invoice)
+  // }
 
   // Handle server response with pagination info
   const invoiceList = invoicesResponse?.results || invoicesResponse?.data || []
@@ -409,7 +411,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn, onConvertPe
                           <Download className="h-4 w-4" />
                         </Button> */}
 
-                        <Button
+                        {/* <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReturn(invoice)}
@@ -417,7 +419,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn, onConvertPe
                           title={t('return_items')}
                         >
                           <RotateCcw className="h-4 w-4" />
-                        </Button>
+                        </Button> */}
 
                         <Button
                           variant="ghost"
