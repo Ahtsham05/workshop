@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/popover'
 import { 
   ArrowLeft, 
-  Calendar, 
+  // Calendar, 
   ChevronDown, 
   Package, 
   Printer, 
@@ -82,7 +82,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
+  // const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes] = useState('')
   const [dueDate, setDueDate] = useState<string>('')
   const [viewMode, setViewMode] = useState<'pending' | 'converted' | 'all'>('pending')
