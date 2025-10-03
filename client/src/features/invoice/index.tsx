@@ -10,7 +10,7 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
-import { InvoicePanel, ProductCatalog, InvoiceList } from './components'
+import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
 import { ReturnForm } from '../returns/components/return-form'
 import { toast } from 'sonner'
 
@@ -86,7 +86,7 @@ export default function InvoicePage() {
   const dispatch = useDispatch<AppDispatch>()
   
   // View state management
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'return'>('list')
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'return' | 'convert-pending'>('list')
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
   const [returningInvoice, setReturningInvoice] = useState<any>(null)
 
@@ -452,6 +452,10 @@ export default function InvoicePage() {
     setReturningInvoice(invoiceData)
   }
 
+  const handleConvertPending = () => {
+    setCurrentView('convert-pending')
+  }
+
   // Render based on current view
   if (currentView === 'list') {
     return (
@@ -469,6 +473,7 @@ export default function InvoicePage() {
             onCreateNew={handleCreateNew}
             onEdit={handleEdit}
             onReturn={handleReturn}
+            onConvertPending={handleConvertPending}
           />
         </Main>
       </div>
@@ -492,6 +497,28 @@ export default function InvoicePage() {
             invoice={returningInvoice}
             onSuccess={handleBackToList}
             onCancel={handleBackToList}
+          />
+        </Main>
+      </div>
+    )
+  }
+
+  // Convert pending view
+  if (currentView === 'convert-pending') {
+    return (
+      <div className='flex-1 flex flex-col'>
+        <Header fixed>
+          <Search />
+          <div className='ml-auto flex items-center space-x-4'>
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ProfileDropdown />
+          </div>
+        </Header>
+        <Main>
+          <PendingInvoiceConverter 
+            customers={customers}
+            onBack={handleBackToList}
           />
         </Main>
       </div>

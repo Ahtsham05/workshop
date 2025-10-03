@@ -39,6 +39,7 @@ import {
   // Download,
   Receipt,
   RotateCcw,
+  Clock,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
@@ -49,6 +50,7 @@ interface InvoiceListProps {
   onCreateNew?: () => void
   onEdit?: (invoice: any) => void
   onReturn?: (invoice: any) => void
+  onConvertPending?: () => void
 }
 
 const statusColors: Record<string, string> = {
@@ -65,7 +67,7 @@ const typeColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
 }
 
-export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceListProps) {
+export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn, onConvertPending }: InvoiceListProps) {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -242,10 +244,16 @@ export function InvoiceList({ onBack, onCreateNew, onEdit, onReturn }: InvoiceLi
             <p className="text-muted-foreground mt-4">{t('manage_customer_invoices')}</p>
           </div>
         </div>
-        <Button onClick={onCreateNew}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t('create_invoice')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={onConvertPending}>
+            <Clock className="h-4 w-4 mr-2" />
+            {t('convert_pending_invoices')}
+          </Button>
+          <Button onClick={onCreateNew}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t('create_invoice')}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
