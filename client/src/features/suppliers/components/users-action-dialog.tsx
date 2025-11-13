@@ -22,12 +22,12 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import SmartInput from '@/components/smart-input.tsx'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addSupplier, updateSupplier } from '@/stores/supplier.slice' // Adjusted to supplier slice
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
-import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { cn } from '@/lib/utils'
 
 // Define the form schema with translations
@@ -133,22 +133,14 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('supplier_name')}
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={t('supplier_name')}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput
+                        placeholder={t('supplier_name')}
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        autoComplete='off'
+                        className='col-span-4'
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
@@ -223,22 +215,14 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('address')}
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={`${t('supplier_name')} ${t('address')}`}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput
+                        placeholder={`${t('supplier_name')} ${t('address')}`}
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        autoComplete='off'
+                        className='col-span-4'
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

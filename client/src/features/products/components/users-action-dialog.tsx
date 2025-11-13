@@ -32,6 +32,7 @@ import InlineBarcodeInput from '@/components/inline-barcode-input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Badge } from '@/components/ui/badge'
 import { X, Search, Check } from 'lucide-react'
+import SmartInput from '@/components/smart-input.tsx'
 import {
   Command,
   CommandEmpty,
@@ -175,22 +176,14 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       {t('product_name')} *
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={t('product_name')}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput 
+                        placeholder={t('product_name')}
+                        autoComplete='off'
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        className="col-span-4"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
@@ -205,22 +198,14 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       {t('description')}
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={t('description')}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput 
+                        placeholder={t('description')}
+                        autoComplete='off'
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        className="col-span-4"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

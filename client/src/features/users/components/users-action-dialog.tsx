@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
+import SmartInput from '@/components/smart-input.tsx'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { userTypes } from '../data/data'
 import { User } from '../data/schema'
@@ -157,10 +158,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange }: Props) {
                       First Name
                     </FormLabel>
                     <FormControl>
-                      <Input
+                      <SmartInput
                         placeholder='John'
-                        className='col-span-4'
                         autoComplete='off'
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        className='col-span-4'
                         {...field}
                       />
                     </FormControl>
@@ -177,10 +180,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange }: Props) {
                       Last Name
                     </FormLabel>
                     <FormControl>
-                      <Input
+                      <SmartInput
                         placeholder='Doe'
-                        className='col-span-4'
                         autoComplete='off'
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        className='col-span-4'
                         {...field}
                       />
                     </FormControl>

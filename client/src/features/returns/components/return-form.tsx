@@ -49,6 +49,7 @@ import {
 import { CreateReturnRequest } from '../types'
 import { useLanguage } from '@/context/language-context'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import SmartInput from '@/components/smart-input.tsx'
 
 interface ReturnFormItem {
   productId: string
@@ -492,7 +493,7 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
               
               <div>
                 <Label>{t('customer')}</Label>
-                <Input
+                <SmartInput
                   value={formData.customerName || formData.walkInCustomerName || ''}
                   onChange={(e) => setFormData(prev => ({ 
                     ...prev, 
@@ -501,6 +502,8 @@ export function ReturnForm({ invoice, onSuccess, onCancel }: ReturnFormProps) {
                   }))}
                   placeholder={t('enter_customer_name')}
                   disabled={!!invoice} // Disable if invoice is pre-selecte
+                  showVoiceInput={true}
+                  voiceInputSize="sm"
                   className='mt-2'
                 />
               </div>

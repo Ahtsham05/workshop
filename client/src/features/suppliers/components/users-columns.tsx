@@ -5,6 +5,7 @@ import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 
 export function useSupplierColumns() {
   const { t, language } = useLanguage();
@@ -36,7 +37,7 @@ export function useSupplierColumns() {
   const nameColumn: ColumnDef<Supplier> = {
     accessorKey: 'name',
     header: ({ column }) => <DataTableColumnHeader column={column} title={t('supplier_name')} />,
-    cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('name')}</LongText>,
+    cell: ({ row }) => <LongText className={getTextClasses(row.getValue('name'), 'max-w-36')}>{row.getValue('name')}</LongText>,
     enableHiding: true,
   };
 
@@ -62,7 +63,7 @@ export function useSupplierColumns() {
   const addressColumn: ColumnDef<Supplier> = {
     accessorKey: 'address',
     header: ({ column }) => <DataTableColumnHeader column={column} title={t('address')} />,
-    cell: ({ row }) => <div>{row.getValue('address')}</div>,
+    cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
   };
 
   const actionsColumn: ColumnDef<Supplier> = {

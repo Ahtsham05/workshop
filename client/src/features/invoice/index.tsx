@@ -93,7 +93,7 @@ export default function InvoicePage() {
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
     items: [],
-    type: 'cash',
+    type: 'credit',
     subtotal: 0,
     tax: 0,
     discount: 0,
@@ -390,7 +390,7 @@ export default function InvoicePage() {
     // Reset invoice state
     setInvoice({
       items: [],
-      type: 'cash',
+      type: 'credit',
       subtotal: 0,
       tax: 0,
       discount: 0,

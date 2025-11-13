@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 import {
   Select,
   SelectContent,
@@ -352,7 +353,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                     <TableCell className="font-medium">
                       {invoice.invoiceNumber}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className={getTextClasses(getCustomerName(invoice), '')}>
                       {getCustomerName(invoice)}
                     </TableCell>
                     <TableCell>
@@ -584,7 +585,7 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
         </div>
         <div>
           <Label>{t('customer')}</Label>
-          <p className="font-medium">
+          <p className={getTextClasses(getCustomerName(invoice), "font-medium")}>
             {getCustomerName(invoice)}
           </p>
         </div>

@@ -4,13 +4,17 @@ import { useLanguage } from '@/context/language-context';
 interface UseVoiceInputProps {
   onResult: (transcript: string) => void;
   onError: (error: string) => void;
+  language?: string; // Add language parameter
 }
 
-export const useVoiceInput = ({ onResult, onError }: UseVoiceInputProps) => {
+export const useVoiceInput = ({ onResult, onError, language: propLanguage }: UseVoiceInputProps) => {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const { language, t } = useLanguage();
+  const { language: contextLanguage, t } = useLanguage();
+  
+  // Use prop language if provided, otherwise fall back to context language
+  const currentLanguage = propLanguage || (contextLanguage === 'ur' ? 'ur-PK' : 'en-US');
 
   // Initialize speech recognition only once
   useEffect(() => {
@@ -26,7 +30,7 @@ export const useVoiceInput = ({ onResult, onError }: UseVoiceInputProps) => {
         recognition.maxAlternatives = 1;
         
         // Set initial language
-        recognition.lang = language === 'ur' ? 'ur-PK' : 'en-PK';
+        recognition.lang = currentLanguage;
 
         recognition.onstart = () => {
           console.log('Speech recognition started');
@@ -88,13 +92,13 @@ export const useVoiceInput = ({ onResult, onError }: UseVoiceInputProps) => {
     };
   }, []); // Remove dependencies to avoid recreation
 
-  // Update language when language context changes
+  // Update language when language changes
   useEffect(() => {
     if (recognitionRef.current) {
-      recognitionRef.current.lang = language === 'ur' ? 'ur-PK' : 'en-PK';
-      console.log('Updated recognition language to:', language === 'ur' ? 'ur-PK' : 'en-PK');
+      recognitionRef.current.lang = currentLanguage;
+      console.log('Updated recognition language to:', currentLanguage);
     }
-  }, [language]);
+  }, [currentLanguage]);
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current) {

@@ -9,16 +9,19 @@ interface VoiceInputButtonProps {
   onTranscript: (text: string) => void;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
+  language?: string; // Add language prop for voice recognition
 }
 
 export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
   onTranscript,
   className = '',
   size = 'sm',
+  language = 'en-US', // Default to English
 }) => {
   const { t } = useLanguage();
 
   const { isListening, isSupported, startListening, stopListening } = useVoiceInput({
+    language, // Pass language to voice input hook
     onResult: (transcript) => {
       console.log('Voice input received:', transcript);
       onTranscript(transcript);

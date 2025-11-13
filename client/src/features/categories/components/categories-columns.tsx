@@ -13,6 +13,7 @@ import { Category } from '@/stores/category.slice'
 import { useCategories } from '../context/categories-context'
 import { useLanguage } from '@/context/language-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 
 export function useCategoryColumns(): ColumnDef<Category>[] {
   const { dispatch } = useCategories()
@@ -69,7 +70,7 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
               {category.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <span className="font-medium">{category.name}</span>
+          <span className={getTextClasses(category.name, "font-medium")}>{category.name}</span>
         </div>
       )
     },

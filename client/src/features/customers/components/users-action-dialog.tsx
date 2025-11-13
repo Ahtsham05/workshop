@@ -21,12 +21,12 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import SmartInput from '@/components/smart-input.tsx'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addCustomer, updateCustomer } from '@/stores/customer.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
-import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { useEffect } from 'react'
 
 const formSchema = z.object({
@@ -123,22 +123,14 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('customer_name')}
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={t('customer_name')}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput
+                        placeholder={t('customer_name')}
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        autoComplete='off'
+                        className='col-span-4'
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>
@@ -213,22 +205,14 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                       {t('address')}
                     </FormLabel>
                     <FormControl>
-                      <div className="relative col-span-4">
-                        <Input
-                          placeholder={t('address')}
-                          className='pr-10'
-                          autoComplete='off'
-                          {...field}
-                        />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <VoiceInputButton 
-                            onTranscript={(text) => {
-                              field.onChange(text);
-                            }}
-                            size="sm"
-                          />
-                        </div>
-                      </div>
+                      <SmartInput
+                        placeholder={t('address')}
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        autoComplete='off'
+                        className='col-span-4'
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

@@ -18,7 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+import SmartInput from '@/components/smart-input.tsx'
 import { toast } from 'sonner'
 import { useCategories } from '../context/categories-context'
 import { useDispatch } from 'react-redux'
@@ -27,7 +27,6 @@ import { createCategory, updateCategory } from '@/stores/category.slice'
 import { useEffect, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
-import { VoiceInputButton } from '@/components/ui/voice-input-button'
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, 'Category name is required'),
@@ -142,21 +141,12 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
                 <FormItem>
                   <FormLabel>{t('category_name')} *</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input 
-                        placeholder={t('enter_category_name')} 
-                        className="pr-10"
-                        {...field} 
-                      />
-                      <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                        <VoiceInputButton 
-                          onTranscript={(text) => {
-                            field.onChange(text);
-                          }}
-                          size="sm"
-                        />
-                      </div>
-                    </div>
+                    <SmartInput 
+                      placeholder={t('enter_category_name')} 
+                      showVoiceInput={true}
+                      voiceInputSize="sm"
+                      {...field} 
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

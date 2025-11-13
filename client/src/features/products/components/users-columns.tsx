@@ -8,6 +8,7 @@ import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 
 export const useProductColumns = (): ColumnDef<Product>[] => {
   const { t } = useLanguage()
@@ -52,7 +53,7 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
               <Package className="h-4 w-4 text-gray-400" />
             </div>
           )}
-          <LongText className='max-w-36'>{row.getValue('name')}</LongText>
+          <LongText className={getTextClasses(row.getValue('name'), 'max-w-36')}>{row.getValue('name')}</LongText>
         </div>
       )
     },
@@ -61,7 +62,7 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     {
     accessorKey: 'description',
     header: ({ column }) => <DataTableColumnHeader column={column} title='description' />,
-    cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('description')}</LongText>,
+    cell: ({ row }) => <LongText className={getTextClasses(row.getValue('description'), 'max-w-36')}>{row.getValue('description')}</LongText>,
     enableHiding: true,
   },
   {
@@ -86,7 +87,7 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
                   className="w-3 h-3 rounded-full object-cover"
                 />
               )}
-              <span className="text-xs">{category.name}</span>
+              <span className={getTextClasses(category.name, "text-xs")}>{category.name}</span>
             </Badge>
           ))}
           {categories.length > 2 && (

@@ -5,6 +5,7 @@ import { Customer } from '../data/schema'  // Changed from Product to Customer
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 
 export const useCustomerColumns = (): ColumnDef<Customer>[] => {
   const { t } = useLanguage()
@@ -34,7 +35,7 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
   {
     accessorKey: 'name',
     header: ({ column }) => <DataTableColumnHeader column={column} title='customer_name' />,
-    cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('name')}</LongText>,
+    cell: ({ row }) => <LongText className={getTextClasses(row.getValue('name'), 'max-w-36')}>{row.getValue('name')}</LongText>,
     enableHiding: true,
   },
   {
@@ -56,7 +57,7 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
   {
     accessorKey: 'address',
     header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
-    cell: ({ row }) => <div>{row.getValue('address')}</div>,
+    cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
   },
   {
     id: 'actions',

@@ -14,6 +14,9 @@ import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import SmartInput from '@/components/smart-input.tsx'
+import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
+import { getTextClasses } from '@/utils/urdu-text-utils'
 import {
   Command,
   CommandEmpty,
@@ -159,7 +162,7 @@ export function InvoicePanel({
       setInvoice(prev => ({
         ...prev,
         // Keep original type - don't change it based on status
-        type: editingInvoice.type || 'cash',
+        type: editingInvoice.type || 'credit',
         status: editingInvoice.status
       }))
     }
@@ -441,6 +444,9 @@ export function InvoicePanel({
 
   return (
     <div className='space-y-4'>
+      {/* Keyboard Language Override */}
+      <KeyboardLanguageOverride />
+      
       {/* Customer and Type Selection */}
       <Card>
         <CardHeader>
@@ -515,7 +521,7 @@ export function InvoicePanel({
                                         {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
                                       </span>
                                     </div>
-                                    <span className="text-xs truncate" title={selectedCustomer.name}>
+                                    <span className={getTextClasses(selectedCustomer.name, "text-xs truncate")} title={selectedCustomer.name}>
                                       {selectedCustomer.name}
                                     </span>
                                   </Badge>
@@ -529,7 +535,7 @@ export function InvoicePanel({
                                         {invoice.customerName.charAt(0).toUpperCase()}
                                       </span>
                                     </div>
-                                    <span className="text-xs truncate" title={invoice.customerName}>
+                                    <span className={getTextClasses(invoice.customerName, "text-xs truncate")} title={invoice.customerName}>
                                       {invoice.customerName}
                                     </span>
                                   </Badge>
@@ -539,7 +545,7 @@ export function InvoicePanel({
                                 return (
                                   <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
                                     <User className="w-3 h-3 flex-shrink-0" />
-                                    <span className="text-xs truncate" title={invoice.walkInCustomerName}>
+                                    <span className={getTextClasses(invoice.walkInCustomerName, "text-xs truncate")} title={invoice.walkInCustomerName}>
                                       {invoice.walkInCustomerName}
                                     </span>
                                   </Badge>
@@ -574,6 +580,11 @@ export function InvoicePanel({
                           onTranscript={(text) => {
                             setCustomerSearchQuery(text);
                           }}
+                          language={(() => {
+                            const { detectCurrentKeyboardLanguage } = require('@/utils/keyboard-language-utils');
+                            const currentLang = detectCurrentKeyboardLanguage();
+                            return currentLang === 'ur' ? 'ur-PK' : 'en-US';
+                          })()}
                           size="sm"
                         />
                       </div>
@@ -619,7 +630,7 @@ export function InvoicePanel({
                                   </span>
                                 </div>
                                 <div className="flex flex-col flex-1 min-w-0">
-                                  <span className="truncate font-medium" title={customer.name}>
+                                  <span className={getTextClasses(customer.name, "truncate font-medium")} title={customer.name}>
                                     {customer.name}
                                   </span>
                                   {customer.phone && (
@@ -687,12 +698,13 @@ export function InvoicePanel({
           {invoice.customerId === 'walk-in' && (
             <div>
               <Label htmlFor="walkInCustomerName">{t('customer_name')}</Label>
-              <Input
+              <SmartInput
                 id="walkInCustomerName"
-                type="text"
                 placeholder={t('enter_customer_name')}
                 value={invoice.walkInCustomerName || ''}
                 onChange={(e) => setInvoice(prev => ({ ...prev, walkInCustomerName: e.target.value }))}
+                showVoiceInput={true}
+                voiceInputSize="sm"
                 className="w-full"
               />
             </div>
@@ -775,9 +787,9 @@ export function InvoicePanel({
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <Search className="w-3 h-3 flex-shrink-0" />
                                 <span 
-                                  className={`truncate ${
+                                  className={getTextClasses(item.name || t('select_product'), `truncate ${
                                     !item.productId ? 'text-red-500' : 'text-muted-foreground'
-                                  }`}
+                                  }`)}
                                   title={item.name || t('select_product')}
                                 >
                                   {item.name || t('select_product')}
@@ -798,6 +810,11 @@ export function InvoicePanel({
                                 <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
                                   <VoiceInputButton 
                                     onTranscript={setProductSearchQuery}
+                                    language={(() => {
+                                      const { detectCurrentKeyboardLanguage } = require('@/utils/keyboard-language-utils');
+                                      const currentLang = detectCurrentKeyboardLanguage();
+                                      return currentLang === 'ur' ? 'ur-PK' : 'en-US';
+                                    })()}
                                     size="sm"
                                   />
                                 </div>
@@ -824,7 +841,7 @@ export function InvoicePanel({
                                           </div>
                                         )}
                                         <div className="flex flex-col flex-1 min-w-0">
-                                          <span className="text-sm font-medium truncate" title={product.name}>
+                                          <span className={getTextClasses(product.name, "text-sm font-medium truncate")} title={product.name}>
                                             {product.name}
                                           </span>
                                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -843,7 +860,7 @@ export function InvoicePanel({
                       </div>
                     ) : (
                       <div className="min-w-0">
-                        <p className='font-medium truncate' title={item.name}>{item.name}</p>
+                        <p className={getTextClasses(item.name, 'font-medium truncate')} title={item.name}>{item.name}</p>
                         <p className='text-xs text-muted-foreground'>
                           Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
                         </p>
