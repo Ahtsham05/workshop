@@ -122,7 +122,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 12px;
       line-height: 1.3;
       margin: 0;
@@ -312,7 +312,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
@@ -567,7 +567,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 14px;
       line-height: 1.4;
       margin: 0;
@@ -876,7 +876,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="invoice-header">
@@ -905,9 +905,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="info-row">
         <span class="info-label">${urduTexts.customer}:</span>
         <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || 'N/A')}</strong></span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.type}:</span>
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
       ${type === 'credit' && dueDate ? `
@@ -920,16 +917,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     <div class="info-section">
       <div class="info-title">${urduTexts.invoice_details}:</div>
       <div class="info-row">
-        <span class="info-label">${urduTexts.invoice_number}:</span>
-        <span><strong>${invoiceNumber}</strong></span>
-      </div>
-      <div class="info-row">
         <span class="info-label">${urduTexts.issue_date}:</span>
         <span>${new Date().toLocaleDateString('ur-PK')}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.items_count}:</span>
-        <span>${items.length}</span>
       </div>
     </div>
   </div>
