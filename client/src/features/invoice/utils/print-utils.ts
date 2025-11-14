@@ -85,9 +85,9 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     print_options: 'پرنٹ آپشنز',
     print_receipt: '🖨️ رسید پرنٹ کریں',
     close: '✕ بند کریں',
-    cash: 'نقد',
-    credit: 'ادھار',
-    pending: 'زیر التوا'
+    cash: 'cash',
+    credit: 'credit',
+    pending: 'pending'
   }
 
   const getTypeText = (type: string) => {
