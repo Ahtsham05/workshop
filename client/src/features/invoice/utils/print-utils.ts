@@ -81,7 +81,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     thank_you: 'آپ کا شکریہ!',
     keep_receipt: 'براہ کرم یہ رسید محفوظ رکھیں',
     visit_again: 'دوبارہ تشریف لائیے گا',
-    powered_by: 'نظام کی طرف سے',
+    powered_by: 'Logix Plus Software Solutions',
     print_options: 'پرنٹ آپشنز',
     print_receipt: '🖨️ رسید پرنٹ کریں',
     close: '✕ بند کریں',
@@ -332,10 +332,6 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <span>${new Date().toLocaleDateString('ur-PK')}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">${urduTexts.time}:</span>
-      <span>${new Date().toLocaleTimeString('ur-PK')}</span>
-    </div>
-    <div class="info-row">
       <span class="info-label">${urduTexts.type}:</span>
       <span>${getTypeText(type)}</span>
     </div>
@@ -437,8 +433,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     <div class="footer-line"><strong>${urduTexts.thank_you}</strong></div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
     <div class="footer-line">${urduTexts.visit_again}</div>
-    <div style="margin-top: 6px; font-size: 7px; color: #666;">
-      ${urduTexts.powered_by} - ${new Date().toLocaleString('ur-PK')}
+    <div style="margin-top: 8px; font-size: 8px; color: #666; text-align: center; line-height: 1.2;">
+      ${urduTexts.powered_by}
     </div>
   </div>
   
@@ -526,7 +522,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     thank_you: 'آپ کا شکریہ!',
     keep_receipt: 'براہ کرم یہ انوائس محفوظ رکھیں',
     generated_on: 'تیار کیا گیا',
-    powered_by: 'نظام کی طرف سے',
+    powered_by: 'Logix Plus Software Solutions',
     print_options: 'پرنٹ آپشنز',
     print_invoice: '🖨️ انوائس پرنٹ کریں',
     close: '✕ بند کریں',
@@ -1029,9 +1025,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="footer">
     <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
-    <div class="footer-line">کسی بھی سوال کے لیے ہم سے رابطہ کریں</div>
-    <div style="margin-top: 15px; font-size: 10px; color: #999;">
-      ${urduTexts.generated_on} ${new Date().toLocaleString('ur-PK')} | ${urduTexts.powered_by}
+    <div style="margin-top: 15px; font-size: 11px; color: #777; text-align: center; line-height: 1.3;">
+      ${urduTexts.powered_by}
     </div>
   </div>
   
