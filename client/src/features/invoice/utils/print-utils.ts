@@ -22,9 +22,6 @@ export interface PrintInvoiceData {
   serviceCharge?: number
 }
 
-// Translation function type
-export type TranslationFunction = (key: string) => string
-
 export const generateBarcodeText = (text: string): string => {
   // Generate Code 39 barcode format - requires * start/stop characters
   return `*${text}*`
@@ -34,7 +31,7 @@ export const formatCurrency = (amount: number): string => {
   return `Rs${amount.toFixed(2)}`
 }
 
-export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFunction, isRTL: boolean = false): string => {
+export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   const {
     invoiceNumber,
     items,
@@ -55,12 +52,59 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
   } = data
   console.log("data",data)
 
+  // Urdu translations
+  const urduTexts = {
+    business_name: 'آپ کا کاروبار',
+    business_address: 'آپ کا پتہ، شہر، ملک',
+    business_phone: '+92 300 1234567',
+    business_email: 'info@yourbusiness.com',
+    tax_id: 'ٹیکس آئی ڈی: 123456789',
+    invoice_title: 'رسید',
+    invoice_number: 'رسید نمبر',
+    date: 'تاریخ',
+    time: 'وقت',
+    type: 'قسم',
+    customer: 'کسٹمر',
+    due_date: 'آخری تاریخ',
+    walk_in_customer: 'واک ان کسٹمر',
+    items_purchased: 'خریدی گئی اشیاء',
+    subtotal: 'ذیلی ٹوٹل',
+    discount: 'رعایت',
+    delivery_charge: 'ڈیلیوری چارج',
+    service_charge: 'سروس چارج',
+    tax: 'ٹیکس',
+    total: 'کل',
+    paid: 'ادا شدہ',
+    balance_due: 'باقی رقم',
+    paid_in_full: 'مکمل ادائیگی',
+    notes: 'نوٹس',
+    thank_you: 'آپ کا شکریہ!',
+    keep_receipt: 'براہ کرم یہ رسید محفوظ رکھیں',
+    visit_again: 'دوبارہ تشریف لائیے گا',
+    powered_by: 'نظام کی طرف سے',
+    print_options: 'پرنٹ آپشنز',
+    print_receipt: '🖨️ رسید پرنٹ کریں',
+    close: '✕ بند کریں',
+    cash: 'نقد',
+    credit: 'ادھار',
+    pending: 'زیر التوا'
+  }
+
+  const getTypeText = (type: string) => {
+    switch(type) {
+      case 'cash': return urduTexts.cash
+      case 'credit': return urduTexts.credit
+      case 'pending': return urduTexts.pending
+      default: return type
+    }
+  }
+
   return `
 <!DOCTYPE html>
-<html dir="${isRTL ? 'rtl' : 'ltr'}" lang="${isRTL ? 'ur' : 'en'}">
+<html dir="rtl" lang="ur">
 <head>
   <meta charset="UTF-8">
-  <title>${t('print_invoice_title')} ${invoiceNumber}</title>
+  <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
   <style>
     @media print {
       @page { 
@@ -78,7 +122,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
     }
     
     body {
-      font-family: ${isRTL ? "'Noto Sans Arabic', 'Arial Unicode MS'" : "'Courier New', monospace"};
+      font-family: 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
       font-size: 12px;
       line-height: 1.3;
       margin: 0;
@@ -86,7 +130,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
       width: 300px;
       background: white;
       color: #000;
-      direction: ${isRTL ? 'rtl' : 'ltr'};
+      direction: rtl;
     }
     
     .receipt-header {
@@ -197,6 +241,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
       letter-spacing: 1px;
       margin: 6px 0;
       font-weight: normal;
+      direction: ltr;
     }
     
     .barcode-text {
@@ -271,43 +316,43 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
 </head>
 <body>
   <div class="receipt-header">
-    <div class="business-name">${t('print_business_name')}</div>
-    <div class="business-info">${t('print_business_address')}</div>
-    <div class="business-info">${t('print_business_phone')} | ${t('print_business_email')}</div>
-    <div class="business-info">${t('print_tax_id')}</div>
+    <div class="business-name">${urduTexts.business_name}</div>
+    <div class="business-info">${urduTexts.business_address}</div>
+    <div class="business-info">${urduTexts.business_phone} | ${urduTexts.business_email}</div>
+    <div class="business-info">${urduTexts.tax_id}</div>
   </div>
   
   <div class="invoice-info">
     <div class="info-row">
-      <span class="info-label">${t('invoice_number')}:</span>
+      <span class="info-label">${urduTexts.invoice_number}:</span>
       <span class="highlight">${invoiceNumber}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">${t('date')}:</span>
-      <span>${new Date().toLocaleDateString()}</span>
+      <span class="info-label">${urduTexts.date}:</span>
+      <span>${new Date().toLocaleDateString('ur-PK')}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">${t('print_time')}:</span>
-      <span>${new Date().toLocaleTimeString()}</span>
+      <span class="info-label">${urduTexts.time}:</span>
+      <span>${new Date().toLocaleTimeString('ur-PK')}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">${t('type')}:</span>
-      <span>${t(type)}</span>
+      <span class="info-label">${urduTexts.type}:</span>
+      <span>${getTypeText(type)}</span>
     </div>
     <div class="info-row">
-      <span class="info-label">${t('customer')}:</span>
-      <span>${customerId === 'walk-in' ? (walkInCustomerName || t('walk_in_customer')) : (customerName || 'N/A')}</span>
+      <span class="info-label">${urduTexts.customer}:</span>
+      <span>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || 'N/A')}</span>
     </div>
     ${type === 'credit' && dueDate ? `
     <div class="info-row">
-      <span class="info-label">${t('due_date')}:</span>
-      <span>${new Date(dueDate).toLocaleDateString()}</span>
+      <span class="info-label">${urduTexts.due_date}:</span>
+      <span>${new Date(dueDate).toLocaleDateString('ur-PK')}</span>
     </div>
     ` : ''}
   </div>
   
   <div class="items-section">
-    <div class="items-header">${t('print_items_purchased')}</div>
+    <div class="items-header">${urduTexts.items_purchased}</div>
     ${items.map((item, index) => `
       <div class="item-row">
         <div class="item-name">${index + 1}. ${item.name}</div>
@@ -321,35 +366,35 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
   
   <div class="totals-section">
     <div class="total-row">
-      <span>${t('subtotal')}:</span>
+      <span>${urduTexts.subtotal}:</span>
       <span>${formatCurrency(subtotal)}</span>
     </div>
     ${discount > 0 ? `
     <div class="total-row">
-      <span>${t('discount')}:</span>
+      <span>${urduTexts.discount}:</span>
       <span>-${formatCurrency(discount)}</span>
     </div>
     ` : ''}
     ${deliveryCharge > 0 ? `
     <div class="total-row">
-      <span>${t('print_delivery_charge')}:</span>
+      <span>${urduTexts.delivery_charge}:</span>
       <span>${formatCurrency(deliveryCharge)}</span>
     </div>
     ` : ''}
     ${serviceCharge > 0 ? `
     <div class="total-row">
-      <span>${t('print_service_charge')}:</span>
+      <span>${urduTexts.service_charge}:</span>
       <span>${formatCurrency(serviceCharge)}</span>
     </div>
     ` : ''}
     ${tax > 0 ? `
     <div class="total-row">
-      <span>${t('tax')}:</span>
+      <span>${urduTexts.tax}:</span>
       <span>${formatCurrency(tax)}</span>
     </div>
     ` : ''}
     <div class="total-row total-final">
-      <span>${t('total')}:</span>
+      <span>${urduTexts.total}:</span>
       <span>${formatCurrency(total)}</span>
     </div>
   </div>
@@ -357,18 +402,18 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
   ${type !== 'pending' ? `
     <div class="payment-section">
       <div class="total-row">
-        <span>${t('print_paid')}:</span>
+        <span>${urduTexts.paid}:</span>
         <span class="highlight">${formatCurrency(paidAmount)}</span>
       </div>
       ${balance > 0 ? `
       <div class="total-row" style="color: #d32f2f;">
-        <span><strong>${t('print_balance_due')}:</strong></span>
+        <span><strong>${urduTexts.balance_due}:</strong></span>
         <span><strong>${formatCurrency(balance)}</strong></span>
       </div>
       ` : ''}
       ${balance === 0 ? `
       <div class="total-row" style="color: #2e7d32;">
-        <span><strong>${t('print_paid_in_full')}</strong></span>
+        <span><strong>${urduTexts.paid_in_full}</strong></span>
         <span>✓</span>
       </div>
       ` : ''}
@@ -376,40 +421,40 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
   ` : ''}
   
   <div class="barcode-section">
-    <div style="font-size: 10px; margin-bottom: 4px;">${t('invoice_number')}</div>
+    <div style="font-size: 10px; margin-bottom: 4px;">${urduTexts.invoice_number}</div>
     <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
     <div class="barcode-text">${invoiceNumber}</div>
   </div>
   
   ${notes ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 3px;">${t('notes')}:</div>
+      <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.notes}:</div>
       <div>${notes}</div>
     </div>
   ` : ''}
   
   <div class="footer">
-    <div class="footer-line"><strong>${t('print_thank_you_message')}</strong></div>
-    <div class="footer-line">${t('print_keep_receipt')}</div>
-    <div class="footer-line">${t('print_visit_again')}</div>
+    <div class="footer-line"><strong>${urduTexts.thank_you}</strong></div>
+    <div class="footer-line">${urduTexts.keep_receipt}</div>
+    <div class="footer-line">${urduTexts.visit_again}</div>
     <div style="margin-top: 6px; font-size: 7px; color: #666;">
-      ${t('print_powered_by')} - ${new Date().toLocaleString()}
+      ${urduTexts.powered_by} - ${new Date().toLocaleString('ur-PK')}
     </div>
   </div>
   
   <div class="no-print">
-    <div style="margin-bottom: 10px; font-weight: bold;">${t('print_options')}</div>
+    <div style="margin-bottom: 10px; font-weight: bold;">${urduTexts.print_options}</div>
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
     >
-      🖨️ ${t('print_receipt_btn')}
+      ${urduTexts.print_receipt}
     </button>
     <button 
       onclick="window.close()" 
       class="print-btn print-btn-secondary"
     >
-      ✕ ${t('print_close')}
+      ${urduTexts.close}
     </button>
   </div>
 </body>
@@ -418,7 +463,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData, t: TranslationFuncti
 }
 
 // Generate A4 Invoice HTML with table layout
-export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunction, isRTL: boolean = false): string => {
+export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const {
     invoiceNumber,
     items,
@@ -438,12 +483,73 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
     serviceCharge = 0
   } = data
 
+  // Urdu translations for A4 invoice
+  const urduTexts = {
+    business_name: 'آپ کا کاروبار',
+    business_address: 'آپ کا پتہ، شہر، ملک',
+    business_phone: '+92 300 1234567',
+    business_email: 'info@yourbusiness.com',
+    tax_id: 'ٹیکس آئی ڈی: 123456789',
+    invoice_title: 'انوائس',
+    invoice_number: 'انوائس نمبر',
+    date: 'تاریخ',
+    time: 'وقت',
+    type: 'قسم',
+    customer: 'کسٹمر',
+    due_date: 'آخری تاریخ',
+    walk_in_customer: 'واک ان کسٹمر',
+    bill_to: 'بل کی معلومات',
+    invoice_details: 'انوائس کی تفصیلات',
+    issue_date: 'تاریخ',
+    items_count: 'اشیاء کی تعداد',
+    product_name: 'پروڈکٹ کا نام',
+    quantity: 'مقدار',
+    unit_price: 'قیمت',
+    total_amount: 'کل رقم',
+    subtotal: 'ذیلی ٹوٹل',
+    discount: 'رعایت',
+    delivery_charge: 'ڈیلیوری چارج',
+    service_charge: 'سروس چارج',
+    tax: 'ٹیکس',
+    total: 'کل',
+    amount: 'رقم',
+    payment_information: 'ادائیگی کی معلومات',
+    amount_paid: 'ادا شدہ رقم',
+    balance_due: 'باقی رقم',
+    paid_in_full: 'مکمل ادائیگی',
+    payment_status: 'ادائیگی کی صورتحال',
+    completed: 'مکمل',
+    pending_payment: 'ادائیگی باقی',
+    invoice_barcode: 'انوائس بار کوڈ',
+    scan_to_verify: 'تصدیق کے لیے اسکین کریں',
+    additional_notes: 'اضافی نوٹس',
+    thank_you: 'آپ کا شکریہ!',
+    keep_receipt: 'براہ کرم یہ انوائس محفوظ رکھیں',
+    generated_on: 'تیار کیا گیا',
+    powered_by: 'نظام کی طرف سے',
+    print_options: 'پرنٹ آپشنز',
+    print_invoice: '🖨️ انوائس پرنٹ کریں',
+    close: '✕ بند کریں',
+    cash: 'cash',
+    credit: 'credit',
+    pending: 'pending'
+  }
+
+  const getTypeText = (type: string) => {
+    switch(type) {
+      case 'cash': return urduTexts.cash
+      case 'credit': return urduTexts.credit
+      case 'pending': return urduTexts.pending
+      default: return type
+    }
+  }
+
   return `
 <!DOCTYPE html>
-<html dir="${isRTL ? 'rtl' : 'ltr'}" lang="${isRTL ? 'ur' : 'en'}">
+<html dir="rtl" lang="ur">
 <head>
   <meta charset="UTF-8">
-  <title>${t('print_invoice_title')} ${invoiceNumber}</title>
+  <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
   <style>
     @media print {
       @page { 
@@ -461,14 +567,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
     }
     
     body {
-      font-family: ${isRTL ? "'Noto Sans Arabic', 'Arial Unicode MS'" : "'Arial', sans-serif"};
+      font-family: 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
       font-size: 14px;
       line-height: 1.4;
       margin: 0;
       padding: 20px;
       background: white;
       color: #000;
-      direction: ${isRTL ? 'rtl' : 'ltr'};
+      direction: rtl;
     }
     
     .invoice-header {
@@ -498,7 +604,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
     }
     
     .invoice-details {
-      text-align: ${isRTL ? 'left' : 'right'};
+      text-align: left;
       flex: 1;
     }
     
@@ -553,30 +659,35 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
       border-collapse: collapse;
       margin-bottom: 30px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border: 2px solid #007bff;
     }
     
     .items-table th {
       background: #007bff;
       color: white;
       padding: 12px 8px;
-      text-align: ${isRTL ? 'right' : 'left'};
-      font-weight: 600;
-      border: none;
+      text-align: right;
+      font-weight: 800;
+      font-size: 14px;
+      border: 1px solid #0056b3;
+      border-bottom: 2px solid #0056b3;
     }
     
     .items-table th:first-child {
-      border-radius: ${isRTL ? '0 8px 0 0' : '8px 0 0 0'};
+      border-radius: 0 8px 0 0;
     }
     
     .items-table th:last-child {
-      border-radius: ${isRTL ? '8px 0 0 0' : '0 8px 0 0'};
-      text-align: ${isRTL ? 'left' : 'right'};
+      border-radius: 8px 0 0 0;
+      text-align: left;
     }
     
     .items-table td {
-      padding: 10px 8px;
-      border-bottom: 1px solid #e9ecef;
+      padding: 12px 8px;
+      border: 1px solid #dee2e6;
+      border-bottom: 1px solid #dee2e6;
       vertical-align: top;
+      font-size: 13px;
     }
     
     .items-table tr:nth-child(even) {
@@ -587,38 +698,53 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
       background: #e3f2fd;
     }
     
+    .items-table tbody tr:last-child td {
+      border-bottom: 2px solid #007bff;
+    }
+    
     .items-table .text-right {
-      text-align: ${isRTL ? 'left' : 'right'};
+      text-align: left;
     }
     
     .items-table .text-center {
       text-align: center;
     }
     
+    .items-table .text-left {
+      text-align: right;
+    }
+    
     .totals-section {
       display: flex;
-      justify-content: ${isRTL ? 'flex-start' : 'flex-end'};
+      justify-content: flex-start;
       margin-bottom: 30px;
     }
     
     .totals-table {
       width: 300px;
       border-collapse: collapse;
+      border: 2px solid #007bff;
+      border-radius: 8px;
+      overflow: hidden;
     }
     
     .totals-table td {
-      padding: 8px 12px;
+      padding: 10px 12px;
       border-bottom: 1px solid #e9ecef;
+      font-size: 13px;
     }
     
     .totals-table .total-label {
-      font-weight: 600;
-      text-align: ${isRTL ? 'left' : 'right'};
+      font-weight: 700;
+      text-align: left;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
     }
     
     .totals-table .total-amount {
-      text-align: ${isRTL ? 'right' : 'left'};
-      font-weight: 500;
+      text-align: right;
+      font-weight: 600;
+      background: white;
     }
     
     .totals-table .final-total {
@@ -626,6 +752,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
       color: white;
       font-weight: bold;
       font-size: 16px;
+      border-bottom: none;
+    }
+    
+    .totals-table .final-total .total-label,
+    .totals-table .final-total .total-amount {
+      background: #007bff;
+      color: white;
+      border-right: none;
     }
     
     .payment-info {
@@ -649,6 +783,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
       letter-spacing: 2px;
       margin: 10px 0;
       font-weight: normal;
+      direction: ltr;
     }
     
     .barcode-text {
@@ -661,8 +796,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
       margin: 30px 0;
       padding: 15px;
       background: #f8f9fa;
-      border-${isRTL ? 'right' : 'left'}: 4px solid #007bff;
-      border-radius: ${isRTL ? '8px 0 0 8px' : '0 8px 8px 0'};
+      border-right: 4px solid #007bff;
+      border-radius: 8px 0 0 8px;
     }
     
     .footer {
@@ -746,54 +881,54 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
 <body>
   <div class="invoice-header">
     <div class="company-info">
-      <div class="company-name">${t('print_business_name')}</div>
+      <div class="company-name">${urduTexts.business_name}</div>
       <div class="company-details">
-        ${t('print_business_address')}<br>
-        ${t('print_business_phone')}<br>
-        ${t('print_business_email')}<br>
-        ${t('print_tax_id')}
+        ${urduTexts.business_address}<br>
+        ${urduTexts.business_phone}<br>
+        ${urduTexts.business_email}<br>
+        ${urduTexts.tax_id}
       </div>
     </div>
     <div class="invoice-details">
-      <div class="invoice-title">${t('print_invoice_title')}</div>
+      <div class="invoice-title">${urduTexts.invoice_title}</div>
       <div class="invoice-meta">
         <div><strong>#${invoiceNumber}</strong></div>
-        <div>${t('date')}: ${new Date().toLocaleDateString()}</div>
-        <div>${t('print_time')}: ${new Date().toLocaleTimeString()}</div>
+        <div>${urduTexts.date}: ${new Date().toLocaleDateString('ur-PK')}</div>
+        <div>${urduTexts.time}: ${new Date().toLocaleTimeString('ur-PK')}</div>
       </div>
     </div>
   </div>
   
   <div class="invoice-info">
     <div class="info-section">
-      <div class="info-title">${t('print_bill_to')}:</div>
+      <div class="info-title">${urduTexts.bill_to}:</div>
       <div class="info-row">
-        <span class="info-label">${t('customer')}:</span>
-        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || t('walk_in_customer')) : (customerName || 'N/A')}</strong></span>
+        <span class="info-label">${urduTexts.customer}:</span>
+        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || 'N/A')}</strong></span>
       </div>
       <div class="info-row">
-        <span class="info-label">${t('type')}:</span>
-        <span class="status-badge status-${type}">${t(type)}</span>
+        <span class="info-label">${urduTexts.type}:</span>
+        <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
       ${type === 'credit' && dueDate ? `
       <div class="info-row">
-        <span class="info-label">${t('due_date')}:</span>
-        <span><strong style="color: #d32f2f;">${new Date(dueDate).toLocaleDateString()}</strong></span>
+        <span class="info-label">${urduTexts.due_date}:</span>
+        <span><strong style="color: #d32f2f;">${new Date(dueDate).toLocaleDateString('ur-PK')}</strong></span>
       </div>
       ` : ''}
     </div>
     <div class="info-section">
-      <div class="info-title">${t('print_invoice_details')}:</div>
+      <div class="info-title">${urduTexts.invoice_details}:</div>
       <div class="info-row">
-        <span class="info-label">${t('invoice_number')}:</span>
+        <span class="info-label">${urduTexts.invoice_number}:</span>
         <span><strong>${invoiceNumber}</strong></span>
       </div>
       <div class="info-row">
-        <span class="info-label">${t('print_issue_date')}:</span>
-        <span>${new Date().toLocaleDateString()}</span>
+        <span class="info-label">${urduTexts.issue_date}:</span>
+        <span>${new Date().toLocaleDateString('ur-PK')}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">${t('print_items_count')}:</span>
+        <span class="info-label">${urduTexts.items_count}:</span>
         <span>${items.length}</span>
       </div>
     </div>
@@ -803,19 +938,19 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
     <thead>
       <tr>
         <th style="width: 5%;">#</th>
-        <th style="width: 45%;">${t('print_product_name')}</th>
-        <th style="width: 15%;" class="text-center">${t('print_quantity')}</th>
-        <th style="width: 15%;" class="text-right">${t('print_unit_price')}</th>
-        <th style="width: 20%;" class="text-right">${t('total')}</th>
+        <th style="width: 45%;">${urduTexts.product_name}</th>
+        <th style="width: 15%;" class="text-center">${urduTexts.quantity}</th>
+        <th style="width: 15%;" class="text-right">${urduTexts.unit_price}</th>
+        <th style="width: 20%;" class="text-right">${urduTexts.total}</th>
       </tr>
     </thead>
     <tbody>
       ${items.map((item, index) => `
         <tr>
-          <td class="text-center">${index + 1}</td>
-          <td><strong>${item.name}</strong></td>
-          <td class="text-center">${item.quantity}</td>
-          <td class="text-right">${formatCurrency(item.unitPrice)}</td>
+          <td class="text-center"><strong>${index + 1}</strong></td>
+          <td class="text-left"><strong>${item.name}</strong></td>
+          <td class="text-center"><strong>${item.quantity}</strong></td>
+          <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
         </tr>
       `).join('')}
@@ -825,35 +960,35 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
   <div class="totals-section">
     <table class="totals-table">
       <tr>
-        <td class="total-label">${t('subtotal')}:</td>
+        <td class="total-label">${urduTexts.subtotal}:</td>
         <td class="total-amount">${formatCurrency(subtotal)}</td>
       </tr>
       ${discount > 0 ? `
       <tr>
-        <td class="total-label">${t('discount')}:</td>
+        <td class="total-label">${urduTexts.discount}:</td>
         <td class="total-amount" style="color: #d32f2f;">-${formatCurrency(discount)}</td>
       </tr>
       ` : ''}
       ${deliveryCharge > 0 ? `
       <tr>
-        <td class="total-label">${t('print_delivery_charge')}:</td>
+        <td class="total-label">${urduTexts.delivery_charge}:</td>
         <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
       </tr>
       ` : ''}
       ${serviceCharge > 0 ? `
       <tr>
-        <td class="total-label">${t('print_service_charge')}:</td>
+        <td class="total-label">${urduTexts.service_charge}:</td>
         <td class="total-amount">${formatCurrency(serviceCharge)}</td>
       </tr>
       ` : ''}
       ${tax > 0 ? `
       <tr>
-        <td class="total-label">${t('tax')}:</td>
+        <td class="total-label">${urduTexts.tax}:</td>
         <td class="total-amount">${formatCurrency(tax)}</td>
       </tr>
       ` : ''}
       <tr class="final-total">
-        <td class="total-label">${t('total')} ${t('amount')}:</td>
+        <td class="total-label">${urduTexts.total} ${urduTexts.amount}:</td>
         <td class="total-amount">${formatCurrency(total)}</td>
       </tr>
     </table>
@@ -862,68 +997,68 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData, t: TranslationFunc
   ${type !== 'pending' ? `
     <div class="payment-info">
       <div>
-        <div class="info-title">${t('print_payment_information')}:</div>
+        <div class="info-title">${urduTexts.payment_information}:</div>
         <div class="info-row">
-          <span class="info-label">${t('print_amount_paid')}:</span>
+          <span class="info-label">${urduTexts.amount_paid}:</span>
           <span style="color: #2e7d32; font-weight: bold;">${formatCurrency(paidAmount)}</span>
         </div>
         ${balance > 0 ? `
         <div class="info-row">
-          <span class="info-label"><strong>${t('print_balance_due')}:</strong></span>
+          <span class="info-label"><strong>${urduTexts.balance_due}:</strong></span>
           <span style="color: #d32f2f; font-weight: bold; font-size: 16px;">${formatCurrency(balance)}</span>
         </div>
         ` : ''}
         ${balance === 0 ? `
         <div class="info-row">
-          <span style="color: #2e7d32; font-weight: bold;">✓ ${t('print_paid_in_full')}</span>
+          <span style="color: #2e7d32; font-weight: bold;">✓ ${urduTexts.paid_in_full}</span>
           <span></span>
         </div>
         ` : ''}
       </div>
       <div>
-        <div class="info-title">${t('print_payment_status')}:</div>
+        <div class="info-title">${urduTexts.payment_status}:</div>
         <div style="font-size: 16px; font-weight: bold; ${balance === 0 ? 'color: #2e7d32;' : 'color: #d32f2f;'}">
-          ${balance === 0 ? `✓ ${t('print_completed')}` : `⚠ ${t('print_pending_payment')}`}
+          ${balance === 0 ? `✓ ${urduTexts.completed}` : `⚠ ${urduTexts.pending_payment}`}
         </div>
       </div>
     </div>
   ` : ''}
   
   <div class="barcode-section">
-    <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${t('print_invoice_barcode')}</div>
+    <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${urduTexts.invoice_barcode}</div>
     <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
-    <div class="barcode-text">${t('print_scan_to_verify')}: ${invoiceNumber}</div>
+    <div class="barcode-text">${urduTexts.scan_to_verify}: ${invoiceNumber}</div>
   </div>
   
   ${notes ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${t('print_additional_notes')}:</div>
+      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.additional_notes}:</div>
       <div style="font-size: 14px;">${notes}</div>
     </div>
   ` : ''}
   
   <div class="footer">
-    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${t('print_thank_you_message')}</div>
-    <div class="footer-line">${t('print_keep_receipt')}</div>
-    <div class="footer-line">For any questions regarding this invoice, please contact us</div>
+    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
+    <div class="footer-line">${urduTexts.keep_receipt}</div>
+    <div class="footer-line">کسی بھی سوال کے لیے ہم سے رابطہ کریں</div>
     <div style="margin-top: 15px; font-size: 10px; color: #999;">
-      ${t('print_generated_on')} ${new Date().toLocaleString()} | ${t('print_powered_by')}
+      ${urduTexts.generated_on} ${new Date().toLocaleString('ur-PK')} | ${urduTexts.powered_by}
     </div>
   </div>
   
   <div class="no-print">
-    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${t('print_options')}</div>
+    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${urduTexts.print_options}</div>
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
     >
-      🖨️ ${t('print_invoice_btn')}
+      ${urduTexts.print_invoice}
     </button>
     <button 
       onclick="window.close()" 
       class="print-btn print-btn-secondary"
     >
-      ✕ ${t('print_close')}
+      ${urduTexts.close}
     </button>
   </div>
 </body>

@@ -114,15 +114,16 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge
       }
 
-      const htmlContent = generateInvoiceHTML(printData, t, isRTL)
+      // Force Urdu/RTL for print
+      const htmlContent = generateInvoiceHTML(printData)
       openPrintWindow(htmlContent)
       
-      toast.success(t('print_success') || 'Invoice sent to printer')
+      toast.success('Invoice sent to printer')
     } catch (error) {
       console.error('Print error:', error)
-      toast.error(t('print_error') || 'Failed to print invoice')
+      toast.error('Failed to print invoice')
     }
-  }, [t])
+  }, [t, invoice.customerName])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
@@ -151,15 +152,16 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge
       }
 
-      const htmlContent = generateA4InvoiceHTML(printData, t, isRTL)
+      // Force Urdu/RTL for print
+      const htmlContent = generateA4InvoiceHTML(printData)
       openA4PrintWindow(htmlContent)
       
-      toast.success(t('print_success') || 'A4 Invoice sent to printer')
+      toast.success('A4 Invoice sent to printer')
     } catch (error) {
       console.error('A4 Print error:', error)
-      toast.error(t('print_error') || 'Failed to print A4 invoice')
+      toast.error('Failed to print A4 invoice')
     }
-  }, [t])
+  }, [t, invoice.customerName])
 
   // Initialize form values when in edit mode
   useEffect(() => {

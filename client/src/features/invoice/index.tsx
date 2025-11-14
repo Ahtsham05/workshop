@@ -109,6 +109,9 @@ export default function InvoicePage() {
     roundingAdjustment: 0
   })
   
+  // Track if invoice has been saved to prevent stock restoration
+  const [invoiceSaved, setInvoiceSaved] = useState(false)
+  
   // State for products and categories
   const [products, setProducts] = useState<Product[]>([])
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([])
@@ -120,8 +123,32 @@ export default function InvoicePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [taxRate, setTaxRate] = useState(0) // Configurable tax rate
 
+  // Refresh products to get latest stock data
+  const refreshProducts = useCallback(async () => {
+    try {
+      const data = await dispatch(fetchAllProducts({}))
+      let productsData = []
+      
+      if (data.payload?.results) {
+        productsData = data.payload.results
+      } else if (data.payload) {
+        productsData = Array.isArray(data.payload) ? data.payload : []
+      } else {
+        productsData = []
+      }
+      
+      setProducts(productsData)
+      console.log('Products refreshed with latest stock data')
+    } catch (error) {
+      console.error('Error refreshing products:', error)
+    }
+  }, [dispatch])
+
   // Fetch products and customers on component mount
   useEffect(() => {
+    console.log('=== INVOICE COMPONENT MOUNT ===')
+    console.log('Fetching fresh products and customers data')
+    
     setLoading(true)
     
     // Fetch products
@@ -139,9 +166,10 @@ export default function InvoicePage() {
           productsData = []
         }
         
-        console.log('Processed products data:', productsData)
+        console.log('Processed products data:', productsData.length, 'products')
         console.log('First product sample:', productsData[0])
         setProducts(productsData)
+        console.log('Products state updated with fresh data')
       })
       .catch((error) => {
         console.error('Error fetching products:', error)
@@ -545,8 +573,8 @@ export default function InvoicePage() {
   }, [invoice, calculateTotals])
 
   const handleCreateNew = () => {
-    // Restore stock for current invoice items before creating new
-    if (invoice.items.length > 0) {
+    // Restore stock for current invoice items before creating new (only if not saved)
+    if (!invoiceSaved && invoice.items.length > 0) {
       setProducts(prevProducts => {
         let updatedProducts = [...prevProducts]
         invoice.items.forEach(item => {
@@ -561,7 +589,15 @@ export default function InvoicePage() {
         return updatedProducts
       })
       console.log('Stock restored for previous invoice items')
+    } else if (invoiceSaved) {
+      console.log('Previous invoice was saved - stock already committed, no restoration needed')
     }
+    
+    // Reset the saved flag for new invoice
+    setInvoiceSaved(false)
+    
+    // Refresh products to ensure latest stock data
+    refreshProducts()
     
     setCurrentView('create')
     setEditingInvoice(null)
@@ -588,6 +624,12 @@ export default function InvoicePage() {
   }
 
   const handleEdit = (invoiceData: any) => {
+    // Reset the saved flag when starting to edit
+    setInvoiceSaved(false)
+    
+    // Refresh products to ensure latest stock data
+    refreshProducts()
+    
     setCurrentView('edit')
     setEditingInvoice(invoiceData)
     
@@ -649,8 +691,8 @@ export default function InvoicePage() {
   }
 
   const handleBackToList = () => {
-    // Restore stock for current invoice items before going back
-    if (invoice.items.length > 0) {
+    // Only restore stock if invoice was not saved (i.e., user canceled/navigated away)
+    if (!invoiceSaved && invoice.items.length > 0) {
       setProducts(prevProducts => {
         let updatedProducts = [...prevProducts]
         invoice.items.forEach(item => {
@@ -665,7 +707,15 @@ export default function InvoicePage() {
         return updatedProducts
       })
       console.log('Stock restored before going back to list')
+    } else if (invoiceSaved) {
+      console.log('Invoice was saved - stock changes committed, no restoration needed')
     }
+    
+    // Reset the saved flag for next invoice
+    setInvoiceSaved(false)
+    
+    // Refresh products to ensure we have the latest stock data from server
+    refreshProducts()
     
     setCurrentView('list')
     setEditingInvoice(null)
@@ -679,19 +729,19 @@ export default function InvoicePage() {
 
   // Handle successful invoice save - commit stock changes
   const handleSaveSuccess = useCallback(() => {
-    // Clear invoice items to commit stock changes (prevent restoration)
-    setInvoice(prev => ({
-      ...prev,
-      items: []
-    }))
+    // Mark invoice as saved to prevent stock restoration
+    setInvoiceSaved(true)
     
     console.log('Invoice saved - stock changes committed')
     
-    // Navigate back to list after a brief delay
-    setTimeout(() => {
-      handleBackToList()
-    }, 1000)
-  }, [])
+    // Navigate back to list with a direct call
+    setCurrentView('list')
+    setEditingInvoice(null)
+    setReturningInvoice(null)
+    
+    // Refresh products to ensure we have the latest stock data from server
+    refreshProducts()
+  }, [refreshProducts])
 
   const handleConvertPending = () => {
     setCurrentView('convert-pending')
