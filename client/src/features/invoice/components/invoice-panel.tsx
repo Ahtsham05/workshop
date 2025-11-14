@@ -15,8 +15,9 @@ import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/inv
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import SmartInput from '@/components/smart-input.tsx'
-import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
+// import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { getTextClasses } from '@/utils/urdu-text-utils'
+import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import {
   Command,
   CommandEmpty,
@@ -42,8 +43,10 @@ interface InvoicePanelProps {
   setTaxRate: (rate: number) => void
   customers: any[]
   products: any[]
+  setProducts: React.Dispatch<React.SetStateAction<any[]>>
   calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
   onBackToList?: () => void
+  onSaveSuccess?: () => void
   isEditing?: boolean
   editingInvoice?: any
 }
@@ -59,8 +62,10 @@ export function InvoicePanel({
   // setTaxRate,
   customers,
   products,
+  setProducts,
   calculateTotals,
   onBackToList,
+  onSaveSuccess,
   isEditing = false,
   editingInvoice
 }: InvoicePanelProps) {
@@ -73,6 +78,10 @@ export function InvoicePanel({
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
+
+  // Detect current keyboard language
+  const currentKeyboardLanguage = detectCurrentKeyboardLanguage()
+  const voiceLanguage = currentKeyboardLanguage === 'ur' ? 'ur-PK' : 'en-US'
 
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
@@ -127,7 +136,7 @@ export function InvoicePanel({
           subtotal: item.quantity * item.unitPrice
         })),
         customerId: invoiceData.customerId,
-        customerName: invoiceData.customerName,
+        customerName: invoice.customerName || invoiceData.customerName,
         walkInCustomerName: invoiceData.walkInCustomerName,
         type: invoiceData.type,
         subtotal: invoiceData.subtotal,
@@ -178,6 +187,31 @@ export function InvoicePanel({
     }
   }, [invoice.type, setInvoice])
 
+  // Handle walk-in customer business rules
+  useEffect(() => {
+    if (invoice.customerId === 'walk-in') {
+      // Force cash type for walk-in customers
+      if (invoice.type !== 'cash') {
+        setInvoice(prev => ({ 
+          ...prev, 
+          type: 'cash'
+        }))
+      }
+    }
+  }, [invoice.customerId, invoice.type, setInvoice])
+
+  // Set default date when customer is selected or type is pending
+  useEffect(() => {
+    if ((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') {
+      if (!invoice.dueDate) {
+        setInvoice(prev => ({ 
+          ...prev, 
+          dueDate: new Date().toISOString().split('T')[0] 
+        }))
+      }
+    }
+  }, [invoice.customerId, invoice.type, invoice.dueDate, setInvoice])
+
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
     if (!customerSearchQuery) return true
@@ -204,6 +238,39 @@ export function InvoicePanel({
       toast.error('Selected product has no valid ID')
       return
     }
+
+    // Get current stock from the products state (real-time stock)
+    const currentProduct = products.find(p => (p._id || p.id) === productId)
+    const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
+    
+    console.log('=== PRODUCT SELECT DEBUG ===')
+    console.log('Selected product:', product.name, 'ID:', productId)
+    console.log('Current stock from products state:', currentStock)
+    console.log('Product stock from parameter:', product.stockQuantity)
+    
+    // Find the current item to get its quantity
+    const currentItem = invoice.items.find(item => item.id === itemId)
+    if (!currentItem) {
+      console.error('Item not found:', itemId)
+      return
+    }
+
+    // If this item already had a product selected, restore its stock first
+    if (currentItem.productId && !currentItem.isManualEntry) {
+      setProducts(prevProducts => prevProducts.map(p => 
+        (p._id || p.id) === currentItem.productId 
+          ? { ...p, stockQuantity: p.stockQuantity + currentItem.quantity }
+          : p
+      ))
+      console.log(`Stock restored for previous product: ${currentItem.name} + ${currentItem.quantity}`)
+    }
+
+    // Check if we have enough stock for the current quantity
+    if (currentItem.quantity > currentStock) {
+      toast.error(`${product.name} - Not enough stock available. Current stock: ${currentStock}, Required: ${currentItem.quantity}`)
+      console.log('ERROR: Not enough stock for current quantity')
+      return
+    }
     
     const newItems = invoice.items.map(item => 
       item.id === itemId 
@@ -220,6 +287,16 @@ export function InvoicePanel({
           }
         : item
     )
+
+    // Update stock to reflect the selection (decrease by current item quantity)
+    setProducts(prevProducts => prevProducts.map(p => 
+      (p._id || p.id) === productId 
+        ? { ...p, stockQuantity: p.stockQuantity - currentItem.quantity }
+        : p
+    ))
+    
+    console.log(`Stock updated: ${product.name} - decreased by ${currentItem.quantity}`)
+    console.log('=== PRODUCT SELECT DEBUG END ===')
     
     if (calculateTotals) {
       // Use parent's calculateTotals function
@@ -258,7 +335,7 @@ export function InvoicePanel({
     
     setProductSelectOpen('')
     setProductSearchQuery('')
-  }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice])
+  }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
 
   // const handleDiscountChange = useCallback((value: string) => {
   //   setDiscountInput(value)
@@ -371,6 +448,11 @@ export function InvoicePanel({
       
       toast.success(successMessage)
       
+      // Call success callback to commit stock changes
+      if (onSaveSuccess) {
+        onSaveSuccess()
+      }
+      
       // Print if requested
       if (printType !== 'none') {
         // Enhanced customer name resolution for both create and edit scenarios
@@ -382,9 +464,9 @@ export function InvoicePanel({
                                      invoice.walkInCustomerName || 
                                      editingInvoice?.walkInCustomerName
         } else {
-          // For regular customers, try multiple sources
-          resolvedCustomerName = result.customerName || 
-                               invoice.customerName || 
+          // For regular customers, prioritize the custom display name entered by user
+          resolvedCustomerName = invoice.customerName || 
+                               result.customerName || 
                                editingInvoice?.customerName ||
                                (result.customerId || invoice.customerId || editingInvoice?.customerId 
                                  ? customers.find(c => (c._id || c.id) === (result.customerId || invoice.customerId || editingInvoice?.customerId))?.name 
@@ -419,7 +501,7 @@ export function InvoicePanel({
       // Reset saving state
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess])
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -444,8 +526,8 @@ export function InvoicePanel({
 
   return (
     <div className='space-y-4'>
-      {/* Keyboard Language Override */}
-      <KeyboardLanguageOverride />
+      {/* Keyboard Language Override 
+      <KeyboardLanguageOverride />*/}
       
       {/* Customer and Type Selection */}
       <Card>
@@ -580,11 +662,7 @@ export function InvoicePanel({
                           onTranscript={(text) => {
                             setCustomerSearchQuery(text);
                           }}
-                          language={(() => {
-                            const { detectCurrentKeyboardLanguage } = require('@/utils/keyboard-language-utils');
-                            const currentLang = detectCurrentKeyboardLanguage();
-                            return currentLang === 'ur' ? 'ur-PK' : 'en-US';
-                          })()}
+                          language={voiceLanguage}
                           size="sm"
                         />
                       </div>
@@ -617,7 +695,11 @@ export function InvoicePanel({
                             <CommandItem
                               key={customerId}
                               onSelect={() => {
-                                setInvoice(prev => ({ ...prev, customerId }))
+                                setInvoice(prev => ({ 
+                                  ...prev, 
+                                  customerId,
+                                  customerName: customer.name // Set customer name for editing
+                                }))
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
                               }}
@@ -666,8 +748,19 @@ export function InvoicePanel({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">{t('cash')}</SelectItem>
-                  <SelectItem value="credit">{t('credit')}</SelectItem>
-                  <SelectItem value="pending">{t('pending')}</SelectItem>
+                  {/* Disable credit and pending for walk-in customers */}
+                  <SelectItem 
+                    value="credit" 
+                    disabled={invoice.customerId === 'walk-in'}
+                  >
+                    {t('credit')}
+                  </SelectItem>
+                  <SelectItem 
+                    value="pending" 
+                    disabled={invoice.customerId === 'walk-in'}
+                  >
+                    {t('pending')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -684,7 +777,7 @@ export function InvoicePanel({
             )} */}
           </div>
 
-          {invoice.type === 'credit' && (
+          {(invoice.type === 'credit' || (invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') && (
             <div>
               <Label htmlFor="dueDate">{t('due_date')}</Label>
               <Input
@@ -709,6 +802,21 @@ export function InvoicePanel({
               />
             </div>
           )}
+
+          {((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') && invoice.customerId !== 'walk-in' ? (
+            <div>
+              <Label htmlFor="customerDisplayName">{t('customer_name')}</Label>
+              <SmartInput
+                id="customerDisplayName"
+                placeholder={t('enter_customer_name') || 'Enter customer name'}
+                value={invoice.customerName || ''}
+                onChange={(e) => setInvoice(prev => ({ ...prev, customerName: e.target.value }))}
+                showVoiceInput={true}
+                voiceInputSize="sm"
+                className="w-full"
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -810,11 +918,7 @@ export function InvoicePanel({
                                 <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
                                   <VoiceInputButton 
                                     onTranscript={setProductSearchQuery}
-                                    language={(() => {
-                                      const { detectCurrentKeyboardLanguage } = require('@/utils/keyboard-language-utils');
-                                      const currentLang = detectCurrentKeyboardLanguage();
-                                      return currentLang === 'ur' ? 'ur-PK' : 'en-US';
-                                    })()}
+                                    language={voiceLanguage}
                                     size="sm"
                                   />
                                 </div>

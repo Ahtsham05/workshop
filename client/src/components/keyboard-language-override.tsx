@@ -9,16 +9,34 @@ import {
 } from '@/utils/keyboard-language-utils'
 
 export function KeyboardLanguageOverride() {
-  const [currentOverride, setCurrentOverride] = React.useState<'ur' | 'en' | null>(getManualKeyboardLanguage())
-  const [detectedLanguage, setDetectedLanguage] = React.useState<'ur' | 'en'>(detectCurrentKeyboardLanguage())
+  const [currentOverride, setCurrentOverride] = React.useState<'ur' | 'en' | null>(null)
+  const [detectedLanguage, setDetectedLanguage] = React.useState<'ur' | 'en'>('en')
+
+  // Initialize state safely
+  React.useEffect(() => {
+    try {
+      setCurrentOverride(getManualKeyboardLanguage())
+      setDetectedLanguage(detectCurrentKeyboardLanguage())
+    } catch (error) {
+      console.warn('Error initializing keyboard language override:', error)
+    }
+  }, [])
 
   const handleSetLanguage = (language: 'ur' | 'en' | null) => {
-    setManualKeyboardLanguage(language)
-    setCurrentOverride(language)
+    try {
+      setManualKeyboardLanguage(language)
+      setCurrentOverride(language)
+    } catch (error) {
+      console.warn('Error setting manual keyboard language:', error)
+    }
   }
 
   const refreshDetection = () => {
-    setDetectedLanguage(detectCurrentKeyboardLanguage())
+    try {
+      setDetectedLanguage(detectCurrentKeyboardLanguage())
+    } catch (error) {
+      console.warn('Error refreshing keyboard language detection:', error)
+    }
   }
 
   return (

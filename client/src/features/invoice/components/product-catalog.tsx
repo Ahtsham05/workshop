@@ -13,6 +13,8 @@ import { useLanguage } from '@/context/language-context'
 import { Category, Product } from '../index'
 import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import { getTextClasses } from '@/utils/urdu-text-utils'
+import { toast } from 'sonner'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -207,7 +209,7 @@ export function ProductCatalog({
                         <Package className='h-4 w-4 text-gray-400' />
                       </div>
                     )}
-                    <span className='text-xs text-center truncate w-full'>
+                    <span className={getTextClasses(category.name, 'text-xs text-center truncate w-full')}>
                       {category.name}
                     </span>
                     <Badge variant="outline" className='text-xs px-1 py-0'>
@@ -235,7 +237,7 @@ export function ProductCatalog({
                 <div key={category._id} className='space-y-2'>
                   {/* Category Header */}
                   <div className='flex items-center gap-2'>
-                    <h3 className='font-semibold text-base'>{category.name}</h3>
+                    <h3 className={getTextClasses(category.name, 'font-semibold text-base')}>{category.name}</h3>
                     <Badge variant="outline" className='text-xs'>{category.products.length}</Badge>
                   </div>
                   <Separator />
@@ -248,12 +250,26 @@ export function ProductCatalog({
                     {category.products.map((product) => (
                       <div
                         key={product._id}
-                        onClick={() => handleQuickAdd(product, 1)}
+                        onClick={() => {
+                          if (product.stockQuantity > 0) {
+                            handleQuickAdd(product, 1)
+                          } else {
+                            // Show error toast for out of stock items
+                            toast.error(`${product.name} is out of stock`)
+                          }
+                        }}
                         className={showImages
-                          ? 'border rounded-lg p-2 space-y-2 hover:shadow-sm transition-shadow bg-white cursor-pointer'
-                          : 'border rounded-lg p-2 flex items-center gap-2 hover:bg-muted/30 transition-colors cursor-pointer'
+                          ? `border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
+                              product.stockQuantity > 0 
+                                ? 'hover:shadow-sm cursor-pointer' 
+                                : 'opacity-60 cursor-not-allowed bg-gray-50'
+                            }`
+                          : `border rounded-lg p-2 flex items-center gap-2 transition-colors ${
+                              product.stockQuantity > 0 
+                                ? 'hover:bg-muted/30 cursor-pointer' 
+                                : 'opacity-60 cursor-not-allowed bg-gray-50'
+                            }`
                         }
-                        style={{ opacity: product.stockQuantity === 0 ? 0.6 : 1 }}
                       >
                         {/* Product Image */}
                         {showImages && (
@@ -285,7 +301,7 @@ export function ProductCatalog({
 
                         {/* Product Info */}
                         <div className={showImages ? 'space-y-1' : 'flex-1 min-w-0'}>
-                          <h4 className={`font-medium text-sm ${showImages ? 'text-center truncate' : 'truncate'}`}>
+                          <h4 className={getTextClasses(product.name, `font-medium text-sm ${showImages ? 'text-center truncate' : 'truncate'}`)}>
                             {product.name}
                           </h4>
                           <div className={`flex ${showImages ? 'flex-col items-center gap-0' : 'items-center gap-2'} text-xs text-muted-foreground`}>

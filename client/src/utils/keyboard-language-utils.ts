@@ -12,8 +12,12 @@ let manualKeyboardLanguage: 'ur' | 'en' | null = null
  * @param language - 'ur' | 'en' | null (null to auto-detect)
  */
 export const setManualKeyboardLanguage = (language: 'ur' | 'en' | null) => {
-  manualKeyboardLanguage = language
-  console.log('🔤 Manual keyboard language set to:', language)
+  try {
+    manualKeyboardLanguage = language
+    console.log('🔤 Manual keyboard language set to:', language)
+  } catch (error) {
+    console.warn('Error setting manual keyboard language:', error)
+  }
 }
 
 /**
@@ -21,7 +25,12 @@ export const setManualKeyboardLanguage = (language: 'ur' | 'en' | null) => {
  * @returns 'ur' | 'en' | null
  */
 export const getManualKeyboardLanguage = (): 'ur' | 'en' | null => {
-  return manualKeyboardLanguage
+  try {
+    return manualKeyboardLanguage
+  } catch (error) {
+    console.warn('Error getting manual keyboard language:', error)
+    return null
+  }
 }
 
 /**
@@ -92,17 +101,22 @@ export const getSystemKeyboardLanguage = (): 'ur' | 'en' => {
  * Real-time keyboard language detection with multiple methods
  */
 export const getRealTimeKeyboardLanguage = (): 'ur' | 'en' => {
-  // First check manual override
-  const manual = getManualKeyboardLanguage()
-  if (manual) {
-    console.log('🔤 Using manual keyboard language override:', manual)
-    return manual
-  }
+  try {
+    // First check manual override
+    const manual = getManualKeyboardLanguage()
+    if (manual) {
+      console.log('🔤 Using manual keyboard language override:', manual)
+      return manual
+    }
 
-  // Add a keyboard event listener to detect real-time changes
-  const detectedLanguage = detectCurrentKeyboardLanguage()
-  console.log('🔤 Real-time detected keyboard language:', detectedLanguage)
-  return detectedLanguage
+    // Use basic system detection without calling detectCurrentKeyboardLanguage to avoid circular dependency
+    const systemLang = getSystemKeyboardLanguage()
+    console.log('🔤 Real-time detected keyboard language:', systemLang)
+    return systemLang
+  } catch (error) {
+    console.warn('Error in real-time keyboard language detection:', error)
+    return 'en'
+  }
 }
 
 /**
@@ -112,16 +126,16 @@ export const getRealTimeKeyboardLanguage = (): 'ur' | 'en' => {
  */
 export const detectCurrentKeyboardLanguage = (): 'ur' | 'en' => {
   try {
-    // First try the enhanced real-time detection
-    const realTimeLang = getRealTimeKeyboardLanguage()
-    
-    // If real-time detection finds Urdu, use it
-    if (realTimeLang === 'ur') {
-      return 'ur'
+    // Check manual override first
+    const manual = getManualKeyboardLanguage()
+    if (manual) {
+      console.log('🔤 Using manual keyboard language override:', manual)
+      return manual
     }
     
     // Check browser language and keyboard settings
-    const browserLang = navigator.language || navigator.languages?.[0] || 'en'
+    const browserLang = (typeof navigator !== 'undefined' && navigator.language) || 
+                       (typeof navigator !== 'undefined' && navigator.languages?.[0]) || 'en'
     console.log('🔤 Browser Language:', browserLang)
     
     if (browserLang.includes('ur') || browserLang.includes('pk') || browserLang.toLowerCase().includes('urdu')) {
@@ -130,9 +144,10 @@ export const detectCurrentKeyboardLanguage = (): 'ur' | 'en' => {
     }
 
     // Check for Urdu/Arabic in any of the navigator languages
-    const languages = navigator.languages || [navigator.language || 'en']
+    const languages = (typeof navigator !== 'undefined' && navigator.languages) || 
+                     [(typeof navigator !== 'undefined' && navigator.language) || 'en']
     const hasUrduLanguage = languages.some(lang => 
-      lang.includes('ur') || lang.includes('pk') || lang.toLowerCase().includes('urdu') || lang.includes('arab')
+      lang && (lang.includes('ur') || lang.includes('pk') || lang.toLowerCase().includes('urdu') || lang.includes('arab'))
     )
     
     if (hasUrduLanguage) {
