@@ -311,10 +311,10 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       }
 
       if (printType === 'a4') {
-        const htmlContent = generateA4InvoiceHTML(printData, t)
+        const htmlContent = generateA4InvoiceHTML(printData)
         openA4PrintWindow(htmlContent)
       } else {
-        const htmlContent = generateInvoiceHTML(printData, t)
+        const htmlContent = generateInvoiceHTML(printData)
         openPrintWindow(htmlContent)
       }
     } catch (error) {
