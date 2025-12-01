@@ -75,6 +75,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
@@ -94,7 +95,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     page: currentPage,
     limit: itemsPerPage,
     ...(debouncedSearch && { search: debouncedSearch }),
-    ...(statusFilter !== 'all' && { status: statusFilter })
+    ...(statusFilter !== 'all' && { status: statusFilter }),
+    ...(typeFilter !== 'all' && { type: typeFilter })
   })
   const { data: customersData } = useGetAllCustomersQuery(undefined)
   // Remove the deleteInvoice hook since we'll use it in the dialog component
@@ -202,7 +204,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, statusFilter, itemsPerPage])
+  }, [debouncedSearch, statusFilter, typeFilter, itemsPerPage])
 
   // Calculate display indices for pagination info
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -262,7 +264,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="search">{t('search')}</Label>
               <div className="relative mt-2">
@@ -294,12 +296,28 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
               </Select>
             </div>
 
+            <div>
+              <Label>{t('invoice_type')}</Label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className='w-full mt-2'>
+                  <SelectValue placeholder={t('all_types')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_types')}</SelectItem>
+                  <SelectItem value="cash">{t('cash')}</SelectItem>
+                  <SelectItem value="credit">{t('credit')}</SelectItem>
+                  <SelectItem value="pending">{t('pending')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-end">
               <Button
                 variant="outline"
                 onClick={() => {
                   setSearchTerm('')
                   setStatusFilter('all')
+                  setTypeFilter('all')
                 }}
                 className="w-full"
               >
