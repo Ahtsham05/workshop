@@ -279,7 +279,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
               </div>
             </div>
             
-            <div>
+            {/* <div>
               <Label>{t('status')}</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className='w-full mt-2'>
@@ -294,7 +294,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <SelectItem value="refunded">{t('refunded')}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </div> */}
 
             <div>
               <Label>{t('invoice_type')}</Label>
@@ -361,7 +361,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead>{t('type')}</TableHead>
                   <TableHead>{t('date')}</TableHead>
                   <TableHead>{t('amount')}</TableHead>
-                  <TableHead>{t('status')}</TableHead>
+                  {/* <TableHead>{t('status')}</TableHead> */}
                   <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -386,11 +386,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
                     </TableCell>
                     <TableCell>Rs{invoice.total?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>
+                    {/* <TableCell>
                       <Badge className={statusColors[invoice.status || 'draft']}>
                         {t(invoice.status || 'draft')}
                       </Badge>
-                    </TableCell>
+                    </TableCell> */}
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Dialog>
