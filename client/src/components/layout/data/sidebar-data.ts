@@ -80,6 +80,11 @@ export const sidebarData: SidebarData = {
           icon: IconPackages,
         },
         {
+          title: 'Purchase Invoice',
+          url: '/purchase-invoice',
+          icon: IconPackages,
+        },
+        {
           title: 'Invoices',
           url: '/invoice',
           icon: IconPackages,

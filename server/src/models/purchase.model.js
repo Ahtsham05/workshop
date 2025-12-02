@@ -16,6 +16,7 @@ const PurchaseSchema = new mongoose.Schema({
   ],
   purchaseDate: { type: Date, default: Date.now },
   totalAmount: { type: Number, required: true },
+  notes: { type: String },
   status: { type: Boolean, default: false },
 }, {
   timestamps: true,

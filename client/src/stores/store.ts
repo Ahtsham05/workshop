@@ -10,6 +10,7 @@ import categoryReducer from './category.slice';
 import { invoiceApi } from './invoice.api';
 import { returnApi } from './return.api';
 import { customerApi } from './customer.api';
+import { purchaseApi } from './purchase.api';
 
 export const store = configureStore({
   reducer: {
@@ -26,12 +27,14 @@ export const store = configureStore({
     [invoiceApi.reducerPath]: invoiceApi.reducer,
     [returnApi.reducerPath]: returnApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
+    [purchaseApi.reducerPath]: purchaseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       invoiceApi.middleware,
       returnApi.middleware,
-      customerApi.middleware
+      customerApi.middleware,
+      purchaseApi.middleware
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

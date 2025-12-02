@@ -47,6 +47,7 @@ import { Route as AuthenticatedReturnsIndexImport } from './routes/_authenticate
 import { Route as AuthenticatedPurchaseIndexImport } from './routes/_authenticated/purchase/index'
 import { Route as AuthenticatedPurchaseViewIndexImport } from './routes/_authenticated/purchase-view/index'
 import { Route as AuthenticatedPurchaseLedgerIndexImport } from './routes/_authenticated/purchase-ledger/index'
+import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedPurchaseAddIndexImport } from './routes/_authenticated/purchase-add/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedMobileRepairIndexImport } from './routes/_authenticated/mobile-repair/index'
@@ -301,6 +302,13 @@ const AuthenticatedPurchaseLedgerIndexRoute =
   AuthenticatedPurchaseLedgerIndexImport.update({
     id: '/purchase-ledger/',
     path: '/purchase-ledger/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedPurchaseInvoiceIndexRoute =
+  AuthenticatedPurchaseInvoiceIndexImport.update({
+    id: '/purchase-invoice/',
+    path: '/purchase-invoice/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -699,6 +707,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPurchaseAddIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/purchase-invoice/': {
+      id: '/_authenticated/purchase-invoice/'
+      path: '/purchase-invoice'
+      fullPath: '/purchase-invoice'
+      preLoaderRoute: typeof AuthenticatedPurchaseInvoiceIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/purchase-ledger/': {
       id: '/_authenticated/purchase-ledger/'
       path: '/purchase-ledger'
@@ -857,6 +872,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileRepairIndexRoute: typeof AuthenticatedMobileRepairIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseAddIndexRoute: typeof AuthenticatedPurchaseAddIndexRoute
+  AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedPurchaseLedgerIndexRoute: typeof AuthenticatedPurchaseLedgerIndexRoute
   AuthenticatedPurchaseViewIndexRoute: typeof AuthenticatedPurchaseViewIndexRoute
   AuthenticatedPurchaseIndexRoute: typeof AuthenticatedPurchaseIndexRoute
@@ -892,6 +908,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileRepairIndexRoute: AuthenticatedMobileRepairIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseAddIndexRoute: AuthenticatedPurchaseAddIndexRoute,
+  AuthenticatedPurchaseInvoiceIndexRoute:
+    AuthenticatedPurchaseInvoiceIndexRoute,
   AuthenticatedPurchaseLedgerIndexRoute: AuthenticatedPurchaseLedgerIndexRoute,
   AuthenticatedPurchaseViewIndexRoute: AuthenticatedPurchaseViewIndexRoute,
   AuthenticatedPurchaseIndexRoute: AuthenticatedPurchaseIndexRoute,
@@ -954,6 +972,7 @@ export interface FileRoutesByFullPath {
   '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-add': typeof AuthenticatedPurchaseAddIndexRoute
+  '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
   '/purchase': typeof AuthenticatedPurchaseIndexRoute
@@ -1009,6 +1028,7 @@ export interface FileRoutesByTo {
   '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-add': typeof AuthenticatedPurchaseAddIndexRoute
+  '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
   '/purchase': typeof AuthenticatedPurchaseIndexRoute
@@ -1067,6 +1087,7 @@ export interface FileRoutesById {
   '/_authenticated/mobile-repair/': typeof AuthenticatedMobileRepairIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-add/': typeof AuthenticatedPurchaseAddIndexRoute
+  '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/_authenticated/purchase-ledger/': typeof AuthenticatedPurchaseLedgerIndexRoute
   '/_authenticated/purchase-view/': typeof AuthenticatedPurchaseViewIndexRoute
   '/_authenticated/purchase/': typeof AuthenticatedPurchaseIndexRoute
@@ -1126,6 +1147,7 @@ export interface FileRouteTypes {
     | '/mobile-repair'
     | '/products'
     | '/purchase-add'
+    | '/purchase-invoice'
     | '/purchase-ledger'
     | '/purchase-view'
     | '/purchase'
@@ -1180,6 +1202,7 @@ export interface FileRouteTypes {
     | '/mobile-repair'
     | '/products'
     | '/purchase-add'
+    | '/purchase-invoice'
     | '/purchase-ledger'
     | '/purchase-view'
     | '/purchase'
@@ -1236,6 +1259,7 @@ export interface FileRouteTypes {
     | '/_authenticated/mobile-repair/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-add/'
+    | '/_authenticated/purchase-invoice/'
     | '/_authenticated/purchase-ledger/'
     | '/_authenticated/purchase-view/'
     | '/_authenticated/purchase/'
@@ -1344,6 +1368,7 @@ export const routeTree = rootRoute
         "/_authenticated/mobile-repair/",
         "/_authenticated/products/",
         "/_authenticated/purchase-add/",
+        "/_authenticated/purchase-invoice/",
         "/_authenticated/purchase-ledger/",
         "/_authenticated/purchase-view/",
         "/_authenticated/purchase/",
@@ -1498,6 +1523,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/purchase-add/": {
       "filePath": "_authenticated/purchase-add/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/purchase-invoice/": {
+      "filePath": "_authenticated/purchase-invoice/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-ledger/": {

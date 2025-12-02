@@ -14,6 +14,7 @@ const createPurchase = {
     ).required(),
     totalAmount: Joi.number().required(),
     purchaseDate: Joi.date(),
+    notes: Joi.string().allow(''),
   }),
 };
 
@@ -52,6 +53,7 @@ const updatePurchase = {
     ),
     totalAmount: Joi.number(),
     purchaseDate: Joi.date(),
+    notes: Joi.string().allow(''),
   }),
 };
 
