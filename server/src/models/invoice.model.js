@@ -72,6 +72,12 @@ const InvoiceSchema = new mongoose.Schema({
     couponCode: { type: String },
     returnPolicy: { type: String },
     
+    // Conversion tracking for pending invoices
+    isConvertedToBill: { type: Boolean, default: false },
+    convertedAt: { type: Date },
+    convertedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice' }, // Reference to converted credit invoice
+    billNumber: { type: String }, // Unique bill number for converted pending invoices
+    
     // Additional information
     notes: { type: String },
     
@@ -86,7 +92,8 @@ const InvoiceSchema = new mongoose.Schema({
     
     // Audit fields
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    convertedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
     timestamps: true
 });
@@ -164,6 +171,29 @@ InvoiceSchema.methods.markAsPaid = function(amount, paymentMethod = 'cash', refe
     }
     
     return this;
+};
+
+// Static method to generate unique bill number
+InvoiceSchema.statics.generateBillNumber = async function() {
+    // Get the count of unique bill numbers (not just converted invoices count)
+    const lastBill = await this.findOne({ billNumber: { $exists: true, $ne: null } })
+        .sort({ billNumber: -1 })
+        .select('billNumber');
+    
+    let billCount = 1;
+    if (lastBill && lastBill.billNumber) {
+        // Extract number from format BILL-202512-000001
+        const match = lastBill.billNumber.match(/-([0-9]{6})$/);
+        if (match) {
+            billCount = parseInt(match[1]) + 1;
+        }
+    }
+    
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const uniqueId = String(billCount).padStart(6, '0');
+    
+    return `BILL-${year}${month}-${uniqueId}`;
 };
 
 // Static method to get invoice statistics

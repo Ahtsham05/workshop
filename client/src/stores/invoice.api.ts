@@ -152,6 +152,11 @@ export const invoiceApi = createApi({
       }),
       providesTags: ['Invoice'],
     }),
+
+    // Generate bill number
+    generateBillNumber: builder.query({
+      query: () => '/generate-bill-number',
+    }),
   }),
 })
 
@@ -169,4 +174,5 @@ export const {
   useGetDailySalesReportQuery,
   useGetOutstandingInvoicesQuery,
   useGetInvoicesByCustomerQuery,
+  useGenerateBillNumberQuery,
 } = invoiceApi

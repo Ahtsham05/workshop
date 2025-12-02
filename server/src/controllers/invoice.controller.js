@@ -28,6 +28,17 @@ const getInvoices = catchAsync(async (req, res) => {
   console.log('Invoice search - Filter:', filter);
   console.log('Invoice search - Options:', options);
   
+  // Handle isConvertedToBill filter explicitly
+  if (req.query.isConvertedToBill !== undefined) {
+    // If explicitly provided in query, use it
+    filter.isConvertedToBill = req.query.isConvertedToBill === 'true';
+    console.log('Explicitly filtering by isConvertedToBill:', filter.isConvertedToBill);
+  } else if (filter.type === 'pending') {
+    // If viewing pending invoices without explicit isConvertedToBill, filter to show only those not yet converted
+    filter.isConvertedToBill = false;
+    console.log('Auto-filtering pending invoices to show only unconverted');
+  }
+  
   // Add date range filter if provided
   if (req.query.dateFrom || req.query.dateTo) {
     filter.invoiceDate = {};
@@ -227,6 +238,15 @@ const duplicateInvoice = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(duplicatedInvoice);
 });
 
+const generateBillNumber = catchAsync(async (req, res) => {
+  const billNumber = await invoiceService.generateBillNumber();
+  // Prevent caching to ensure unique bill numbers
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.send({ billNumber });
+});
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -240,5 +260,6 @@ module.exports = {
   getInvoicesByCustomer,
   getOutstandingInvoices,
   cancelInvoice,
-  duplicateInvoice
+  duplicateInvoice,
+  generateBillNumber
 };

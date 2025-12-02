@@ -1,18 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+// import { Input } from '@/components/ui/input'
+// import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -46,11 +46,10 @@ import {
   Check,
   Clock,
   Plus,
-  FileText,
+  // FileText,
   AlertCircle,
-  Filter,
   CheckCircle,
-  History
+  // History
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
@@ -85,11 +84,6 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   // const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes] = useState('')
   const [dueDate, setDueDate] = useState<string>('')
-  const [viewMode, setViewMode] = useState<'pending' | 'converted' | 'all'>('pending')
-  const [dateFilter, setDateFilter] = useState({
-    from: format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'), // 30 days ago
-    to: format(new Date(), 'yyyy-MM-dd') // today
-  })
   
   const [createInvoice, { isLoading: isCreating }] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
@@ -101,71 +95,53 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     setDueDate(format(defaultDueDate, 'yyyy-MM-dd'))
   }, [])
 
-  // Fetch pending invoices for selected customer based on view mode
-  const { data: pendingInvoicesResponse, isLoading: loadingInvoices, refetch } = useGetInvoicesQuery(
+  // Fetch ALL invoices for selected customer (both pending and converted)
+  const { data: allInvoicesResponse, isLoading: loadingInvoices, refetch } = useGetInvoicesQuery(
     {
       customerId: selectedCustomerId,
-      limit: 100,
-      page: 1,
-      dateFrom: dateFilter.from,
-      dateTo: dateFilter.to
+      // No type filter - we want ALL invoices (pending, credit, cash)
+      limit: 1000, // Fetch all invoices
+      page: 1
+      // No date filter - we want ALL invoices regardless of date
     },
     {
       skip: !selectedCustomerId || selectedCustomerId === 'walk-in'
     }
   )
 
-  const pendingInvoices = pendingInvoicesResponse?.results || []
+  const allInvoices = allInvoicesResponse?.results || []
 
   // Get selected customer name
   const selectedCustomer = customers.find(c => (c._id || c.id) === selectedCustomerId)
+
+  // Separate pending (not converted) and converted invoices
+  // Unconverted: pending type invoices that haven't been converted yet
+  const unconvertedInvoices = useMemo(() => {
+    return allInvoices.filter((invoice: any) => 
+      invoice.type === 'pending' && !invoice.isConvertedToBill
+    )
+  }, [allInvoices])
+
+  // Converted: pending type invoices that have been converted (marked as sent to party)
+  const convertedInvoices = useMemo(() => {
+    return allInvoices.filter((invoice: any) => 
+      invoice.type === 'pending' && invoice.isConvertedToBill === true
+    )
+  }, [allInvoices])
 
   // Debug log
   useEffect(() => {
     console.log('Query params:', {
       customerId: selectedCustomerId,
-      limit: 100,
-      page: 1,
-      dateFrom: dateFilter.from,
-      dateTo: dateFilter.to,
-      viewMode
+      limit: 1000,
+      page: 1
     })
     console.log('Selected customer:', selectedCustomer)
-    console.log('Pending invoices response:', pendingInvoicesResponse)
-  }, [selectedCustomerId, dateFilter.from, dateFilter.to, viewMode, selectedCustomer, pendingInvoicesResponse])
-
-  // Force re-render when API data changes
-  useEffect(() => {
-    console.log('API data updated, pendingInvoices:', pendingInvoices.length, 'invoices')
-  }, [pendingInvoicesResponse])
-
-  // Filter invoices based on view mode and conversion status
-  const filteredInvoices = useMemo(() => {
-    console.log('Recalculating filteredInvoices...')
-    console.log('All invoices from API:', pendingInvoices.length, pendingInvoices)
-    console.log('Current view mode:', viewMode)
-    
-    if (viewMode === 'all') return pendingInvoices
-    
-    const filtered = pendingInvoices.filter((invoice: any) => {
-      const isConverted = invoice.convertedToCredit === true
-      
-      // An invoice is considered "pending" if:
-      // 1. It's NOT a credit invoice (credit invoices are not pending for conversion)
-      // 2. It's not already converted to credit
-      const isPending = invoice.type !== 'credit' && !isConverted
-      
-      console.log(`Invoice ${invoice.invoiceNumber}: type=${invoice.type}, status=${invoice.status}, balance=${invoice.balance}, isConverted=${isConverted}, isPending=${isPending}`)
-      
-      if (viewMode === 'converted') return isConverted
-      if (viewMode === 'pending') return isPending
-      
-      return true
-    })
-    
-    console.log(`Filtered ${filtered.length} invoices for mode "${viewMode}":`, filtered)
-    return filtered
-  }, [pendingInvoices, viewMode, pendingInvoicesResponse])
+    console.log('All invoices response:', allInvoicesResponse)
+    console.log('Total invoices fetched:', allInvoices.length)
+    console.log('Unconverted pending invoices:', unconvertedInvoices.length)
+    console.log('Converted pending invoices:', convertedInvoices.length)
+  }, [selectedCustomerId, selectedCustomer, allInvoicesResponse, allInvoices, unconvertedInvoices, convertedInvoices])
 
   // Debug customer selection
   useEffect(() => {
@@ -193,7 +169,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
 
     // Process each selected invoice
     selectedInvoices.forEach(invoiceId => {
-      const invoice = filteredInvoices.find((inv: any) => inv._id === invoiceId)
+      const invoice = unconvertedInvoices.find((inv: any) => inv._id === invoiceId)
       if (!invoice) return
 
       // Process each item in the invoice
@@ -226,7 +202,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     })
 
     return Array.from(itemMap.values())
-  }, [selectedInvoices, filteredInvoices])
+  }, [selectedInvoices, unconvertedInvoices])
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -257,30 +233,35 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
 
   // Select all invoices
   const selectAllInvoices = () => {
-    if (selectedInvoices.size === filteredInvoices.length) {
+    if (selectedInvoices.size === unconvertedInvoices.length) {
       setSelectedInvoices(new Set())
     } else {
-      setSelectedInvoices(new Set(filteredInvoices.map((inv: any) => inv._id)))
+      setSelectedInvoices(new Set(unconvertedInvoices.map((inv: any) => inv._id)))
     }
   }
 
-  // Mark pending invoices as converted
-  const markInvoicesAsConverted = async (invoiceIds: string[]) => {
+  // Mark pending invoices as converted with unique bill number
+  const markInvoicesAsConverted = async (invoiceIds: string[], creditInvoiceId: string, billNumber: string) => {
     try {
       const updatePromises = invoiceIds.map(invoiceId =>
         updateInvoice({
           id: invoiceId,
-          notes: `Converted to credit invoice on ${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}`
-          // Removed convertedToCredit and convertedAt fields as they're not allowed by backend
+          isConvertedToBill: true,
+          convertedAt: new Date().toISOString(),
+          convertedTo: creditInvoiceId,
+          billNumber: billNumber,
+          notes: `Bill sent to party on ${format(new Date(), 'yyyy-MM-dd HH:mm:ss')} - Bill #${billNumber}`
         }).unwrap()
       )
       
       await Promise.all(updatePromises)
+      console.log('Successfully marked invoices as converted with bill number:', billNumber, invoiceIds)
+      
+      // Refetch pending invoices to update the UI
+      setTimeout(() => refetch(), 500)
     } catch (error) {
       console.error('Failed to mark invoices as converted:', error)
-      // Don't throw - we still want to show success for the credit invoice creation
-      // In a production environment, you might want to implement this tracking differently
-      // For now, we'll create the credit invoice successfully but won't track the conversion status
+      toast.error('Failed to mark invoices as sent to party')
     }
   }
 
@@ -336,6 +317,41 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     }
 
     try {
+      // Generate unique bill number first using fetch with timestamp to avoid caching
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
+      const billNumberResponse = await fetch(`${baseUrl}/invoices/generate-bill-number?t=${Date.now()}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
+      
+      console.log('Bill number response status:', billNumberResponse.status)
+      
+      if (!billNumberResponse.ok) {
+        const errorData = await billNumberResponse.json().catch(() => ({}))
+        console.error('Bill number generation error:', errorData)
+        throw new Error(errorData.message || 'Failed to generate bill number')
+      }
+      
+      const responseData = await billNumberResponse.json()
+      console.log('Bill number response:', responseData)
+      
+      const { billNumber } = responseData
+      
+      if (!billNumber) {
+        throw new Error('No bill number returned from server')
+      }
+      
+      console.log('Generated bill number:', billNumber)
+
+      // Validate converted items
+      if (convertedItems.some(item => !item.productId)) {
+        throw new Error('Some items are missing productId')
+      }
+
       // Prepare invoice data
       const invoiceData = {
         items: convertedItems.map(item => ({
@@ -360,22 +376,29 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         paidAmount: 0,
         balance: totals.total,
         dueDate: dueDate,
-        notes: notes || `Converted from pending invoices: ${Array.from(selectedInvoices).join(', ')}`,
+        notes: notes || `Converted from ${selectedInvoices.size} pending invoices - Bill #${billNumber}`,
         deliveryCharge: 0,
         serviceCharge: 0,
         roundingAdjustment: 0
       }
+      
+      console.log('Prepared invoice data:', JSON.stringify(invoiceData, null, 2))
 
       // Create the credit invoice
+      console.log('Creating credit invoice with data:', invoiceData)
       const result = await createInvoice(invoiceData).unwrap()
+      console.log('Credit invoice created successfully:', result)
       
-      // Mark the selected pending invoices as converted
-      await markInvoicesAsConverted(Array.from(selectedInvoices))
+      // Mark the selected pending invoices as converted with the unique bill number
+      console.log('Marking invoices as converted...')
+      await markInvoicesAsConverted(Array.from(selectedInvoices), result._id, billNumber)
+      console.log('Invoices marked as converted successfully')
       
-      toast.success(t('credit_invoice_created_successfully'))
+      toast.success(`${t('credit_invoice_created_successfully')} - Bill #${billNumber}`)
 
       // Print if requested
       if (printType !== 'none') {
+        console.log('Printing invoice...')
         printInvoice(result, printType)
       }
 
@@ -384,8 +407,11 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       setNotes('')
       
     } catch (error: any) {
-      console.error('Failed to create credit invoice:', error)
-      toast.error(error?.data?.message || t('failed_to_create_invoice'))
+      console.error('Failed to create credit invoice - Full error:', error)
+      console.error('Error response:', error?.response)
+      console.error('Error data:', error?.data)
+      const errorMessage = error?.data?.message || error?.message || t('failed_to_create_invoice')
+      toast.error(`Failed to convert: ${errorMessage}`)
     }
   }
 
@@ -524,99 +550,27 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
               </CardContent>
             </Card>
 
-            {/* Pending Invoices */}
+            {/* Pending Invoices - For Selection */}
             {selectedCustomerId && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      {viewMode === 'pending' ? t('pending_invoices') : 
-                       viewMode === 'converted' ? t('converted_invoices') : 
-                       t('all_invoices')}
-                      {filteredInvoices.length > 0 && (
-                        <Badge variant="secondary">{filteredInvoices.length}</Badge>
+                      <Clock className="h-5 w-5" />
+                      {t('pending_invoices')}
+                      {unconvertedInvoices.length > 0 && (
+                        <Badge variant="secondary">{unconvertedInvoices.length}</Badge>
                       )}
                     </CardTitle>
-                    <div className="flex items-center gap-2">
-                      {/* View Mode Selector */}
-                      <Select value={viewMode} onValueChange={(value: 'pending' | 'converted' | 'all') => setViewMode(value)}>
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pending">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              {t('pending_only')}
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="converted">
-                            <div className="flex items-center gap-2">
-                              <CheckCircle className="h-4 w-4" />
-                              {t('converted_only')}
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="all">
-                            <div className="flex items-center gap-2">
-                              <History className="h-4 w-4" />
-                              {t('all_invoices')}
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {viewMode === 'pending' && filteredInvoices.length > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={selectAllInvoices}
-                        >
-                          {selectedInvoices.size === filteredInvoices.length ? t('deselect_all') : t('select_all')}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Date Filter */}
-                  <div className="flex items-center gap-4 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                      <Filter className="h-4 w-4" />
-                      <Label className="text-sm font-medium">{t('filter_by_date_range')}</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="date"
-                        value={dateFilter.from}
-                        onChange={(e) => {
-                          console.log('Changing from date to:', e.target.value)
-                          setDateFilter(prev => ({ ...prev, from: e.target.value }))
-                          // Trigger refetch after a short delay
-                          setTimeout(() => {
-                            console.log('Triggering refetch for from date change')
-                            refetch()
-                          }, 100)
-                        }}
-                        className="w-36"
-                        title={t('from_date')}
-                      />
-                      <span className="text-muted-foreground">to</span>
-                      <Input
-                        type="date"
-                        value={dateFilter.to}
-                        onChange={(e) => {
-                          console.log('Changing to date to:', e.target.value)
-                          setDateFilter(prev => ({ ...prev, to: e.target.value }))
-                          // Trigger refetch after a short delay
-                          setTimeout(() => {
-                            console.log('Triggering refetch for to date change')
-                            refetch()
-                          }, 100)
-                        }}
-                        className="w-36"
-                        title={t('to_date')}
-                      />
-                    </div>
+                    {unconvertedInvoices.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={selectAllInvoices}
+                      >
+                        {selectedInvoices.size === unconvertedInvoices.length ? t('deselect_all') : t('select_all')}
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -625,112 +579,197 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                       <p>{t('loading_invoices')}</p>
                     </div>
-                  ) : filteredInvoices.length === 0 ? (
+                  ) : unconvertedInvoices.length === 0 ? (
                     <div className="text-center py-8">
                       <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-muted-foreground">
-                        {viewMode === 'pending' ? t('no_pending_invoices_found') : 
-                         viewMode === 'converted' ? t('no_converted_invoices_found') : 
-                         t('no_invoices_found')}
-                      </p>
+                      <p className="text-muted-foreground">{t('no_pending_invoices_found')}</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {filteredInvoices.map((invoice: any) => {
-                        const isConverted = invoice.convertedToCredit === true
+                      {unconvertedInvoices.map((invoice: any) => {
                         const isSelected = selectedInvoices.has(invoice._id)
                         
                         return (
                           <div
                             key={invoice._id}
-                            className={`border rounded-lg p-4 transition-colors ${
+                            className={`border rounded-lg p-4 transition-colors cursor-pointer ${
                               isSelected
                                 ? 'border-primary bg-primary/5'
-                                : isConverted 
-                                ? 'border-green-200 bg-green-50'
                                 : 'border-border hover:border-primary/50'
-                            } ${viewMode === 'pending' && !isConverted ? 'cursor-pointer' : ''}`}
-                            onClick={() => {
-                              if (viewMode === 'pending' && !isConverted) {
-                                toggleInvoiceSelection(invoice._id)
-                              }
-                            }}
+                            }`}
+                            onClick={() => toggleInvoiceSelection(invoice._id)}
                           >
                             <div className="flex items-center gap-3">
-                              {viewMode === 'pending' && !isConverted && (
-                                <Checkbox
-                                  checked={isSelected}
-                                  onChange={() => toggleInvoiceSelection(invoice._id)}
-                                />
-                              )}
+                              <Checkbox
+                                checked={isSelected}
+                                onChange={() => toggleInvoiceSelection(invoice._id)}
+                              />
                               
                               <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="font-medium">{invoice.invoiceNumber}</div>
-                                        {/* Show invoice type badge */}
-                                        <Badge 
-                                          variant="outline" 
-                                          className={`text-xs ${
-                                            invoice.type === 'credit' 
-                                              ? 'bg-green-100 text-green-800' 
-                                              : invoice.type === 'cash'
-                                              ? 'bg-blue-100 text-blue-800'
-                                              : 'bg-yellow-100 text-yellow-800'
-                                          }`}
-                                        >
-                                          {invoice.type === 'credit' && <CheckCircle className="h-3 w-3 mr-1" />}
-                                          {invoice.type === 'cash' && <Receipt className="h-3 w-3 mr-1" />}
-                                          {invoice.type !== 'credit' && invoice.type !== 'cash' && <Clock className="h-3 w-3 mr-1" />}
-                                          {invoice.type?.toUpperCase() || 'PENDING'}
-                                        </Badge>
-                                        {/* Show conversion status if converted */}
-                                        {isConverted && (
-                                          <Badge variant="outline" className="text-xs bg-purple-100 text-purple-800">
-                                            <History className="h-3 w-3 mr-1" />
-                                            {t('converted')}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {format(new Date(invoice.createdAt), 'MMM dd, yyyy')} • 
-                                        {invoice.items.length} {t('items')}
-                                        {isConverted && invoice.convertedAt && (
-                                          <span> • {t('converted_on')} {format(new Date(invoice.convertedAt), 'MMM dd, yyyy')}</span>
-                                        )}
-                                      </div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="font-medium">{invoice.invoiceNumber}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {format(new Date(invoice.createdAt), 'MMM dd, yyyy')}
+                                  </div>
+                                </div>
+                                
+                                {/* Show items list */}
+                                <div className="text-sm space-y-1 mb-2">
+                                  {invoice.items.slice(0, 3).map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between text-muted-foreground">
+                                      <span>{item.name}</span>
+                                      <span>Qty: {item.quantity}</span>
                                     </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="font-medium">Rs {invoice.total.toFixed(2)}</div>
-                                    <Badge 
-                                      variant="outline" 
-                                      className={`text-xs ${
-                                        invoice.type === 'credit' 
-                                          ? 'bg-green-100 text-green-800' 
-                                          : invoice.type === 'cash'
-                                          ? 'bg-blue-100 text-blue-800'
-                                          : 'bg-yellow-100 text-yellow-800'
-                                      }`}
-                                    >
-                                      {invoice.type?.toUpperCase() || 'PENDING'}
-                                    </Badge>
-                                  </div>
+                                  ))}
+                                  {invoice.items.length > 3 && (
+                                    <div className="text-xs text-muted-foreground">
+                                      +{invoice.items.length - 3} more items
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                              
-                              {isConverted && (
-                                <div className="text-green-600">
-                                  <CheckCircle className="h-5 w-5" />
-                                </div>
-                              )}
                             </div>
                           </div>
                         )
                       })}
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Converted Invoices - Table View */}
+            {selectedCustomerId && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    {t('converted_invoices')}
+                    {convertedInvoices.length > 0 && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800">
+                        {convertedInvoices.length}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {convertedInvoices.length === 0 ? (
+                    <div className="text-center py-8">
+                      <CheckCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground">{t('no_converted_invoices_found')}</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('bill_number')}</TableHead>
+                          <TableHead>{t('date')}</TableHead>
+                          <TableHead className="text-right">{t('total')}</TableHead>
+                          <TableHead className="text-right">{t('actions')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {convertedInvoices.map((invoice: any) => (
+                        <TableRow key={invoice._id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-mono font-semibold text-green-600">
+                                {invoice.billNumber || 'N/A'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {invoice.invoiceNumber}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-sm">
+                                {format(new Date(invoice.convertedAt || invoice.createdAt), 'MMM dd, yyyy')}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(invoice.convertedAt || invoice.createdAt), 'hh:mm a')}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            Rs {invoice.total?.toFixed(2) || '0.00'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const printData: PrintInvoiceData = {
+                                    invoiceNumber: invoice.invoiceNumber,
+                                    items: invoice.items.map((item: any) => ({
+                                      name: item.name,
+                                      quantity: item.quantity,
+                                      unitPrice: item.unitPrice,
+                                      subtotal: item.subtotal
+                                    })),
+                                    customerId: selectedCustomer,
+                                    customerName: selectedCustomer?.name,
+                                    type: 'credit',
+                                    subtotal: invoice.subtotal,
+                                    tax: invoice.tax || 0,
+                                    discount: invoice.discount || 0,
+                                    total: invoice.total,
+                                    paidAmount: invoice.paidAmount || 0,
+                                    balance: invoice.balance || invoice.total,
+                                    dueDate: invoice.dueDate,
+                                    notes: invoice.notes,
+                                    deliveryCharge: 0,
+                                    serviceCharge: 0
+                                  }
+                                  const htmlContent = generateInvoiceHTML(printData)
+                                  openPrintWindow(htmlContent)
+                                }}
+                                className="flex items-center gap-1"
+                              >
+                                <Receipt className="h-3 w-3" />
+                                Print
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const printData: PrintInvoiceData = {
+                                    invoiceNumber: invoice.invoiceNumber,
+                                    items: invoice.items.map((item: any) => ({
+                                      name: item.name,
+                                      quantity: item.quantity,
+                                      unitPrice: item.unitPrice,
+                                      subtotal: item.subtotal
+                                    })),
+                                    customerId: selectedCustomer,
+                                    customerName: selectedCustomer?.name,
+                                    type: 'credit',
+                                    subtotal: invoice.subtotal,
+                                    tax: invoice.tax || 0,
+                                    discount: invoice.discount || 0,
+                                    total: invoice.total,
+                                    paidAmount: invoice.paidAmount || 0,
+                                    balance: invoice.balance || invoice.total,
+                                    dueDate: invoice.dueDate,
+                                    notes: invoice.notes,
+                                    deliveryCharge: 0,
+                                    serviceCharge: 0
+                                  }
+                                  const htmlContent = generateA4InvoiceHTML(printData)
+                                  openA4PrintWindow(htmlContent)
+                                }}
+                                className="flex items-center gap-1"
+                              >
+                                <Printer className="h-3 w-3" />
+                                A4
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   )}
                 </CardContent>
               </Card>

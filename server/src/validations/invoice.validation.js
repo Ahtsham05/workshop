@@ -65,6 +65,7 @@ const getInvoices = {
     dateFrom: Joi.date(),
     dateTo: Joi.date(),
     search: Joi.string(),
+    isConvertedToBill: Joi.string().valid('true', 'false'),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer()
@@ -108,6 +109,10 @@ const updateInvoice = {
     returnPolicy: Joi.string().allow('').optional(),
     notes: Joi.string().allow('').optional(),
     status: Joi.string().valid('draft', 'finalized', 'paid', 'cancelled', 'refunded').optional(),
+    isConvertedToBill: Joi.boolean().optional(),
+    convertedAt: Joi.date().optional(),
+    convertedTo: Joi.string().custom(objectId).optional(),
+    billNumber: Joi.string().optional(),
     allowUpdateFinalized: Joi.boolean().optional()
   })
 };

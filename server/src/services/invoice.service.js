@@ -9,6 +9,11 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Invoice>}
  */
 const createInvoice = async (invoiceBody, userId) => {
+  console.log('=== Creating Invoice ===');
+  console.log('Invoice type:', invoiceBody.type);
+  console.log('Number of items:', invoiceBody.items?.length);
+  console.log('Customer ID:', invoiceBody.customerId);
+  
   // Validate required fields
   if (!invoiceBody.items || invoiceBody.items.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invoice must have at least one item');
@@ -20,22 +25,31 @@ const createInvoice = async (invoiceBody, userId) => {
     if (!customer) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
     }
+    console.log('Customer validated:', customer.name);
   }
 
   // Validate products and calculate totals
   const validatedItems = [];
   for (const item of invoiceBody.items) {
     if (!item.productId) {
+      console.error('Missing productId for item:', item);
       throw new ApiError(httpStatus.BAD_REQUEST, 'Product ID is required for all items');
     }
 
     const product = await Product.findById(item.productId);
     if (!product) {
+      console.error('Product not found:', item.productId);
       throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
     }
 
-    // Check stock availability
-    if (product.stockQuantity < item.quantity) {
+    // Check stock availability - but skip for credit invoices converted from pending
+    // because stock was already reduced when pending invoice was created
+    if (invoiceBody.type !== 'credit' && product.stockQuantity < item.quantity) {
+      console.error('Insufficient stock:', {
+        product: product.name,
+        available: product.stockQuantity,
+        requested: item.quantity
+      });
       throw new ApiError(
         httpStatus.BAD_REQUEST, 
         `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`
@@ -75,14 +89,21 @@ const createInvoice = async (invoiceBody, userId) => {
   }
 
   await invoice.save();
+  console.log('Invoice saved with ID:', invoice._id);
 
   // Update product stock quantities
-  for (const item of validatedItems) {
-    await Product.findByIdAndUpdate(
-      item.productId,
-      { $inc: { stockQuantity: -item.quantity } },
-      { new: true }
-    );
+  // Skip stock reduction for credit invoices (stock was already reduced when pending invoice was created)
+  if (invoice.type !== 'credit') {
+    console.log('Updating stock quantities...');
+    for (const item of validatedItems) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { stockQuantity: -item.quantity } },
+        { new: true }
+      );
+    }
+  } else {
+    console.log('Skipping stock reduction for credit invoice');
   }
 
   // Populate references conditionally
@@ -296,13 +317,19 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     }
   }
 
+  console.log('Updating invoice:', invoiceId);
+  console.log('Update fields:', Object.keys(updateBody));
+  
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
   
-  // Recalculate totals
-  invoice.calculateTotals();
+  // Recalculate totals only if items were updated
+  if (updateBody.items) {
+    invoice.calculateTotals();
+  }
   
   await invoice.save();
+  console.log('Invoice updated successfully');
   
   // Return populated invoice with customerName
   return getInvoiceById(invoiceId);
@@ -475,6 +502,14 @@ const getDailySalesReport = async (date = new Date()) => {
   return report;
 };
 
+/**
+ * Generate unique bill number
+ * @returns {Promise<string>}
+ */
+const generateBillNumber = async () => {
+  return await Invoice.generateBillNumber();
+};
+
 module.exports = {
   createInvoice,
   queryInvoices,
@@ -484,5 +519,6 @@ module.exports = {
   finalizeInvoice,
   processPayment,
   getInvoiceStatistics,
-  getDailySalesReport
+  getDailySalesReport,
+  generateBillNumber
 };

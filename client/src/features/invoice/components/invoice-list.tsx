@@ -63,9 +63,10 @@ const statusColors: Record<string, string> = {
 }
 
 const typeColors: Record<string, string> = {
-  cash: 'bg-green-100 text-green-800',
+  cash: 'bg-emerald-100 text-emerald-800',
   credit: 'bg-blue-100 text-blue-800',
   pending: 'bg-yellow-100 text-yellow-800',
+  'pending-converted': 'bg-green-500 text-white', // Converted pending invoices - bright green
 }
 
 export function InvoiceList({ onBack, onCreateNew, onEdit, 
@@ -91,13 +92,23 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery({
+  // Build query parameters
+  const queryParams = {
     page: currentPage,
     limit: itemsPerPage,
     ...(debouncedSearch && { search: debouncedSearch }),
     ...(statusFilter !== 'all' && { status: statusFilter }),
-    ...(typeFilter !== 'all' && { type: typeFilter })
-  })
+    ...(typeFilter === 'pending-converted' 
+      ? { type: 'pending', isConvertedToBill: 'true' } 
+      : typeFilter !== 'all' 
+        ? { type: typeFilter } 
+        : {})
+  }
+  
+  console.log('Query Parameters being sent:', queryParams)
+  console.log('Type Filter Value:', typeFilter)
+  
+  const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
   const { data: customersData } = useGetAllCustomersQuery(undefined)
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
@@ -185,6 +196,21 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
 
   // Debug logging
   console.log('Invoice API Response:', { invoicesResponse, isLoading, error })
+  console.log('Type Filter:', typeFilter)
+  
+  // Debug invoice conversion status
+  if (invoicesResponse?.results) {
+    invoicesResponse.results.forEach((inv: any) => {
+      if (inv.type === 'pending') {
+        console.log('Pending Invoice:', {
+          number: inv.invoiceNumber,
+          isConvertedToBill: inv.isConvertedToBill,
+          type: inv.type,
+          shouldBeGreen: inv.isConvertedToBill === true
+        })
+      }
+    })
+  }
 
   const handleDelete = (invoice: any) => {
     setInvoiceToDelete(invoice)
@@ -307,6 +333,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <SelectItem value="cash">{t('cash')}</SelectItem>
                   <SelectItem value="credit">{t('credit')}</SelectItem>
                   <SelectItem value="pending">{t('pending')}</SelectItem>
+                  <SelectItem value="pending-converted">{t('converted_pending')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -359,6 +386,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead>{t('customer')}</TableHead>
                   <TableHead>{t('phone')}</TableHead>
                   <TableHead>{t('type')}</TableHead>
+                  <TableHead>{t('bill_number')}</TableHead>
                   <TableHead>{t('date')}</TableHead>
                   <TableHead>{t('amount')}</TableHead>
                   {/* <TableHead>{t('status')}</TableHead> */}
@@ -378,9 +406,24 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       {getCustomerPhone(invoice)}
                     </TableCell>
                     <TableCell>
-                      <Badge className={typeColors[invoice.type || 'cash']}>
-                        {t(invoice.type || 'cash')}
+                      <Badge className={typeColors[
+                        invoice.type === 'pending' && invoice.isConvertedToBill === true
+                          ? 'pending-converted' 
+                          : invoice.type || 'cash'
+                      ]}>
+                        {invoice.type === 'pending' && invoice.isConvertedToBill === true
+                          ? t('converted_pending')
+                          : t(invoice.type || 'cash')}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {invoice.billNumber ? (
+                        <span className="font-mono text-sm font-medium text-green-600">
+                          {invoice.billNumber}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}

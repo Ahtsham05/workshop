@@ -259,6 +259,7 @@ const translations: Translations = {
     "no_converted_invoices_found": "No converted invoices found",
     "converted": "Converted",
     "converted_on": "converted on",
+    "converted_pending": "Converted Pending",
     "date_range": "Date Range",
     "filter_by_date_range": "Filter by Date Range",
     "from_date": "From Date",
@@ -277,6 +278,7 @@ const translations: Translations = {
     "error_loading_invoices": "Error loading invoices",
     "unknown_error": "Unknown error",
     "invoice_number": "Invoice #",
+    "bill_number": "Bill #",
     "all_statuses": "All statuses",
     "all_types": "All types",
     "draft": "Draft",
@@ -862,6 +864,7 @@ const translations: Translations = {
     "no_converted_invoices_found": "کوئی تبدیل شدہ انوائس نہیں ملی",
     "converted": "تبدیل شدہ",
     "converted_on": "پر تبدیل کیا گیا",
+    "converted_pending": "تبدیل شدہ زیر التواء",
     "date_range": "تاریخ کی حد",
     
     // Invoice List
@@ -871,6 +874,7 @@ const translations: Translations = {
     "error_loading_invoices": "انوائسز لوڈ کرنے میں خرابی",
     "unknown_error": "نامعلوم خرابی",
     "invoice_number": "انوائس #",
+    "bill_number": "بل #",
     "all_statuses": "تمام حالات",
     "all_types": "تمام اقسام",
     "draft": "مسودہ",

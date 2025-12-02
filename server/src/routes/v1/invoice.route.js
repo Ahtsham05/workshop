@@ -12,6 +12,10 @@ router
   .get(auth('getInvoices'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
 
 router
+  .route('/generate-bill-number')
+  .get(auth('manageInvoices'), invoiceController.generateBillNumber);
+
+router
   .route('/statistics')
   .get(auth('getInvoices'), validate(invoiceValidation.getInvoiceStatistics), invoiceController.getInvoiceStatistics);
 
