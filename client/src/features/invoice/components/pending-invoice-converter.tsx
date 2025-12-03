@@ -129,6 +129,60 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     )
   }, [allInvoices])
 
+  // Group converted invoices by bill number
+  const groupedConvertedBills = useMemo(() => {
+    const billGroups = new Map<string, {
+      billNumber: string
+      invoices: any[]
+      totalAmount: number
+      items: any[]
+      convertedAt: string
+      dueDate?: string
+      notes: string
+    }>()
+
+    convertedInvoices.forEach((invoice: any) => {
+      const billNumber = invoice.billNumber || 'N/A'
+      
+      if (billGroups.has(billNumber)) {
+        // Add to existing bill group
+        const group = billGroups.get(billNumber)!
+        group.invoices.push(invoice)
+        group.totalAmount += invoice.total || 0
+        // Merge items
+        invoice.items?.forEach((item: any) => {
+          const existingItemIndex = group.items.findIndex((groupItem: any) => 
+            groupItem.productId === item.productId || groupItem.name === item.name
+          )
+          if (existingItemIndex !== -1) {
+            // Create a new item with merged quantities instead of modifying existing
+            const existingItem = group.items[existingItemIndex]
+            group.items[existingItemIndex] = {
+              ...existingItem,
+              quantity: existingItem.quantity + item.quantity,
+              subtotal: existingItem.subtotal + item.subtotal
+            }
+          } else {
+            group.items.push({ ...item })
+          }
+        })
+      } else {
+        // Create new bill group
+        billGroups.set(billNumber, {
+          billNumber,
+          invoices: [invoice],
+          totalAmount: invoice.total || 0,
+          items: invoice.items ? [...invoice.items] : [],
+          convertedAt: invoice.convertedAt || invoice.createdAt,
+          dueDate: invoice.dueDate,
+          notes: invoice.notes || ''
+        })
+      }
+    })
+
+    return Array.from(billGroups.values())
+  }, [convertedInvoices])
+
   // Debug log
   useEffect(() => {
     console.log('Query params:', {
@@ -141,7 +195,9 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     console.log('Total invoices fetched:', allInvoices.length)
     console.log('Unconverted pending invoices:', unconvertedInvoices.length)
     console.log('Converted pending invoices:', convertedInvoices.length)
-  }, [selectedCustomerId, selectedCustomer, allInvoicesResponse, allInvoices, unconvertedInvoices, convertedInvoices])
+    console.log('Grouped converted bills:', groupedConvertedBills.length)
+    console.log('Grouped bills data:', groupedConvertedBills)
+  }, [selectedCustomerId, selectedCustomer, allInvoicesResponse, allInvoices, unconvertedInvoices, convertedInvoices, groupedConvertedBills])
 
   // Debug customer selection
   useEffect(() => {
@@ -645,15 +701,15 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   <CardTitle className="flex items-center gap-2">
                     <CheckCircle className="h-5 w-5 text-green-600" />
                     {t('converted_invoices')}
-                    {convertedInvoices.length > 0 && (
+                    {groupedConvertedBills.length > 0 && (
                       <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        {convertedInvoices.length}
+                        {groupedConvertedBills.length}
                       </Badge>
                     )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {convertedInvoices.length === 0 ? (
+                  {groupedConvertedBills.length === 0 ? (
                     <div className="text-center py-8">
                       <CheckCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                       <p className="text-muted-foreground">{t('no_converted_invoices_found')}</p>
@@ -664,35 +720,41 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                         <TableRow>
                           <TableHead>{t('bill_number')}</TableHead>
                           <TableHead>{t('date')}</TableHead>
+                          <TableHead className="text-center">{t('invoices_count')}</TableHead>
                           <TableHead className="text-right">{t('total')}</TableHead>
                           <TableHead className="text-right">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {convertedInvoices.map((invoice: any) => (
-                        <TableRow key={invoice._id}>
+                        {groupedConvertedBills.map((billGroup) => (
+                        <TableRow key={billGroup.billNumber}>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="font-mono font-semibold text-green-600">
-                                {invoice.billNumber || 'N/A'}
+                                {billGroup.billNumber}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {invoice.invoiceNumber}
+                                {billGroup.invoices.length} invoice(s) merged
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-sm">
-                                {format(new Date(invoice.convertedAt || invoice.createdAt), 'MMM dd, yyyy')}
+                                {format(new Date(billGroup.convertedAt), 'MMM dd, yyyy')}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {format(new Date(invoice.convertedAt || invoice.createdAt), 'hh:mm a')}
+                                {format(new Date(billGroup.convertedAt), 'hh:mm a')}
                               </span>
                             </div>
                           </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="text-xs">
+                              {billGroup.invoices.length}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-right font-medium">
-                            Rs {invoice.total?.toFixed(2) || '0.00'}
+                            Rs {billGroup.totalAmount.toFixed(2)}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -701,8 +763,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 size="sm"
                                 onClick={() => {
                                   const printData: PrintInvoiceData = {
-                                    invoiceNumber: invoice.invoiceNumber,
-                                    items: invoice.items.map((item: any) => ({
+                                    invoiceNumber: billGroup.billNumber,
+                                    items: billGroup.items.map((item: any) => ({
                                       name: item.name,
                                       quantity: item.quantity,
                                       unitPrice: item.unitPrice,
@@ -711,14 +773,14 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     customerId: selectedCustomer,
                                     customerName: selectedCustomer?.name,
                                     type: 'credit',
-                                    subtotal: invoice.subtotal,
-                                    tax: invoice.tax || 0,
-                                    discount: invoice.discount || 0,
-                                    total: invoice.total,
-                                    paidAmount: invoice.paidAmount || 0,
-                                    balance: invoice.balance || invoice.total,
-                                    dueDate: invoice.dueDate,
-                                    notes: invoice.notes,
+                                    subtotal: billGroup.totalAmount,
+                                    tax: 0,
+                                    discount: 0,
+                                    total: billGroup.totalAmount,
+                                    paidAmount: 0,
+                                    balance: billGroup.totalAmount,
+                                    dueDate: billGroup.dueDate,
+                                    notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
                                     deliveryCharge: 0,
                                     serviceCharge: 0
                                   }
@@ -735,8 +797,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 size="sm"
                                 onClick={() => {
                                   const printData: PrintInvoiceData = {
-                                    invoiceNumber: invoice.invoiceNumber,
-                                    items: invoice.items.map((item: any) => ({
+                                    invoiceNumber: billGroup.billNumber,
+                                    items: billGroup.items.map((item: any) => ({
                                       name: item.name,
                                       quantity: item.quantity,
                                       unitPrice: item.unitPrice,
@@ -745,14 +807,14 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     customerId: selectedCustomer,
                                     customerName: selectedCustomer?.name,
                                     type: 'credit',
-                                    subtotal: invoice.subtotal,
-                                    tax: invoice.tax || 0,
-                                    discount: invoice.discount || 0,
-                                    total: invoice.total,
-                                    paidAmount: invoice.paidAmount || 0,
-                                    balance: invoice.balance || invoice.total,
-                                    dueDate: invoice.dueDate,
-                                    notes: invoice.notes,
+                                    subtotal: billGroup.totalAmount,
+                                    tax: 0,
+                                    discount: 0,
+                                    total: billGroup.totalAmount,
+                                    paidAmount: 0,
+                                    balance: billGroup.totalAmount,
+                                    dueDate: billGroup.dueDate,
+                                    notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
                                     deliveryCharge: 0,
                                     serviceCharge: 0
                                   }

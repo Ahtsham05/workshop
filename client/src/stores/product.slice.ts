@@ -123,7 +123,11 @@ const productSlice = createSlice({
             .addCase(fetchAllProducts.fulfilled, (state, action) => {
                 state.data = action.payload; // Assuming payload contains the list of products
                 //products array extract id and name and set into state products with value and label
-                state.products = action.payload.map((product: any) => ({ value: product.id, label: product.name, ...product }));
+                state.products = action.payload.map((product: any) => ({ 
+                    ...product, // Spread product first to preserve all original fields including id
+                    value: product.id, 
+                    label: product.name 
+                }));
             })
             .addCase(bulkUpdateProducts.fulfilled, (state, action) => {
                 // Update the products in state with the returned updated products

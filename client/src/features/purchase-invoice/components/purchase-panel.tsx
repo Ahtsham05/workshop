@@ -6,19 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Trash2, Package, Printer, Save, ArrowLeft, Search, ChevronDown, Check, Minus, Plus, Loader2 } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -54,10 +46,20 @@ export default function PurchasePanel({
   const { t } = useLanguage()
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
+  const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
   const suppliers: Supplier[] = suppliersData?.results || []
+
+  // Filter suppliers by search query
+  const filteredSuppliers = suppliers.filter(supplier => {
+    if (!supplierSearchQuery) return true
+    const query = supplierSearchQuery.toLowerCase()
+    const name = supplier.name?.toLowerCase() || ''
+    const phone = supplier.phone?.toLowerCase() || ''
+    return name.includes(query) || phone.includes(query)
+  })
 
   // RTK Query mutations
   const [createPurchase] = useCreatePurchaseMutation()
@@ -103,7 +105,7 @@ export default function PurchasePanel({
   const handleSavePurchase = useCallback(
     async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
       // Validation
-      if (!purchase.supplier?._id) {
+      if (!(purchase.supplier?._id || purchase.supplier?.id)) {
         toast.error(t('Please select a supplier'))
         return
       }
@@ -119,13 +121,23 @@ export default function PurchasePanel({
 
       // Map to backend format
       const purchaseData = {
-        supplier: purchase.supplier._id,
-        items: purchase.items.map((item) => ({
-          product: item.product._id,
-          quantity: item.quantity,
-          priceAtPurchase: item.purchasePrice,
-          total: item.quantity * item.purchasePrice,
-        })),
+        supplier: purchase.supplier._id || purchase.supplier.id,
+        items: purchase.items.map((item) => {
+          const productId = item.product._id || item.product.id;
+          
+          if (!productId) {
+            console.error(`Product has no valid ID!`, item.product);
+            toast.error(`Product "${item.product.name}" has no valid ID. Please refresh the product list and try again.`);
+            throw new Error(`Product "${item.product.name}" has no valid ID`);
+          }
+          
+          return {
+            product: productId,
+            quantity: item.quantity,
+            priceAtPurchase: item.purchasePrice,
+            total: item.quantity * item.purchasePrice,
+          };
+        }),
         totalAmount: totals.total,
         purchaseDate: purchase.date || new Date().toISOString(),
         notes: purchase.notes?.trim() || undefined,
@@ -212,9 +224,7 @@ export default function PurchasePanel({
             </div>
           )}
           
-          <div>
-          {/* Supplier Selection */}
-            <Label className="mb-2">
+           <Label className="mb-2">
               {t('Supplier')} <span className="text-red-500">*</span>
             </Label>
             <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
@@ -223,26 +233,30 @@ export default function PurchasePanel({
                   variant="outline"
                   role="combobox"
                   aria-expanded={supplierSelectOpen}
-                  className={`w-full justify-between min-h-[2.5rem] h-auto py-2 ${
-                    !purchase.supplier?._id ? 'border-red-500 bg-red-50' : ''
+                  className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
+                    !(purchase.supplier?._id || purchase.supplier?.id) ? 'border-red-500 bg-red-50' : ''
                   }`}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <Search className="w-4 h-4 flex-shrink-0" />
-                    {purchase.supplier?._id ? (
-                      <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
-                        <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] font-medium text-white">
-                            {purchase.supplier.name?.charAt(0).toUpperCase() || 'S'}
+                    {(purchase.supplier?._id || purchase.supplier?.id) ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                          <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                            <span className="text-[10px] font-medium text-white">
+                              {purchase.supplier.name?.charAt(0).toUpperCase() || 'S'}
+                            </span>
+                          </div>
+                          <span className="text-xs truncate" title={purchase.supplier.name}>
+                            {purchase.supplier.name}
                           </span>
-                        </div>
-                        <span className="text-xs truncate" title={purchase.supplier.name}>
-                          {purchase.supplier.name}
-                        </span>
-                      </Badge>
+                        </Badge>
+                      </div>
                     ) : (
-                      <span className="truncate text-red-500" title={t('Select supplier')}>
-                        {t('Select supplier')} *
+                      <span className={`truncate ${
+                        !(purchase.supplier?._id || purchase.supplier?.id) ? 'text-red-500' : 'text-muted-foreground'
+                      }`} title={t('Select supplier')}>
+                        {t('Select supplier')} {!(purchase.supplier?._id || purchase.supplier?.id) && '*'}
                       </span>
                     )}
                   </div>
@@ -250,60 +264,93 @@ export default function PurchasePanel({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput placeholder={t('Search suppliers...')} />
-                  <CommandList>
-                    <CommandEmpty>{t('No supplier found')}</CommandEmpty>
-                    <CommandGroup>
-                      {suppliers
-                        .filter((supplier) => {
-                          const searchInput = document.querySelector('[cmdk-input]') as HTMLInputElement
-                          const searchValue = searchInput?.value?.toLowerCase() || ''
-                          if (!searchValue) return true
-                          return (
-                            supplier.name?.toLowerCase().includes(searchValue) ||
-                            supplier.phone?.toLowerCase().includes(searchValue)
-                          )
-                        })
-                        .map((supplier) => {
-                          const isSelected = purchase.supplier?._id === supplier._id
-                          return (
-                            <CommandItem
-                              key={supplier._id}
-                              value={supplier._id}
-                              onSelect={(selectedValue) => {
-                                console.log('Selected supplier:', supplier)
-                                const selected = suppliers.find((s) => s._id === selectedValue)
-                                if (selected) {
-                                  setPurchase((prev) => ({
-                                    ...prev,
-                                    supplier: selected,
-                                  }))
-                                }
-                                setSupplierSelectOpen(false)
-                              }}
-                              className={isSelected ? 'bg-accent' : ''}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  isSelected ? 'opacity-100' : 'opacity-0'
-                                }`}
-                              />
-                              <div className="flex-1">
-                                <div className="font-medium">{supplier.name}</div>
+                <div className="p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder={t('Search suppliers...')}
+                      value={supplierSearchQuery}
+                      onChange={(e) => setSupplierSearchQuery(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  {filteredSuppliers.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      {t('No suppliers found')}
+                    </div>
+                  ) : (
+                    <div className="space-y-1 p-1">
+                      {filteredSuppliers.map((supplier, index) => {
+                        const supplierId = supplier._id || supplier.id || `supplier-${index}`
+                        const isSelected = (purchase.supplier?._id && purchase.supplier._id === supplierId) || 
+                                         (purchase.supplier?.id && purchase.supplier.id === supplierId) ||
+                                         (purchase.supplier?.name === supplier.name)
+                        return (
+                          <div
+                            key={supplierId}
+                            onClick={() => {
+                              setPurchase(prev => ({
+                                ...prev,
+                                supplier: supplier
+                              }))
+                              setSupplierSelectOpen(false)
+                              setSupplierSearchQuery('')
+                            }}
+                            className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-accent/50 transition-colors ${
+                              isSelected ? 'bg-accent' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                <span className="text-sm font-medium text-white">
+                                  {supplier.name?.charAt(0).toUpperCase() || 'S'}
+                                </span>
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="truncate font-medium" title={supplier.name}>
+                                  {supplier.name}
+                                </span>
                                 {supplier.phone && (
-                                  <div className="text-xs text-muted-foreground">{supplier.phone}</div>
+                                  <span className="text-xs text-muted-foreground truncate" title={supplier.phone}>
+                                    {supplier.phone}
+                                  </span>
                                 )}
                               </div>
-                            </CommandItem>
-                          )
-                        })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
+                            </div>
+                            {isSelected && (
+                              <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
+                                <Check className="w-3 h-3 text-primary" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </PopoverContent>
             </Popover>
-          </div>
+
+            {/* Purchase Date */}
+            <div>
+              <Label htmlFor="purchase-date">
+                {t('Purchase Date')} <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="purchase-date"
+                type="date"
+                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                onChange={(e) =>
+                  setPurchase((prev) => ({
+                    ...prev,
+                    date: new Date(e.target.value).toISOString(),
+                  }))
+                }
+                className="w-full"
+              />
+            </div>
         </CardContent>
       </Card>
 
@@ -350,7 +397,7 @@ export default function PurchasePanel({
                         size="sm"
                         variant="outline"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.product._id, Math.max(1, item.quantity - 1))}
+                        onClick={() => updateQuantity(item.product._id || item.product.id || item.product.name, Math.max(1, item.quantity - 1))}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
@@ -358,14 +405,14 @@ export default function PurchasePanel({
                         type="number"
                         min="1"
                         value={item.quantity}
-                        onChange={(e) => updateQuantity(item.product._id, parseInt(e.target.value) || 1)}
+                        onChange={(e) => updateQuantity(item.product._id || item.product.id || item.product.name, parseInt(e.target.value) || 1)}
                         className="h-6 w-12 text-center text-xs p-1"
                       />
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.product._id, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.product._id || item.product.id || item.product.name, item.quantity + 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -380,7 +427,7 @@ export default function PurchasePanel({
                       min="0.01"
                       step="0.01"
                       value={item.purchasePrice}
-                      onChange={(e) => updatePurchasePrice(item.product._id, parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updatePurchasePrice(item.product._id || item.product.id || item.product.name, parseFloat(e.target.value) || 0)}
                       className="h-6 w-16 text-center text-xs p-1"
                     />
                   </div>
@@ -395,7 +442,7 @@ export default function PurchasePanel({
                       size="sm"
                       variant="ghost"
                       className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                      onClick={() => removeFromPurchase(item.product._id)}
+                      onClick={() => removeFromPurchase(item.product._id || item.product.id || item.product.name)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -454,7 +501,7 @@ export default function PurchasePanel({
               onClick={() => handleSavePurchase('none')}
               className="w-full"
               size="lg"
-              disabled={!purchase.supplier?._id || purchase.items.length === 0 || isLoading}
+              disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
               variant="outline"
             >
               {isLoading && savingType === 'none' ? (
@@ -477,7 +524,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('receipt')}
                 className="w-full"
                 size="lg"
-                disabled={!purchase.supplier?._id || purchase.items.length === 0 || isLoading}
+                disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'receipt' ? (
@@ -498,7 +545,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('a4')}
                 className="w-full"
                 size="lg"
-                disabled={!purchase.supplier?._id || purchase.items.length === 0 || isLoading}
+                disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'a4' ? (

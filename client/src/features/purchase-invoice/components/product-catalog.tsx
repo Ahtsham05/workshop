@@ -10,7 +10,7 @@ import { Search,
      Package, Scan, Image as ImageIcon, List } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
-import { Category, Product } from '../index'
+import type { Category, Product } from '../../invoice/index'
 import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { getTextClasses } from '@/utils/urdu-text-utils'
@@ -305,12 +305,12 @@ export function ProductCatalog({
                             {product.name}
                           </h4>
                           <div className={`flex ${showImages ? 'flex-col items-center gap-0' : 'items-center gap-2'} text-xs text-muted-foreground`}>
-                            <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
+                            <span className='font-medium text-foreground text-sm'>
                               Rs{product.price.toFixed(2)}
                             </span>
-                            <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
+                            <span>Stock: {product.stockQuantity}</span>
                             {!showImages && product.barcode && (
-                              <span key={`barcode-${product._id}`} className='text-xs bg-muted px-1 py-0.5 rounded'>
+                              <span className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}
                               </span>
                             )}

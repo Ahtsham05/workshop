@@ -17,7 +17,8 @@ export interface PurchaseItem {
 
 // Supplier Interface
 export interface Supplier {
-  _id: string;
+  _id?: string;
+  id?: string;
   name: string;
   phone?: string;
   email?: string;
@@ -29,7 +30,7 @@ export interface Supplier {
 export interface Purchase {
   _id?: string;
   invoiceNumber: string;
-  supplier: Supplier;
+  supplier: Supplier | null;
   items: PurchaseItem[];
   subtotal: number;
   total: number;
@@ -46,7 +47,7 @@ const PurchaseInvoicePage = () => {
   const [currentView, setCurrentView] = useState<ViewType>('create');
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
-    supplier: {} as Supplier,
+    supplier: null,
     items: [],
     subtotal: 0,
     total: 0,
@@ -117,10 +118,11 @@ const PurchaseInvoicePage = () => {
       let categoryId = 'other';
       let categoryName = 'Other';
       
-      // Ensure stockQuantity exists
+      // Ensure stockQuantity exists and preserve ID fields
       const productWithStock = {
         ...product,
-        id: product._id,
+        _id: product._id || product.id, // Ensure _id exists
+        id: product.id || product._id,   // Ensure id exists  
         stockQuantity: product.stockQuantity || 0
       };
       
@@ -147,12 +149,34 @@ const PurchaseInvoicePage = () => {
     setCategorizedProducts(Array.from(categoryMap.values()));
   }, [products]);
 
+  // Reset purchase form
+  const resetPurchaseForm = useCallback(() => {
+    setPurchase({
+      invoiceNumber: '',
+      supplier: null,
+      items: [],
+      subtotal: 0,
+      total: 0,
+      notes: '',
+      date: new Date().toISOString(),
+    })
+  }, [])
+
   // Add product to purchase
   const addToPurchase = useCallback((product: Product, quantity: number = 1) => {
     setPurchase((prev) => {
-      const existingIndex = prev.items.findIndex((item) => item.product._id === product._id);
+      // More robust product identification - handle missing IDs
+      const getProductIdentifier = (prod: Product) => {
+        return prod._id || prod.id || prod.name; // fallback to name if no ID
+      };
 
-      if (existingIndex >= 0) {
+      const productIdentifier = getProductIdentifier(product);
+      const existingIndex = prev.items.findIndex((item) => {
+        const itemIdentifier = getProductIdentifier(item.product);
+        return itemIdentifier && productIdentifier && itemIdentifier === productIdentifier;
+      });
+
+      if (existingIndex >= 0 && productIdentifier) {
         const updated = [...prev.items];
         updated[existingIndex] = {
           ...updated[existingIndex],
@@ -175,7 +199,10 @@ const PurchaseInvoicePage = () => {
   const removeFromPurchase = useCallback((productId: string) => {
     setPurchase((prev) => ({
       ...prev,
-      items: prev.items.filter((item) => item.product._id !== productId),
+      items: prev.items.filter((item) => {
+        const itemId = item.product._id || item.product.id || item.product.name;
+        return itemId !== productId;
+      }),
     }));
   }, []);
 
@@ -184,9 +211,10 @@ const PurchaseInvoicePage = () => {
     if (quantity <= 0) return;
     setPurchase((prev) => ({
       ...prev,
-      items: prev.items.map((item) =>
-        item.product._id === productId ? { ...item, quantity } : item
-      ),
+      items: prev.items.map((item) => {
+        const itemId = item.product._id || item.product.id || item.product.name;
+        return itemId === productId ? { ...item, quantity } : item;
+      }),
     }));
   }, []);
 
@@ -195,9 +223,10 @@ const PurchaseInvoicePage = () => {
     if (price < 0) return;
     setPurchase((prev) => ({
       ...prev,
-      items: prev.items.map((item) =>
-        item.product._id === productId ? { ...item, purchasePrice: price } : item
-      ),
+      items: prev.items.map((item) => {
+        const itemId = item.product._id || item.product.id || item.product.name;
+        return itemId === productId ? { ...item, purchasePrice: price } : item;
+      }),
     }));
   }, []);
 
@@ -233,32 +262,16 @@ const PurchaseInvoicePage = () => {
     setCurrentView('list');
     setIsEditing(false);
     setEditingPurchase(null);
-    setPurchase({
-      invoiceNumber: '',
-      supplier: {} as Supplier,
-      items: [],
-      subtotal: 0,
-      total: 0,
-      notes: '',
-      date: new Date().toISOString(),
-    });
-  }, []);
+    resetPurchaseForm();
+  }, [resetPurchaseForm]);
 
   // Switch to create view
   const handleCreateNew = useCallback(() => {
     setCurrentView('create');
     setIsEditing(false);
     setEditingPurchase(null);
-    setPurchase({
-      invoiceNumber: '',
-      supplier: {} as Supplier,
-      items: [],
-      subtotal: 0,
-      total: 0,
-      notes: '',
-      date: new Date().toISOString(),
-    });
-  }, []);
+    resetPurchaseForm();
+  }, [resetPurchaseForm]);
 
   // Handle edit
   const handleEdit = useCallback((purchaseToEdit: any) => {
@@ -286,21 +299,7 @@ const PurchaseInvoicePage = () => {
         />
       ) : currentView === 'create' ? (
         <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
-          {/* Left Column - Product Catalog */}
-          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
-            <ProductCatalog
-              categorizedProducts={categorizedProducts}
-              loading={loading}
-              showImages={showImages}
-              setShowImages={setShowImages}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onAddToInvoice={addToPurchase}
-              onBarcodeSearch={handleBarcodeSearch}
-            />
-          </div>
-
-          {/* Right Column - Purchase Panel */}
+          {/* Left Column - Purchase Panel */}
           <div className="space-y-4 pb-6">
             <PurchasePanel
               purchase={purchase}
@@ -313,6 +312,20 @@ const PurchaseInvoicePage = () => {
               onSaveSuccess={handleSaveSuccess}
               isEditing={isEditing}
               editingPurchase={editingPurchase}
+            />
+          </div>
+
+          {/* Right Column - Product Catalog */}
+          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
+            <ProductCatalog
+              categorizedProducts={categorizedProducts}
+              loading={loading}
+              showImages={showImages}
+              setShowImages={setShowImages}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onAddToInvoice={addToPurchase}
+              onBarcodeSearch={handleBarcodeSearch}
             />
           </div>
         </div>
