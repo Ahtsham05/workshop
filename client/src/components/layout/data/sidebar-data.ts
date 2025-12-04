@@ -75,11 +75,6 @@ export const sidebarData: SidebarData = {
           icon: IconPackages,
         },
         {
-          title: 'Purchase',
-          url: '/purchase',
-          icon: IconPackages,
-        },
-        {
           title: 'Purchase Invoice',
           url: '/purchase-invoice',
           icon: IconPackages,
@@ -99,26 +94,6 @@ export const sidebarData: SidebarData = {
           url: '/accounting',
           icon: IconChecklist,
         },
-        {
-          title: 'Accounts',
-          url: '/accounts',
-          icon: IconChecklist,
-        },
-        {
-          title: 'Transactions',
-          url: '/transactions',
-          icon: IconChecklist,
-        },
-        {
-          title: 'Mobile Repairing',
-          url: '/mobile-repair',
-          icon: IconMessages,
-        },
-        {
-          title: 'Jazz Cash & Load',
-          url: '/mobile-load',
-          icon: IconMessages,
-        },
         // {
         //   title: 'Chats',
         //   url: '/chats',
@@ -134,30 +109,6 @@ export const sidebarData: SidebarData = {
           title: 'Reports',
           icon: IconLockAccess,
           items: [
-            {
-              title: "Customers Ledger",
-              url: '/customer-ledger',
-            },
-            {
-              title: "Suppliers Ledger",
-              url: '/supplier-ledger',
-            },
-            {
-              title: "Transaction Ledger",
-              url: '/transaction-ledger',
-            },
-            {
-              title: "Sale Ledger",
-              url: '/sale-ledger',
-            },
-            {
-              title: "Purchase Ledger",
-              url: '/purchase-ledger',
-            },
-            {
-              title: "Account Ledger",
-              url: '/account-ledger',
-            }
             // {
             //   title: 'Sign In',
             //   url: '/sign-in',

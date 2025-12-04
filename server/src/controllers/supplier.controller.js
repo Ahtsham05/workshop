@@ -38,21 +38,11 @@ const getAllSuppliers = catchAsync(async (req, res) => {
   res.send(suppliers);
 });
 
-const getSupplierPurchaseAndTransactions = catchAsync(async (req, res) => {
-  const { supplierId, startDate, endDate } = req.query;
-  // Call the service to get the sales and transactions
-  const results = await supplierService.getSupplierPurchaseAndTransactions(supplierId, startDate, endDate);
-  res.send(results);
-});
-
-
-
 module.exports = {
   createSupplier,
   getSuppliers,
   getSupplier,
   updateSupplier,
   deleteSupplier,
-  getAllSuppliers,
-  getSupplierPurchaseAndTransactions
+  getAllSuppliers
 };

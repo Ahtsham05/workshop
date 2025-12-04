@@ -4,11 +4,8 @@ import authReducer from './auth.slice';
 import productReducer from './product.slice'; // Import your product slice reducer
 import customerReducer from './customer.slice';
 import supplierReducer from './supplier.slice';
-import accountReducer from './account.slice';
-import mobileRepairReducer from './mobileRepair.slice'
 import categoryReducer from './category.slice';
 import { invoiceApi } from './invoice.api';
-import { returnApi } from './return.api';
 import { customerApi } from './customer.api';
 import { purchaseApi } from './purchase.api';
 
@@ -20,19 +17,15 @@ export const store = configureStore({
     product: productReducer,
     customer: customerReducer,
     supplier: supplierReducer,
-    account: accountReducer,
-    mobileRepair: mobileRepairReducer,
     category: categoryReducer,
     // Add RTK Query API reducers
     [invoiceApi.reducerPath]: invoiceApi.reducer,
-    [returnApi.reducerPath]: returnApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
     [purchaseApi.reducerPath]: purchaseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       invoiceApi.middleware,
-      returnApi.middleware,
       customerApi.middleware,
       purchaseApi.middleware
     ),

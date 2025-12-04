@@ -49,19 +49,10 @@ const deleteSupplier = {
   }),
 };
 
-const getSupplierPurchaseAndTransactions = {
-  query: Joi.object().keys({
-    supplierId: Joi.string().required(),
-    startDate: Joi.date().required(),
-    endDate: Joi.date().required(),
-  }),
-}
-
 module.exports = {
   createSupplier,
   getSuppliers,
   getSupplier,
   updateSupplier,
-  deleteSupplier,
-  getSupplierPurchaseAndTransactions
+  deleteSupplier
 };

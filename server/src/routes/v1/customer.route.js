@@ -16,10 +16,6 @@ router
   .get(auth('getCustomers'), customerController.getAllCustomers);
 
 router
-  .route('/ledger')
-  .get(auth('getLedger'), validate(customerValidation.getCustomerSalesAndTransactions), customerController.getCustomerSalesAndTransactions)
-
-router
   .route('/:customerId')
   .get(auth('getCustomers'), validate(customerValidation.getCustomer), customerController.getCustomer)
   .patch(auth('manageCustomers'), validate(customerValidation.updateCustomer), customerController.updateCustomer)

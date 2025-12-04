@@ -15,12 +15,6 @@ import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
-import { Route as reportsTransactionLedgerDetailImport } from './routes/(reports)/transaction-ledger-detail'
-import { Route as reportsSupplierLedgerDetailImport } from './routes/(reports)/supplier-ledger-detail'
-import { Route as reportsSaleLedgerDetailImport } from './routes/(reports)/sale-ledger-detail'
-import { Route as reportsPurchaseLedgerDetailImport } from './routes/(reports)/purchase-ledger-detail'
-import { Route as reportsCustomerLedgerDetailImport } from './routes/(reports)/customer-ledger-detail'
-import { Route as reportsAccountLedgerDetailImport } from './routes/(reports)/account-ledger-detail'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
 import { Route as errors404Import } from './routes/(errors)/404'
@@ -33,35 +27,18 @@ import { Route as authOtpImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
-import { Route as AuthenticatedTransactionsIndexImport } from './routes/_authenticated/transactions/index'
-import { Route as AuthenticatedTransactionLedgerIndexImport } from './routes/_authenticated/transaction-ledger/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
-import { Route as AuthenticatedSupplierLedgerIndexImport } from './routes/_authenticated/supplier-ledger/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
-import { Route as AuthenticatedSaleIndexImport } from './routes/_authenticated/sale/index'
-import { Route as AuthenticatedSaleViewIndexImport } from './routes/_authenticated/sale-view/index'
-import { Route as AuthenticatedSaleLedgerIndexImport } from './routes/_authenticated/sale-ledger/index'
-import { Route as AuthenticatedSaleAddIndexImport } from './routes/_authenticated/sale-add/index'
-import { Route as AuthenticatedReturnsIndexImport } from './routes/_authenticated/returns/index'
-import { Route as AuthenticatedPurchaseIndexImport } from './routes/_authenticated/purchase/index'
-import { Route as AuthenticatedPurchaseViewIndexImport } from './routes/_authenticated/purchase-view/index'
-import { Route as AuthenticatedPurchaseLedgerIndexImport } from './routes/_authenticated/purchase-ledger/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
-import { Route as AuthenticatedPurchaseAddIndexImport } from './routes/_authenticated/purchase-add/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
-import { Route as AuthenticatedMobileRepairIndexImport } from './routes/_authenticated/mobile-repair/index'
-import { Route as AuthenticatedMobileLoadIndexImport } from './routes/_authenticated/mobile-load/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
-import { Route as AuthenticatedCustomerLedgerIndexImport } from './routes/_authenticated/customer-ledger/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
-import { Route as AuthenticatedAccountsIndexImport } from './routes/_authenticated/accounts/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
-import { Route as AuthenticatedAccountLedgerIndexImport } from './routes/_authenticated/account-ledger/index'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
@@ -92,48 +69,6 @@ const AuthenticatedBarcodeDemoRoute = AuthenticatedBarcodeDemoImport.update({
   path: '/barcode-demo',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-
-const reportsTransactionLedgerDetailRoute =
-  reportsTransactionLedgerDetailImport.update({
-    id: '/(reports)/transaction-ledger-detail',
-    path: '/transaction-ledger-detail',
-    getParentRoute: () => rootRoute,
-  } as any)
-
-const reportsSupplierLedgerDetailRoute =
-  reportsSupplierLedgerDetailImport.update({
-    id: '/(reports)/supplier-ledger-detail',
-    path: '/supplier-ledger-detail',
-    getParentRoute: () => rootRoute,
-  } as any)
-
-const reportsSaleLedgerDetailRoute = reportsSaleLedgerDetailImport.update({
-  id: '/(reports)/sale-ledger-detail',
-  path: '/sale-ledger-detail',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const reportsPurchaseLedgerDetailRoute =
-  reportsPurchaseLedgerDetailImport.update({
-    id: '/(reports)/purchase-ledger-detail',
-    path: '/purchase-ledger-detail',
-    getParentRoute: () => rootRoute,
-  } as any)
-
-const reportsCustomerLedgerDetailRoute =
-  reportsCustomerLedgerDetailImport.update({
-    id: '/(reports)/customer-ledger-detail',
-    path: '/customer-ledger-detail',
-    getParentRoute: () => rootRoute,
-  } as any)
-
-const reportsAccountLedgerDetailRoute = reportsAccountLedgerDetailImport.update(
-  {
-    id: '/(reports)/account-ledger-detail',
-    path: '/account-ledger-detail',
-    getParentRoute: () => rootRoute,
-  } as any,
-)
 
 const errors503Route = errors503Import.update({
   id: '/(errors)/503',
@@ -209,20 +144,6 @@ const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
-const AuthenticatedTransactionsIndexRoute =
-  AuthenticatedTransactionsIndexImport.update({
-    id: '/transactions/',
-    path: '/transactions/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedTransactionLedgerIndexRoute =
-  AuthenticatedTransactionLedgerIndexImport.update({
-    id: '/transaction-ledger/',
-    path: '/transaction-ledger/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
 const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexImport.update({
   id: '/tasks/',
   path: '/tasks/',
@@ -236,13 +157,6 @@ const AuthenticatedSuppliersIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
-const AuthenticatedSupplierLedgerIndexRoute =
-  AuthenticatedSupplierLedgerIndexImport.update({
-    id: '/supplier-ledger/',
-    path: '/supplier-ledger/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
 const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
   {
     id: '/',
@@ -251,72 +165,10 @@ const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
   } as any,
 )
 
-const AuthenticatedSaleIndexRoute = AuthenticatedSaleIndexImport.update({
-  id: '/sale/',
-  path: '/sale/',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-
-const AuthenticatedSaleViewIndexRoute = AuthenticatedSaleViewIndexImport.update(
-  {
-    id: '/sale-view/',
-    path: '/sale-view/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any,
-)
-
-const AuthenticatedSaleLedgerIndexRoute =
-  AuthenticatedSaleLedgerIndexImport.update({
-    id: '/sale-ledger/',
-    path: '/sale-ledger/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedSaleAddIndexRoute = AuthenticatedSaleAddIndexImport.update({
-  id: '/sale-add/',
-  path: '/sale-add/',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-
-const AuthenticatedReturnsIndexRoute = AuthenticatedReturnsIndexImport.update({
-  id: '/returns/',
-  path: '/returns/',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-
-const AuthenticatedPurchaseIndexRoute = AuthenticatedPurchaseIndexImport.update(
-  {
-    id: '/purchase/',
-    path: '/purchase/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any,
-)
-
-const AuthenticatedPurchaseViewIndexRoute =
-  AuthenticatedPurchaseViewIndexImport.update({
-    id: '/purchase-view/',
-    path: '/purchase-view/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedPurchaseLedgerIndexRoute =
-  AuthenticatedPurchaseLedgerIndexImport.update({
-    id: '/purchase-ledger/',
-    path: '/purchase-ledger/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
 const AuthenticatedPurchaseInvoiceIndexRoute =
   AuthenticatedPurchaseInvoiceIndexImport.update({
     id: '/purchase-invoice/',
     path: '/purchase-invoice/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedPurchaseAddIndexRoute =
-  AuthenticatedPurchaseAddIndexImport.update({
-    id: '/purchase-add/',
-    path: '/purchase-add/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -327,20 +179,6 @@ const AuthenticatedProductsIndexRoute = AuthenticatedProductsIndexImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
-
-const AuthenticatedMobileRepairIndexRoute =
-  AuthenticatedMobileRepairIndexImport.update({
-    id: '/mobile-repair/',
-    path: '/mobile-repair/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedMobileLoadIndexRoute =
-  AuthenticatedMobileLoadIndexImport.update({
-    id: '/mobile-load/',
-    path: '/mobile-load/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 
 const AuthenticatedInvoiceIndexRoute = AuthenticatedInvoiceIndexImport.update({
   id: '/invoice/',
@@ -359,13 +197,6 @@ const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexImport.update({
     id: '/customers/',
     path: '/customers/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedCustomerLedgerIndexRoute =
-  AuthenticatedCustomerLedgerIndexImport.update({
-    id: '/customer-ledger/',
-    path: '/customer-ledger/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -388,25 +219,10 @@ const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
-const AuthenticatedAccountsIndexRoute = AuthenticatedAccountsIndexImport.update(
-  {
-    id: '/accounts/',
-    path: '/accounts/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any,
-)
-
 const AuthenticatedAccountingIndexRoute =
   AuthenticatedAccountingIndexImport.update({
     id: '/accounting/',
     path: '/accounting/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-
-const AuthenticatedAccountLedgerIndexRoute =
-  AuthenticatedAccountLedgerIndexImport.update({
-    id: '/account-ledger/',
-    path: '/account-ledger/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -533,48 +349,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof errors503Import
       parentRoute: typeof rootRoute
     }
-    '/(reports)/account-ledger-detail': {
-      id: '/(reports)/account-ledger-detail'
-      path: '/account-ledger-detail'
-      fullPath: '/account-ledger-detail'
-      preLoaderRoute: typeof reportsAccountLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
-    '/(reports)/customer-ledger-detail': {
-      id: '/(reports)/customer-ledger-detail'
-      path: '/customer-ledger-detail'
-      fullPath: '/customer-ledger-detail'
-      preLoaderRoute: typeof reportsCustomerLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
-    '/(reports)/purchase-ledger-detail': {
-      id: '/(reports)/purchase-ledger-detail'
-      path: '/purchase-ledger-detail'
-      fullPath: '/purchase-ledger-detail'
-      preLoaderRoute: typeof reportsPurchaseLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
-    '/(reports)/sale-ledger-detail': {
-      id: '/(reports)/sale-ledger-detail'
-      path: '/sale-ledger-detail'
-      fullPath: '/sale-ledger-detail'
-      preLoaderRoute: typeof reportsSaleLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
-    '/(reports)/supplier-ledger-detail': {
-      id: '/(reports)/supplier-ledger-detail'
-      path: '/supplier-ledger-detail'
-      fullPath: '/supplier-ledger-detail'
-      preLoaderRoute: typeof reportsSupplierLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
-    '/(reports)/transaction-ledger-detail': {
-      id: '/(reports)/transaction-ledger-detail'
-      path: '/transaction-ledger-detail'
-      fullPath: '/transaction-ledger-detail'
-      preLoaderRoute: typeof reportsTransactionLedgerDetailImport
-      parentRoute: typeof rootRoute
-    }
     '/_authenticated/barcode-demo': {
       id: '/_authenticated/barcode-demo'
       path: '/barcode-demo'
@@ -624,25 +398,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
-    '/_authenticated/account-ledger/': {
-      id: '/_authenticated/account-ledger/'
-      path: '/account-ledger'
-      fullPath: '/account-ledger'
-      preLoaderRoute: typeof AuthenticatedAccountLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
     '/_authenticated/accounting/': {
       id: '/_authenticated/accounting/'
       path: '/accounting'
       fullPath: '/accounting'
       preLoaderRoute: typeof AuthenticatedAccountingIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/accounts/': {
-      id: '/_authenticated/accounts/'
-      path: '/accounts'
-      fullPath: '/accounts'
-      preLoaderRoute: typeof AuthenticatedAccountsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/apps/': {
@@ -666,13 +426,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
-    '/_authenticated/customer-ledger/': {
-      id: '/_authenticated/customer-ledger/'
-      path: '/customer-ledger'
-      fullPath: '/customer-ledger'
-      preLoaderRoute: typeof AuthenticatedCustomerLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
       path: '/customers'
@@ -694,32 +447,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvoiceIndexImport
       parentRoute: typeof AuthenticatedImport
     }
-    '/_authenticated/mobile-load/': {
-      id: '/_authenticated/mobile-load/'
-      path: '/mobile-load'
-      fullPath: '/mobile-load'
-      preLoaderRoute: typeof AuthenticatedMobileLoadIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/mobile-repair/': {
-      id: '/_authenticated/mobile-repair/'
-      path: '/mobile-repair'
-      fullPath: '/mobile-repair'
-      preLoaderRoute: typeof AuthenticatedMobileRepairIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof AuthenticatedProductsIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/purchase-add/': {
-      id: '/_authenticated/purchase-add/'
-      path: '/purchase-add'
-      fullPath: '/purchase-add'
-      preLoaderRoute: typeof AuthenticatedPurchaseAddIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-invoice/': {
@@ -729,75 +461,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPurchaseInvoiceIndexImport
       parentRoute: typeof AuthenticatedImport
     }
-    '/_authenticated/purchase-ledger/': {
-      id: '/_authenticated/purchase-ledger/'
-      path: '/purchase-ledger'
-      fullPath: '/purchase-ledger'
-      preLoaderRoute: typeof AuthenticatedPurchaseLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/purchase-view/': {
-      id: '/_authenticated/purchase-view/'
-      path: '/purchase-view'
-      fullPath: '/purchase-view'
-      preLoaderRoute: typeof AuthenticatedPurchaseViewIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/purchase/': {
-      id: '/_authenticated/purchase/'
-      path: '/purchase'
-      fullPath: '/purchase'
-      preLoaderRoute: typeof AuthenticatedPurchaseIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/returns/': {
-      id: '/_authenticated/returns/'
-      path: '/returns'
-      fullPath: '/returns'
-      preLoaderRoute: typeof AuthenticatedReturnsIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/sale-add/': {
-      id: '/_authenticated/sale-add/'
-      path: '/sale-add'
-      fullPath: '/sale-add'
-      preLoaderRoute: typeof AuthenticatedSaleAddIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/sale-ledger/': {
-      id: '/_authenticated/sale-ledger/'
-      path: '/sale-ledger'
-      fullPath: '/sale-ledger'
-      preLoaderRoute: typeof AuthenticatedSaleLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/sale-view/': {
-      id: '/_authenticated/sale-view/'
-      path: '/sale-view'
-      fullPath: '/sale-view'
-      preLoaderRoute: typeof AuthenticatedSaleViewIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/sale/': {
-      id: '/_authenticated/sale/'
-      path: '/sale'
-      fullPath: '/sale'
-      preLoaderRoute: typeof AuthenticatedSaleIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
-    }
-    '/_authenticated/supplier-ledger/': {
-      id: '/_authenticated/supplier-ledger/'
-      path: '/supplier-ledger'
-      fullPath: '/supplier-ledger'
-      preLoaderRoute: typeof AuthenticatedSupplierLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/suppliers/': {
       id: '/_authenticated/suppliers/'
@@ -811,20 +480,6 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof AuthenticatedTasksIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/transaction-ledger/': {
-      id: '/_authenticated/transaction-ledger/'
-      path: '/transaction-ledger'
-      fullPath: '/transaction-ledger'
-      preLoaderRoute: typeof AuthenticatedTransactionLedgerIndexImport
-      parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/transactions/': {
-      id: '/_authenticated/transactions/'
-      path: '/transactions'
-      fullPath: '/transactions'
-      preLoaderRoute: typeof AuthenticatedTransactionsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/users/': {
@@ -874,34 +529,17 @@ interface AuthenticatedRouteChildren {
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedAccountLedgerIndexRoute: typeof AuthenticatedAccountLedgerIndexRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
-  AuthenticatedAccountsIndexRoute: typeof AuthenticatedAccountsIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
-  AuthenticatedCustomerLedgerIndexRoute: typeof AuthenticatedCustomerLedgerIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
-  AuthenticatedMobileLoadIndexRoute: typeof AuthenticatedMobileLoadIndexRoute
-  AuthenticatedMobileRepairIndexRoute: typeof AuthenticatedMobileRepairIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
-  AuthenticatedPurchaseAddIndexRoute: typeof AuthenticatedPurchaseAddIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
-  AuthenticatedPurchaseLedgerIndexRoute: typeof AuthenticatedPurchaseLedgerIndexRoute
-  AuthenticatedPurchaseViewIndexRoute: typeof AuthenticatedPurchaseViewIndexRoute
-  AuthenticatedPurchaseIndexRoute: typeof AuthenticatedPurchaseIndexRoute
-  AuthenticatedReturnsIndexRoute: typeof AuthenticatedReturnsIndexRoute
-  AuthenticatedSaleAddIndexRoute: typeof AuthenticatedSaleAddIndexRoute
-  AuthenticatedSaleLedgerIndexRoute: typeof AuthenticatedSaleLedgerIndexRoute
-  AuthenticatedSaleViewIndexRoute: typeof AuthenticatedSaleViewIndexRoute
-  AuthenticatedSaleIndexRoute: typeof AuthenticatedSaleIndexRoute
-  AuthenticatedSupplierLedgerIndexRoute: typeof AuthenticatedSupplierLedgerIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
-  AuthenticatedTransactionLedgerIndexRoute: typeof AuthenticatedTransactionLedgerIndexRoute
-  AuthenticatedTransactionsIndexRoute: typeof AuthenticatedTransactionsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedProductsBulkEditIndexRoute: typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -911,36 +549,18 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedAccountLedgerIndexRoute: AuthenticatedAccountLedgerIndexRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
-  AuthenticatedAccountsIndexRoute: AuthenticatedAccountsIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
-  AuthenticatedCustomerLedgerIndexRoute: AuthenticatedCustomerLedgerIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
-  AuthenticatedMobileLoadIndexRoute: AuthenticatedMobileLoadIndexRoute,
-  AuthenticatedMobileRepairIndexRoute: AuthenticatedMobileRepairIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
-  AuthenticatedPurchaseAddIndexRoute: AuthenticatedPurchaseAddIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
-  AuthenticatedPurchaseLedgerIndexRoute: AuthenticatedPurchaseLedgerIndexRoute,
-  AuthenticatedPurchaseViewIndexRoute: AuthenticatedPurchaseViewIndexRoute,
-  AuthenticatedPurchaseIndexRoute: AuthenticatedPurchaseIndexRoute,
-  AuthenticatedReturnsIndexRoute: AuthenticatedReturnsIndexRoute,
-  AuthenticatedSaleAddIndexRoute: AuthenticatedSaleAddIndexRoute,
-  AuthenticatedSaleLedgerIndexRoute: AuthenticatedSaleLedgerIndexRoute,
-  AuthenticatedSaleViewIndexRoute: AuthenticatedSaleViewIndexRoute,
-  AuthenticatedSaleIndexRoute: AuthenticatedSaleIndexRoute,
-  AuthenticatedSupplierLedgerIndexRoute: AuthenticatedSupplierLedgerIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
-  AuthenticatedTransactionLedgerIndexRoute:
-    AuthenticatedTransactionLedgerIndexRoute,
-  AuthenticatedTransactionsIndexRoute: AuthenticatedTransactionsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedProductsBulkEditIndexRoute:
     AuthenticatedProductsBulkEditIndexRoute,
@@ -963,12 +583,6 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
-  '/account-ledger-detail': typeof reportsAccountLedgerDetailRoute
-  '/customer-ledger-detail': typeof reportsCustomerLedgerDetailRoute
-  '/purchase-ledger-detail': typeof reportsPurchaseLedgerDetailRoute
-  '/sale-ledger-detail': typeof reportsSaleLedgerDetailRoute
-  '/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
-  '/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
@@ -976,35 +590,18 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
-  '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
-  '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
-  '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
-  '/mobile-load': typeof AuthenticatedMobileLoadIndexRoute
-  '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
-  '/purchase-add': typeof AuthenticatedPurchaseAddIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
-  '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
-  '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
-  '/purchase': typeof AuthenticatedPurchaseIndexRoute
-  '/returns': typeof AuthenticatedReturnsIndexRoute
-  '/sale-add': typeof AuthenticatedSaleAddIndexRoute
-  '/sale-ledger': typeof AuthenticatedSaleLedgerIndexRoute
-  '/sale-view': typeof AuthenticatedSaleViewIndexRoute
-  '/sale': typeof AuthenticatedSaleIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/supplier-ledger': typeof AuthenticatedSupplierLedgerIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
-  '/transaction-ledger': typeof AuthenticatedTransactionLedgerIndexRoute
-  '/transactions': typeof AuthenticatedTransactionsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -1020,12 +617,6 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
-  '/account-ledger-detail': typeof reportsAccountLedgerDetailRoute
-  '/customer-ledger-detail': typeof reportsCustomerLedgerDetailRoute
-  '/purchase-ledger-detail': typeof reportsPurchaseLedgerDetailRoute
-  '/sale-ledger-detail': typeof reportsSaleLedgerDetailRoute
-  '/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
-  '/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
@@ -1033,35 +624,18 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
-  '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
-  '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
-  '/customer-ledger': typeof AuthenticatedCustomerLedgerIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
-  '/mobile-load': typeof AuthenticatedMobileLoadIndexRoute
-  '/mobile-repair': typeof AuthenticatedMobileRepairIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
-  '/purchase-add': typeof AuthenticatedPurchaseAddIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
-  '/purchase-ledger': typeof AuthenticatedPurchaseLedgerIndexRoute
-  '/purchase-view': typeof AuthenticatedPurchaseViewIndexRoute
-  '/purchase': typeof AuthenticatedPurchaseIndexRoute
-  '/returns': typeof AuthenticatedReturnsIndexRoute
-  '/sale-add': typeof AuthenticatedSaleAddIndexRoute
-  '/sale-ledger': typeof AuthenticatedSaleLedgerIndexRoute
-  '/sale-view': typeof AuthenticatedSaleViewIndexRoute
-  '/sale': typeof AuthenticatedSaleIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
-  '/supplier-ledger': typeof AuthenticatedSupplierLedgerIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
-  '/transaction-ledger': typeof AuthenticatedTransactionLedgerIndexRoute
-  '/transactions': typeof AuthenticatedTransactionsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -1080,12 +654,6 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
-  '/(reports)/account-ledger-detail': typeof reportsAccountLedgerDetailRoute
-  '/(reports)/customer-ledger-detail': typeof reportsCustomerLedgerDetailRoute
-  '/(reports)/purchase-ledger-detail': typeof reportsPurchaseLedgerDetailRoute
-  '/(reports)/sale-ledger-detail': typeof reportsSaleLedgerDetailRoute
-  '/(reports)/supplier-ledger-detail': typeof reportsSupplierLedgerDetailRoute
-  '/(reports)/transaction-ledger-detail': typeof reportsTransactionLedgerDetailRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -1093,35 +661,18 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
-  '/_authenticated/account-ledger/': typeof AuthenticatedAccountLedgerIndexRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
-  '/_authenticated/accounts/': typeof AuthenticatedAccountsIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
-  '/_authenticated/customer-ledger/': typeof AuthenticatedCustomerLedgerIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
-  '/_authenticated/mobile-load/': typeof AuthenticatedMobileLoadIndexRoute
-  '/_authenticated/mobile-repair/': typeof AuthenticatedMobileRepairIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
-  '/_authenticated/purchase-add/': typeof AuthenticatedPurchaseAddIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
-  '/_authenticated/purchase-ledger/': typeof AuthenticatedPurchaseLedgerIndexRoute
-  '/_authenticated/purchase-view/': typeof AuthenticatedPurchaseViewIndexRoute
-  '/_authenticated/purchase/': typeof AuthenticatedPurchaseIndexRoute
-  '/_authenticated/returns/': typeof AuthenticatedReturnsIndexRoute
-  '/_authenticated/sale-add/': typeof AuthenticatedSaleAddIndexRoute
-  '/_authenticated/sale-ledger/': typeof AuthenticatedSaleLedgerIndexRoute
-  '/_authenticated/sale-view/': typeof AuthenticatedSaleViewIndexRoute
-  '/_authenticated/sale/': typeof AuthenticatedSaleIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/_authenticated/supplier-ledger/': typeof AuthenticatedSupplierLedgerIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
-  '/_authenticated/transaction-ledger/': typeof AuthenticatedTransactionLedgerIndexRoute
-  '/_authenticated/transactions/': typeof AuthenticatedTransactionsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -1141,12 +692,6 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
-    | '/account-ledger-detail'
-    | '/customer-ledger-detail'
-    | '/purchase-ledger-detail'
-    | '/sale-ledger-detail'
-    | '/supplier-ledger-detail'
-    | '/transaction-ledger-detail'
     | '/barcode-demo'
     | '/voice-demo'
     | '/'
@@ -1154,35 +699,18 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
-    | '/account-ledger'
     | '/accounting'
-    | '/accounts'
     | '/apps'
     | '/categories'
     | '/chats'
-    | '/customer-ledger'
     | '/customers'
     | '/help-center'
     | '/invoice'
-    | '/mobile-load'
-    | '/mobile-repair'
     | '/products'
-    | '/purchase-add'
     | '/purchase-invoice'
-    | '/purchase-ledger'
-    | '/purchase-view'
-    | '/purchase'
-    | '/returns'
-    | '/sale-add'
-    | '/sale-ledger'
-    | '/sale-view'
-    | '/sale'
     | '/settings/'
-    | '/supplier-ledger'
     | '/suppliers'
     | '/tasks'
-    | '/transaction-ledger'
-    | '/transactions'
     | '/users'
     | '/products/bulk-edit'
   fileRoutesByTo: FileRoutesByTo
@@ -1197,12 +725,6 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
-    | '/account-ledger-detail'
-    | '/customer-ledger-detail'
-    | '/purchase-ledger-detail'
-    | '/sale-ledger-detail'
-    | '/supplier-ledger-detail'
-    | '/transaction-ledger-detail'
     | '/barcode-demo'
     | '/voice-demo'
     | '/'
@@ -1210,35 +732,18 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
-    | '/account-ledger'
     | '/accounting'
-    | '/accounts'
     | '/apps'
     | '/categories'
     | '/chats'
-    | '/customer-ledger'
     | '/customers'
     | '/help-center'
     | '/invoice'
-    | '/mobile-load'
-    | '/mobile-repair'
     | '/products'
-    | '/purchase-add'
     | '/purchase-invoice'
-    | '/purchase-ledger'
-    | '/purchase-view'
-    | '/purchase'
-    | '/returns'
-    | '/sale-add'
-    | '/sale-ledger'
-    | '/sale-view'
-    | '/sale'
     | '/settings'
-    | '/supplier-ledger'
     | '/suppliers'
     | '/tasks'
-    | '/transaction-ledger'
-    | '/transactions'
     | '/users'
     | '/products/bulk-edit'
   id:
@@ -1255,12 +760,6 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
-    | '/(reports)/account-ledger-detail'
-    | '/(reports)/customer-ledger-detail'
-    | '/(reports)/purchase-ledger-detail'
-    | '/(reports)/sale-ledger-detail'
-    | '/(reports)/supplier-ledger-detail'
-    | '/(reports)/transaction-ledger-detail'
     | '/_authenticated/barcode-demo'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
@@ -1268,35 +767,18 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
-    | '/_authenticated/account-ledger/'
     | '/_authenticated/accounting/'
-    | '/_authenticated/accounts/'
     | '/_authenticated/apps/'
     | '/_authenticated/categories/'
     | '/_authenticated/chats/'
-    | '/_authenticated/customer-ledger/'
     | '/_authenticated/customers/'
     | '/_authenticated/help-center/'
     | '/_authenticated/invoice/'
-    | '/_authenticated/mobile-load/'
-    | '/_authenticated/mobile-repair/'
     | '/_authenticated/products/'
-    | '/_authenticated/purchase-add/'
     | '/_authenticated/purchase-invoice/'
-    | '/_authenticated/purchase-ledger/'
-    | '/_authenticated/purchase-view/'
-    | '/_authenticated/purchase/'
-    | '/_authenticated/returns/'
-    | '/_authenticated/sale-add/'
-    | '/_authenticated/sale-ledger/'
-    | '/_authenticated/sale-view/'
-    | '/_authenticated/sale/'
     | '/_authenticated/settings/'
-    | '/_authenticated/supplier-ledger/'
     | '/_authenticated/suppliers/'
     | '/_authenticated/tasks/'
-    | '/_authenticated/transaction-ledger/'
-    | '/_authenticated/transactions/'
     | '/_authenticated/users/'
     | '/_authenticated/products/bulk-edit/'
   fileRoutesById: FileRoutesById
@@ -1314,12 +796,6 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
-  reportsAccountLedgerDetailRoute: typeof reportsAccountLedgerDetailRoute
-  reportsCustomerLedgerDetailRoute: typeof reportsCustomerLedgerDetailRoute
-  reportsPurchaseLedgerDetailRoute: typeof reportsPurchaseLedgerDetailRoute
-  reportsSaleLedgerDetailRoute: typeof reportsSaleLedgerDetailRoute
-  reportsSupplierLedgerDetailRoute: typeof reportsSupplierLedgerDetailRoute
-  reportsTransactionLedgerDetailRoute: typeof reportsTransactionLedgerDetailRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -1334,12 +810,6 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
-  reportsAccountLedgerDetailRoute: reportsAccountLedgerDetailRoute,
-  reportsCustomerLedgerDetailRoute: reportsCustomerLedgerDetailRoute,
-  reportsPurchaseLedgerDetailRoute: reportsPurchaseLedgerDetailRoute,
-  reportsSaleLedgerDetailRoute: reportsSaleLedgerDetailRoute,
-  reportsSupplierLedgerDetailRoute: reportsSupplierLedgerDetailRoute,
-  reportsTransactionLedgerDetailRoute: reportsTransactionLedgerDetailRoute,
 }
 
 export const routeTree = rootRoute
@@ -1362,13 +832,7 @@ export const routeTree = rootRoute
         "/(errors)/403",
         "/(errors)/404",
         "/(errors)/500",
-        "/(errors)/503",
-        "/(reports)/account-ledger-detail",
-        "/(reports)/customer-ledger-detail",
-        "/(reports)/purchase-ledger-detail",
-        "/(reports)/sale-ledger-detail",
-        "/(reports)/supplier-ledger-detail",
-        "/(reports)/transaction-ledger-detail"
+        "/(errors)/503"
       ]
     },
     "/_authenticated": {
@@ -1378,34 +842,17 @@ export const routeTree = rootRoute
         "/_authenticated/barcode-demo",
         "/_authenticated/voice-demo",
         "/_authenticated/",
-        "/_authenticated/account-ledger/",
         "/_authenticated/accounting/",
-        "/_authenticated/accounts/",
         "/_authenticated/apps/",
         "/_authenticated/categories/",
         "/_authenticated/chats/",
-        "/_authenticated/customer-ledger/",
         "/_authenticated/customers/",
         "/_authenticated/help-center/",
         "/_authenticated/invoice/",
-        "/_authenticated/mobile-load/",
-        "/_authenticated/mobile-repair/",
         "/_authenticated/products/",
-        "/_authenticated/purchase-add/",
         "/_authenticated/purchase-invoice/",
-        "/_authenticated/purchase-ledger/",
-        "/_authenticated/purchase-view/",
-        "/_authenticated/purchase/",
-        "/_authenticated/returns/",
-        "/_authenticated/sale-add/",
-        "/_authenticated/sale-ledger/",
-        "/_authenticated/sale-view/",
-        "/_authenticated/sale/",
-        "/_authenticated/supplier-ledger/",
         "/_authenticated/suppliers/",
         "/_authenticated/tasks/",
-        "/_authenticated/transaction-ledger/",
-        "/_authenticated/transactions/",
         "/_authenticated/users/",
         "/_authenticated/products/bulk-edit/"
       ]
@@ -1451,24 +898,6 @@ export const routeTree = rootRoute
     "/(errors)/503": {
       "filePath": "(errors)/503.tsx"
     },
-    "/(reports)/account-ledger-detail": {
-      "filePath": "(reports)/account-ledger-detail.tsx"
-    },
-    "/(reports)/customer-ledger-detail": {
-      "filePath": "(reports)/customer-ledger-detail.tsx"
-    },
-    "/(reports)/purchase-ledger-detail": {
-      "filePath": "(reports)/purchase-ledger-detail.tsx"
-    },
-    "/(reports)/sale-ledger-detail": {
-      "filePath": "(reports)/sale-ledger-detail.tsx"
-    },
-    "/(reports)/supplier-ledger-detail": {
-      "filePath": "(reports)/supplier-ledger-detail.tsx"
-    },
-    "/(reports)/transaction-ledger-detail": {
-      "filePath": "(reports)/transaction-ledger-detail.tsx"
-    },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
       "parent": "/_authenticated"
@@ -1497,16 +926,8 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/notifications.tsx",
       "parent": "/_authenticated/settings"
     },
-    "/_authenticated/account-ledger/": {
-      "filePath": "_authenticated/account-ledger/index.tsx",
-      "parent": "/_authenticated"
-    },
     "/_authenticated/accounting/": {
       "filePath": "_authenticated/accounting/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/accounts/": {
-      "filePath": "_authenticated/accounts/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/apps/": {
@@ -1521,10 +942,6 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/chats/index.tsx",
       "parent": "/_authenticated"
     },
-    "/_authenticated/customer-ledger/": {
-      "filePath": "_authenticated/customer-ledger/index.tsx",
-      "parent": "/_authenticated"
-    },
     "/_authenticated/customers/": {
       "filePath": "_authenticated/customers/index.tsx",
       "parent": "/_authenticated"
@@ -1537,65 +954,17 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/invoice/index.tsx",
       "parent": "/_authenticated"
     },
-    "/_authenticated/mobile-load/": {
-      "filePath": "_authenticated/mobile-load/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/mobile-repair/": {
-      "filePath": "_authenticated/mobile-repair/index.tsx",
-      "parent": "/_authenticated"
-    },
     "/_authenticated/products/": {
       "filePath": "_authenticated/products/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/purchase-add/": {
-      "filePath": "_authenticated/purchase-add/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-invoice/": {
       "filePath": "_authenticated/purchase-invoice/index.tsx",
       "parent": "/_authenticated"
     },
-    "/_authenticated/purchase-ledger/": {
-      "filePath": "_authenticated/purchase-ledger/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/purchase-view/": {
-      "filePath": "_authenticated/purchase-view/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/purchase/": {
-      "filePath": "_authenticated/purchase/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/returns/": {
-      "filePath": "_authenticated/returns/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/sale-add/": {
-      "filePath": "_authenticated/sale-add/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/sale-ledger/": {
-      "filePath": "_authenticated/sale-ledger/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/sale-view/": {
-      "filePath": "_authenticated/sale-view/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/sale/": {
-      "filePath": "_authenticated/sale/index.tsx",
-      "parent": "/_authenticated"
-    },
     "/_authenticated/settings/": {
       "filePath": "_authenticated/settings/index.tsx",
       "parent": "/_authenticated/settings"
-    },
-    "/_authenticated/supplier-ledger/": {
-      "filePath": "_authenticated/supplier-ledger/index.tsx",
-      "parent": "/_authenticated"
     },
     "/_authenticated/suppliers/": {
       "filePath": "_authenticated/suppliers/index.tsx",
@@ -1603,14 +972,6 @@ export const routeTree = rootRoute
     },
     "/_authenticated/tasks/": {
       "filePath": "_authenticated/tasks/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/transaction-ledger/": {
-      "filePath": "_authenticated/transaction-ledger/index.tsx",
-      "parent": "/_authenticated"
-    },
-    "/_authenticated/transactions/": {
-      "filePath": "_authenticated/transactions/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/users/": {

@@ -49,19 +49,10 @@ const deleteCustomer = {
   }),
 };
 
-const getCustomerSalesAndTransactions = {
-  query: Joi.object().keys({
-    customerId: Joi.string().required(),
-    startDate: Joi.date().required(),
-    endDate: Joi.date().required(),
-  }),
-};
-
 module.exports = {
   createCustomer,
   getCustomers,
   getCustomer,
   updateCustomer,
-  deleteCustomer,
-  getCustomerSalesAndTransactions
+  deleteCustomer
 };

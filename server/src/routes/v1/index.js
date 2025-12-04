@@ -8,12 +8,7 @@ const config = require('../../config/config');
 const customerRoute = require('./customer.route');
 const supplierRoute = require('./supplier.route');
 const purchaseRoute = require('./purchase.route');
-const saleRoute = require('./sale.route');
 const invoiceRoute = require('./invoice.route');
-const returnRoute = require('./return.route');
-const transactionRoute = require('./transaction.route');
-const accountRoute = require('./account.route');
-const mobileRepairRoute = require('./mobileRepair.route');
 const expenseRoute = require('./expense.route');
 const customerLedgerRoute = require('./customerLedger.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
@@ -50,28 +45,8 @@ const defaultRoutes = [
     route: purchaseRoute
   },
   {
-    path: '/sales',
-    route: saleRoute
-  },
-  {
     path: '/invoices',
     route: invoiceRoute
-  },
-  {
-    path: '/returns',
-    route: returnRoute
-  },
-  {
-    path: '/accounts',
-    route: accountRoute,
-  },
-  {
-    path: '/transactions',
-    route: transactionRoute
-  },
-  {
-    path: '/mobile-repairs',
-    route: mobileRepairRoute
   },
   {
     path: '/expenses',

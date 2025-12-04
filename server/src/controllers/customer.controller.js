@@ -39,21 +39,11 @@ const getAllCustomers = catchAsync(async (req, res) => {
   res.send(customers);
 })
 
-
-const getCustomerSalesAndTransactions = catchAsync(async (req, res) => {
-  const { customerId, startDate, endDate } = req.query;
-  // Call the service to get the sales and transactions
-  const results = await customerService.getCustomerSalesAndTransactions(customerId, startDate, endDate);
-  res.send(results);
-});
-
-
 module.exports = {
   createCustomer,
   getCustomers,
   getCustomer,
   updateCustomer,
   deleteCustomer,
-  getAllCustomers,
-  getCustomerSalesAndTransactions
+  getAllCustomers
 };

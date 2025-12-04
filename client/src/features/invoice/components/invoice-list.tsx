@@ -50,7 +50,6 @@ interface InvoiceListProps {
   onBack?: () => void
   onCreateNew?: () => void
   onEdit?: (invoice: any) => void
-  onReturn?: (invoice: any) => void
   onConvertPending?: () => void
 }
 
@@ -216,10 +215,6 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     setInvoiceToDelete(invoice)
     setDeleteDialogOpen(true)
   }
-
-  // const handleReturn = (invoice: any) => {
-  //   onReturn?.(invoice)
-  // }
 
   // Handle server response with pagination info
   const invoiceList = invoicesResponse?.results || invoicesResponse?.data || []

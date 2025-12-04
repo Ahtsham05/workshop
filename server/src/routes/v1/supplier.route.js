@@ -16,10 +16,6 @@ router
   .get(auth('getSuppliers'), validate(supplierValidation.getAllSuppliers), supplierController.getAllSuppliers);
   
 router
-  .route('/ledger')
-  .get(auth('getLedger'), validate(supplierValidation.getSupplierPurchaseAndTransactions), supplierController.getSupplierPurchaseAndTransactions)
-  
-router
   .route('/:supplierId')
   .get(auth('getSuppliers'), validate(supplierValidation.getSupplier), supplierController.getSupplier)
   .patch(auth('manageSuppliers'), validate(supplierValidation.updateSupplier), supplierController.updateSupplier)

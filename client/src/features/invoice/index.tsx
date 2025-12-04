@@ -11,7 +11,6 @@ import { AppDispatch } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
-import { ReturnForm } from '../returns/components/return-form'
 import { toast } from 'sonner'
 
 export interface InvoiceItem {
@@ -87,9 +86,8 @@ export default function InvoicePage() {
   const dispatch = useDispatch<AppDispatch>()
   
   // View state management
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'return' | 'convert-pending'>('list')
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>('list')
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
-  const [returningInvoice, setReturningInvoice] = useState<any>(null)
 
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
@@ -720,12 +718,6 @@ export default function InvoicePage() {
     
     setCurrentView('list')
     setEditingInvoice(null)
-    setReturningInvoice(null)
-  }
-
-  const handleReturn = (invoiceData: any) => {
-    setCurrentView('return')
-    setReturningInvoice(invoiceData)
   }
 
   // Handle successful invoice save - commit stock changes
@@ -738,7 +730,6 @@ export default function InvoicePage() {
     // Navigate back to list with a direct call
     setCurrentView('list')
     setEditingInvoice(null)
-    setReturningInvoice(null)
     
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
@@ -762,31 +753,7 @@ export default function InvoicePage() {
           <InvoiceList 
             onCreateNew={handleCreateNew}
             onEdit={handleEdit}
-            onReturn={handleReturn}
             onConvertPending={handleConvertPending}
-          />
-        </Main>
-      </div>
-    )
-  }
-
-  // Return view
-  if (currentView === 'return') {
-    return (
-      <div className='flex-1 flex flex-col'>
-        <Header fixed>
-          <Search />
-          <div className='ml-auto flex items-center space-x-4'>
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
-          </div>
-        </Header>
-        <Main>
-          <ReturnForm
-            invoice={returningInvoice}
-            onSuccess={handleBackToList}
-            onCancel={handleBackToList}
           />
         </Main>
       </div>

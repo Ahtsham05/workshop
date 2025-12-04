@@ -9,7 +9,6 @@ import { AppDispatch } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { fetchAllCutomers } from '@/stores/customer.slice'
-import { fetchAllAccounts } from '@/stores/account.slice'
 
 interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
   fixed?: boolean
@@ -46,7 +45,6 @@ export const Header = ({
       dispatch(fetchAllProducts({}))
       dispatch(fetchAllSuppliers({}))
       dispatch(fetchAllCutomers({}))
-      dispatch(fetchAllAccounts({}))
       
     }else{
       navigate({
