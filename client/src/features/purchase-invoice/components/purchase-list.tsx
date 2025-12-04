@@ -481,9 +481,9 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                           </div>
                         )}
                         {/* Show product ID for debugging */}
-                        <div className="text-xs text-muted-foreground">
+                        {/* <div className="text-xs text-muted-foreground">
                           ID: {typeof item.product === 'string' ? item.product : item.product?.id || item.product?._id || 'No ID'}
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                   </TableCell>

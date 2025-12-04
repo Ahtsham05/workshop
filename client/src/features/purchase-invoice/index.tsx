@@ -17,8 +17,7 @@ export interface PurchaseItem {
 
 // Supplier Interface
 export interface Supplier {
-  _id?: string;
-  id?: string;
+  _id: string;
   name: string;
   phone?: string;
   email?: string;
@@ -30,7 +29,7 @@ export interface Supplier {
 export interface Purchase {
   _id?: string;
   invoiceNumber: string;
-  supplier: Supplier | null;
+  supplier: Supplier;
   items: PurchaseItem[];
   subtotal: number;
   total: number;
@@ -47,7 +46,7 @@ const PurchaseInvoicePage = () => {
   const [currentView, setCurrentView] = useState<ViewType>('create');
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
-    supplier: null,
+    supplier: {} as Supplier,
     items: [],
     subtotal: 0,
     total: 0,
@@ -118,11 +117,10 @@ const PurchaseInvoicePage = () => {
       let categoryId = 'other';
       let categoryName = 'Other';
       
-      // Ensure stockQuantity exists and preserve ID fields
+      // Ensure stockQuantity exists and preserve original product structure
+      // Don't add id property if _id doesn't exist - keep the product as-is
       const productWithStock = {
         ...product,
-        _id: product._id || product.id, // Ensure _id exists
-        id: product.id || product._id,   // Ensure id exists  
         stockQuantity: product.stockQuantity || 0
       };
       
@@ -149,34 +147,19 @@ const PurchaseInvoicePage = () => {
     setCategorizedProducts(Array.from(categoryMap.values()));
   }, [products]);
 
-  // Reset purchase form
-  const resetPurchaseForm = useCallback(() => {
-    setPurchase({
-      invoiceNumber: '',
-      supplier: null,
-      items: [],
-      subtotal: 0,
-      total: 0,
-      notes: '',
-      date: new Date().toISOString(),
-    })
-  }, [])
-
   // Add product to purchase
   const addToPurchase = useCallback((product: Product, quantity: number = 1) => {
+    console.log('Adding product to purchase:', product);
+    console.log('Product id:', product.id || (product as any)._id);
+    
     setPurchase((prev) => {
-      // More robust product identification - handle missing IDs
-      const getProductIdentifier = (prod: Product) => {
-        return prod._id || prod.id || prod.name; // fallback to name if no ID
-      };
-
-      const productIdentifier = getProductIdentifier(product);
+      const productIdToMatch = product.id || (product as any)._id;
       const existingIndex = prev.items.findIndex((item) => {
-        const itemIdentifier = getProductIdentifier(item.product);
-        return itemIdentifier && productIdentifier && itemIdentifier === productIdentifier;
+        const itemProductId = item.product.id || (item.product as any)._id;
+        return itemProductId === productIdToMatch;
       });
 
-      if (existingIndex >= 0 && productIdentifier) {
+      if (existingIndex >= 0) {
         const updated = [...prev.items];
         updated[existingIndex] = {
           ...updated[existingIndex],
@@ -200,8 +183,8 @@ const PurchaseInvoicePage = () => {
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.filter((item) => {
-        const itemId = item.product._id || item.product.id || item.product.name;
-        return itemId !== productId;
+        const itemProductId = item.product.id || (item.product as any)._id;
+        return itemProductId !== productId;
       }),
     }));
   }, []);
@@ -212,8 +195,8 @@ const PurchaseInvoicePage = () => {
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item) => {
-        const itemId = item.product._id || item.product.id || item.product.name;
-        return itemId === productId ? { ...item, quantity } : item;
+        const itemProductId = item.product.id || (item.product as any)._id;
+        return itemProductId === productId ? { ...item, quantity } : item;
       }),
     }));
   }, []);
@@ -224,8 +207,8 @@ const PurchaseInvoicePage = () => {
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item) => {
-        const itemId = item.product._id || item.product.id || item.product.name;
-        return itemId === productId ? { ...item, purchasePrice: price } : item;
+        const itemProductId = item.product.id || (item.product as any)._id;
+        return itemProductId === productId ? { ...item, purchasePrice: price } : item;
       }),
     }));
   }, []);
@@ -233,7 +216,7 @@ const PurchaseInvoicePage = () => {
   // Calculate totals
   const calculateTotals = useCallback(() => {
     const subtotal = purchase.items.reduce(
-      (sum, item) => sum + item.quantity * item.purchasePrice,
+      (sum, item) => sum + (item.quantity * (item.purchasePrice || 0)),
       0
     );
     return {
@@ -262,25 +245,54 @@ const PurchaseInvoicePage = () => {
     setCurrentView('list');
     setIsEditing(false);
     setEditingPurchase(null);
-    resetPurchaseForm();
-  }, [resetPurchaseForm]);
+    setPurchase({
+      invoiceNumber: '',
+      supplier: {} as Supplier,
+      items: [],
+      subtotal: 0,
+      total: 0,
+      notes: '',
+      date: new Date().toISOString(),
+    });
+  }, []);
 
   // Switch to create view
   const handleCreateNew = useCallback(() => {
     setCurrentView('create');
     setIsEditing(false);
     setEditingPurchase(null);
-    resetPurchaseForm();
-  }, [resetPurchaseForm]);
+    setPurchase({
+      invoiceNumber: '',
+      supplier: {} as Supplier,
+      items: [],
+      subtotal: 0,
+      total: 0,
+      notes: '',
+      date: new Date().toISOString(),
+    });
+  }, []);
 
   // Handle edit
   const handleEdit = useCallback((purchaseToEdit: any) => {
+    console.log('Editing purchase:', purchaseToEdit);
     setCurrentView('create');
     setIsEditing(true);
     setEditingPurchase(purchaseToEdit);
+    
+    // Transform items from backend format to frontend format
+    const transformedItems = (purchaseToEdit.items || []).map((item: any) => ({
+      product: item.product, // Already populated by backend
+      quantity: item.quantity,
+      purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
+    }));
+    
+    console.log('Transformed items:', transformedItems);
+    
     setPurchase({
       ...purchaseToEdit,
-      items: purchaseToEdit.items || [],
+      items: transformedItems,
+      supplier: purchaseToEdit.supplier || ({} as Supplier),
+      date: purchaseToEdit.purchaseDate || purchaseToEdit.date || new Date().toISOString(),
     });
   }, []);
 
@@ -299,7 +311,21 @@ const PurchaseInvoicePage = () => {
         />
       ) : currentView === 'create' ? (
         <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
-          {/* Left Column - Purchase Panel */}
+          {/* Left Column - Product Catalog */}
+          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
+            <ProductCatalog
+              categorizedProducts={categorizedProducts}
+              loading={loading}
+              showImages={showImages}
+              setShowImages={setShowImages}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onAddToInvoice={addToPurchase}
+              onBarcodeSearch={handleBarcodeSearch}
+            />
+          </div>
+
+          {/* Right Column - Purchase Panel */}
           <div className="space-y-4 pb-6">
             <PurchasePanel
               purchase={purchase}
@@ -312,20 +338,6 @@ const PurchaseInvoicePage = () => {
               onSaveSuccess={handleSaveSuccess}
               isEditing={isEditing}
               editingPurchase={editingPurchase}
-            />
-          </div>
-
-          {/* Right Column - Product Catalog */}
-          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
-            <ProductCatalog
-              categorizedProducts={categorizedProducts}
-              loading={loading}
-              showImages={showImages}
-              setShowImages={setShowImages}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onAddToInvoice={addToPurchase}
-              onBarcodeSearch={handleBarcodeSearch}
             />
           </div>
         </div>

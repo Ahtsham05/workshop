@@ -38,11 +38,11 @@ const createPurchase = async (purchaseBody) => {
  * @returns {Promise<QueryResult>}
  */
 const queryPurchases = async (filter, options) => {
-  // Ensure 'populate' is set in options to include supplier data
- options.populate = 'supplier';
+  // Ensure 'populate' is set in options to include supplier and product data
+  options.populate = 'supplier,items.product';
   const purchases = await Purchase.paginate(filter, options);
   return purchases;
-};;
+};
 
 /**
  * Get purchase by id
@@ -68,14 +68,14 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Purchase not found');
   }
 
-  // Loop through the existing items and calculate the stock adjustments and price updates
+  // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
 
     // Find the existing purchase item
     const existingItem = purchase.items.find(item => item.product._id.toString() === updatedItem.product.toString());
 
     if (existingItem) {
-      // Find the product to adjust the stock and price
+      // EXISTING ITEM - Calculate the difference and adjust stock
       const product = await Product.findById(updatedItem.product);
 
       if (product) {
@@ -90,6 +90,38 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         product.price = updatedItem.priceAtPurchase;
 
         // Save the product with updated stock and price
+        await product.save();
+      }
+    } else {
+      // NEW ITEM - Add the full quantity to stock (wasn't in original purchase)
+      const product = await Product.findById(updatedItem.product);
+
+      if (product) {
+        // Add the full quantity since this is a new item
+        product.stockQuantity += updatedItem.quantity;
+
+        // Update the product price with the new price
+        product.price = updatedItem.priceAtPurchase;
+
+        // Save the product with updated stock and price
+        await product.save();
+      }
+    }
+  }
+
+  // Handle removed items - decrease stock for items that were in original but not in update
+  for (const originalItem of purchase.items) {
+    const stillExists = updateBody.items?.find(item => item.product.toString() === originalItem.product._id.toString());
+    
+    if (!stillExists) {
+      // REMOVED ITEM - Subtract the quantity from stock
+      const product = await Product.findById(originalItem.product);
+      
+      if (product) {
+        // Subtract the quantity since this item was removed
+        product.stockQuantity -= originalItem.quantity;
+        
+        // Save the product with updated stock
         await product.save();
       }
     }

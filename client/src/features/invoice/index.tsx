@@ -61,8 +61,8 @@ export interface SplitPayment {
 }
 
 export interface Product {
-  _id: string
-  id?: string
+  id: string  // Backend transforms _id to id via toJSON plugin
+  _id?: string  // Fallback for compatibility
   name: string
   price: number
   cost: number
@@ -75,7 +75,8 @@ export interface Product {
 }
 
 export interface Category {
-  _id: string
+  _id: string  // Categories use _id (check if backend also transforms these)
+  id?: string
   name: string
   image?: { url: string; publicId: string }
   products: Product[]

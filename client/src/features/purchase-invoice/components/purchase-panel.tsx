@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,15 +65,15 @@ export default function PurchasePanel({
   const [createPurchase] = useCreatePurchaseMutation()
   const [updatePurchase] = useUpdatePurchaseMutation()
 
-  // Initialize form when editing
-  useEffect(() => {
-    if (isEditing && editingPurchase) {
-      setPurchase({
-        ...editingPurchase,
-        items: editingPurchase.items || [],
-      })
-    }
-  }, [isEditing, editingPurchase, setPurchase])
+  // Initialize form when editing - removed because parent component already handles transformation
+  // useEffect(() => {
+  //   if (isEditing && editingPurchase) {
+  //     setPurchase({
+  //       ...editingPurchase,
+  //       items: editingPurchase.items || [],
+  //     })
+  //   }
+  // }, [isEditing, editingPurchase, setPurchase])
 
   // Print functionality
   const printPurchase = useCallback(
@@ -105,7 +105,8 @@ export default function PurchasePanel({
   const handleSavePurchase = useCallback(
     async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
       // Validation
-      if (!(purchase.supplier?._id || purchase.supplier?.id)) {
+      const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+      if (!supplierId) {
         toast.error(t('Please select a supplier'))
         return
       }
@@ -119,11 +120,14 @@ export default function PurchasePanel({
 
       const totals = calculateTotals()
 
+      console.log('Saving purchase with data:', purchase)
+
       // Map to backend format
       const purchaseData = {
-        supplier: purchase.supplier._id || purchase.supplier.id,
+        supplier: supplierId,
         items: purchase.items.map((item) => {
-          const productId = item.product._id || item.product.id;
+          // Backend uses 'id' property (transformed from _id by toJSON plugin)
+          const productId = item.product.id || (item.product as any)._id;
           
           if (!productId) {
             console.error(`Product has no valid ID!`, item.product);
@@ -145,9 +149,10 @@ export default function PurchasePanel({
 
       try {
         let result
-        if (isEditing && editingPurchase?._id) {
+        const purchaseId = editingPurchase?._id || editingPurchase?.id
+        if (isEditing && purchaseId) {
           result = await updatePurchase({
-            id: editingPurchase._id,
+            id: purchaseId,
             data: purchaseData,
           }).unwrap()
           toast.success(t('Purchase updated successfully'))
@@ -234,12 +239,12 @@ export default function PurchasePanel({
                   role="combobox"
                   aria-expanded={supplierSelectOpen}
                   className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
-                    !(purchase.supplier?._id || purchase.supplier?.id) ? 'border-red-500 bg-red-50' : ''
+                    !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'border-red-500 bg-red-50' : ''
                   }`}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <Search className="w-4 h-4 flex-shrink-0" />
-                    {(purchase.supplier?._id || purchase.supplier?.id) ? (
+                    {(purchase.supplier?._id || (purchase.supplier as any)?.id) ? (
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
                           <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
@@ -254,9 +259,9 @@ export default function PurchasePanel({
                       </div>
                     ) : (
                       <span className={`truncate ${
-                        !(purchase.supplier?._id || purchase.supplier?.id) ? 'text-red-500' : 'text-muted-foreground'
+                        !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'text-red-500' : 'text-muted-foreground'
                       }`} title={t('Select supplier')}>
-                        {t('Select supplier')} {!(purchase.supplier?._id || purchase.supplier?.id) && '*'}
+                        {t('Select supplier')} {!(purchase.supplier?._id || (purchase.supplier as any)?.id) && '*'}
                       </span>
                     )}
                   </div>
@@ -283,20 +288,33 @@ export default function PurchasePanel({
                   ) : (
                     <div className="space-y-1 p-1">
                       {filteredSuppliers.map((supplier, index) => {
-                        const supplierId = supplier._id || supplier.id || `supplier-${index}`
-                        const isSelected = (purchase.supplier?._id && purchase.supplier._id === supplierId) || 
-                                         (purchase.supplier?.id && purchase.supplier.id === supplierId) ||
-                                         (purchase.supplier?.name === supplier.name)
+                        const supplierId = supplier._id || (supplier as any).id || `supplier-${index}`
+                        const currentSupplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+                        const isSelected = currentSupplierId === supplierId
                         return (
                           <div
                             key={supplierId}
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              console.log('Selecting supplier:', supplier)
+                              const selectedSupplier = {
+                                _id: supplier._id || (supplier as any).id,
+                                name: supplier.name,
+                                phone: supplier.phone,
+                                email: supplier.email,
+                                address: supplier.address,
+                                balance: supplier.balance
+                              }
+                              console.log('Setting supplier to:', selectedSupplier)
                               setPurchase(prev => ({
                                 ...prev,
-                                supplier: supplier
+                                supplier: selectedSupplier
                               }))
-                              setSupplierSelectOpen(false)
-                              setSupplierSearchQuery('')
+                              setTimeout(() => {
+                                setSupplierSelectOpen(false)
+                                setSupplierSearchQuery('')
+                              }, 100)
                             }}
                             className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-accent/50 transition-colors ${
                               isSelected ? 'bg-accent' : ''
@@ -366,8 +384,10 @@ export default function PurchasePanel({
                 {t('No items added yet')}
               </div>
             ) : (
-              purchase.items.map((item: PurchaseItem, index: number) => (
-                <div key={`${item.product._id}-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+              purchase.items.map((item: PurchaseItem, index: number) => {
+                const productId = item.product.id || (item.product as any)._id;
+                return (
+                <div key={`${productId}-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
                   {/* Product Image */}
                   {item.product.image?.url ? (
                     <img 
@@ -397,7 +417,7 @@ export default function PurchasePanel({
                         size="sm"
                         variant="outline"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.product._id || item.product.id || item.product.name, Math.max(1, item.quantity - 1))}
+                        onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1))}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
@@ -405,14 +425,14 @@ export default function PurchasePanel({
                         type="number"
                         min="1"
                         value={item.quantity}
-                        onChange={(e) => updateQuantity(item.product._id || item.product.id || item.product.name, parseInt(e.target.value) || 1)}
+                        onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
                         className="h-6 w-12 text-center text-xs p-1"
                       />
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.product._id || item.product.id || item.product.name, item.quantity + 1)}
+                        onClick={() => updateQuantity(productId, item.quantity + 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -426,8 +446,8 @@ export default function PurchasePanel({
                       type="number"
                       min="0.01"
                       step="0.01"
-                      value={item.purchasePrice}
-                      onChange={(e) => updatePurchasePrice(item.product._id || item.product.id || item.product.name, parseFloat(e.target.value) || 0)}
+                      value={item.purchasePrice || 0}
+                      onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
                       className="h-6 w-16 text-center text-xs p-1"
                     />
                   </div>
@@ -442,13 +462,14 @@ export default function PurchasePanel({
                       size="sm"
                       variant="ghost"
                       className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                      onClick={() => removeFromPurchase(item.product._id || item.product.id || item.product.name)}
+                      onClick={() => removeFromPurchase(productId)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-              ))
+              )
+              })
             )}
           </div>
         </CardContent>
@@ -501,7 +522,7 @@ export default function PurchasePanel({
               onClick={() => handleSavePurchase('none')}
               className="w-full"
               size="lg"
-              disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
+              disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
               variant="outline"
             >
               {isLoading && savingType === 'none' ? (
@@ -524,7 +545,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('receipt')}
                 className="w-full"
                 size="lg"
-                disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
+                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'receipt' ? (
@@ -545,7 +566,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('a4')}
                 className="w-full"
                 size="lg"
-                disabled={!(purchase.supplier?._id || purchase.supplier?.id) || purchase.items.length === 0 || isLoading}
+                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'a4' ? (
