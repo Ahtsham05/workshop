@@ -15,6 +15,8 @@ import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/inv
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import SmartInput from '@/components/smart-input.tsx'
+import Axios from '@/utils/Axios'
+import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
@@ -78,6 +80,8 @@ export function InvoicePanel({
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
+  const [customerBalance, setCustomerBalance] = useState<number>(0)
+  const [loadingBalance, setLoadingBalance] = useState(false)
 
   // Detect current keyboard language
   const currentKeyboardLanguage = detectCurrentKeyboardLanguage()
@@ -111,7 +115,9 @@ export function InvoicePanel({
         dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
         deliveryCharge: invoiceData.deliveryCharge,
-        serviceCharge: invoiceData.serviceCharge
+        serviceCharge: invoiceData.serviceCharge,
+        previousBalance: customerBalance,
+        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0)
       }
 
       // Force Urdu/RTL for print
@@ -149,7 +155,9 @@ export function InvoicePanel({
         dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
         deliveryCharge: invoiceData.deliveryCharge,
-        serviceCharge: invoiceData.serviceCharge
+        serviceCharge: invoiceData.serviceCharge,
+        previousBalance: customerBalance,
+        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0)
       }
 
       // Force Urdu/RTL for print
@@ -213,6 +221,29 @@ export function InvoicePanel({
       }
     }
   }, [invoice.customerId, invoice.type, invoice.dueDate, setInvoice])
+
+  // Fetch customer balance when customer is selected
+  useEffect(() => {
+    const fetchCustomerBalance = async () => {
+      if (invoice.customerId && invoice.customerId !== 'walk-in') {
+        setLoadingBalance(true)
+        try {
+          const url = `${summery.fetchCustomerBalance.url}/${invoice.customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
+          const response = await Axios.get(url)
+          setCustomerBalance(response.data.balance || 0)
+        } catch (error) {
+          console.error('Failed to fetch customer balance:', error)
+          setCustomerBalance(0)
+        } finally {
+          setLoadingBalance(false)
+        }
+      } else {
+        setCustomerBalance(0)
+      }
+    }
+    
+    fetchCustomerBalance()
+  }, [invoice.customerId])
 
   // Filter customers by name or phone number
   const filteredCustomers = customers.filter(customer => {
@@ -453,6 +484,17 @@ export function InvoicePanel({
       // Call success callback to commit stock changes
       if (onSaveSuccess) {
         onSaveSuccess()
+      }
+
+      // Refresh customer balance after successful save
+      if (invoice.customerId && invoice.customerId !== 'walk-in') {
+        try {
+          const url = `${summery.fetchCustomerBalance.url}/${invoice.customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
+          const response = await Axios.get(url)
+          setCustomerBalance(response.data.balance || 0)
+        } catch (error) {
+          console.error('Failed to refresh customer balance:', error)
+        }
       }
       
       // Print if requested
@@ -1183,7 +1225,7 @@ export function InvoicePanel({
                   </div>
                 )}
 
-                <div className='space-y-2'>
+                {/* <div className='space-y-2'>
                   <div className='flex justify-between'>
                     <span>{t('paid')}:</span>
                     <span className='text-green-600'>
@@ -1198,6 +1240,42 @@ export function InvoicePanel({
                       </span>
                     </div>
                   )}
+                </div> */}
+              </>
+            )}
+
+            {/* Customer Balance Display - After Payment Details */}
+            {invoice.customerId && invoice.customerId !== 'walk-in' && (
+              <>
+                <Separator className="my-2" />
+                <div className='space-y-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg'>
+                  <div className='flex justify-between items-center text-sm'>
+                    <span className="font-medium">{t('Previous Balance')}:</span>
+                    <span className={`font-bold ${customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                      {loadingBalance ? (
+                        <span className="text-xs">Loading...</span>
+                      ) : (
+                        `Rs${Math.abs(customerBalance).toFixed(2)} ${customerBalance > 0 ? '(Dr)' : customerBalance < 0 ? '(Cr)' : ''}`
+                      )}
+                    </span>
+                  </div>
+                  <div className='flex justify-between items-center text-sm'>
+                    <span className="font-medium">{t('Current Invoice')}:</span>
+                    <span className="font-bold text-red-600">Rs{invoice.total.toFixed(2)} (Dr)</span>
+                  </div>
+                  {invoice.paidAmount > 0 && (
+                    <div className='flex justify-between items-center text-sm'>
+                      <span className="font-medium">{t('Paid Now')}:</span>
+                      <span className="font-bold text-green-600">-Rs{invoice.paidAmount.toFixed(2)} (Cr)</span>
+                    </div>
+                  )}
+                  <Separator />
+                  <div className='flex justify-between items-center'>
+                    <span className="font-bold">{t('Net Balance')}:</span>
+                    <span className={`font-bold text-lg ${(customerBalance + invoice.total - invoice.paidAmount) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      Rs{Math.abs(customerBalance + invoice.total - invoice.paidAmount).toFixed(2)} {(customerBalance + invoice.total - invoice.paidAmount) > 0 ? '(Receivable)' : '(Payable)'}
+                    </span>
+                  </div>
                 </div>
               </>
             )}

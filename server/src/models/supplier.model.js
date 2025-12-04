@@ -7,6 +7,7 @@ const SupplierSchema = new mongoose.Schema({
   phone: { type: String },
   whatsapp: { type: String },
   address: { type: String },
+  balance: { type: Number, default: 0 },
 }, {
   timestamps: true,
 });

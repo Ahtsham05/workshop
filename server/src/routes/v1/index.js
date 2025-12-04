@@ -13,7 +13,10 @@ const invoiceRoute = require('./invoice.route');
 const returnRoute = require('./return.route');
 const transactionRoute = require('./transaction.route');
 const accountRoute = require('./account.route');
-const mobileRepairRoute = require('./mobileRepair.route')
+const mobileRepairRoute = require('./mobileRepair.route');
+const expenseRoute = require('./expense.route');
+const customerLedgerRoute = require('./customerLedger.route');
+const supplierLedgerRoute = require('./supplierLedger.route');
 
 const router = express.Router();
 
@@ -69,6 +72,18 @@ const defaultRoutes = [
   {
     path: '/mobile-repairs',
     route: mobileRepairRoute
+  },
+  {
+    path: '/expenses',
+    route: expenseRoute
+  },
+  {
+    path: '/customer-ledger',
+    route: customerLedgerRoute
+  },
+  {
+    path: '/supplier-ledger',
+    route: supplierLedgerRoute
   },
 ];
 

@@ -20,6 +20,8 @@ export interface PrintInvoiceData {
   notes?: string
   deliveryCharge?: number
   serviceCharge?: number
+  previousBalance?: number
+  netBalance?: number
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -77,6 +79,9 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     paid: 'ادا شدہ',
     balance_due: 'باقی رقم',
     paid_in_full: 'مکمل ادائیگی',
+    previous_balance: 'پچھلا بیلنس',
+    current_invoice: 'موجودہ انوائس',
+    net_balance: 'کل بیلنس',
     notes: 'نوٹس',
     thank_you: 'آپ کا شکریہ!',
     keep_receipt: 'براہ کرم یہ رسید محفوظ رکھیں',
@@ -395,6 +400,27 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
   </div>
   
+  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
+    <div class="payment-section" style="border-top: 1px solid #000; margin-top: 8px;">
+      <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
+        <span>${urduTexts.previous_balance}:</span>
+        <span style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}">
+          ${formatCurrency(Math.abs(data.previousBalance || 0))} ${data.previousBalance > 0 ? '(Dr)' : data.previousBalance < 0 ? '(Cr)' : ''}
+        </span>
+      </div>
+      <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
+        <span>${urduTexts.current_invoice}:</span>
+        <span style="color: #d32f2f;">${formatCurrency(total)} (Dr)</span>
+      </div>
+      <div class="total-row" style="font-weight: bold; border-top: 1px dotted #000; padding-top: 3px;">
+        <span>${urduTexts.net_balance}:</span>
+        <span style="color: ${(data.previousBalance || 0) + total > 0 ? '#d32f2f' : '#2e7d32'}">
+          ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
+        </span>
+      </div>
+    </div>
+  ` : ''}
+  
   ${type !== 'pending' ? `
     <div class="payment-section">
       <div class="total-row">
@@ -516,6 +542,9 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     payment_status: 'ادائیگی کی صورتحال',
     completed: 'مکمل',
     pending_payment: 'ادائیگی باقی',
+    previous_balance: 'پچھلا بیلنس',
+    current_invoice: 'موجودہ انوائس',
+    net_balance: 'کل بیلنس',
     invoice_barcode: 'انوائس بار کوڈ',
     scan_to_verify: 'تصدیق کے لیے اسکین کریں',
     additional_notes: 'اضافی نوٹس',
@@ -978,6 +1007,33 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       </tr>
     </table>
   </div>
+
+  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
+    <div class="payment-info" style="border-top: 2px solid #007bff; padding-top: 15px; margin-top: 15px;">
+      <div>
+        <div class="info-title">${urduTexts.previous_balance}:</div>
+        <div class="info-row">
+          <span style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}; font-weight: bold; font-size: 16px;">
+            ${formatCurrency(Math.abs(data.previousBalance || 0))} ${data.previousBalance > 0 ? '(Dr)' : data.previousBalance < 0 ? '(Cr)' : ''}
+          </span>
+        </div>
+      </div>
+      <div>
+        <div class="info-title">${urduTexts.current_invoice}:</div>
+        <div class="info-row">
+          <span style="color: #d32f2f; font-weight: bold; font-size: 16px;">${formatCurrency(total)} (Dr)</span>
+        </div>
+      </div>
+      <div>
+        <div class="info-title">${urduTexts.net_balance}:</div>
+        <div class="info-row">
+          <span style="color: ${(data.previousBalance || 0) + total > 0 ? '#d32f2f' : '#2e7d32'}; font-weight: bold; font-size: 18px;">
+            ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
+          </span>
+        </div>
+      </div>
+    </div>
+  ` : ''}
   
   ${type !== 'pending' ? `
     <div class="payment-info">

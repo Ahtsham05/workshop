@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,10 +12,13 @@ import {
 } from '@/components/ui/popover'
 import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
 import { toast } from 'sonner'
+import Axios from '@/utils/Axios'
+import summery from '@/utils/summery'
 import type { Purchase, PurchaseItem, Supplier } from '../index'
 
 interface PurchasePanelProps {
@@ -47,6 +50,8 @@ export default function PurchasePanel({
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
+  const [supplierBalance, setSupplierBalance] = useState<number>(0)
+  const [loadingBalance, setLoadingBalance] = useState(false)
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
@@ -74,6 +79,30 @@ export default function PurchasePanel({
   //     })
   //   }
   // }, [isEditing, editingPurchase, setPurchase])
+
+  // Fetch supplier balance when supplier is selected
+  useEffect(() => {
+    const fetchSupplierBalance = async () => {
+      const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+      if (supplierId) {
+        setLoadingBalance(true)
+        try {
+          const url = `${summery.fetchSupplierBalance.url}/${supplierId}${summery.fetchSupplierBalance.urlSuffix || ''}`
+          const response = await Axios.get(url)
+          setSupplierBalance(response.data.balance || 0)
+        } catch (error) {
+          console.error('Failed to fetch supplier balance:', error)
+          setSupplierBalance(0)
+        } finally {
+          setLoadingBalance(false)
+        }
+      } else {
+        setSupplierBalance(0)
+      }
+    }
+    
+    fetchSupplierBalance()
+  }, [purchase.supplier])
 
   // Print functionality
   const printPurchase = useCallback(
@@ -121,6 +150,16 @@ export default function PurchasePanel({
       const totals = calculateTotals()
 
       console.log('Saving purchase with data:', purchase)
+      console.log('Supplier ID:', supplierId)
+      console.log('Totals:', totals)
+
+      // Validate and normalize paymentType
+      const validPaymentTypes = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'];
+      let paymentType = purchase.paymentType || 'Cash';
+      if (!validPaymentTypes.includes(paymentType)) {
+        console.warn(`Invalid paymentType: ${paymentType}, defaulting to 'Cash'`);
+        paymentType = 'Cash';
+      }
 
       // Map to backend format
       const purchaseData = {
@@ -143,9 +182,14 @@ export default function PurchasePanel({
           };
         }),
         totalAmount: totals.total,
+        paidAmount: purchase.paidAmount || 0,
+        balance: totals.total - (purchase.paidAmount || 0),
+        paymentType: paymentType,
         purchaseDate: purchase.date || new Date().toISOString(),
         notes: purchase.notes?.trim() || undefined,
       }
+
+      console.log('Purchase data being sent to backend:', purchaseData)
 
       try {
         let result
@@ -159,6 +203,18 @@ export default function PurchasePanel({
         } else {
           result = await createPurchase(purchaseData).unwrap()
           toast.success(t('Purchase created successfully'))
+        }
+
+        // Refresh supplier balance after successful save
+        const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+        if (supplierId) {
+          try {
+            const url = `${summery.fetchSupplierBalance.url}/${supplierId}${summery.fetchSupplierBalance.urlSuffix || ''}`
+            const response = await Axios.get(url)
+            setSupplierBalance(response.data.balance || 0)
+          } catch (error) {
+            console.error('Failed to refresh supplier balance:', error)
+          }
         }
 
         // Print if requested
@@ -505,6 +561,73 @@ export default function PurchasePanel({
               <span>{t('Total')}:</span>
               <span>Rs{totals.total.toFixed(2)}</span>
             </div>
+
+            {/* Paid Amount Input */}
+            <div className="border-t pt-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="paid-amount" className="whitespace-nowrap">
+                  {t('Paid Amount')}:
+                </Label>
+                <Input
+                  id="paid-amount"
+                  type="number"
+                  min="0"
+                  max={totals.total}
+                  value={purchase.paidAmount || 0}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value) || 0
+                    const currentTotal = calculateTotals().total
+                    setPurchase((prev) => ({
+                      ...prev,
+                      paidAmount: value,
+                      balance: currentTotal - value,
+                    }))
+                  }}
+                  placeholder="0.00"
+                  className="flex-1"
+                />
+              </div>
+              {/* {purchase.paidAmount !== undefined && purchase.paidAmount < totals.total && (
+                <div className="flex justify-between text-sm font-medium text-orange-600">
+                  <span>{t('Balance Due')}:</span>
+                  <span>Rs{(totals.total - (purchase.paidAmount || 0)).toFixed(2)}</span>
+                </div>
+              )} */}x1
+            </div>
+
+            {/* Supplier Balance After Payment - Only show in create mode */}
+            {!isEditing && (purchase.supplier?._id || (purchase.supplier as any)?.id) && (
+              <div className="border-t pt-3 space-y-2 bg-orange-50 dark:bg-orange-950 rounded-lg p-3 mt-2">
+                <div className='flex justify-between items-center text-sm'>
+                  <span className="font-medium">{t('Previous Balance')}:</span>
+                  <span className={`font-bold ${supplierBalance > 0 ? 'text-red-600' : supplierBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                    {loadingBalance ? (
+                      <span className="text-xs">Loading...</span>
+                    ) : (
+                      `Rs${Math.abs(supplierBalance).toFixed(2)} ${supplierBalance > 0 ? '(Cr)' : supplierBalance < 0 ? '(Dr)' : ''}`
+                    )}
+                  </span>
+                </div>
+                <div className='flex justify-between items-center text-sm'>
+                  <span className="font-medium">{t('Current Purchase')}:</span>
+                  <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
+                </div>
+                {purchase.paidAmount > 0 && (
+                  <div className='flex justify-between items-center text-sm'>
+                    <span className="font-medium">{t('Paid Now')}:</span>
+                    <span className="font-bold text-green-600">-Rs{purchase.paidAmount.toFixed(2)} (Dr)</span>
+                  </div>
+                )}
+                <Separator />
+                <div className='flex justify-between items-center'>
+                  <span className="font-bold">{t('Net Balance')}:</span>
+                  <span className={`font-bold text-lg ${(supplierBalance + totals.total - (purchase.paidAmount || 0)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    Rs{Math.abs(supplierBalance + totals.total - (purchase.paidAmount || 0)).toFixed(2)} {(supplierBalance + totals.total - (purchase.paidAmount || 0)) > 0 ? '(Payable)' : '(Receivable)'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>{t('Total Items')}:</span>
               <span>{purchase.items.length}</span>

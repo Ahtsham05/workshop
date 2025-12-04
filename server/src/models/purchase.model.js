@@ -16,6 +16,9 @@ const PurchaseSchema = new mongoose.Schema({
   ],
   purchaseDate: { type: Date, default: Date.now },
   totalAmount: { type: Number, required: true },
+  paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase
+  balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount)
+  paymentType: { type: String, enum: ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'], default: 'Cash' },
   notes: { type: String },
   status: { type: Boolean, default: false },
 }, {

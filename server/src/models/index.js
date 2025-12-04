@@ -13,3 +13,6 @@ module.exports.Transaction = require('./transaction.model');
 module.exports.GeneralLedger = require('./generalLedger.model');
 module.exports.Voucher = require('./voucher.model');
 module.exports.MobileRepair = require('./mobileRepair.model');
+module.exports.Expense = require('./expense.model');
+module.exports.CustomerLedger = require('./customerLedger.model');
+module.exports.SupplierLedger = require('./supplierLedger.model');

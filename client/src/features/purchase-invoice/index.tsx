@@ -33,6 +33,9 @@ export interface Purchase {
   items: PurchaseItem[];
   subtotal: number;
   total: number;
+  paidAmount?: number;
+  balance?: number;
+  paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit';
   notes?: string;
   date: string;
   createdAt?: string;
@@ -50,6 +53,9 @@ const PurchaseInvoicePage = () => {
     items: [],
     subtotal: 0,
     total: 0,
+    paidAmount: 0,
+    balance: 0,
+    paymentType: 'Cash',
     notes: '',
     date: new Date().toISOString(),
   });
@@ -251,6 +257,9 @@ const PurchaseInvoicePage = () => {
       items: [],
       subtotal: 0,
       total: 0,
+      paidAmount: 0,
+      balance: 0,
+      paymentType: 'Cash',
       notes: '',
       date: new Date().toISOString(),
     });
@@ -267,6 +276,9 @@ const PurchaseInvoicePage = () => {
       items: [],
       subtotal: 0,
       total: 0,
+      paidAmount: 0,
+      balance: 0,
+      paymentType: 'Cash',
       notes: '',
       date: new Date().toISOString(),
     });
@@ -293,6 +305,7 @@ const PurchaseInvoicePage = () => {
       items: transformedItems,
       supplier: purchaseToEdit.supplier || ({} as Supplier),
       date: purchaseToEdit.purchaseDate || purchaseToEdit.date || new Date().toISOString(),
+      paymentType: purchaseToEdit.paymentType || 'Cash', // Ensure paymentType has valid default
     });
   }, []);
 

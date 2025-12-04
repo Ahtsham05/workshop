@@ -258,6 +258,96 @@ const summery = {
     method: 'get',
   },
 
+  // expenses
+  addExpense: {
+    url: '/expenses',
+    method: 'post',
+  },
+  updateExpense: {
+    url: '/expenses',
+    method: 'patch',
+  },
+  deleteExpense: {
+    url: '/expenses',
+    method: 'delete',
+  },
+  fetchExpenses: {
+    url: '/expenses',
+    method: 'get',
+  },
+  fetchExpenseSummary: {
+    url: '/expenses/summary',
+    method: 'get',
+  },
+  fetchExpenseTrends: {
+    url: '/expenses/trends',
+    method: 'get',
+  },
+
+  // customer ledger
+  addCustomerLedgerEntry: {
+    url: '/customer-ledger',
+    method: 'post',
+  },
+  updateCustomerLedgerEntry: {
+    url: '/customer-ledger',
+    method: 'patch',
+  },
+  deleteCustomerLedgerEntry: {
+    url: '/customer-ledger',
+    method: 'delete',
+  },
+  fetchCustomerLedgerEntries: {
+    url: '/customer-ledger',
+    method: 'get',
+  },
+  fetchCustomerBalance: {
+    url: '/customer-ledger/customer',
+    method: 'get',
+    urlSuffix: '/balance',
+  },
+  fetchCustomerLedgerSummary: {
+    url: '/customer-ledger/customer',
+    method: 'get',
+    urlSuffix: '/summary',
+  },
+  fetchCustomersWithBalances: {
+    url: '/customer-ledger/customers-with-balances',
+    method: 'get',
+  },
+
+  // supplier ledger
+  addSupplierLedgerEntry: {
+    url: '/supplier-ledger',
+    method: 'post',
+  },
+  updateSupplierLedgerEntry: {
+    url: '/supplier-ledger',
+    method: 'patch',
+  },
+  deleteSupplierLedgerEntry: {
+    url: '/supplier-ledger',
+    method: 'delete',
+  },
+  fetchSupplierLedgerEntries: {
+    url: '/supplier-ledger',
+    method: 'get',
+  },
+  fetchSupplierBalance: {
+    url: '/supplier-ledger/supplier',
+    method: 'get',
+    urlSuffix: '/balance',
+  },
+  fetchSupplierLedgerSummary: {
+    url: '/supplier-ledger/supplier',
+    method: 'get',
+    urlSuffix: '/summary',
+  },
+  fetchSuppliersWithBalances: {
+    url: '/supplier-ledger/suppliers-with-balances',
+    method: 'get',
+  },
+
 };
 
 export default summery;

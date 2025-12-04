@@ -15,3 +15,6 @@ module.exports.returnService = require('./return.service.js');
 module.exports.transactionService = require('./transaction.service.js');
 module.exports.accountService = require('./account.service.js');
 module.exports.mobileRepairService = require('./mobileRepair.service.js');
+module.exports.expenseService = require('./expense.service.js');
+module.exports.customerLedgerService = require('./customerLedger.service.js');
+module.exports.supplierLedgerService = require('./supplierLedger.service.js');

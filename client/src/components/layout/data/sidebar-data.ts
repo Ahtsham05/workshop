@@ -95,6 +95,11 @@ export const sidebarData: SidebarData = {
         //   icon: IconRefresh,
         // },
         {
+          title: 'Accounting',
+          url: '/accounting',
+          icon: IconChecklist,
+        },
+        {
           title: 'Accounts',
           url: '/accounts',
           icon: IconChecklist,

@@ -1,6 +1,6 @@
 const allRoles = {
-  user: ['getProducts','getUsers','getSuppliers','getCustomers','getPurchases','getSales','getInvoices','getReturns','getTransactions','getAccounts','getMobileRepairs','getCategories'],
-  admin: ['getUsers', 'manageUsers', 'getProducts', 'manageProducts', 'getCategories', 'manageCategories', 'getSuppliers', 'manageSuppliers', 'getCustomers', 'manageCustomers','getPurchases', 'managePurchases', 'getSales', 'manageSales', 'getInvoices', 'manageInvoices', 'getReturns', 'createReturn', 'manageReturns', 'approveReturns', 'processReturns', 'getTransactions', 'manageTransactions', 'getAccounts', 'manageAccounts', 'getLedger','manageMobileRepairs','getMobileRepairs'],
+  user: ['getProducts','getUsers','getSuppliers','getCustomers','getPurchases','getSales','getInvoices','getReturns','getTransactions','getAccounts','getMobileRepairs','getCategories','getExpenses','getLedgers'],
+  admin: ['getUsers', 'manageUsers', 'getProducts', 'manageProducts', 'getCategories', 'manageCategories', 'getSuppliers', 'manageSuppliers', 'getCustomers', 'manageCustomers','getPurchases', 'managePurchases', 'getSales', 'manageSales', 'getInvoices', 'manageInvoices', 'getReturns', 'createReturn', 'manageReturns', 'approveReturns', 'processReturns', 'getTransactions', 'manageTransactions', 'getAccounts', 'manageAccounts', 'getLedger','manageMobileRepairs','getMobileRepairs','getExpenses','manageExpenses','getLedgers','manageLedgers'],
 };
 
 const roles = Object.keys(allRoles);

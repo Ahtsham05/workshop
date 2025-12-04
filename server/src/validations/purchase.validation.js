@@ -13,6 +13,9 @@ const createPurchase = {
       })
     ).required(),
     totalAmount: Joi.number().required(),
+    paidAmount: Joi.number().min(0),
+    balance: Joi.number().min(0),
+    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
   }),
@@ -52,6 +55,9 @@ const updatePurchase = {
       })
     ),
     totalAmount: Joi.number(),
+    paidAmount: Joi.number().min(0),
+    balance: Joi.number().min(0),
+    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
   }),

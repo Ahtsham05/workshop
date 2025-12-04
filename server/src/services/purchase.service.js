@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Purchase, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
+const supplierLedgerService = require('./supplierLedger.service');
 
 /**
  * Create a purchase record
@@ -21,6 +22,68 @@ const createPurchase = async (purchaseBody) => {
 
       // Save the updated product
       await product.save();
+    }
+  }
+
+  // Calculate balance if paidAmount is provided
+  if (purchase.paidAmount !== undefined) {
+    purchase.balance = purchase.totalAmount - purchase.paidAmount;
+  }
+
+  // Save the purchase with balance calculated
+  await purchase.save();
+
+  // Create supplier ledger entry if supplier is provided
+  if (purchase.supplier) {
+    try {
+      console.log('Creating supplier ledger entry for purchase:', {
+        supplier: purchase.supplier,
+        invoiceNumber: purchase.invoiceNumber,
+        totalAmount: purchase.totalAmount,
+        paidAmount: purchase.paidAmount,
+        balance: purchase.balance
+      });
+
+      // Create purchase entry (credit - we owe supplier)
+      const purchaseEntry = await supplierLedgerService.createLedgerEntry({
+        supplier: purchase.supplier,
+        transactionType: 'purchase',
+        transactionDate: purchase.purchaseDate || new Date(),
+        reference: purchase.invoiceNumber,
+        referenceId: purchase._id,
+        description: `Purchase Invoice #${purchase.invoiceNumber}`,
+        debit: 0,
+        credit: purchase.totalAmount,
+        paymentMethod: purchase.paymentType,
+        notes: `Purchase of ${purchase.items.length} items`
+      });
+      console.log('Supplier ledger entry created for purchase:', purchase.invoiceNumber, 'Entry ID:', purchaseEntry._id);
+
+      // If any amount is paid at the time of purchase, create payment entry (debit - we paid supplier)
+      if (purchase.paidAmount && purchase.paidAmount > 0) {
+        // Add 1 second to payment date so it appears after the purchase entry when sorted
+        const paymentDate = new Date(purchase.purchaseDate || new Date());
+        paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+
+        const paymentEntry = await supplierLedgerService.createLedgerEntry({
+          supplier: purchase.supplier,
+          transactionType: 'payment_made',
+          transactionDate: paymentDate,
+          reference: purchase.invoiceNumber,
+          referenceId: purchase._id,
+          description: `Payment made for Purchase #${purchase.invoiceNumber}${purchase.paidAmount < purchase.totalAmount ? ' (Partial)' : ''}`,
+          debit: purchase.paidAmount,
+          credit: 0,
+          paymentMethod: purchase.paymentType,
+          notes: `Amount paid: Rs${purchase.paidAmount.toFixed(2)}${purchase.balance > 0 ? `, Balance: Rs${purchase.balance.toFixed(2)}` : ''}`
+        });
+        console.log('Payment ledger entry created for purchase:', purchase.invoiceNumber, 'Amount:', purchase.paidAmount, 'Entry ID:', paymentEntry._id);
+      }
+    } catch (error) {
+      console.error('Failed to create supplier ledger entry:', error);
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+      // Don't fail the purchase creation if ledger entry fails
     }
   }
 
@@ -67,6 +130,11 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   if (!purchase) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Purchase not found');
   }
+
+  // Store original values for ledger update
+  const originalTotalAmount = purchase.totalAmount;
+  const originalPaidAmount = purchase.paidAmount || 0;
+  const originalSupplier = purchase.supplier?._id || purchase.supplier;
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
@@ -131,6 +199,84 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   Object.assign(purchase, updateBody); // Merge the new values into the purchase document
   await purchase.save(); // Save the updated purchase document
 
+  // Update supplier ledger entries if amounts or supplier changed
+  const newSupplier = purchase.supplier?._id || purchase.supplier;
+  const newTotalAmount = purchase.totalAmount;
+  const newPaidAmount = purchase.paidAmount || 0;
+
+  if (originalSupplier && (
+    originalTotalAmount !== newTotalAmount || 
+    originalPaidAmount !== newPaidAmount ||
+    originalSupplier.toString() !== newSupplier.toString()
+  )) {
+    try {
+      console.log('Updating supplier ledger entries for purchase:', {
+        purchaseId: purchase._id,
+        invoiceNumber: purchase.invoiceNumber,
+        originalTotal: originalTotalAmount,
+        newTotal: newTotalAmount,
+        originalPaid: originalPaidAmount,
+        newPaid: newPaidAmount,
+        supplierChanged: originalSupplier.toString() !== newSupplier.toString()
+      });
+
+      // If supplier changed, delete old entries and create new ones
+      if (originalSupplier.toString() !== newSupplier.toString()) {
+        // Delete old ledger entries for the original supplier
+        await supplierLedgerService.deleteLedgerEntriesByReference(purchase._id);
+        
+        // Create new entries for new supplier
+        await supplierLedgerService.createLedgerEntry({
+          supplier: newSupplier,
+          transactionType: 'purchase',
+          transactionDate: purchase.purchaseDate || new Date(),
+          reference: purchase.invoiceNumber,
+          referenceId: purchase._id,
+          description: `Purchase Invoice #${purchase.invoiceNumber} (Updated)`,
+          debit: 0,
+          credit: newTotalAmount,
+          paymentMethod: purchase.paymentType,
+          notes: `Purchase of ${purchase.items.length} items (Updated)`
+        });
+
+        if (newPaidAmount > 0) {
+          const paymentDate = new Date(purchase.purchaseDate || new Date());
+          paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+
+          await supplierLedgerService.createLedgerEntry({
+            supplier: newSupplier,
+            transactionType: 'payment_made',
+            transactionDate: paymentDate,
+            reference: purchase.invoiceNumber,
+            referenceId: purchase._id,
+            description: `Payment for Purchase #${purchase.invoiceNumber} (Updated)`,
+            debit: newPaidAmount,
+            credit: 0,
+            paymentMethod: purchase.paymentType,
+            notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
+          });
+        }
+      } else {
+        // Same supplier - update existing entries
+        await supplierLedgerService.updateLedgerEntriesByReference(purchase._id, {
+          totalAmount: newTotalAmount,
+          paidAmount: newPaidAmount,
+          invoiceNumber: purchase.invoiceNumber,
+          purchaseDate: purchase.purchaseDate,
+          paymentMethod: purchase.paymentType,
+          itemsCount: purchase.items.length
+        });
+      }
+
+      console.log('Supplier ledger entries updated successfully');
+    } catch (error) {
+      console.error('Failed to update supplier ledger entries:', error);
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+      // Don't fail the purchase update if ledger update fails
+    }
+  }
+
   return purchase;
 };
 
@@ -158,6 +304,17 @@ const deletePurchaseById = async (purchaseId) => {
 
       // Save the updated product stock
       await product.save();
+    }
+  }
+
+  // Delete related supplier ledger entries
+  if (purchase.supplier) {
+    try {
+      console.log('Deleting supplier ledger entries for purchase:', purchase.invoiceNumber);
+      await supplierLedgerService.deleteLedgerEntriesByReference(purchase._id);
+    } catch (error) {
+      console.error('Failed to delete supplier ledger entries:', error);
+      // Don't fail the purchase deletion if ledger deletion fails
     }
   }
 

@@ -60,6 +60,7 @@ import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAccountsIndexImport } from './routes/_authenticated/accounts/index'
+import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
 import { Route as AuthenticatedAccountLedgerIndexImport } from './routes/_authenticated/account-ledger/index'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
@@ -395,6 +396,13 @@ const AuthenticatedAccountsIndexRoute = AuthenticatedAccountsIndexImport.update(
   } as any,
 )
 
+const AuthenticatedAccountingIndexRoute =
+  AuthenticatedAccountingIndexImport.update({
+    id: '/accounting/',
+    path: '/accounting/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedAccountLedgerIndexRoute =
   AuthenticatedAccountLedgerIndexImport.update({
     id: '/account-ledger/',
@@ -621,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/account-ledger'
       fullPath: '/account-ledger'
       preLoaderRoute: typeof AuthenticatedAccountLedgerIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/accounting/': {
+      id: '/_authenticated/accounting/'
+      path: '/accounting'
+      fullPath: '/accounting'
+      preLoaderRoute: typeof AuthenticatedAccountingIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/accounts/': {
@@ -860,6 +875,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountLedgerIndexRoute: typeof AuthenticatedAccountLedgerIndexRoute
+  AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedAccountsIndexRoute: typeof AuthenticatedAccountsIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
@@ -896,6 +912,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountLedgerIndexRoute: AuthenticatedAccountLedgerIndexRoute,
+  AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedAccountsIndexRoute: AuthenticatedAccountsIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
@@ -960,6 +977,7 @@ export interface FileRoutesByFullPath {
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
+  '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -1016,6 +1034,7 @@ export interface FileRoutesByTo {
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/account-ledger': typeof AuthenticatedAccountLedgerIndexRoute
+  '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/accounts': typeof AuthenticatedAccountsIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -1075,6 +1094,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/account-ledger/': typeof AuthenticatedAccountLedgerIndexRoute
+  '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/accounts/': typeof AuthenticatedAccountsIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
@@ -1135,6 +1155,7 @@ export interface FileRouteTypes {
     | '/settings/display'
     | '/settings/notifications'
     | '/account-ledger'
+    | '/accounting'
     | '/accounts'
     | '/apps'
     | '/categories'
@@ -1190,6 +1211,7 @@ export interface FileRouteTypes {
     | '/settings/display'
     | '/settings/notifications'
     | '/account-ledger'
+    | '/accounting'
     | '/accounts'
     | '/apps'
     | '/categories'
@@ -1247,6 +1269,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/account-ledger/'
+    | '/_authenticated/accounting/'
     | '/_authenticated/accounts/'
     | '/_authenticated/apps/'
     | '/_authenticated/categories/'
@@ -1356,6 +1379,7 @@ export const routeTree = rootRoute
         "/_authenticated/voice-demo",
         "/_authenticated/",
         "/_authenticated/account-ledger/",
+        "/_authenticated/accounting/",
         "/_authenticated/accounts/",
         "/_authenticated/apps/",
         "/_authenticated/categories/",
@@ -1475,6 +1499,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/account-ledger/": {
       "filePath": "_authenticated/account-ledger/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/accounting/": {
+      "filePath": "_authenticated/accounting/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/accounts/": {
