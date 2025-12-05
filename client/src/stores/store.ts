@@ -8,6 +8,8 @@ import categoryReducer from './category.slice';
 import { invoiceApi } from './invoice.api';
 import { customerApi } from './customer.api';
 import { purchaseApi } from './purchase.api';
+import { dashboardApi } from './dashboard.api';
+import { reportsApi } from './reports.api';
 
 export const store = configureStore({
   reducer: {
@@ -22,12 +24,16 @@ export const store = configureStore({
     [invoiceApi.reducerPath]: invoiceApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
     [purchaseApi.reducerPath]: purchaseApi.reducer,
+    [dashboardApi.reducerPath]: dashboardApi.reducer,
+    [reportsApi.reducerPath]: reportsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       invoiceApi.middleware,
       customerApi.middleware,
-      purchaseApi.middleware
+      purchaseApi.middleware,
+      dashboardApi.middleware,
+      reportsApi.middleware
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

@@ -95,20 +95,26 @@ const createInvoice = async (invoiceBody, userId) => {
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
     try {
+      // Determine reference and description based on whether this is a converted pending invoice with bill number
+      const displayReference = invoice.billNumber ? `Bill #${invoice.billNumber}` : invoice.invoiceNumber;
+      const description = invoice.billNumber 
+        ? `Bill sent to party - Bill #${invoice.billNumber}` 
+        : `Sale Invoice #${invoice.invoiceNumber}`;
+      
       // For credit/cash invoices, create a sale entry (debit - customer owes us)
       await customerLedgerService.createLedgerEntry({
         customer: invoice.customerId,
         transactionType: 'sale',
         transactionDate: invoice.invoiceDate || new Date(),
-        reference: invoice.invoiceNumber,
+        reference: displayReference,
         referenceId: invoice._id,
-        description: `Sale Invoice #${invoice.invoiceNumber}`,
+        description: description,
         debit: invoice.total,
         credit: 0,
         paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
         notes: invoice.notes || `Invoice for ${validatedItems.length} items`
       });
-      console.log('Customer ledger entry created for invoice:', invoice.invoiceNumber);
+      console.log('Customer ledger entry created for invoice:', displayReference);
       
       // If any amount is paid at the time of invoice, create payment entry (credit - customer paid us)
       if (invoice.paidAmount > 0) {

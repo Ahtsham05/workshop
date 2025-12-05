@@ -4,7 +4,7 @@ import {
   // IconHelp,
   IconLayoutDashboard,
   IconLockAccess,
-  IconMessages,
+  // IconMessages,
   IconPackages,
   // IconPalette,
   // IconSettings,
@@ -75,12 +75,12 @@ export const sidebarData: SidebarData = {
           icon: IconPackages,
         },
         {
-          title: 'Purchase Invoice',
+          title: 'PURCHASES',
           url: '/purchase-invoice',
           icon: IconPackages,
         },
         {
-          title: 'Invoices',
+          title: 'INVOICES',
           url: '/invoice',
           icon: IconPackages,
         },
@@ -90,7 +90,7 @@ export const sidebarData: SidebarData = {
         //   icon: IconRefresh,
         // },
         {
-          title: 'Accounting',
+          title: 'Accounts',
           url: '/accounting',
           icon: IconChecklist,
         },
@@ -107,29 +107,8 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: 'Reports',
+          url: '/reports',
           icon: IconLockAccess,
-          items: [
-            // {
-            //   title: 'Sign In',
-            //   url: '/sign-in',
-            // },
-            // {
-            //   title: 'Sign In (2 Col)',
-            //   url: '/sign-in-2',
-            // },
-            // {
-            //   title: 'Sign Up',
-            //   url: '/sign-up',
-            // },
-            // {
-            //   title: 'Forgot Password',
-            //   url: '/forgot-password',
-            // },
-            // {
-            //   title: 'OTP',
-            //   url: '/otp',
-            // },
-          ],
         },
         // {
         //   title: 'Errors',

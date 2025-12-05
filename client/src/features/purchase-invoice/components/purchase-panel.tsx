@@ -612,10 +612,10 @@ export default function PurchasePanel({
                   <span className="font-medium">{t('Current Purchase')}:</span>
                   <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
                 </div>
-                {purchase.paidAmount > 0 && (
+                {(purchase.paidAmount || 0) > 0 && (
                   <div className='flex justify-between items-center text-sm'>
                     <span className="font-medium">{t('Paid Now')}:</span>
-                    <span className="font-bold text-green-600">-Rs{purchase.paidAmount.toFixed(2)} (Dr)</span>
+                    <span className="font-bold text-green-600">-Rs{(purchase.paidAmount || 0).toFixed(2)} (Dr)</span>
                   </div>
                 )}
                 <Separator />

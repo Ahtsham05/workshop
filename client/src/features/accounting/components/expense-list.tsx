@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import * as XLSX from 'xlsx';
 import {
   Table,
   TableBody,
@@ -58,13 +59,15 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
 
   useEffect(() => {
     loadExpenses();
-  }, [currentPage, selectedCategory, searchTerm, refreshTrigger]);
+  }, [currentPage, pageSize, selectedCategory, searchTerm, refreshTrigger]);
 
   const loadExpenses = async () => {
     try {
@@ -72,7 +75,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
 
       const params: any = {
         page: currentPage,
-        limit: 10,
+        limit: pageSize,
         sortBy: 'date:desc',
       };
 
@@ -91,11 +94,34 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
 
       setExpenses(response.data?.results || []);
       setTotalPages(response.data?.totalPages || 1);
+      setTotalResults(response.data?.totalResults || 0);
     } catch (error) {
       console.error('Error loading expenses:', error);
       toast.error(t('Failed to load expenses'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportToExcel = () => {
+    try {
+      const data = expenses.map(expense => ({
+        'Date': format(new Date(expense.date), 'MMM dd, yyyy'),
+        'Category': expense.category,
+        'Description': expense.description,
+        'Vendor': expense.vendor || '-',
+        'Amount': expense.amount.toFixed(2),
+        'Payment Method': expense.paymentMethod
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
+      XLSX.writeFile(wb, `expenses-${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(t('Data exported successfully'));
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(t('Failed to export data'));
     }
   };
 
@@ -151,9 +177,9 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="flex flex-col md:flex-row items-end gap-3">
             {/* Search */}
-            <div className="space-y-2">
+            <div className="flex-1 w-full space-y-2">
               <Label>{t('Search')}</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -170,7 +196,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
             </div>
 
             {/* Category Filter */}
-            <div className="space-y-2">
+            <div className="w-full md:w-48 space-y-2">
               <Label>{t('Category')}</Label>
               <Select
                 value={selectedCategory}
@@ -179,7 +205,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -192,21 +218,35 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               </Select>
             </div>
 
-            {/* Clear Filters */}
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedCategory('All');
-                  setCurrentPage(1);
-                }}
-                className="w-full"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                {t('Clear Filters')}
-              </Button>
+            {/* Records per page */}
+            <div className="w-full md:w-40 space-y-2">
+              <Label>{t('Records per page')}</Label>
+              <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
+                <SelectTrigger className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* Clear Filters Button */}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedCategory('All');
+                setCurrentPage(1);
+              }}
+              className="w-full md:w-auto"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              {t('Clear Filters')}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -216,9 +256,9 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Expense List')}</CardTitle>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={exportToExcel}>
               <Download className="h-4 w-4 mr-2" />
-              {t('Export')}
+              {t('Export to Excel')}
             </Button>
           </div>
         </CardHeader>
@@ -294,10 +334,18 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-muted-foreground">
-                {t('Page')} {currentPage} {t('of')} {totalPages}
-              </p>
+              <div className="text-sm text-gray-600">
+                {t('Showing')} {(currentPage - 1) * pageSize + 1} {t('to')} {Math.min(currentPage * pageSize, totalResults)} {t('of')} {totalResults} {t('expenses')}
+              </div>
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                >
+                  {t('First')}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -306,6 +354,11 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                 >
                   {t('Previous')}
                 </Button>
+                <div className="flex items-center gap-2 px-3">
+                  <span className="text-sm text-gray-600">
+                    {t('Page')} {currentPage} {t('of')} {totalPages}
+                  </span>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -313,6 +366,14 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                   disabled={currentPage === totalPages}
                 >
                   {t('Next')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  {t('Last')}
                 </Button>
               </div>
             </div>

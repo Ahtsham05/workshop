@@ -86,7 +86,7 @@ export default function InvoicePage() {
   const dispatch = useDispatch<AppDispatch>()
   
   // View state management
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>('list')
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>('create')
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
 
   // State for invoice
@@ -727,9 +727,33 @@ export default function InvoicePage() {
     
     console.log('Invoice saved - stock changes committed')
     
-    // Navigate back to list with a direct call
-    setCurrentView('list')
+    // Reset to create new invoice instead of going to list
+    setCurrentView('create')
     setEditingInvoice(null)
+    
+    // Reset invoice state for new invoice
+    setInvoice({
+      items: [],
+      type: 'credit',
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      totalProfit: 0,
+      totalCost: 0,
+      paidAmount: 0,
+      balance: 0,
+      splitPayment: [],
+      loyaltyPoints: 0,
+      deliveryCharge: 0,
+      serviceCharge: 0,
+      roundingAdjustment: 0,
+      notes: '',
+      dueDate: undefined
+    })
+    
+    // Reset the saved flag for next invoice
+    setInvoiceSaved(false)
     
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()

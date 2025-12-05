@@ -14,7 +14,7 @@ import type { Category, Product } from '../../invoice/index'
 import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { getTextClasses } from '@/utils/urdu-text-utils'
-import { toast } from 'sonner'
+// import { toast } from 'sonner'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -250,25 +250,10 @@ export function ProductCatalog({
                     {category.products.map((product) => (
                       <div
                         key={product._id}
-                        onClick={() => {
-                          if (product.stockQuantity > 0) {
-                            handleQuickAdd(product, 1)
-                          } else {
-                            // Show error toast for out of stock items
-                            toast.error(`${product.name} is out of stock`)
-                          }
-                        }}
+                        onClick={() => handleQuickAdd(product, 1)}
                         className={showImages
-                          ? `border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
-                              product.stockQuantity > 0 
-                                ? 'hover:shadow-sm cursor-pointer' 
-                                : 'opacity-60 cursor-not-allowed bg-gray-50'
-                            }`
-                          : `border rounded-lg p-2 flex items-center gap-2 transition-colors ${
-                              product.stockQuantity > 0 
-                                ? 'hover:bg-muted/30 cursor-pointer' 
-                                : 'opacity-60 cursor-not-allowed bg-gray-50'
-                            }`
+                          ? 'border rounded-lg p-2 space-y-2 transition-shadow bg-white hover:shadow-sm cursor-pointer'
+                          : 'border rounded-lg p-2 flex items-center gap-2 transition-colors hover:bg-muted/30 cursor-pointer'
                         }
                       >
                         {/* Product Image */}
@@ -285,17 +270,10 @@ export function ProductCatalog({
                                 <Package className='h-8 w-8 text-gray-400' />
                               </div>
                             )}
-                            {/* Stock badge overlay */}
-                            {product.stockQuantity <= 5 && product.stockQuantity > 0 && (
-                              <Badge variant="destructive" className='absolute top-1 right-1 text-xs px-1 py-0'>
-                                Low
-                              </Badge>
-                            )}
-                            {product.stockQuantity === 0 && (
-                              <Badge variant="secondary" className='absolute top-1 right-1 text-xs px-1 py-0'>
-                                Out
-                              </Badge>
-                            )}
+                            {/* Stock info badge - shows current stock */}
+                            <Badge variant="outline" className='absolute top-1 right-1 text-xs px-1.5 py-0.5 bg-white/90 backdrop-blur-sm'>
+                              {product.stockQuantity}
+                            </Badge>
                           </div>
                         )}
 
@@ -360,21 +338,11 @@ export function ProductCatalog({
                           )}
                         </div> */}
 
-                        {/* Stock Warning for list view only */}
+                        {/* Stock info badge for list view */}
                         {!showImages && (
-                          <>
-                            {product.stockQuantity <= 5 && product.stockQuantity > 0 && (
-                              <Badge variant="destructive" className='text-xs px-1 py-0'>
-                                {t('low_stock')}
-                              </Badge>
-                            )}
-                            
-                            {product.stockQuantity === 0 && (
-                              <Badge variant="secondary" className='text-xs px-1 py-0'>
-                                {t('out_of_stock')}
-                              </Badge>
-                            )}
-                          </>
+                          <Badge variant="outline" className='text-xs px-1.5 py-0.5 bg-white/90'>
+                            {product.stockQuantity}
+                          </Badge>
                         )}
                       </div>
                     ))}

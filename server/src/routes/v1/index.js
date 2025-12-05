@@ -12,6 +12,8 @@ const invoiceRoute = require('./invoice.route');
 const expenseRoute = require('./expense.route');
 const customerLedgerRoute = require('./customerLedger.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
+const dashboardRoute = require('./dashboard.route');
+const reportsRoute = require('./reports.route');
 
 const router = express.Router();
 
@@ -59,6 +61,14 @@ const defaultRoutes = [
   {
     path: '/supplier-ledger',
     route: supplierLedgerRoute
+  },
+  {
+    path: '/dashboard',
+    route: dashboardRoute
+  },
+  {
+    path: '/reports',
+    route: reportsRoute
   },
 ];
 

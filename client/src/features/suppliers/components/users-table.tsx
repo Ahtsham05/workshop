@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -47,6 +48,7 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
+  const navigate = useNavigate()
 
   // console.log("data", data)
   // console.log("paggination", paggination)
@@ -114,7 +116,12 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
-                  className='group/row'
+                  className='group/row cursor-pointer hover:bg-muted/50'
+                  onClick={() => {
+                    const supplierId = row.original._id || row.original.id;
+                    console.log('Navigating to supplier ledger:', { supplierId, name: row.original.name, original: row.original });
+                    navigate({ to: '/accounting', search: { tab: 'supplier-ledger', supplierId, supplierName: row.original.name } })
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell

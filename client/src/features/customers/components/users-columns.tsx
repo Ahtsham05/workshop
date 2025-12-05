@@ -22,12 +22,14 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
       />
     ),
     cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label='Select row'
-        className='translate-y-[2px]'
-      />
+      <div onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label='Select row'
+          className='translate-y-[2px]'
+        />
+      </div>
     ),
     enableSorting: false,
     enableHiding: true,
@@ -62,7 +64,11 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
   {
     id: 'actions',
     header: () => t('actions'),
-    cell: DataTableRowActions,
+    cell: (props) => (
+      <div onClick={(e) => e.stopPropagation()}>
+        <DataTableRowActions {...props} />
+      </div>
+    ),
   }
 ]
 }

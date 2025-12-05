@@ -1,13 +1,26 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { CustomerLedgerList } from './customer-ledger-list';
 import { CustomerLedgerDetails } from './customer-ledger-details';
-import { useLanguage } from '@/context/language-context';
+// import { useLanguage } from '@/context/language-context';s
 
-export function CustomerLedger() {
-  const { t } = useLanguage();
+interface CustomerLedgerProps {
+  initialCustomer?: any;
+}
+
+export function CustomerLedger({ initialCustomer }: CustomerLedgerProps) {
+  // const { t } = useLanguage();
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [view, setView] = useState<'list' | 'details'>('list');
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    console.log('CustomerLedger received initialCustomer:', initialCustomer);
+    if (initialCustomer && initialCustomer._id) {
+      console.log('Setting selected customer:', initialCustomer);
+      setSelectedCustomer(initialCustomer);
+      setView('details');
+    }
+  }, [initialCustomer, initialCustomer?._id]);
 
   const handleSelectCustomer = (customer: any) => {
     setSelectedCustomer(customer);

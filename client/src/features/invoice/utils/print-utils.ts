@@ -21,6 +21,7 @@ export interface PrintInvoiceData {
   deliveryCharge?: number
   serviceCharge?: number
   previousBalance?: number
+  newBalance?: number
   netBalance?: number
 }
 
@@ -1009,29 +1010,25 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   </div>
 
   ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
-    <div class="payment-info" style="border-top: 2px solid #007bff; padding-top: 15px; margin-top: 15px;">
-      <div>
-        <div class="info-title">${urduTexts.previous_balance}:</div>
-        <div class="info-row">
-          <span style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}; font-weight: bold; font-size: 16px;">
+    <div style="border-top: 2px solid #007bff; padding-top: 15px; margin-top: 15px; margin-bottom: 20px;">
+      <table class="totals-table" style="width: 400px;">
+        <tr>
+          <td class="total-label">${urduTexts.previous_balance}:</td>
+          <td class="total-amount" style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}; font-size: 14px;">
             ${formatCurrency(Math.abs(data.previousBalance || 0))} ${data.previousBalance > 0 ? '(Dr)' : data.previousBalance < 0 ? '(Cr)' : ''}
-          </span>
-        </div>
-      </div>
-      <div>
-        <div class="info-title">${urduTexts.current_invoice}:</div>
-        <div class="info-row">
-          <span style="color: #d32f2f; font-weight: bold; font-size: 16px;">${formatCurrency(total)} (Dr)</span>
-        </div>
-      </div>
-      <div>
-        <div class="info-title">${urduTexts.net_balance}:</div>
-        <div class="info-row">
-          <span style="color: ${(data.previousBalance || 0) + total > 0 ? '#d32f2f' : '#2e7d32'}; font-weight: bold; font-size: 18px;">
+          </td>
+        </tr>
+        <tr>
+          <td class="total-label">${urduTexts.current_invoice}:</td>
+          <td class="total-amount" style="color: #d32f2f; font-size: 14px;">${formatCurrency(total)} (Dr)</td>
+        </tr>
+        <tr class="final-total">
+          <td class="total-label">${urduTexts.net_balance}:</td>
+          <td class="total-amount" style="font-size: 16px;">
             ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
-          </span>
-        </div>
-      </div>
+          </td>
+        </tr>
+      </table>
     </div>
   ` : ''}
   

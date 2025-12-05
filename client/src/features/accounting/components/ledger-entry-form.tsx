@@ -31,7 +31,7 @@ interface LedgerEntryFormProps {
 export function LedgerEntryForm({
   ledgerType,
   entityId,
-  entityName,
+  // entityName,
   editingEntry,
   onSuccess,
   onCancel,
@@ -50,7 +50,7 @@ export function LedgerEntryForm({
     reference: editingEntry?.reference || '',
     debit: editingEntry?.debit ? editingEntry.debit.toString() : '',
     credit: editingEntry?.credit ? editingEntry.credit.toString() : '',
-    paymentMethod: editingEntry?.paymentMethod || '',
+    paymentMethod: editingEntry?.paymentMethod || 'Cash',
     notes: editingEntry?.notes || '',
   });
 
@@ -213,7 +213,7 @@ export function LedgerEntryForm({
                 onValueChange={handleTransactionTypeChange}
                 disabled={!!entryId}
               >
-                <SelectTrigger className={entryId ? 'bg-gray-100 cursor-not-allowed' : ''}>
+                <SelectTrigger className={entryId ? 'bg-gray-100 cursor-not-allowed w-full' : 'w-full'}>
                   <SelectValue placeholder={t('Select type')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -283,7 +283,7 @@ export function LedgerEntryForm({
                   setFormData({ ...formData, paymentMethod: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full'>
                   <SelectValue placeholder={t('Select method')} />
                 </SelectTrigger>
                 <SelectContent>

@@ -56,6 +56,8 @@ import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
 import { toast } from 'sonner'
+import Axios from '@/utils/Axios'
+import summery from '@/utils/summery'
 
 interface ConvertedItem {
   id: string
@@ -84,6 +86,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   // const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes] = useState('')
   const [dueDate, setDueDate] = useState<string>('')
+  const [customerBalance, setCustomerBalance] = useState<number>(0)
+  const [loadingBalance, setLoadingBalance] = useState(false)
   
   const [createInvoice, { isLoading: isCreating }] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
@@ -94,6 +98,31 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     defaultDueDate.setDate(defaultDueDate.getDate() + 30)
     setDueDate(format(defaultDueDate, 'yyyy-MM-dd'))
   }, [])
+
+  // Fetch customer balance when customer is selected
+  useEffect(() => {
+    const fetchCustomerBalance = async () => {
+      if (!selectedCustomerId || selectedCustomerId === 'walk-in') {
+        setCustomerBalance(0)
+        return
+      }
+
+      setLoadingBalance(true)
+      try {
+        const url = `${summery.fetchCustomerBalance.url}/${selectedCustomerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
+        const response = await Axios.get(url)
+        console.log('Customer balance response:', response.data)
+        setCustomerBalance(response.data?.balance || 0)
+      } catch (error) {
+        console.error('Failed to fetch customer balance:', error)
+        setCustomerBalance(0)
+      } finally {
+        setLoadingBalance(false)
+      }
+    }
+
+    fetchCustomerBalance()
+  }, [selectedCustomerId])
 
   // Fetch ALL invoices for selected customer (both pending and converted)
   const { data: allInvoicesResponse, isLoading: loadingInvoices, refetch } = useGetInvoicesQuery(
@@ -265,16 +294,20 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     const subtotal = convertedItems.reduce((sum, item) => sum + item.subtotal, 0)
     const totalProfit = convertedItems.reduce((sum, item) => sum + item.profit, 0)
     const totalCost = convertedItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+    const invoiceTotal = subtotal
+    const newBalance = customerBalance + invoiceTotal
     
     return {
       subtotal,
-      total: subtotal, // No tax or discount for now
+      total: invoiceTotal,
       totalProfit,
       totalCost,
       tax: 0,
-      discount: 0
+      discount: 0,
+      previousBalance: customerBalance,
+      newBalance: newBalance
     }
-  }, [convertedItems])
+  }, [convertedItems, customerBalance])
 
   // Toggle invoice selection
   const toggleInvoiceSelection = (invoiceId: string) => {
@@ -344,7 +377,9 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
         deliveryCharge: 0,
-        serviceCharge: 0
+        serviceCharge: 0,
+        previousBalance: customerBalance,
+        newBalance: customerBalance + invoiceData.total
       }
 
       if (printType === 'a4') {
@@ -432,6 +467,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         paidAmount: 0,
         balance: totals.total,
         dueDate: dueDate,
+        billNumber: billNumber,
         notes: notes || `Converted from ${selectedInvoices.size} pending invoices - Bill #${billNumber}`,
         deliveryCharge: 0,
         serviceCharge: 0,
@@ -931,6 +967,23 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                     <div className="flex justify-between font-medium">
                       <span>{t('total')}</span>
                       <span>Rs {totals.total.toFixed(2)}</span>
+                    </div>
+                    <Separator className="my-2" />
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Previous Balance</span>
+                      <span className={customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : ''}>
+                        {loadingBalance ? 'Loading...' : `Rs ${Math.abs(customerBalance).toFixed(2)}`}
+                        {customerBalance > 0 && ' (Due)'}
+                        {customerBalance < 0 && ' (Advance)'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg">
+                      <span>New Balance</span>
+                      <span className={totals.newBalance > 0 ? 'text-red-600' : totals.newBalance < 0 ? 'text-green-600' : ''}>
+                        Rs {Math.abs(totals.newBalance).toFixed(2)}
+                        {totals.newBalance > 0 && ' (Due)'}
+                        {totals.newBalance < 0 && ' (Advance)'}
+                      </span>
                     </div>
                   </div>
                 </CardContent>

@@ -14,6 +14,7 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
+import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
@@ -61,6 +62,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
 const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
   id: '/voice-demo',
   path: '/voice-demo',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -356,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/reports': {
+      id: '/_authenticated/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthenticatedReportsImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/voice-demo': {
       id: '/_authenticated/voice-demo'
       path: '/voice-demo'
@@ -527,6 +541,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
@@ -547,6 +562,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
@@ -584,6 +600,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -618,6 +635,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -655,6 +673,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -693,6 +712,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/reports'
     | '/voice-demo'
     | '/'
     | '/settings/account'
@@ -726,6 +746,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/reports'
     | '/voice-demo'
     | '/'
     | '/settings/account'
@@ -761,6 +782,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/reports'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
     | '/_authenticated/settings/account'
@@ -840,6 +862,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
+        "/_authenticated/reports",
         "/_authenticated/voice-demo",
         "/_authenticated/",
         "/_authenticated/accounting/",
@@ -900,6 +923,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/reports": {
+      "filePath": "_authenticated/reports.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/voice-demo": {

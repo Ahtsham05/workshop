@@ -4,7 +4,7 @@ import { AppDispatch } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
 import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
-import { ProductCatalog } from '../invoice/components/product-catalog';
+import { ProductCatalog } from './components/product-catalog';
 import { toast } from 'sonner';
 import type { Product, Category } from '../invoice/index';
 
@@ -324,21 +324,7 @@ const PurchaseInvoicePage = () => {
         />
       ) : currentView === 'create' ? (
         <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
-          {/* Left Column - Product Catalog */}
-          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
-            <ProductCatalog
-              categorizedProducts={categorizedProducts}
-              loading={loading}
-              showImages={showImages}
-              setShowImages={setShowImages}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onAddToInvoice={addToPurchase}
-              onBarcodeSearch={handleBarcodeSearch}
-            />
-          </div>
-
-          {/* Right Column - Purchase Panel */}
+          {/* Left Column - Purchase Panel */}
           <div className="space-y-4 pb-6">
             <PurchasePanel
               purchase={purchase}
@@ -351,6 +337,20 @@ const PurchaseInvoicePage = () => {
               onSaveSuccess={handleSaveSuccess}
               isEditing={isEditing}
               editingPurchase={editingPurchase}
+            />
+          </div>
+
+          {/* Right Column - Product Catalog */}
+          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
+            <ProductCatalog
+              categorizedProducts={categorizedProducts}
+              loading={loading}
+              showImages={showImages}
+              setShowImages={setShowImages}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onAddToInvoice={addToPurchase}
+              onBarcodeSearch={handleBarcodeSearch}
             />
           </div>
         </div>

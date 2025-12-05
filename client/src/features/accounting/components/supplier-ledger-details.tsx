@@ -4,13 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/context/language-context';
-import { ArrowLeft, Plus, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
+import { useGetPurchaseByIdQuery } from '@/stores/purchase.api';
 
 interface LedgerEntry {
   _id?: string;
@@ -31,26 +35,127 @@ interface SupplierLedgerDetailsProps {
   onBack: () => void;
 }
 
+// Purchase dialog content component
+function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: string; supplierName: string }) {
+  const { t } = useLanguage();
+  
+  if (!purchaseId) {
+    return <div className="text-center py-8 text-gray-500">{t('No purchase selected')}</div>;
+  }
+
+  const { data: purchaseData, isLoading, error } = useGetPurchaseByIdQuery(purchaseId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !purchaseData) {
+    return <div className="text-center py-8 text-red-500">{t('Failed to load purchase details')}</div>;
+  }
+
+  const formatDate = (date: any) => {
+    try {
+      if (!date) return '-';
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return '-';
+      return format(dateObj, 'MMM dd, yyyy');
+    } catch {
+      return '-';
+    }
+  };
+
+  const formatCurrency = (amount: any) => {
+    const num = Number(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
+          <p className="font-medium">{purchaseData.invoiceNumber || '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Date')}</p>
+          <p className="font-medium">{formatDate(purchaseData.date || purchaseData.purchaseDate)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Supplier')}</p>
+          <p className="font-medium">{purchaseData.supplierName || purchaseData.supplier?.name || supplierName}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Total Amount')}</p>
+          <p className="font-medium text-lg">Rs{formatCurrency(purchaseData.totalAmount || purchaseData.total)}</p>
+        </div>
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Product')}</TableHead>
+              <TableHead>{t('Quantity')}</TableHead>
+              <TableHead>{t('Price')}</TableHead>
+              <TableHead className="text-right">{t('Total')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {purchaseData.items && purchaseData.items.length > 0 ? (
+              purchaseData.items.map((item: any, index: number) => (
+                <TableRow key={index}>
+                  <TableCell>{item.name || item.product?.name || item.productName || '-'}</TableCell>
+                  <TableCell>{item.quantity || 0}</TableCell>
+                  <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
+                  <TableCell className="text-right">Rs{formatCurrency(item.subtotal || item.total)}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-gray-500">{t('No items')}</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
-  const [currentBalance, setCurrentBalance] = useState(supplier.balance);
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [viewingPurchase, setViewingPurchase] = useState<any>(null);
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     fetchLedgerEntries();
     fetchSupplierBalance();
-  }, [supplier._id]);
+  }, [supplier._id, currentPage, pageSize]);
 
   const fetchLedgerEntries = async () => {
     try {
       setLoading(true);
       const response = await Axios.get(summery.fetchSupplierLedgerEntries.url, {
-        params: { supplier: supplier._id, sortBy: 'transactionDate:asc' },
+        params: { 
+          supplier: supplier._id, 
+          sortBy: 'transactionDate:asc',
+          page: currentPage,
+          limit: pageSize
+        },
       });
       setEntries(response.data.results || []);
+      setTotalPages(response.data.totalPages || 1);
+      setTotalResults(response.data.totalResults || 0);
     } catch (error: any) {
       toast.error(t('Failed to load ledger entries'));
       console.error('Error fetching ledger entries:', error);
@@ -59,13 +164,40 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     }
   };
 
+  const exportToExcel = () => {
+    try {
+      const data = entries.map(entry => ({
+        'Date': format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
+        'Type': getTransactionTypeLabel(entry.transactionType),
+        'Description': entry.description,
+        'Reference': entry.reference || '-',
+        'Debit': entry.debit > 0 ? entry.debit.toFixed(2) : '-',
+        'Credit': entry.credit > 0 ? entry.credit.toFixed(2) : '-',
+        'Balance': entry.balance.toFixed(2)
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
+      XLSX.writeFile(wb, `${supplier.name}-ledger-${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(t('Data exported successfully'));
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(t('Failed to export data'));
+    }
+  };
+
   const fetchSupplierBalance = async () => {
     try {
+      setBalanceLoading(true);
       const url = `${summery.fetchSupplierBalance.url}/${supplier._id}${summery.fetchSupplierBalance.urlSuffix || ''}`;
       const response = await Axios.get(url);
       setCurrentBalance(response.data.balance || 0);
     } catch (error: any) {
       console.error('Failed to fetch supplier balance:', error);
+      setCurrentBalance(supplier.balance || 0);
+    } finally {
+      setBalanceLoading(false);
     }
   };
 
@@ -94,6 +226,11 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
       toast.error(error.response?.data?.message || t('Failed to delete ledger entry'));
       console.error('Error deleting ledger entry:', error);
     }
+  };
+
+  const handleViewPurchase = (referenceId: string) => {
+    setViewingPurchase({ id: referenceId });
+    setPurchaseDialogOpen(true);
   };
 
   // Check if entry is manually created (not from purchase invoice)
@@ -140,10 +277,30 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
           <ArrowLeft className="w-4 h-4 mr-2" />
           {t('Back to Suppliers')}
         </Button>
-        <Button onClick={() => setShowEntryForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t('Add Entry')}
-        </Button>
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm">{t('Show')}</Label>
+            <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToExcel}>
+            <Download className="w-4 h-4 mr-2" />
+            {t('Export')}
+          </Button>
+          <Button onClick={() => setShowEntryForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('Add Entry')}
+          </Button>
+        </div>
       </div>
 
       <Dialog open={showEntryForm} onOpenChange={(open) => {
@@ -173,6 +330,15 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
         </DialogContent>
       </Dialog>
 
+      <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Purchase Details')}</DialogTitle>
+          </DialogHeader>
+          <PurchaseDialogContent purchaseId={viewingPurchase?.id} supplierName={supplier.name} />
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader>
           <CardTitle>{supplier.name}</CardTitle>
@@ -181,15 +347,21 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
         <CardContent>
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <div className="text-sm text-gray-600 mb-1">{t('Current Balance')}</div>
-            <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
-              Rs{Math.abs(currentBalance).toFixed(2)}
-              {currentBalance > 0 && (
-                <span className="text-sm text-red-600 ml-2">({t('Payable')})</span>
-              )}
-              {currentBalance < 0 && (
-                <span className="text-sm text-green-600 ml-2">({t('Receivable')})</span>
-              )}
-            </div>
+            {balanceLoading ? (
+              <div className="text-2xl font-bold text-gray-400">{t('Loading...')}</div>
+            ) : currentBalance !== null ? (
+              <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
+                Rs{Math.abs(currentBalance).toFixed(2)}
+                {currentBalance > 0 && (
+                  <span className="text-sm text-red-600 ml-2">({t('Payable')})</span>
+                )}
+                {currentBalance < 0 && (
+                  <span className="text-sm text-green-600 ml-2">({t('Receivable')})</span>
+                )}
+              </div>
+            ) : (
+              <div className="text-2xl font-bold text-gray-600">Rs0.00</div>
+            )}
           </div>
 
           {loading ? (
@@ -224,7 +396,17 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                       </TableCell>
                       <TableCell>{entry.description}</TableCell>
                       <TableCell className="text-gray-500 text-sm">
-                        {entry.reference || '-'}
+                        {entry.referenceId ? (
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto font-normal text-blue-600 hover:text-blue-800"
+                            onClick={() => handleViewPurchase(entry.referenceId!)}
+                          >
+                            {entry.reference || entry.referenceId}
+                          </Button>
+                        ) : (
+                          entry.reference || '-'
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-red-600">
                         {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '-'}
@@ -264,6 +446,34 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-600">
+                {t('Showing')} {(currentPage - 1) * pageSize + 1} {t('to')} {Math.min(currentPage * pageSize, totalResults)} {t('of')} {totalResults} {t('entries')}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                  {t('First')}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+                  {t('Previous')}
+                </Button>
+                <div className="flex items-center gap-2 px-3">
+                  <span className="text-sm text-gray-600">
+                    {t('Page')} {currentPage} {t('of')} {totalPages}
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+                  {t('Next')}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+                  {t('Last')}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

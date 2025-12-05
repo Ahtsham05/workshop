@@ -8,6 +8,8 @@ import ProductDialogs from './components/users-dialogs' // Adjusted for products
 import ProductPrimaryButtons from './components/users-primary-buttons' // Adjusted for products
 import { ProductTable } from './components/users-table' // Adjusted for products
 import ProductsProvider from './context/users-context' // Adjusted for products
+import { LowStockAlert } from './components/low-stock-alert'
+import { LowStockDetails } from './components/low-stock-details'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState, useCallback } from 'react'
@@ -32,6 +34,8 @@ export default function Products() {
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
   const [inlineEditMode, setInlineEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
+  const [showLowStockDetails, setShowLowStockDetails] = useState(false)
+  const [lowStockThreshold, setLowStockThreshold] = useState(10)
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
@@ -152,6 +156,39 @@ export default function Products() {
     setEditValues({})
   }, [])
 
+  // Load threshold from localStorage
+  useEffect(() => {
+    const savedThreshold = localStorage.getItem('lowStockThreshold');
+    if (savedThreshold) {
+      setLowStockThreshold(parseInt(savedThreshold));
+    }
+  }, []);
+
+  if (showLowStockDetails) {
+    return (
+      <ProductsProvider>
+        <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
+          <Header fixed>
+            <Search />
+            <div className='ml-auto flex items-center space-x-4'>
+              <LanguageSwitch />
+              <ThemeSwitch />
+              <ProfileDropdown />
+            </div>
+          </Header>
+
+          <Main>
+            <LowStockDetails 
+              products={products}
+              onBack={() => setShowLowStockDetails(false)}
+              threshold={lowStockThreshold}
+            />
+          </Main>
+        </div>
+      </ProductsProvider>
+    );
+  }
+
   return (
     <ProductsProvider>
       <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
@@ -165,6 +202,13 @@ export default function Products() {
         </Header>
 
         <Main>
+          {/* Low Stock Alert Banner */}
+          <div className='mb-4'>
+            <div onClick={() => setShowLowStockDetails(true)} className="cursor-pointer">
+              <LowStockAlert products={products} defaultThreshold={lowStockThreshold} />
+            </div>
+          </div>
+
           <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
             <div>
               <h2 className='text-2xl font-bold mb-5 tracking-tight'>{t('products_list')}</h2>
