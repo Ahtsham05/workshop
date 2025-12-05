@@ -24,10 +24,6 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
       const newValue = e.target.value
       setInputValue(newValue)
       
-      // Detect keyboard language from the new input
-      const detectedLang = detectKeyboardLanguage(newValue)
-      setKeyboardLang(detectedLang)
-      
       // Call the original onChange if provided
       if (onChange) {
         onChange(e)
@@ -42,10 +38,6 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
     const handleVoiceInput = useCallback((transcript: string) => {
       const newValue = inputValue + transcript
       setInputValue(newValue)
-      
-      // Detect language for the combined text
-      const detectedLang = detectKeyboardLanguage(newValue)
-      setKeyboardLang(detectedLang)
       
       // Create a synthetic event to maintain compatibility
       const syntheticEvent = {
