@@ -30,7 +30,7 @@ export function QuickActions() {
     {
       icon: <BarChart3 className='h-5 w-5' />,
       label: t('View Reports'),
-      onClick: () => navigate({ to: '/' }),
+      onClick: () => navigate({ to: '/reports' }),
       color: 'bg-orange-500 hover:bg-orange-600',
     },
   ]
