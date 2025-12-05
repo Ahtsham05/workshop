@@ -13,13 +13,11 @@ interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
   ({ className, onValueChange, onChange, showVoiceInput = false, voiceInputSize = 'sm', ...props }, ref) => {
     const [inputValue, setInputValue] = useState(props.value?.toString() || '')
-    const [keyboardLang, setKeyboardLang] = useState<'ur' | 'en'>('en')
 
     // Update internal state when props.value changes
     useEffect(() => {
       const newValue = props.value?.toString() || ''
       setInputValue(newValue)
-      setKeyboardLang(detectKeyboardLanguage(newValue))
     }, [props.value])
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
