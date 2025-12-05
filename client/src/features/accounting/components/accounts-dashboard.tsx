@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
-  DollarSign, 
+  // DollarSign, 
   TrendingUp, 
   TrendingDown,
   Users, 
@@ -218,7 +218,7 @@ export function AccountsDashboard() {
                     fill="#8884d8"
                     dataKey="amount"
                   >
-                    {stats.expensesByCategory.map((entry, index) => (
+                    {stats.expensesByCategory.map((_,index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>

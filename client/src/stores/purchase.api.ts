@@ -58,7 +58,7 @@ export const purchaseApi = createApi({
     // Get purchase by ID
     getPurchaseById: builder.query({
       query: (id) => `/${id}`,
-      providesTags: (result, error, id) => [{ type: 'Purchase', id }],
+      providesTags: (id) => [{ type: 'Purchase', id }],
     }),
 
     // Update purchase
@@ -68,7 +68,7 @@ export const purchaseApi = createApi({
         method: 'PATCH',
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Purchase', id }, 'Purchase'],
+      invalidatesTags: ({ id }) => [{ type: 'Purchase', id }, 'Purchase'],
     }),
 
     // Delete purchase
