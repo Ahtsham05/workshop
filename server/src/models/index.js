@@ -11,3 +11,4 @@ module.exports.Voucher = require('./voucher.model');
 module.exports.Expense = require('./expense.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
+module.exports.Company = require('./company.model');

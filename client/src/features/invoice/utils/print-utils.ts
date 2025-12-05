@@ -23,6 +23,11 @@ export interface PrintInvoiceData {
   previousBalance?: number
   newBalance?: number
   netBalance?: number
+  companyName?: string
+  companyAddress?: string
+  companyPhone?: string
+  companyEmail?: string
+  companyTaxNumber?: string
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -51,17 +56,22 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     dueDate,
     notes,
     deliveryCharge = 0,
-    serviceCharge = 0
+    serviceCharge = 0,
+    companyName,
+    companyAddress,
+    companyPhone,
+    companyEmail,
+    companyTaxNumber
   } = data
   console.log("data",data)
 
   // Urdu translations
   const urduTexts = {
-    business_name: 'آپ کا کاروبار',
-    business_address: 'آپ کا پتہ، شہر، ملک',
-    business_phone: '+92 300 1234567',
-    business_email: 'info@yourbusiness.com',
-    tax_id: 'ٹیکس آئی ڈی: 123456789',
+    business_name: companyName || 'آپ کا کاروبار',
+    business_address: companyAddress || 'آپ کا پتہ، شہر، ملک',
+    business_phone: companyPhone || '+92 300 1234567',
+    business_email: companyEmail || 'info@yourbusiness.com',
+    tax_id: companyTaxNumber ? `ٹیکس آئی ڈی: ${companyTaxNumber}` : 'ٹیکس آئی ڈی: 123456789',
     invoice_title: 'رسید',
     invoice_number: 'رسید نمبر',
     date: 'تاریخ',
@@ -503,16 +513,21 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     dueDate,
     notes,
     deliveryCharge = 0,
-    serviceCharge = 0
+    serviceCharge = 0,
+    companyName,
+    companyAddress,
+    companyPhone,
+    companyEmail,
+    companyTaxNumber
   } = data
 
   // Urdu translations for A4 invoice
   const urduTexts = {
-    business_name: 'آپ کا کاروبار',
-    business_address: 'آپ کا پتہ، شہر، ملک',
-    business_phone: '+92 300 1234567',
-    business_email: 'info@yourbusiness.com',
-    tax_id: 'ٹیکس آئی ڈی: 123456789',
+    business_name: companyName || 'آپ کا کاروبار',
+    business_address: companyAddress || 'آپ کا پتہ، شہر، ملک',
+    business_phone: companyPhone || '+92 300 1234567',
+    business_email: companyEmail || 'info@yourbusiness.com',
+    tax_id: companyTaxNumber ? `ٹیکس آئی ڈی: ${companyTaxNumber}` : 'ٹیکس آئی ڈی: 123456789',
     invoice_title: 'انوائس',
     invoice_number: 'انوائس نمبر',
     date: 'تاریخ',

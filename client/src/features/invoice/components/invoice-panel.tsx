@@ -20,6 +20,7 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
+import { useGetCompanyQuery } from '@/stores/company.api'
 import {
   Command,
   CommandEmpty,
@@ -90,6 +91,12 @@ export function InvoicePanel({
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
+  
+  // Fetch company data for invoice printing (skip error if not found)
+  const { data: companyData } = useGetCompanyQuery(undefined, {
+    refetchOnMountOrArgChange: false,
+    refetchOnFocus: false,
+  })
   console.log("invoice",invoice)
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
@@ -117,7 +124,12 @@ export function InvoicePanel({
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: customerBalance,
-        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0)
+        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0),
+        companyName: companyData?.name,
+        companyAddress: companyData?.address,
+        companyPhone: companyData?.phone,
+        companyEmail: companyData?.email,
+        companyTaxNumber: companyData?.taxNumber
       }
 
       // Force Urdu/RTL for print
@@ -129,7 +141,7 @@ export function InvoicePanel({
       console.error('Print error:', error)
       toast.error('Failed to print invoice')
     }
-  }, [t, invoice.customerName])
+  }, [t, invoice.customerName, companyData])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
@@ -157,7 +169,12 @@ export function InvoicePanel({
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: customerBalance,
-        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0)
+        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0),
+        companyName: companyData?.name,
+        companyAddress: companyData?.address,
+        companyPhone: companyData?.phone,
+        companyEmail: companyData?.email,
+        companyTaxNumber: companyData?.taxNumber
       }
 
       // Force Urdu/RTL for print
@@ -169,7 +186,7 @@ export function InvoicePanel({
       console.error('A4 Print error:', error)
       toast.error('Failed to print A4 invoice')
     }
-  }, [t, invoice.customerName])
+  }, [t, invoice.customerName, companyData])
 
   // Initialize form values when in edit mode
   useEffect(() => {

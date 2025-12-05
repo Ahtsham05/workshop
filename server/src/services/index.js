@@ -13,3 +13,4 @@ module.exports.invoiceService = require('./invoice.service.js');
 module.exports.expenseService = require('./expense.service.js');
 module.exports.customerLedgerService = require('./customerLedger.service.js');
 module.exports.supplierLedgerService = require('./supplierLedger.service.js');
+module.exports.companyService = require('./company.service.js');

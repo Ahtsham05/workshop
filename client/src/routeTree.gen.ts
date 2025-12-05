@@ -15,6 +15,7 @@ import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedCompanyImport } from './routes/_authenticated/company'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
@@ -44,6 +45,7 @@ import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_aut
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedCompanySetupImport } from './routes/_authenticated/company/setup'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 
 // Create/Update Routes
@@ -68,6 +70,12 @@ const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
 const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedCompanyRoute = AuthenticatedCompanyImport.update({
+  id: '/company',
+  path: '/company',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -261,6 +269,12 @@ const AuthenticatedSettingsAccountRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedCompanySetupRoute = AuthenticatedCompanySetupImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AuthenticatedCompanyRoute,
+} as any)
+
 const AuthenticatedProductsBulkEditIndexRoute =
   AuthenticatedProductsBulkEditIndexImport.update({
     id: '/products/bulk-edit/',
@@ -363,6 +377,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/company': {
+      id: '/_authenticated/company'
+      path: '/company'
+      fullPath: '/company'
+      preLoaderRoute: typeof AuthenticatedCompanyImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/reports': {
       id: '/_authenticated/reports'
       path: '/reports'
@@ -383,6 +404,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexImport
       parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/company/setup': {
+      id: '/_authenticated/company/setup'
+      path: '/setup'
+      fullPath: '/company/setup'
+      preLoaderRoute: typeof AuthenticatedCompanySetupImport
+      parentRoute: typeof AuthenticatedCompanyImport
     }
     '/_authenticated/settings/account': {
       id: '/_authenticated/settings/account'
@@ -538,9 +566,21 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedCompanyRouteChildren {
+  AuthenticatedCompanySetupRoute: typeof AuthenticatedCompanySetupRoute
+}
+
+const AuthenticatedCompanyRouteChildren: AuthenticatedCompanyRouteChildren = {
+  AuthenticatedCompanySetupRoute: AuthenticatedCompanySetupRoute,
+}
+
+const AuthenticatedCompanyRouteWithChildren =
+  AuthenticatedCompanyRoute._addFileChildren(AuthenticatedCompanyRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedCompanyRoute: typeof AuthenticatedCompanyRouteWithChildren
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -562,6 +602,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedCompanyRoute: AuthenticatedCompanyRouteWithChildren,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -600,9 +641,11 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/company': typeof AuthenticatedCompanyRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/company/setup': typeof AuthenticatedCompanySetupRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -635,9 +678,11 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/company': typeof AuthenticatedCompanyRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/company/setup': typeof AuthenticatedCompanySetupRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -673,9 +718,11 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/company': typeof AuthenticatedCompanyRouteWithChildren
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/company/setup': typeof AuthenticatedCompanySetupRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -712,9 +759,11 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/company'
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/company/setup'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -746,9 +795,11 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/company'
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/company/setup'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -782,9 +833,11 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/company'
     | '/_authenticated/reports'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
+    | '/_authenticated/company/setup'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -862,6 +915,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
+        "/_authenticated/company",
         "/_authenticated/reports",
         "/_authenticated/voice-demo",
         "/_authenticated/",
@@ -925,6 +979,13 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/barcode-demo.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/company": {
+      "filePath": "_authenticated/company.tsx",
+      "parent": "/_authenticated",
+      "children": [
+        "/_authenticated/company/setup"
+      ]
+    },
     "/_authenticated/reports": {
       "filePath": "_authenticated/reports.tsx",
       "parent": "/_authenticated"
@@ -936,6 +997,10 @@ export const routeTree = rootRoute
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/company/setup": {
+      "filePath": "_authenticated/company/setup.tsx",
+      "parent": "/_authenticated/company"
     },
     "/_authenticated/settings/account": {
       "filePath": "_authenticated/settings/account.tsx",
