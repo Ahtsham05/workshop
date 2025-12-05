@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
-import { getInputClasses, getVoiceInputLanguage, detectKeyboardLanguage } from '@/utils/keyboard-language-utils'
+import { getInputClasses, getVoiceInputLanguage } from '@/utils/keyboard-language-utils'
 import { cn } from '@/lib/utils'
 
 interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
