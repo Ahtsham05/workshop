@@ -150,7 +150,7 @@ export interface TaxReportData {
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'Inventory', 'Tax'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'Inventory', 'Tax'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
