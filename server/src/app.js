@@ -82,6 +82,16 @@ app.get('/',(req, res) => {
   res.send('Hello World!');
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    env: config.env,
+    mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
+});
+
 // v1 api routes
 app.use('/v1', routes);
 
