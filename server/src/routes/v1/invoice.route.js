@@ -32,6 +32,10 @@ router
   .get(auth('getInvoices'), validate(invoiceValidation.getInvoicesByCustomer), invoiceController.getInvoicesByCustomer);
 
 router
+  .route('/customer/:customerId/product/:productId/history')
+  .get(auth('getInvoices'), invoiceController.getCustomerProductHistory);
+
+router
   .route('/:invoiceId')
   .get(auth('getInvoices'), validate(invoiceValidation.getInvoice), invoiceController.getInvoice)
   .patch(auth('manageInvoices'), validate(invoiceValidation.updateInvoice), invoiceController.updateInvoice)

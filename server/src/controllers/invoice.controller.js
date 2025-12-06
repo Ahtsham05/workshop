@@ -247,6 +247,12 @@ const generateBillNumber = catchAsync(async (req, res) => {
   res.send({ billNumber });
 });
 
+const getCustomerProductHistory = catchAsync(async (req, res) => {
+  const { customerId, productId } = req.params;
+  const history = await invoiceService.getCustomerProductHistory(customerId, productId);
+  res.send(history);
+});
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -261,5 +267,6 @@ module.exports = {
   getOutstandingInvoices,
   cancelInvoice,
   duplicateInvoice,
-  generateBillNumber
+  generateBillNumber,
+  getCustomerProductHistory
 };

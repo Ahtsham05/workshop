@@ -656,6 +656,56 @@ const generateBillNumber = async () => {
   return await Invoice.generateBillNumber();
 };
 
+/**
+ * Get customer's product purchase history
+ * @param {string} customerId
+ * @param {string} productId
+ * @returns {Promise<Object>}
+ */
+const getCustomerProductHistory = async (customerId, productId) => {
+  // Find all invoices for this customer that contain this product
+  const invoices = await Invoice.find({
+    customerId,
+    'items.productId': productId,
+    status: { $ne: 'cancelled' } // Exclude cancelled invoices
+  })
+    .select('invoiceNumber items type createdAt invoiceDate')
+    .sort({ createdAt: -1 }) // Most recent first
+    .lean();
+
+  // Extract product-specific data from each invoice
+  const history = invoices.map(invoice => {
+    const item = invoice.items.find(i => i.productId.toString() === productId);
+    return {
+      _id: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      date: invoice.invoiceDate || invoice.createdAt,
+      type: invoice.type,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: item.subtotal
+    };
+  });
+
+  // Calculate statistics
+  const stats = {
+    history,
+    totalQuantity: history.reduce((sum, item) => sum + item.quantity, 0),
+    lastPrice: history.length > 0 ? history[0].unitPrice : null,
+    avgPrice: history.length > 0 
+      ? history.reduce((sum, item) => sum + item.unitPrice, 0) / history.length 
+      : null,
+    minPrice: history.length > 0 
+      ? Math.min(...history.map(item => item.unitPrice)) 
+      : null,
+    maxPrice: history.length > 0 
+      ? Math.max(...history.map(item => item.unitPrice)) 
+      : null
+  };
+
+  return stats;
+};
+
 module.exports = {
   createInvoice,
   queryInvoices,
@@ -666,5 +716,6 @@ module.exports = {
   processPayment,
   getInvoiceStatistics,
   getDailySalesReport,
-  generateBillNumber
+  generateBillNumber,
+  getCustomerProductHistory
 };

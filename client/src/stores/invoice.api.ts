@@ -157,6 +157,13 @@ export const invoiceApi = createApi({
     generateBillNumber: builder.query({
       query: () => '/generate-bill-number',
     }),
+
+    // Get customer product history
+    getCustomerProductHistory: builder.query({
+      query: ({ customerId, productId }) => ({
+        url: `/customer/${customerId}/product/${productId}/history`,
+      }),
+    }),
   }),
 })
 
@@ -175,4 +182,5 @@ export const {
   useGetOutstandingInvoicesQuery,
   useGetInvoicesByCustomerQuery,
   useGenerateBillNumberQuery,
+  useGetCustomerProductHistoryQuery,
 } = invoiceApi

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Search,
     //  Plus, 
-     Package, Scan, Image as ImageIcon, List } from 'lucide-react'
+     Package, Scan, Image as ImageIcon, List, History } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Category, Product } from '../index'
@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { toast } from 'sonner'
+import { ProductHistoryDialog } from './product-history-dialog'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -25,6 +26,8 @@ interface ProductCatalogProps {
   setSearchTerm: (term: string) => void
   onAddToInvoice: (product: Product, quantity?: number) => void
   onBarcodeSearch: (barcode: string) => void
+  selectedCustomerId?: string
+  selectedCustomerName?: string
 }
 
 export function ProductCatalog({
@@ -35,12 +38,25 @@ export function ProductCatalog({
   searchTerm,
   setSearchTerm,
   onAddToInvoice,
-  onBarcodeSearch
+  onBarcodeSearch,
+  selectedCustomerId,
+  selectedCustomerName
 }: ProductCatalogProps) {
   const { t } = useLanguage()
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
+  const [historyDialog, setHistoryDialog] = useState<{
+    open: boolean
+    productId: string
+    productName: string
+    currentPrice: number
+  }>({
+    open: false,
+    productId: '',
+    productName: '',
+    currentPrice: 0
+  })
 
   // Get all unique categories for the filter
   const allCategories = categorizedProducts.filter(cat => cat.products.length > 0)
@@ -317,6 +333,26 @@ export function ProductCatalog({
                           </div>
                         </div>
 
+                        {/* History Button for selected customer */}
+                        {selectedCustomerId && selectedCustomerId !== 'walk-in' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setHistoryDialog({
+                                open: true,
+                                productId: product._id || product.id,
+                                productName: product.name,
+                                currentPrice: product.price
+                              })
+                            }}
+                            className={`${showImages ? 'w-full mt-1' : ''} flex items-center justify-center gap-1 p-1.5 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors text-xs`}
+                            title={t('view_history')}
+                          >
+                            <History className="h-3 w-3" />
+                            {showImages && <span>{t('view_history')}</span>}
+                          </button>
+                        )}
+
                         {/* Action Buttons */}
                         {/* <div 
                           className={showImages 
@@ -385,6 +421,19 @@ export function ProductCatalog({
           </div>
         </CardContent>
       </Card>
+
+      {/* Product History Dialog */}
+      {selectedCustomerId && selectedCustomerId !== 'walk-in' && (
+        <ProductHistoryDialog
+          open={historyDialog.open}
+          onOpenChange={(open) => setHistoryDialog(prev => ({ ...prev, open }))}
+          customerId={selectedCustomerId}
+          productId={historyDialog.productId}
+          productName={historyDialog.productName}
+          customerName={selectedCustomerName || ''}
+          currentPrice={historyDialog.currentPrice}
+        />
+      )}
     </div>
   )
 }

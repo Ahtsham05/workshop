@@ -852,6 +852,12 @@ export default function InvoicePage() {
               setSearchTerm={setSearchTerm}
               onAddToInvoice={addToInvoice}
               onBarcodeSearch={handleBarcodeSearch}
+              selectedCustomerId={invoice.customerId}
+              selectedCustomerName={
+                invoice.customerId === 'walk-in' 
+                  ? invoice.walkInCustomerName 
+                  : invoice.customerName || customers.find(c => c._id === invoice.customerId)?.name
+              }
             />
           </div>
         </div>
