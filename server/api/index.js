@@ -1,18 +1,36 @@
 const mongoose = require('mongoose');
-const app = require('./app');
-const config = require('./config/config');
-const logger = require('./config/logger');
+const app = require('../src/app');
+const config = require('../src/config/config');
 
-// Connect to MongoDB
-if (mongoose.connection.readyState === 0) {
-  mongoose.connect(config.mongoose.url, config.mongoose.options)
-    .then(() => {
-      logger.info('Connected to MongoDB');
-    })
-    .catch((error) => {
-      logger.error('MongoDB connection error:', error);
-    });
+let isConnected = false;
+
+async function connectToDatabase() {
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (mongoose.connection.readyState === 0) {
+    try {
+      await mongoose.connect(config.mongoose.url);
+      isConnected = true;
+      console.log('MongoDB connected');
+    } catch (error) {
+      console.error('MongoDB connection error:', error);
+      throw error;
+    }
+  }
 }
 
-// Export the Express app for Vercel serverless
-module.exports = app;
+// Export handler for Vercel serverless
+module.exports = async (req, res) => {
+  try {
+    await connectToDatabase();
+    return app(req, res);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+};
