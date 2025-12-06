@@ -17,6 +17,10 @@ router
   .get(auth(), reportsController.getProductReport);
 
 router
+  .route('/products/:productId')
+  .get(auth(), reportsController.getProductDetailReport);
+
+router
   .route('/customers')
   .get(auth(), reportsController.getCustomerReport);
 

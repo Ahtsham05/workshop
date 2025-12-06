@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/context/language-context';
-import { ArrowLeft, Plus, Edit, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
 import { useGetPurchaseByIdQuery } from '@/stores/purchase.api';
+import { PaymentReceipt } from './payment-receipt';
 
 interface LedgerEntry {
   _id?: string;
@@ -136,6 +137,8 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
 
   useEffect(() => {
     fetchLedgerEntries();
@@ -233,6 +236,19 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     setPurchaseDialogOpen(true);
   };
 
+  const handleGenerateReceipt = (entry: LedgerEntry) => {
+    // Find the previous balance from the entry before this one
+    const entryIndex = entries.findIndex(e => (e.id || e._id) === (entry.id || entry._id));
+    const previousBalance = entryIndex > 0 ? entries[entryIndex - 1].balance : entry.balance - entry.debit + entry.credit;
+    
+    setSelectedPayment({
+      entry,
+      previousBalance,
+      currentBalance: entry.balance,
+    });
+    setReceiptDialogOpen(true);
+  };
+
   // Check if entry is manually created (not from purchase invoice)
   const isManualEntry = (entry: LedgerEntry) => {
     return !entry.referenceId;
@@ -319,10 +335,25 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
               entityId={supplier._id}
               entityName={supplier.name}
               editingEntry={editingEntry}
-              onSuccess={() => {
+              onSuccess={(createdEntry) => {
                 handleCloseForm();
                 fetchLedgerEntries();
                 fetchSupplierBalance();
+                
+                // Auto-generate receipt for payment made
+                if (createdEntry && createdEntry.transactionType === 'payment_made') {
+                  setTimeout(() => {
+                    const previousBalance = currentBalance || 0;
+                    const newBalance = previousBalance - createdEntry.debit;
+                    
+                    setSelectedPayment({
+                      entry: createdEntry,
+                      previousBalance: previousBalance,
+                      currentBalance: newBalance,
+                    });
+                    setReceiptDialogOpen(true);
+                  }, 500);
+                }
               }}
               onCancel={handleCloseForm}
             />
@@ -336,6 +367,35 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
             <DialogTitle>{t('Purchase Details')}</DialogTitle>
           </DialogHeader>
           <PurchaseDialogContent purchaseId={viewingPurchase?.id} supplierName={supplier.name} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Payment Receipt')}</DialogTitle>
+          </DialogHeader>
+          {selectedPayment && (
+            <PaymentReceipt
+              customer={{
+                name: supplier.name,
+                phone: supplier.phone,
+                address: supplier.address,
+              }}
+              payment={{
+                amount: selectedPayment.entry.debit,
+                date: selectedPayment.entry.transactionDate,
+                reference: selectedPayment.entry.reference,
+                paymentMethod: selectedPayment.entry.paymentMethod,
+                description: selectedPayment.entry.description,
+              }}
+              balance={{
+                previousBalance: selectedPayment.previousBalance,
+                currentBalance: selectedPayment.currentBalance,
+              }}
+              receiptNumber={selectedPayment.entry.reference || `RCP-${format(new Date(selectedPayment.entry.transactionDate), 'yyyyMMdd')}-${(selectedPayment.entry.id || selectedPayment.entry._id)?.slice(-6)}`}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -418,12 +478,24 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                         Rs{Math.abs(entry.balance).toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1">
+                          {entry.transactionType === 'payment_made' && entry.debit > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleGenerateReceipt(entry)}
+                              className="h-8 w-8 p-0"
+                              title={t('Generate Receipt')}
+                            >
+                              <Receipt className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          )}
                           {entry.transactionType === 'payment_made' && isManualEntry(entry) && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleEditEntry(entry)}
+                              className="h-8 w-8 p-0"
                               title={t('Edit entry')}
                             >
                               <Edit className="w-4 h-4" />

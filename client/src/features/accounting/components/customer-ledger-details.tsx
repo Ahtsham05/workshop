@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/context/language-context';
-import { ArrowLeft, Plus, Edit, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
 import { useGetInvoiceByIdQuery } from '@/stores/invoice.api';
+import { PaymentReceipt } from './payment-receipt';
 
 interface LedgerEntry {
   _id?: string;
@@ -144,6 +145,8 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
 
   useEffect(() => {
     fetchLedgerEntries();
@@ -241,6 +244,19 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     setInvoiceDialogOpen(true);
   };
 
+  const handleGenerateReceipt = (entry: LedgerEntry) => {
+    // Find the previous balance from the entry before this one
+    const entryIndex = entries.findIndex(e => (e.id || e._id) === (entry.id || entry._id));
+    const previousBalance = entryIndex > 0 ? entries[entryIndex - 1].balance : entry.balance - entry.credit + entry.debit;
+    
+    setSelectedPayment({
+      entry,
+      previousBalance,
+      currentBalance: entry.balance,
+    });
+    setReceiptDialogOpen(true);
+  };
+
   // Check if entry is manually created (not from invoice)
   const isManualEntry = (entry: LedgerEntry) => {
     return !entry.referenceId;
@@ -325,10 +341,25 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
               entityId={customer._id}
               entityName={customer.name}
               editingEntry={editingEntry}
-              onSuccess={() => {
+              onSuccess={(createdEntry) => {
                 handleCloseForm();
                 fetchLedgerEntries();
                 fetchCustomerBalance();
+                
+                // Auto-generate receipt for payment received
+                if (createdEntry && createdEntry.transactionType === 'payment_received') {
+                  setTimeout(() => {
+                    const previousBalance = currentBalance || 0;
+                    const newBalance = previousBalance - createdEntry.credit;
+                    
+                    setSelectedPayment({
+                      entry: createdEntry,
+                      previousBalance: previousBalance,
+                      currentBalance: newBalance,
+                    });
+                    setReceiptDialogOpen(true);
+                  }, 500);
+                }
               }}
               onCancel={handleCloseForm}
             />
@@ -342,6 +373,35 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
             <DialogTitle>{t('Invoice Details')}</DialogTitle>
           </DialogHeader>
           <InvoiceDialogContent invoiceId={viewingInvoice?.id} customerName={customer.name} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Payment Receipt')}</DialogTitle>
+          </DialogHeader>
+          {selectedPayment && (
+            <PaymentReceipt
+              customer={{
+                name: customer.name,
+                phone: customer.phone,
+                address: customer.address,
+              }}
+              payment={{
+                amount: selectedPayment.entry.credit,
+                date: selectedPayment.entry.transactionDate,
+                reference: selectedPayment.entry.reference,
+                paymentMethod: selectedPayment.entry.paymentMethod,
+                description: selectedPayment.entry.description,
+              }}
+              balance={{
+                previousBalance: selectedPayment.previousBalance,
+                currentBalance: selectedPayment.currentBalance,
+              }}
+              receiptNumber={selectedPayment.entry.reference || `RCP-${format(new Date(selectedPayment.entry.transactionDate), 'yyyyMMdd')}-${(selectedPayment.entry.id || selectedPayment.entry._id)?.slice(-6)}`}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -426,6 +486,17 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            {entry.transactionType === 'payment_received' && entry.credit > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleGenerateReceipt(entry)}
+                                className="h-8 w-8 p-0"
+                                title={t('Generate Receipt')}
+                              >
+                                <Receipt className="w-4 h-4 text-blue-600" />
+                              </Button>
+                            )}
                             {entry.transactionType === 'payment_received' && isManualEntry(entry) && (
                               <Button
                                 variant="ghost"

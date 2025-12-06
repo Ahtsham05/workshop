@@ -194,6 +194,21 @@ export const reportsApi = createApi({
       },
       providesTags: ['ProductReport'],
     }),
+    getProductDetailReport: builder.query<{
+      product: any
+      summary: any
+      sales: any[]
+      purchases: any[]
+      period: { startDate: string; endDate: string }
+    }, { productId: string; startDate?: string; endDate?: string }>({
+      query: ({ productId, ...params }) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/products/${productId}?${searchParams.toString()}`
+      },
+      providesTags: ['ProductDetailReport'],
+    }),
     getCustomerReport: builder.query<{
       data: CustomerReportData[]
       summary: any
@@ -276,6 +291,7 @@ export const {
   useGetSalesReportQuery,
   useGetPurchaseReportQuery,
   useGetProductReportQuery,
+  useGetProductDetailReportQuery,
   useGetCustomerReportQuery,
   useGetSupplierReportQuery,
   useGetExpenseReportQuery,

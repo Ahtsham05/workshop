@@ -362,6 +362,21 @@ const translations: Translations = {
     "print_amount_paid": "Amount Paid",
     "print_generated_on": "Generated on",
     
+    // Payment Receipt
+    "Payment Receipt": "Payment Receipt",
+    "Generate Receipt": "Generate Receipt",
+    "Print Receipt": "Print Receipt",
+    "Receipt No": "Receipt No",
+    "Received From": "Received From",
+    "Payment Date": "Payment Date",
+    "Previous Balance": "Previous Balance",
+    "Payment Received": "Payment Received",
+    "Remaining Balance": "Remaining Balance",
+    "Received By": "Received By",
+    "Customer Signature": "Customer Signature",
+    "This is a computer generated receipt": "This is a computer generated receipt",
+    "Thank you for your payment": "Thank you for your payment",
+    
     // Pending Invoice Converter
     "convert_pending_invoices": "Convert Pending Invoices",
     "select_pending_invoices_to_convert_to_credit": "Select pending invoices to convert to credit",
@@ -1142,6 +1157,21 @@ const translations: Translations = {
     "print_service_charge": "سروس چارج",
     "print_amount_paid": "ادا شدہ رقم",
     "print_generated_on": "تیار شدہ",
+    
+    // Payment Receipt
+    "Payment Receipt": "ادائیگی کی رسید",
+    "Generate Receipt": "رسید بنائیں",
+    "Print Receipt": "رسید پرنٹ کریں",
+    "Receipt No": "رسید نمبر",
+    "Received From": "وصول کنندہ",
+    "Payment Date": "ادائیگی کی تاریخ",
+    "Previous Balance": "سابقہ بیلنس",
+    "Payment Received": "ادائیگی موصول",
+    "Remaining Balance": "بقایا رقم",
+    "Received By": "وصول کنندہ",
+    "Customer Signature": "کسٹمر کے دستخط",
+    "This is a computer generated receipt": "یہ کمپیوٹر سے تیار شدہ رسید ہے",
+    "Thank you for your payment": "آپ کی ادائیگی کا شکریہ",
     
     // Pending Invoice Converter
     "convert_pending_invoices": "زیر التواء انوائسز کو تبدیل کریں",

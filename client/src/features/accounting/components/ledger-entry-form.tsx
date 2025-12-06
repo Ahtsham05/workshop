@@ -24,7 +24,7 @@ interface LedgerEntryFormProps {
   entityId: string;
   entityName: string;
   editingEntry?: any;
-  onSuccess?: () => void;
+  onSuccess?: (entry?: any) => void;
   onCancel?: () => void;
 }
 
@@ -170,6 +170,8 @@ export function LedgerEntryForm({
 
         await Axios.patch(url, updatePayload);
         toast.success(t('Ledger entry updated successfully'));
+        
+        if (onSuccess) onSuccess();
       } else {
         // Create new entry - send full payload
         const createPayload = {
@@ -188,11 +190,18 @@ export function LedgerEntryForm({
           ? summery.addCustomerLedgerEntry.url
           : summery.addSupplierLedgerEntry.url;
 
-        await Axios.post(url, createPayload);
+        const response = await Axios.post(url, createPayload);
         toast.success(t('Ledger entry added successfully'));
+        
+        // Pass the created entry back if it's a payment received/made
+        if (onSuccess) {
+          if ((formData.transactionType === 'payment_received' || formData.transactionType === 'payment_made') && response.data) {
+            onSuccess(response.data);
+          } else {
+            onSuccess();
+          }
+        }
       }
-      
-      if (onSuccess) onSuccess();
     } catch (error: any) {
       toast.error(error.response?.data?.message || t('Failed to add ledger entry'));
       console.error('Error adding ledger entry:', error);

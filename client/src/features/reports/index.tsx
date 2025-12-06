@@ -22,7 +22,7 @@ import { TaxReport } from './components/tax-report'
 export default function ReportsPage() {
   const { t } = useLanguage()
   const now = new Date()
-  const [startDate, setStartDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0))
+  const [startDate, setStartDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0))
   const [endDate, setEndDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
   const [activeTab, setActiveTab] = useState('sales')
   const exportRef = useRef<{ exportToExcel: () => void }>(null)

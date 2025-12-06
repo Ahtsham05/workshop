@@ -236,6 +236,134 @@ const getProductReport = catchAsync(async (req, res) => {
 });
 
 /**
+ * Get Single Product Detail Report
+ * @route GET /v1/reports/products/:productId
+ */
+const getProductDetailReport = catchAsync(async (req, res) => {
+  const { productId } = req.params;
+  const { startDate, endDate } = req.query;
+
+  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const end = endDate ? new Date(endDate) : new Date();
+
+  // Get product basic info
+  const product = await Product.findById(productId);
+  if (!product) {
+    return res.status(httpStatus.NOT_FOUND).send({ message: 'Product not found' });
+  }
+
+  // Get sales to customers (invoices)
+  const salesData = await Invoice.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: start, $lte: end },
+        status: { $ne: 'cancelled' }
+      }
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        'items.productId': product._id
+      }
+    },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customer'
+      }
+    },
+    { $unwind: '$customer' },
+    {
+      $project: {
+        _id: 1,
+        invoiceNumber: 1,
+        date: '$createdAt',
+        customerName: '$customer.name',
+        customerPhone: '$customer.phone',
+        quantity: '$items.quantity',
+        price: '$items.price',
+        subtotal: '$items.subtotal',
+        profit: '$items.profit',
+        type: { $literal: 'sale' }
+      }
+    },
+    {
+      $sort: { date: -1 }
+    }
+  ]);
+
+  // Get purchases from suppliers
+  const purchaseData = await Purchase.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: start, $lte: end },
+        status: { $ne: 'cancelled' }
+      }
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        'items.productId': product._id
+      }
+    },
+    {
+      $lookup: {
+        from: 'suppliers',
+        localField: 'supplierId',
+        foreignField: '_id',
+        as: 'supplier'
+      }
+    },
+    { $unwind: '$supplier' },
+    {
+      $project: {
+        _id: 1,
+        purchaseNumber: 1,
+        date: '$createdAt',
+        supplierName: '$supplier.name',
+        supplierPhone: '$supplier.phone',
+        quantity: '$items.quantity',
+        price: '$items.unitPrice',
+        subtotal: { $multiply: ['$items.quantity', '$items.unitPrice'] },
+        type: { $literal: 'purchase' }
+      }
+    },
+    {
+      $sort: { date: -1 }
+    }
+  ]);
+
+  // Calculate summary
+  const summary = {
+    totalSold: salesData.reduce((sum, item) => sum + item.quantity, 0),
+    totalPurchased: purchaseData.reduce((sum, item) => sum + item.quantity, 0),
+    totalRevenue: salesData.reduce((sum, item) => sum + item.subtotal, 0),
+    totalCost: purchaseData.reduce((sum, item) => sum + item.subtotal, 0),
+    totalProfit: salesData.reduce((sum, item) => sum + item.profit, 0),
+    uniqueCustomers: new Set(salesData.map(item => item.customerName)).size,
+    uniqueSuppliers: new Set(purchaseData.map(item => item.supplierName)).size,
+  };
+
+  res.status(httpStatus.OK).send({
+    product: {
+      _id: product._id,
+      name: product.name,
+      barcode: product.barcode,
+      currentStock: product.stockQuantity,
+      purchasePrice: product.purchasePrice,
+      sellingPrice: product.sellingPrice,
+      minStockLevel: product.minStockLevel
+    },
+    summary,
+    sales: salesData,
+    purchases: purchaseData,
+    period: { startDate: start, endDate: end }
+  });
+});
+
+/**
  * Get Customer Report
  * @route GET /v1/reports/customers
  */
@@ -671,6 +799,7 @@ module.exports = {
   getSalesReport,
   getPurchaseReport,
   getProductReport,
+  getProductDetailReport,
   getCustomerReport,
   getSupplierReport,
   getExpenseReport,
