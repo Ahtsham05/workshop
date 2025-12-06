@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense } = require('../models');
 
@@ -263,27 +264,76 @@ const getProductDetailReport = catchAsync(async (req, res) => {
     { $unwind: '$items' },
     {
       $match: {
-        'items.productId': product._id
+        'items.productId': mongoose.Types.ObjectId.isValid(productId) 
+          ? new mongoose.Types.ObjectId(productId) 
+          : productId
+      }
+    },
+    {
+      $addFields: {
+        // Convert customerId string to ObjectId if it's a valid ObjectId string
+        customerIdConverted: {
+          $cond: {
+            if: {
+              $and: [
+                { $ne: ['$customerId', 'walk-in'] },
+                { $ne: ['$customerId', null] },
+                { $eq: [{ $type: '$customerId' }, 'string'] },
+                { $regexMatch: { input: '$customerId', regex: '^[0-9a-fA-F]{24}$' } }
+              ]
+            },
+            then: { $toObjectId: '$customerId' },
+            else: {
+              $cond: {
+                if: { $eq: [{ $type: '$customerId' }, 'objectId'] },
+                then: '$customerId',
+                else: null
+              }
+            }
+          }
+        }
       }
     },
     {
       $lookup: {
         from: 'customers',
-        localField: 'customerId',
+        localField: 'customerIdConverted',
         foreignField: '_id',
-        as: 'customer'
+        as: 'customerInfo'
       }
     },
-    { $unwind: '$customer' },
+    {
+      $addFields: {
+        customerData: { $arrayElemAt: ['$customerInfo', 0] }
+      }
+    },
     {
       $project: {
         _id: 1,
         invoiceNumber: 1,
         date: '$createdAt',
-        customerName: '$customer.name',
-        customerPhone: '$customer.phone',
+        customerName: {
+          $switch: {
+            branches: [
+              {
+                case: { $eq: ['$customerId', 'walk-in'] },
+                then: { $ifNull: ['$walkInCustomerName', 'Walk-in Customer'] }
+              },
+              {
+                case: { $ne: ['$customerData.name', null] },
+                then: '$customerData.name'
+              },
+              {
+                case: { $ne: ['$customerName', null] },
+                then: '$customerName'
+              }
+            ],
+            default: 'Walk-in Customer'
+          }
+        },
+        customerPhone: '$customerData.phone',
         quantity: '$items.quantity',
-        price: '$items.price',
+        price: '$items.unitPrice',
         subtotal: '$items.subtotal',
         profit: '$items.profit',
         type: { $literal: 'sale' }
@@ -298,35 +348,43 @@ const getProductDetailReport = catchAsync(async (req, res) => {
   const purchaseData = await Purchase.aggregate([
     {
       $match: {
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
+        createdAt: { $gte: start, $lte: end }
       }
     },
     { $unwind: '$items' },
     {
       $match: {
-        'items.productId': product._id
+        'items.product': mongoose.Types.ObjectId.isValid(productId) 
+          ? new mongoose.Types.ObjectId(productId) 
+          : productId
       }
     },
     {
       $lookup: {
         from: 'suppliers',
-        localField: 'supplierId',
-        foreignField: '_id',
-        as: 'supplier'
+        let: { supplierId: '$supplier' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ['$_id', '$$supplierId']
+              }
+            }
+          }
+        ],
+        as: 'supplierInfo'
       }
     },
-    { $unwind: '$supplier' },
     {
       $project: {
         _id: 1,
-        purchaseNumber: 1,
+        purchaseNumber: { $ifNull: ['$invoiceNumber', 'N/A'] },
         date: '$createdAt',
-        supplierName: '$supplier.name',
-        supplierPhone: '$supplier.phone',
+        supplierName: { $arrayElemAt: ['$supplierInfo.name', 0] },
+        supplierPhone: { $arrayElemAt: ['$supplierInfo.phone', 0] },
         quantity: '$items.quantity',
-        price: '$items.unitPrice',
-        subtotal: { $multiply: ['$items.quantity', '$items.unitPrice'] },
+        price: '$items.priceAtPurchase',
+        subtotal: '$items.total',
         type: { $literal: 'purchase' }
       }
     },
