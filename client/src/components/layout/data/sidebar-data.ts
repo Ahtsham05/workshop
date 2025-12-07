@@ -27,17 +27,7 @@ export const sidebarData: SidebarData = {
     {
       name: '786 Engineering Works',
       logo: Command,
-      plan: '786 Engineering Works',
-    },
-    {
-      name: 'Acme Inc',
-      logo: GalleryVerticalEnd,
-      plan: 'Enterprise',
-    },
-    {
-      name: 'Acme Corp.',
-      logo: AudioWaveform,
-      plan: 'Startup',
+      plan: 'Admin Dashboard',
     },
   ],
   navGroups: [

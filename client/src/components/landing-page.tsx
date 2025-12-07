@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/context/auth-context'
+import { Logo } from '@/components/logo'
 
 export default function LandingPage() {
   const navigate = useNavigate()
@@ -25,12 +26,15 @@ export default function LandingPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-6">
+        <div className="flex justify-center mb-4">
+          <Logo width={200} height={80} />
+        </div>
         <div className="relative">
           <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-foreground">Welcome</h2>
+          <h2 className="text-xl font-semibold text-foreground">Welcome to 786 Engineering Works</h2>
           <p className="text-muted-foreground">Redirecting you to the application...</p>
         </div>
       </div>

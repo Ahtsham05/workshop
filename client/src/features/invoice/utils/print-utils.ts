@@ -156,6 +156,13 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       padding-bottom: 8px;
     }
     
+    .company-logo {
+      max-width: 120px;
+      height: auto;
+      margin: 0 auto 8px;
+      display: block;
+    }
+    
     .business-name {
       font-size: 16px;
       font-weight: bold;
@@ -332,6 +339,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 </head>
 <body>
   <div class="receipt-header">
+    <img src="/images/logo-light.png" alt="786 Engineering Works" class="company-logo" />
     <div class="business-name">${urduTexts.business_name}</div>
     <div class="business-info">${urduTexts.business_address}</div>
     <div class="business-info">${urduTexts.business_phone} | ${urduTexts.business_email}</div>
@@ -631,6 +639,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       flex: 1;
     }
     
+    .company-logo {
+      max-width: 150px;
+      height: auto;
+      margin-bottom: 10px;
+      display: block;
+    }
+    
     .company-name {
       font-size: 28px;
       font-weight: bold;
@@ -922,6 +937,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 <body>
   <div class="invoice-header">
     <div class="company-info">
+      <img src="/images/logo-light.png" alt="786 Engineering Works" class="company-logo" />
       <div class="company-name">${urduTexts.business_name}</div>
       <div class="company-details">
         ${urduTexts.business_address}<br>

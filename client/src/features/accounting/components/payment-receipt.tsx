@@ -144,6 +144,13 @@ export function PaymentReceipt({
       padding-bottom: 8px;
     }
     
+    .company-logo {
+      max-width: 120px;
+      height: auto;
+      margin: 0 auto 8px;
+      display: block;
+    }
+    
     .business-name {
       font-size: 16px;
       font-weight: bold;
@@ -300,6 +307,7 @@ export function PaymentReceipt({
 </head>
 <body>
   <div class="receipt-header">
+    <img src="/images/logo-light.png" alt="786 Engineering Works" class="company-logo" />
     <div class="business-name">${data.company.name}</div>
     ${data.company.address ? `<div class="business-info">${data.company.address}</div>` : ''}
     ${data.company.phone || data.company.email ? `
