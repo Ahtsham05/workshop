@@ -53,7 +53,11 @@ const createInvoice = {
     loyaltyPoints: Joi.number().min(0).default(0),
     couponCode: Joi.string().allow('').optional(),
     returnPolicy: Joi.string().allow('').optional(),
-    notes: Joi.string().allow('').optional()
+    notes: Joi.string().allow('').optional(),
+    billNumber: Joi.string().optional(),
+    isConvertedToBill: Joi.boolean().optional(),
+    convertedAt: Joi.date().optional(),
+    convertedTo: Joi.string().custom(objectId).optional()
   })
 };
 

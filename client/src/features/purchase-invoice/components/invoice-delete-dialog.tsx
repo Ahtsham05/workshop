@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { useDeleteInvoiceMutation } from '@/stores/invoice.api'
+import { useDeletePurchaseMutation } from '@/stores/purchase.api'
 import toast from 'react-hot-toast'
 // import { useLanguage } from '@/context/language-context'
 
@@ -18,20 +18,26 @@ interface Props {
 
 export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
   const [value, setValue] = useState('')
-  const [deleteInvoice, { isLoading }] = useDeleteInvoiceMutation()
+  const [deletePurchase, { isLoading }] = useDeletePurchaseMutation()
   // const { t } = useLanguage()
 
   const handleDelete = async () => {
     if (value.trim() !== currentRow.invoiceNumber) return
 
     try {
-      await deleteInvoice(currentRow._id).unwrap()
-      toast.success('Invoice deleted successfully!')
+      const purchaseId = currentRow._id || currentRow.id
+      if (!purchaseId) {
+        toast.error('Purchase ID is missing')
+        return
+      }
+      
+      await deletePurchase(purchaseId).unwrap()
+      toast.success('Purchase deleted successfully!')
       onOpenChange(false)
       setValue('')
     } catch (error: any) {
-      console.error('Failed to delete invoice:', error)
-      toast.error(error?.data?.message || 'Failed to delete invoice')
+      console.error('Failed to delete purchase:', error)
+      toast.error(error?.data?.message || 'Failed to delete purchase')
     }
   }
 
