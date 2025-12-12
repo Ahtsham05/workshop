@@ -3,6 +3,7 @@ export interface PrintInvoiceData {
   items: Array<{
     name: string
     quantity: number
+    unit?: string
     unitPrice: number
     subtotal: number
   }>
@@ -377,7 +378,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="item-row">
         <div class="item-name">${index + 1}. ${item.name}</div>
         <div class="item-details">
-          <span>${item.quantity} × ${formatCurrency(item.unitPrice)}</span>
+          <span>${item.quantity}${item.unit ? ` ${item.unit}` : ''} × ${formatCurrency(item.unitPrice)}</span>
           <span><strong>${formatCurrency(item.subtotal)}</strong></span>
         </div>
       </div>
@@ -984,10 +985,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     <thead>
       <tr>
         <th style="width: 5%;">#</th>
-        <th style="width: 45%;">${urduTexts.product_name}</th>
-        <th style="width: 15%;" class="text-center">${urduTexts.quantity}</th>
+        <th style="width: 40%;">${urduTexts.product_name}</th>
+        <th style="width: 12%;" class="text-center">${urduTexts.quantity}</th>
         <th style="width: 15%;" class="text-right">${urduTexts.unit_price}</th>
-        <th style="width: 20%;" class="text-right">${urduTexts.total}</th>
+        <th style="width: 18%;" class="text-right">${urduTexts.total}</th>
       </tr>
     </thead>
     <tbody>
@@ -995,7 +996,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
         <tr>
           <td class="text-center"><strong>${index + 1}</strong></td>
           <td class="text-left"><strong>${item.name}</strong></td>
-          <td class="text-center"><strong>${item.quantity}</strong></td>
+          <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
         </tr>
