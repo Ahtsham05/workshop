@@ -73,6 +73,45 @@ export interface Permission {
   createPayments?: boolean;
   editPayments?: boolean;
   deletePayments?: boolean;
+  
+  // HR - Employee Permissions
+  getEmployees?: boolean;
+  createEmployees?: boolean;
+  manageEmployees?: boolean;
+  deleteEmployees?: boolean;
+  
+  // HR - Department Permissions
+  getDepartments?: boolean;
+  createDepartments?: boolean;
+  manageDepartments?: boolean;
+  deleteDepartments?: boolean;
+  
+  // HR - Attendance Permissions
+  getAttendance?: boolean;
+  createAttendance?: boolean;
+  manageAttendance?: boolean;
+  deleteAttendance?: boolean;
+  
+  // HR - Leave Permissions
+  getLeaves?: boolean;
+  createLeaves?: boolean;
+  manageLeaves?: boolean;
+  approveLeaves?: boolean;
+  rejectLeaves?: boolean;
+  deleteLeaves?: boolean;
+  
+  // HR - Payroll Permissions
+  getPayroll?: boolean;
+  createPayroll?: boolean;
+  managePayroll?: boolean;
+  processPayroll?: boolean;
+  deletePayroll?: boolean;
+  
+  // HR - Performance Review Permissions
+  getPerformanceReviews?: boolean;
+  createPerformanceReviews?: boolean;
+  managePerformanceReviews?: boolean;
+  deletePerformanceReviews?: boolean;
 }
 
 export interface Role {

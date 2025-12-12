@@ -18,6 +18,13 @@ const reportsRoute = require('./reports.route');
 const companyRoute = require('./company.route');
 const unitsRoute = require('./units.route');
 
+// HR Routes
+const employeeRoute = require('./employee.route');
+const departmentRoute = require('./department.route');
+const attendanceRoute = require('./attendance.route');
+const leaveRoute = require('./leave.route');
+const payrollRoute = require('./payroll.route');
+
 const router = express.Router();
 
 const defaultRoutes = [
@@ -84,6 +91,27 @@ const defaultRoutes = [
   {
     path: '/units',
     route: unitsRoute
+  },
+  // HR Routes
+  {
+    path: '/employees',
+    route: employeeRoute
+  },
+  {
+    path: '/departments',
+    route: departmentRoute
+  },
+  {
+    path: '/attendance',
+    route: attendanceRoute
+  },
+  {
+    path: '/leaves',
+    route: leaveRoute
+  },
+  {
+    path: '/payroll',
+    route: payrollRoute
   },
 ];
 

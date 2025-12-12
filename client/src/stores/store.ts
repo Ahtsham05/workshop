@@ -13,6 +13,7 @@ import { reportsApi } from './reports.api';
 import { companyApi } from './company.api';
 import { rolesApi } from './roles.api';
 import { usersApi } from './users.api';
+import { hrApi } from './hr.api';
 
 export const store = configureStore({
   reducer: {
@@ -32,6 +33,7 @@ export const store = configureStore({
     [companyApi.reducerPath]: companyApi.reducer,
     [rolesApi.reducerPath]: rolesApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
+    [hrApi.reducerPath]: hrApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -42,7 +44,8 @@ export const store = configureStore({
       reportsApi.middleware,
       companyApi.middleware,
       rolesApi.middleware,
-      usersApi.middleware
+      usersApi.middleware,
+      hrApi.middleware
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

@@ -11,6 +11,7 @@ import { SearchProvider } from '@/context/search-context'
 import { ThemeProvider } from '@/context/theme-context'
 import { AuthProvider } from '@/context/auth-context'
 import { LanguageProvider } from '@/context/language-context'
+import { PermissionWrapper } from '@/context/permission-wrapper'
 import Dashboard from '@/features/dashboard'
 import GeneralError from '@/features/errors/general-error'
 import NotFoundError from '@/features/errors/not-found-error'
@@ -28,12 +29,14 @@ function RootComponent() {
             <SearchProvider>
               <NavigationProgress />
               <TokenRefreshInitializer />
-              <SidebarProvider>
-                <AppSidebar />
-                <main className="flex-1 overflow-hidden">
-                  <Dashboard />
-                </main>
-              </SidebarProvider>
+              <PermissionWrapper>
+                <SidebarProvider>
+                  <AppSidebar />
+                  <main className="flex-1 overflow-hidden">
+                    <Dashboard />
+                  </main>
+                </SidebarProvider>
+              </PermissionWrapper>
               <Toaster duration={50000} />
               {import.meta.env.MODE === 'development' && (
                 <>

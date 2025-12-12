@@ -37,19 +37,18 @@ export function NavGroup({ title, items }: NavGroup) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>
-        <NoTranslate>{t(title.toLowerCase())}</NoTranslate>
+        <NoTranslate>{title}</NoTranslate>
       </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
-          // Get the translated title - remove special characters and convert to translation key
-          const translationKey = item.title.toLowerCase().replace(/[& ]/g, '_').replace(/_+/g, '_')
-          const translatedTitle = t(translationKey)
+          // Use original title as is (already properly capitalized)
+          const displayTitle = item.title
           
           if (!item.items)
             return <SidebarMenuLink 
               key={key} 
-              item={{ ...item, title: translatedTitle }} 
+              item={{ ...item, title: displayTitle }} 
               href={href} 
             />
 
@@ -57,14 +56,14 @@ export function NavGroup({ title, items }: NavGroup) {
             return (
               <SidebarMenuCollapsedDropdown 
                 key={key} 
-                item={{ ...item, title: translatedTitle }} 
+                item={{ ...item, title: displayTitle }} 
                 href={href} 
               />
             )
 
           return <SidebarMenuCollapsible 
             key={key} 
-            item={{ ...item, title: translatedTitle }} 
+            item={{ ...item, title: displayTitle }} 
             href={href} 
           />
         })}
@@ -127,7 +126,6 @@ const SidebarMenuCollapsible = ({
         <CollapsibleContent className='CollapsibleContent'>
           <SidebarMenuSub>
             {item.items.map((subItem) => {
-              const translatedSubTitle = t(subItem.title.toLowerCase().replace(/ /g, '_'))
               return (
                 <SidebarMenuSubItem key={subItem.title}>
                   <SidebarMenuSubButton
@@ -138,7 +136,7 @@ const SidebarMenuCollapsible = ({
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                       {subItem.icon && <subItem.icon />}
                       <NoTranslate>
-                        <span className='h-10 flex items-center'>{translatedSubTitle}</span>
+                        <span className='h-10 flex items-center'>{subItem.title}</span>
                       </NoTranslate>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
                     </Link>
@@ -183,7 +181,6 @@ const SidebarMenuCollapsedDropdown = ({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {item.items.map((sub) => {
-            const translatedSubTitle = t(sub.title.toLowerCase().replace(/ /g, '_'))
             return (
               <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
                 <Link
@@ -192,7 +189,7 @@ const SidebarMenuCollapsedDropdown = ({
                 >
                   {sub.icon && <sub.icon />}
                   <NoTranslate>
-                    <span className='h-10 flex items-center max-w-52 text-wrap'>{translatedSubTitle}</span>
+                    <span className='h-10 flex items-center max-w-52 text-wrap'>{sub.title}</span>
                   </NoTranslate>
                   {sub.badge && (
                     <span className='ml-auto text-xs'>{sub.badge}</span>

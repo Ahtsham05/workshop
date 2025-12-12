@@ -13,3 +13,13 @@ module.exports.Expense = require('./expense.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
 module.exports.Company = require('./company.model');
+
+// HR Models
+module.exports.Employee = require('./employee.model');
+module.exports.Department = require('./department.model');
+module.exports.Designation = require('./designation.model');
+module.exports.Shift = require('./shift.model');
+module.exports.Attendance = require('./attendance.model');
+module.exports.Leave = require('./leave.model');
+module.exports.Payroll = require('./payroll.model');
+module.exports.PerformanceReview = require('./performanceReview.model');

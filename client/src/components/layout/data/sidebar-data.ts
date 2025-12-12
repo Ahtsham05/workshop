@@ -14,6 +14,11 @@ import {
   IconCategory,
   IconShield,
   // IconRefresh,
+  IconCalendar,
+  IconCalendarEvent,
+  IconCash,
+  IconBuilding,
+  IconSettings,
 } from '@tabler/icons-react'
 import { Command } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -98,6 +103,46 @@ export const sidebarData: SidebarData = {
         //   badge: '3',
         //   icon: IconMessages,
         // },
+      ],
+    },
+    {
+      title: 'Human Resources',
+      items: [
+        {
+          title: 'HR Dashboard',
+          url: '/hr',
+          icon: IconLayoutDashboard,
+        },
+        {
+          title: 'Employees',
+          url: '/hr/employees',
+          icon: IconUsers,
+        },
+        {
+          title: 'Departments',
+          url: '/hr/departments',
+          icon: IconBuilding,
+        },
+        {
+          title: 'Attendance',
+          url: '/hr/attendance',
+          icon: IconCalendar,
+        },
+        {
+          title: 'Leave Management',
+          url: '/hr/leaves',
+          icon: IconCalendarEvent,
+        },
+        {
+          title: 'Payroll',
+          url: '/hr/payroll',
+          icon: IconCash,
+        },
+        {
+          title: 'HR Settings',
+          url: '/hr/settings',
+          icon: IconSettings,
+        },
       ],
     },
     {

@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { useAuth } from '@/context/auth-context'
 import { AuthLoadingScreen } from '@/components/auth-loading-screen'
+import { PermissionWrapper } from '@/context/permission-wrapper'
 
 // Authentication guard component for the _authenticated layout
 function AuthenticatedLayout() {
@@ -14,12 +15,14 @@ function AuthenticatedLayout() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <main className="flex-1 overflow-hidden">
-        <Outlet />
-      </main>
-    </SidebarProvider>
+    <PermissionWrapper>
+      <SidebarProvider>
+        <AppSidebar />
+        <main className="flex-1 overflow-hidden">
+          <Outlet />
+        </main>
+      </SidebarProvider>
+    </PermissionWrapper>
   )
 }
 

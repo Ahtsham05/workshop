@@ -37,6 +37,7 @@ import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
+import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
@@ -49,6 +50,15 @@ import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authen
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedCompanySetupImport } from './routes/_authenticated/company/setup'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
+import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
+import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
+import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticated/hr/leaves/index'
+import { Route as AuthenticatedHrEmployeesIndexImport } from './routes/_authenticated/hr/employees/index'
+import { Route as AuthenticatedHrDepartmentsIndexImport } from './routes/_authenticated/hr/departments/index'
+import { Route as AuthenticatedHrAttendanceIndexImport } from './routes/_authenticated/hr/attendance/index'
+import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
+import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
+import { Route as AuthenticatedHrEmployeesIdEditImport } from './routes/_authenticated/hr/employees/$id.edit'
 
 // Create/Update Routes
 
@@ -216,6 +226,12 @@ const AuthenticatedInvoiceIndexRoute = AuthenticatedInvoiceIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
+const AuthenticatedHrIndexRoute = AuthenticatedHrIndexImport.update({
+  id: '/hr/',
+  path: '/hr/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
 const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexImport.update({
     id: '/help-center/',
@@ -295,6 +311,71 @@ const AuthenticatedProductsBulkEditIndexRoute =
     id: '/products/bulk-edit/',
     path: '/products/bulk-edit/',
     getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrSettingsIndexRoute =
+  AuthenticatedHrSettingsIndexImport.update({
+    id: '/hr/settings/',
+    path: '/hr/settings/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrPayrollIndexRoute =
+  AuthenticatedHrPayrollIndexImport.update({
+    id: '/hr/payroll/',
+    path: '/hr/payroll/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrLeavesIndexRoute = AuthenticatedHrLeavesIndexImport.update(
+  {
+    id: '/hr/leaves/',
+    path: '/hr/leaves/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
+
+const AuthenticatedHrEmployeesIndexRoute =
+  AuthenticatedHrEmployeesIndexImport.update({
+    id: '/hr/employees/',
+    path: '/hr/employees/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrDepartmentsIndexRoute =
+  AuthenticatedHrDepartmentsIndexImport.update({
+    id: '/hr/departments/',
+    path: '/hr/departments/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrAttendanceIndexRoute =
+  AuthenticatedHrAttendanceIndexImport.update({
+    id: '/hr/attendance/',
+    path: '/hr/attendance/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrEmployeesCreateRoute =
+  AuthenticatedHrEmployeesCreateImport.update({
+    id: '/hr/employees/create',
+    path: '/hr/employees/create',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrEmployeesIdRoute = AuthenticatedHrEmployeesIdImport.update(
+  {
+    id: '/hr/employees/$id',
+    path: '/hr/employees/$id',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
+
+const AuthenticatedHrEmployeesIdEditRoute =
+  AuthenticatedHrEmployeesIdEditImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => AuthenticatedHrEmployeesIdRoute,
   } as any)
 
 // Populate the FileRoutesByPath interface
@@ -497,6 +578,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/hr/': {
+      id: '/_authenticated/hr/'
+      path: '/hr'
+      fullPath: '/hr'
+      preLoaderRoute: typeof AuthenticatedHrIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/invoice/': {
       id: '/_authenticated/invoice/'
       path: '/invoice'
@@ -560,12 +648,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/hr/employees/$id': {
+      id: '/_authenticated/hr/employees/$id'
+      path: '/hr/employees/$id'
+      fullPath: '/hr/employees/$id'
+      preLoaderRoute: typeof AuthenticatedHrEmployeesIdImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/employees/create': {
+      id: '/_authenticated/hr/employees/create'
+      path: '/hr/employees/create'
+      fullPath: '/hr/employees/create'
+      preLoaderRoute: typeof AuthenticatedHrEmployeesCreateImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/attendance/': {
+      id: '/_authenticated/hr/attendance/'
+      path: '/hr/attendance'
+      fullPath: '/hr/attendance'
+      preLoaderRoute: typeof AuthenticatedHrAttendanceIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/departments/': {
+      id: '/_authenticated/hr/departments/'
+      path: '/hr/departments'
+      fullPath: '/hr/departments'
+      preLoaderRoute: typeof AuthenticatedHrDepartmentsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/employees/': {
+      id: '/_authenticated/hr/employees/'
+      path: '/hr/employees'
+      fullPath: '/hr/employees'
+      preLoaderRoute: typeof AuthenticatedHrEmployeesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/leaves/': {
+      id: '/_authenticated/hr/leaves/'
+      path: '/hr/leaves'
+      fullPath: '/hr/leaves'
+      preLoaderRoute: typeof AuthenticatedHrLeavesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/payroll/': {
+      id: '/_authenticated/hr/payroll/'
+      path: '/hr/payroll'
+      fullPath: '/hr/payroll'
+      preLoaderRoute: typeof AuthenticatedHrPayrollIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/settings/': {
+      id: '/_authenticated/hr/settings/'
+      path: '/hr/settings'
+      fullPath: '/hr/settings'
+      preLoaderRoute: typeof AuthenticatedHrSettingsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/products/bulk-edit/': {
       id: '/_authenticated/products/bulk-edit/'
       path: '/products/bulk-edit'
       fullPath: '/products/bulk-edit'
       preLoaderRoute: typeof AuthenticatedProductsBulkEditIndexImport
       parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/hr/employees/$id/edit': {
+      id: '/_authenticated/hr/employees/$id/edit'
+      path: '/edit'
+      fullPath: '/hr/employees/$id/edit'
+      preLoaderRoute: typeof AuthenticatedHrEmployeesIdEditImport
+      parentRoute: typeof AuthenticatedHrEmployeesIdImport
     }
   }
 }
@@ -606,6 +757,20 @@ const AuthenticatedCompanyRouteChildren: AuthenticatedCompanyRouteChildren = {
 const AuthenticatedCompanyRouteWithChildren =
   AuthenticatedCompanyRoute._addFileChildren(AuthenticatedCompanyRouteChildren)
 
+interface AuthenticatedHrEmployeesIdRouteChildren {
+  AuthenticatedHrEmployeesIdEditRoute: typeof AuthenticatedHrEmployeesIdEditRoute
+}
+
+const AuthenticatedHrEmployeesIdRouteChildren: AuthenticatedHrEmployeesIdRouteChildren =
+  {
+    AuthenticatedHrEmployeesIdEditRoute: AuthenticatedHrEmployeesIdEditRoute,
+  }
+
+const AuthenticatedHrEmployeesIdRouteWithChildren =
+  AuthenticatedHrEmployeesIdRoute._addFileChildren(
+    AuthenticatedHrEmployeesIdRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
@@ -619,6 +784,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
+  AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -627,6 +793,14 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedHrEmployeesIdRoute: typeof AuthenticatedHrEmployeesIdRouteWithChildren
+  AuthenticatedHrEmployeesCreateRoute: typeof AuthenticatedHrEmployeesCreateRoute
+  AuthenticatedHrAttendanceIndexRoute: typeof AuthenticatedHrAttendanceIndexRoute
+  AuthenticatedHrDepartmentsIndexRoute: typeof AuthenticatedHrDepartmentsIndexRoute
+  AuthenticatedHrEmployeesIndexRoute: typeof AuthenticatedHrEmployeesIndexRoute
+  AuthenticatedHrLeavesIndexRoute: typeof AuthenticatedHrLeavesIndexRoute
+  AuthenticatedHrPayrollIndexRoute: typeof AuthenticatedHrPayrollIndexRoute
+  AuthenticatedHrSettingsIndexRoute: typeof AuthenticatedHrSettingsIndexRoute
   AuthenticatedProductsBulkEditIndexRoute: typeof AuthenticatedProductsBulkEditIndexRoute
 }
 
@@ -643,6 +817,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
+  AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
@@ -653,6 +828,14 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedUsersManagementIndexRoute:
     AuthenticatedUsersManagementIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedHrEmployeesIdRoute: AuthenticatedHrEmployeesIdRouteWithChildren,
+  AuthenticatedHrEmployeesCreateRoute: AuthenticatedHrEmployeesCreateRoute,
+  AuthenticatedHrAttendanceIndexRoute: AuthenticatedHrAttendanceIndexRoute,
+  AuthenticatedHrDepartmentsIndexRoute: AuthenticatedHrDepartmentsIndexRoute,
+  AuthenticatedHrEmployeesIndexRoute: AuthenticatedHrEmployeesIndexRoute,
+  AuthenticatedHrLeavesIndexRoute: AuthenticatedHrLeavesIndexRoute,
+  AuthenticatedHrPayrollIndexRoute: AuthenticatedHrPayrollIndexRoute,
+  AuthenticatedHrSettingsIndexRoute: AuthenticatedHrSettingsIndexRoute,
   AuthenticatedProductsBulkEditIndexRoute:
     AuthenticatedProductsBulkEditIndexRoute,
 }
@@ -690,6 +873,7 @@ export interface FileRoutesByFullPath {
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -699,7 +883,16 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
+  '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
+  '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
+  '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
+  '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
+  '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
 }
 
 export interface FileRoutesByTo {
@@ -729,6 +922,7 @@ export interface FileRoutesByTo {
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
+  '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -738,7 +932,16 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
+  '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
+  '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
+  '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
+  '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
+  '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
 }
 
 export interface FileRoutesById {
@@ -771,6 +974,7 @@ export interface FileRoutesById {
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
+  '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -780,7 +984,16 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
+  '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/_authenticated/hr/attendance/': typeof AuthenticatedHrAttendanceIndexRoute
+  '/_authenticated/hr/departments/': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/_authenticated/hr/employees/': typeof AuthenticatedHrEmployeesIndexRoute
+  '/_authenticated/hr/leaves/': typeof AuthenticatedHrLeavesIndexRoute
+  '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
+  '/_authenticated/hr/settings/': typeof AuthenticatedHrSettingsIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/_authenticated/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
 }
 
 export interface FileRouteTypes {
@@ -814,6 +1027,7 @@ export interface FileRouteTypes {
     | '/chats'
     | '/customers'
     | '/help-center'
+    | '/hr'
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
@@ -823,7 +1037,16 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/hr/employees/$id'
+    | '/hr/employees/create'
+    | '/hr/attendance'
+    | '/hr/departments'
+    | '/hr/employees'
+    | '/hr/leaves'
+    | '/hr/payroll'
+    | '/hr/settings'
     | '/products/bulk-edit'
+    | '/hr/employees/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -852,6 +1075,7 @@ export interface FileRouteTypes {
     | '/chats'
     | '/customers'
     | '/help-center'
+    | '/hr'
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
@@ -861,7 +1085,16 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/hr/employees/$id'
+    | '/hr/employees/create'
+    | '/hr/attendance'
+    | '/hr/departments'
+    | '/hr/employees'
+    | '/hr/leaves'
+    | '/hr/payroll'
+    | '/hr/settings'
     | '/products/bulk-edit'
+    | '/hr/employees/$id/edit'
   id:
     | '__root__'
     | '/_authenticated'
@@ -892,6 +1125,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chats/'
     | '/_authenticated/customers/'
     | '/_authenticated/help-center/'
+    | '/_authenticated/hr/'
     | '/_authenticated/invoice/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
@@ -901,7 +1135,16 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
     | '/_authenticated/users/'
+    | '/_authenticated/hr/employees/$id'
+    | '/_authenticated/hr/employees/create'
+    | '/_authenticated/hr/attendance/'
+    | '/_authenticated/hr/departments/'
+    | '/_authenticated/hr/employees/'
+    | '/_authenticated/hr/leaves/'
+    | '/_authenticated/hr/payroll/'
+    | '/_authenticated/hr/settings/'
     | '/_authenticated/products/bulk-edit/'
+    | '/_authenticated/hr/employees/$id/edit'
   fileRoutesById: FileRoutesById
 }
 
@@ -971,6 +1214,7 @@ export const routeTree = rootRoute
         "/_authenticated/chats/",
         "/_authenticated/customers/",
         "/_authenticated/help-center/",
+        "/_authenticated/hr/",
         "/_authenticated/invoice/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
@@ -979,6 +1223,14 @@ export const routeTree = rootRoute
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
         "/_authenticated/users/",
+        "/_authenticated/hr/employees/$id",
+        "/_authenticated/hr/employees/create",
+        "/_authenticated/hr/attendance/",
+        "/_authenticated/hr/departments/",
+        "/_authenticated/hr/employees/",
+        "/_authenticated/hr/leaves/",
+        "/_authenticated/hr/payroll/",
+        "/_authenticated/hr/settings/",
         "/_authenticated/products/bulk-edit/"
       ]
     },
@@ -1090,6 +1342,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/help-center/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/hr/": {
+      "filePath": "_authenticated/hr/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/invoice/": {
       "filePath": "_authenticated/invoice/index.tsx",
       "parent": "/_authenticated"
@@ -1126,9 +1382,48 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/users/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/hr/employees/$id": {
+      "filePath": "_authenticated/hr/employees/$id.tsx",
+      "parent": "/_authenticated",
+      "children": [
+        "/_authenticated/hr/employees/$id/edit"
+      ]
+    },
+    "/_authenticated/hr/employees/create": {
+      "filePath": "_authenticated/hr/employees/create.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/attendance/": {
+      "filePath": "_authenticated/hr/attendance/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/departments/": {
+      "filePath": "_authenticated/hr/departments/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/employees/": {
+      "filePath": "_authenticated/hr/employees/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/leaves/": {
+      "filePath": "_authenticated/hr/leaves/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/payroll/": {
+      "filePath": "_authenticated/hr/payroll/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/settings/": {
+      "filePath": "_authenticated/hr/settings/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/products/bulk-edit/": {
       "filePath": "_authenticated/products/bulk-edit/index.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/employees/$id/edit": {
+      "filePath": "_authenticated/hr/employees/$id.edit.tsx",
+      "parent": "/_authenticated/hr/employees/$id"
     }
   }
 }
