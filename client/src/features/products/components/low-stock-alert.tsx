@@ -19,9 +19,10 @@ import { Label } from '@/components/ui/label';
 interface LowStockAlertProps {
   products: Product[];
   defaultThreshold?: number;
+  loading?: boolean;
 }
 
-export function LowStockAlert({ products, defaultThreshold = 10 }: LowStockAlertProps) {
+export function LowStockAlert({ products, defaultThreshold = 10, loading = false }: LowStockAlertProps) {
   const { t } = useLanguage();
   const [threshold, setThreshold] = useState(defaultThreshold);
   const [showSettings, setShowSettings] = useState(false);
@@ -75,6 +76,20 @@ export function LowStockAlert({ products, defaultThreshold = 10 }: LowStockAlert
     setAlertsEnabled(newState);
     localStorage.setItem('lowStockAlertsEnabled', newState.toString());
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <Card className="border-gray-200">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 text-gray-500">
+            <Package className="w-5 h-5 animate-pulse" />
+            <span>{t('Loading Stock Information...') || 'Loading stock information...'}</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!alertsEnabled) {
     return (

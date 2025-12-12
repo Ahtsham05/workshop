@@ -43,9 +43,8 @@ const createInvoice = async (invoiceBody, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
     }
 
-    // Check stock availability - but skip for credit invoices converted from pending
-    // because stock was already reduced when pending invoice was created
-    if (invoiceBody.type !== 'credit' && product.stockQuantity < item.quantity) {
+    // Check stock availability for all invoice types
+    if (product.stockQuantity < item.quantity) {
       console.error('Insufficient stock:', {
         product: product.name,
         available: product.stockQuantity,
@@ -142,19 +141,15 @@ const createInvoice = async (invoiceBody, userId) => {
     }
   }
 
-  // Update product stock quantities
-  // Skip stock reduction for credit invoices (stock was already reduced when pending invoice was created)
-  if (invoice.type !== 'credit') {
-    console.log('Updating stock quantities...');
-    for (const item of validatedItems) {
-      await Product.findByIdAndUpdate(
-        item.productId,
-        { $inc: { stockQuantity: -item.quantity } },
-        { new: true }
-      );
-    }
-  } else {
-    console.log('Skipping stock reduction for credit invoice');
+  // Update product stock quantities for all invoice types
+  console.log('Updating stock quantities for invoice type:', invoice.type);
+  for (const item of validatedItems) {
+    await Product.findByIdAndUpdate(
+      item.productId,
+      { $inc: { stockQuantity: -item.quantity } },
+      { new: true }
+    );
+    console.log(`Stock reduced for product ${item.productId}: -${item.quantity}`);
   }
 
   // Populate references conditionally

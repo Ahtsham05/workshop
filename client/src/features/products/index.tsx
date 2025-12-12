@@ -31,6 +31,7 @@ export default function Products() {
   const [limit, setLimit] = useState(10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingAllProducts, setLoadingAllProducts] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
   const [inlineEditMode, setInlineEditMode] = useState(false)
@@ -44,14 +45,17 @@ export default function Products() {
 
   // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
   useEffect(() => {
+    setLoadingAllProducts(true)
     dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: 'createdAt:desc' }))
       .then((data) => {
         if (data.payload?.results) {
           setAllProducts(data.payload.results)
         }
+        setLoadingAllProducts(false)
       })
       .catch((error) => {
         console.error('Error fetching all products:', error)
+        setLoadingAllProducts(false)
       })
   }, [fetch, dispatch])
 
@@ -219,8 +223,8 @@ export default function Products() {
         <Main>
           {/* Low Stock Alert Banner */}
           <div className='mb-4'>
-            <div onClick={() => setShowLowStockDetails(true)} className="cursor-pointer">
-              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} />
+            <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
+              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} loading={loadingAllProducts} />
             </div>
           </div>
 
