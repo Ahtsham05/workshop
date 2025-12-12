@@ -69,6 +69,7 @@ export interface ProductReportData {
   avgSellingPrice: number
   currentStock: number
   minStockLevel: number
+  unit?: string
 }
 
 export interface CustomerReportData {
@@ -138,6 +139,7 @@ export interface InventoryReportData {
   stockValue: number
   potentialRevenue: number
   status: string
+  unit?: string
 }
 
 export interface TaxReportData {
