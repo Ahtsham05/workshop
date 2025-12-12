@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/language-context'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { TrendingUp, TrendingDown, Users, Package } from 'lucide-react'
+import { getUnitLabel } from '@/lib/units'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -30,7 +31,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
 
   return (
     <Dialog open={!!productId} onOpenChange={onClose}>
-      <DialogContent className='min-w-[1200px] max-h-[90vh] overflow-y-auto'>
+      <DialogContent className='w-full max-w-[95vw] max-h-[90vh] overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>{t('Product Details')}</DialogTitle>
         </DialogHeader>
@@ -124,10 +125,11 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                       <TableHeader>
                         <TableRow>
                           <TableHead className='min-w-[100px]'>{t('date')}</TableHead>
-                          <TableHead className='min-w-[100px]'>{t('invoice_no')}</TableHead>
+                          <TableHead className='min-w-[100px]'>{t('Invoice#')}</TableHead>
                           <TableHead className='min-w-[150px]'>{t('customer')}</TableHead>
                           {/* <TableHead className='min-w-[100px]'>{t('phone')}</TableHead> */}
-                          <TableHead className='text-right min-w-[80px]'>{t('quantity')}</TableHead>
+                          <TableHead className='text-right min-w-[80px]'>{t('Quantity')}</TableHead>
+                          <TableHead className='min-w-[60px]'>{t('Unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('amount')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('profit')}</TableHead>
@@ -144,6 +146,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell className='font-medium'>{sale.customerName}</TableCell>
                               {/* <TableCell>{sale.customerPhone || 'N/A'}</TableCell> */}
                               <TableCell className='text-right'>{sale.quantity}</TableCell>
+                              <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(sale.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(sale.price)}</TableCell>
                               <TableCell className='text-right font-medium'>{formatCurrency(sale.subtotal)}</TableCell>
                               <TableCell className='text-right text-green-600 font-medium'>
@@ -153,7 +156,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={8} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={9} className='text-center py-8 text-muted-foreground'>
                               {t('no_sales_found')}
                             </TableCell>
                           </TableRow>
@@ -175,6 +178,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[150px]'>{t('supplier')}</TableHead>
                           <TableHead className='min-w-[100px]'>{t('phone')}</TableHead>
                           <TableHead className='text-right min-w-[80px]'>{t('quantity')}</TableHead>
+                          <TableHead className='min-w-[60px]'>{t('unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('amount')}</TableHead>
                         </TableRow>
@@ -190,13 +194,14 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell className='font-medium'>{purchase.supplierName}</TableCell>
                               <TableCell>{purchase.supplierPhone || 'N/A'}</TableCell>
                               <TableCell className='text-right'>{purchase.quantity}</TableCell>
+                              <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(purchase.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(purchase.price)}</TableCell>
                               <TableCell className='text-right font-medium'>{formatCurrency(purchase.subtotal)}</TableCell>
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={8} className='text-center py-8 text-muted-foreground'>
                               {t('no_purchases_found')}
                             </TableCell>
                           </TableRow>

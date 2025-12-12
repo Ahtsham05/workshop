@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const { DEFAULT_UNIT, UNITS } = require('../config/units');
 
 const ProductSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
@@ -13,6 +14,11 @@ const ProductSchema = new mongoose.Schema({
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
     stockQuantity: { type: Number, required: true },
+    unit: { 
+        type: String, 
+        default: DEFAULT_UNIT,
+        enum: Object.values(UNITS)
+    },
     sku: { type: String },  // SKU for inventory management
     category: { type: String }, // Keep for backward compatibility
     categories: [{ // New multi-category support

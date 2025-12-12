@@ -235,7 +235,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                           product.stockQuantity <= Math.floor(threshold / 2) ? 'text-orange-600' :
                           'text-yellow-600'
                         }`}>
-                          {product.stockQuantity}
+                          {product.stockQuantity} {product.unit || 'pcs'}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">Rs{product.price.toFixed(2)}</TableCell>

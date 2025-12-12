@@ -12,6 +12,7 @@ import type { Product, Category } from '../invoice/index';
 export interface PurchaseItem {
   product: Product;
   quantity: number;
+  unit?: string; // Unit of measurement
   purchasePrice: number; // price we bought it at
 }
 
@@ -177,6 +178,7 @@ const PurchaseInvoicePage = () => {
       const newItem: PurchaseItem = {
         product,
         quantity,
+        unit: product.unit || 'pcs',
         purchasePrice: product.cost || product.price,
       };
 

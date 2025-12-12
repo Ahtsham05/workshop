@@ -49,6 +49,7 @@ import {
 import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
+import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -57,6 +58,7 @@ const formSchema = z.object({
   price: z.number().min(1, { message: 'Price is required.' }),
   cost: z.number().min(1, { message: 'Cost is required.' }),
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }),
+  unit: z.string().optional(),
   image: z.object({
     url: z.string(),
     publicId: z.string(),
@@ -86,6 +88,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [unitsOpen, setUnitsOpen] = useState(false)
   
   const dispatch = useDispatch<AppDispatch>()
   const { categories } = useSelector((state: RootState) => state.category)
@@ -107,6 +110,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         price: currentRow?.price || 0,
         cost: currentRow?.cost || 0,
         stockQuantity: currentRow?.stockQuantity || 0,
+        unit: currentRow?.unit || DEFAULT_UNIT,
         image: currentRow?.image || undefined,
         categories: currentRow?.categories || [],
       }
@@ -117,6 +121,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         stockQuantity: 0,
         price: 0,
         cost: 0,
+        unit: DEFAULT_UNIT,
         image: undefined,
         categories: [],
       },
@@ -540,6 +545,69 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                           // field.onChange(e)
                         }}
                       />
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='unit'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 md:text-right'>
+                      {t('unit')}
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4'>
+                        <Popover open={unitsOpen} onOpenChange={setUnitsOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={unitsOpen}
+                              className="w-full justify-between"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Search className="w-4 h-4" />
+                                <span>
+                                  {field.value
+                                    ? getAllUnits().find((unit) => unit.value === field.value)?.label
+                                    : t('select_unit')}
+                                </span>
+                              </div>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
+                            <Command>
+                              <CommandInput placeholder={t('Search Units') || 'Search units...'} />
+                              <CommandEmpty>{t('no_units_found') || 'No unit found.'}</CommandEmpty>
+                              <CommandList>
+                                <CommandGroup>
+                                  {getAllUnits().map((unit) => {
+                                    const isSelected = field.value === unit.value
+                                    return (
+                                      <CommandItem
+                                        key={unit.value}
+                                        onSelect={() => {
+                                          field.onChange(unit.value)
+                                          setUnitsOpen(false)
+                                        }}
+                                        className="flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span>{unit.label}</span>
+                                        {isSelected && (
+                                          <Check className="w-4 h-4 text-black" />
+                                        )}
+                                      </CommandItem>
+                                    )
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
                   </FormItem>

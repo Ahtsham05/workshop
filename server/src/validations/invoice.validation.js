@@ -9,6 +9,7 @@ const invoiceItem = Joi.object({
     publicId: Joi.string()
   }).optional(),
   quantity: Joi.number().integer().min(1).required(),
+  unit: Joi.string().allow(''), // Allow unit field
   unitPrice: Joi.number().min(0).required(),
   cost: Joi.number().min(0).required(),
   subtotal: Joi.number().min(0).required(),

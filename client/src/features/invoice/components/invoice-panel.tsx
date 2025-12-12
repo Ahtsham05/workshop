@@ -329,6 +329,7 @@ export function InvoicePanel({
             productId: productId,
             name: product.name,
             image: product.image,
+            unit: product.unit,
             unitPrice: product.price,
             cost: product.cost,
             subtotal: product.price * item.quantity,
@@ -1063,6 +1064,9 @@ export function InvoicePanel({
                       >
                         <Plus className='h-3 w-3' />
                       </Button>
+                    </div>
+                    <div className='text-[10px] text-center text-muted-foreground mt-0.5'>
+                      {item.unit || 'pcs'}
                     </div>
                   </div>
 

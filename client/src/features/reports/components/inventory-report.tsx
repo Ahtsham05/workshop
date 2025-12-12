@@ -120,7 +120,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                   <TableCell className='font-medium'>{product.name}</TableCell>
                   <TableCell>{product.barcode || 'N/A'}</TableCell>
                   <TableCell>{product.category}</TableCell>
-                  <TableCell className='text-right'>{product.stockQuantity}</TableCell>
+                  <TableCell className='text-right'>{product.stockQuantity} {product.unit || 'pcs'}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(product.stockValue)}</TableCell>
                   <TableCell>
                     <Badge 

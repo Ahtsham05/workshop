@@ -19,6 +19,7 @@ export interface InvoiceItem {
   name: string
   image?: { url: string; publicId: string }
   quantity: number
+  unit?: string
   unitPrice: number
   cost: number
   subtotal: number
@@ -66,6 +67,7 @@ export interface Product {
   price: number
   cost: number
   stockQuantity: number
+  unit?: string  // Unit of measurement
   image?: { url: string; publicId: string }
   category?: { _id: string; name: string }
   categories?: { _id: string; name: string }[]
@@ -351,6 +353,7 @@ export default function InvoicePage() {
             name: product.name,
             image: product.image,
             quantity: currentStock,
+            unit: product.unit,
             unitPrice: product.price,
             cost: product.cost,
             subtotal: currentStock * product.price,
@@ -372,6 +375,7 @@ export default function InvoicePage() {
           name: product.name,
           image: product.image,
           quantity,
+          unit: product.unit,
           unitPrice: product.price,
           cost: product.cost,
           subtotal: quantity * product.price,

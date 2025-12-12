@@ -9,6 +9,7 @@ import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
 import { getTextClasses } from '@/utils/urdu-text-utils'
+import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
 
 export const useProductColumns = (): ColumnDef<Product>[] => {
   const { t } = useLanguage()
@@ -119,11 +120,15 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
   {
     accessorKey: 'stockQuantity',
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_quantity' />,
-    cell: ({ row }) => (
-      <Badge variant='outline' className={cn('capitalize')}>
-        {row.getValue('stockQuantity')}
-      </Badge>
-    ),
+    cell: ({ row }) => {
+      const product = row.original
+      const unit = product.unit || DEFAULT_UNIT
+      return (
+        <Badge variant='outline' className={cn('capitalize')}>
+          {row.getValue('stockQuantity')} {getUnitLabel(unit)}
+        </Badge>
+      )
+    },
     filterFn: (row, id, value) => value.includes(row.getValue(id)),
     enableSorting: true,
   },

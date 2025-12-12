@@ -114,12 +114,12 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                 {data?.data?.map((product) => (
                   <TableRow key={product._id}>
                     <TableCell className='font-medium'>{product.productName}</TableCell>
-                    <TableCell className='text-right'>{product.totalQuantitySold}</TableCell>
+                    <TableCell className='text-right'>{product.totalQuantitySold} {product.unit || 'pcs'}</TableCell>
                     <TableCell className='text-right'>{formatCurrency(product.totalRevenue)}</TableCell>
                     <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>
                     <TableCell className='text-right'>
                       <Badge variant={product.currentStock === 0 ? 'destructive' : product.currentStock <= 10 ? 'secondary' : 'default'}>
-                        {product.currentStock}
+                        {product.currentStock} {product.unit || 'pcs'}
                       </Badge>
                     </TableCell>
                     <TableCell className='text-right'>

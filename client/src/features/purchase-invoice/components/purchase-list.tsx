@@ -487,7 +487,7 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{item.quantity}</TableCell>
+                  <TableCell>{item.quantity} {item.unit || 'pcs'}</TableCell>
                   <TableCell>Rs{item.priceAtPurchase?.toFixed(2) || '0.00'}</TableCell>
                   <TableCell>Rs{item.total?.toFixed(2) || '0.00'}</TableCell>
                 </TableRow>

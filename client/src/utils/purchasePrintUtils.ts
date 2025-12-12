@@ -10,7 +10,7 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
         ${item.product?.name || item.name || ''}
       </td>
       <td style="padding: 8px 4px; text-align: center; border-bottom: 1px dashed #ddd;">
-        ${item.quantity}
+        ${item.quantity} ${item.unit || 'pcs'}
       </td>
       <td style="padding: 8px 4px; text-align: right; border-bottom: 1px dashed #ddd;">
         Rs ${item.priceAtPurchase?.toFixed(2) || '0.00'}
@@ -187,7 +187,7 @@ export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: strin
         ${item.product?.name || item.name || ''}
       </td>
       <td style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb;">
-        ${item.quantity}
+        ${item.quantity} ${item.unit || 'pcs'}
       </td>
       <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">
         Rs ${item.priceAtPurchase?.toFixed(2) || '0.00'}

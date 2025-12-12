@@ -177,6 +177,7 @@ export default function PurchasePanel({
           return {
             product: productId,
             quantity: item.quantity,
+            unit: item.unit || item.product.unit || 'pcs',
             priceAtPurchase: item.purchasePrice,
             total: item.quantity * item.purchasePrice,
           };
@@ -492,6 +493,9 @@ export default function PurchasePanel({
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
+                    </div>
+                    <div className='text-[10px] text-center text-muted-foreground mt-0.5'>
+                      {item.unit || item.product.unit || 'pcs'}
                     </div>
                   </div>
 

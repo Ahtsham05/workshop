@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { boolean } = require('joi');
 const Product = require('./product.model');
+const { DEFAULT_UNIT } = require('../config/units');
 
 const PurchaseSchema = new mongoose.Schema({
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
@@ -10,6 +11,7 @@ const PurchaseSchema = new mongoose.Schema({
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
       quantity: { type: Number, required: true },
+      unit: { type: String, default: DEFAULT_UNIT }, // Unit of measurement
       priceAtPurchase: { type: Number, required: true }, // Purchase price of the product
       total: { type: Number, required: true }, // quantity * priceAtPurchase
     },

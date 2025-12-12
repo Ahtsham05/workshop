@@ -10,6 +10,7 @@ export const productSchema = z.object({
   price: z.number().min(0, { message: 'Price must be a positive number.' }), // product price as number
   cost: z.number().min(0, { message: 'Cost must be a positive number.' }), // product cost as number
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }), // stock quantity cannot be negative
+  unit: z.string().optional(), // unit of measurement (pcs, kg, etc.)
   image: z.object({
     url: z.string(),
     publicId: z.string(),

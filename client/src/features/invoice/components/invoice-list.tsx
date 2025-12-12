@@ -680,7 +680,9 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
                     {item.name}
                   </div>
                 </TableCell>
-                <TableCell>{item.quantity}</TableCell>
+                <TableCell>
+                  {item.quantity} {item.unit || 'pcs'}
+                </TableCell>
                 <TableCell>Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
                 <TableCell>Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
               </TableRow>

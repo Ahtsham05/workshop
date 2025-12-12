@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
+const { DEFAULT_UNIT } = require('../config/units');
 
 // Sub-schema for split payments
 const splitPaymentSchema = new mongoose.Schema({
@@ -21,6 +22,7 @@ const invoiceItemSchema = new mongoose.Schema({
         publicId: { type: String }
     },
     quantity: { type: Number, required: true, min: 1 },
+    unit: { type: String, default: DEFAULT_UNIT }, // Unit of measurement
     unitPrice: { type: Number, required: true, min: 0 },
     cost: { type: Number, required: true, min: 0 },
     subtotal: { type: Number, required: true, min: 0 },
