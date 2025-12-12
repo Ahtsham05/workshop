@@ -19,12 +19,14 @@ const getDepartments = {
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
+    search: Joi.string(),
   }),
 };
 
 const getDepartment = {
   params: Joi.object().keys({
     departmentId: Joi.string().custom(objectId),
+    search: Joi.string(),
   }),
 };
 
