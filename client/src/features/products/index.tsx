@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 export default function Products() {
   // Parse product list
   const [products, setProducts] = useState<any[]>([])
+  const [allProducts, setAllProducts] = useState<any[]>([]) // Store all products for low stock alert
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -41,6 +42,20 @@ export default function Products() {
   const { t, language } = useLanguage()
   const columns = useProductColumns() // Get columns with translations
 
+  // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
+  useEffect(() => {
+    dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: 'createdAt:desc' }))
+      .then((data) => {
+        if (data.payload?.results) {
+          setAllProducts(data.payload.results)
+        }
+      })
+      .catch((error) => {
+        console.error('Error fetching all products:', error)
+      })
+  }, [fetch, dispatch])
+
+  // Fetch paginated products for table display
   useEffect(() => {
     setLoading(true)
     const params = {
@@ -179,7 +194,7 @@ export default function Products() {
 
           <Main>
             <LowStockDetails 
-              products={products}
+              products={allProducts}
               onBack={() => setShowLowStockDetails(false)}
               threshold={lowStockThreshold}
             />
@@ -205,7 +220,7 @@ export default function Products() {
           {/* Low Stock Alert Banner */}
           <div className='mb-4'>
             <div onClick={() => setShowLowStockDetails(true)} className="cursor-pointer">
-              <LowStockAlert products={products} defaultThreshold={lowStockThreshold} />
+              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} />
             </div>
           </div>
 

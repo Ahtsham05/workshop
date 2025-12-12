@@ -362,6 +362,10 @@ const translations: Translations = {
     "print_amount_paid": "Amount Paid",
     "print_generated_on": "Generated on",
     
+    // Barcode
+    "generate": "Generate",
+    "barcode_generated": "Barcode generated successfully",
+    
     // Payment Receipt
     "Payment Receipt": "Payment Receipt",
     "Generate Receipt": "Generate Receipt",
@@ -1180,6 +1184,10 @@ const translations: Translations = {
     "print_service_charge": "سروس چارج",
     "print_amount_paid": "ادا شدہ رقم",
     "print_generated_on": "تیار شدہ",
+    
+    // Barcode
+    "generate": "بنائیں",
+    "barcode_generated": "بارکوڈ کامیابی سے بنا دیا گیا",
     
     // Payment Receipt
     "Payment Receipt": "ادائیگی کی رسید",

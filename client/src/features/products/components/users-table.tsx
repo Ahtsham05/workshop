@@ -82,6 +82,11 @@ export function ProductTable({
       rowSelection,
       columnFilters,
     },
+    initialState: {
+      pagination: {
+        pageSize: paggination.limit, // Set initial page size from props
+      },
+    },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -93,7 +98,14 @@ export function ProductTable({
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    manualPagination: false, // Use client-side pagination for display
+    pageCount: 1, // We handle pagination on the server
   })
+  
+  // Sync table page size with backend limit whenever it changes
+  React.useEffect(() => {
+    table.setPageSize(paggination.limit)
+  }, [paggination.limit, table])
 
   return (
     <div className='space-y-4'>

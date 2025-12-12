@@ -56,7 +56,7 @@ const formSchema = z.object({
   barcode: z.string().optional(),
   price: z.number().min(1, { message: 'Price is required.' }),
   cost: z.number().min(1, { message: 'Cost is required.' }),
-  stockQuantity: z.number().min(1, { message: 'Stock quantity is required.' }),
+  stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }),
   image: z.object({
     url: z.string(),
     publicId: z.string(),
@@ -142,6 +142,23 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
   const setNumericValue = (field: any, value: any) => {
     form.setValue(field, Number(value), { shouldValidate: true })
   }
+
+  // Generate barcode function
+  const generateBarcode = () => {
+    const timestamp = Date.now().toString()
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+    const barcode = `${timestamp.slice(-10)}${random}` // 13 digit barcode
+    form.setValue('barcode', barcode, { shouldValidate: true })
+    toast.success(t('barcode_generated'))
+  }
+
+  // Auto-generate barcode when dialog opens for new product
+  useEffect(() => {
+    if (open && !isEdit && !form.getValues('barcode')) {
+      generateBarcode()
+    }
+  }, [open, isEdit])
+  
   // const isDirty = !!form.formState.dirtyFields
   
   return (
@@ -360,15 +377,26 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                     </FormLabel>
                     <FormControl>
                       <div className='col-span-4 space-y-2'>
-                        <InlineBarcodeInput
-                          onBarcodeEntered={(barcode) => {
-                            field.onChange(barcode)
-                          }}
-                          placeholder={t('enter_or_scan_barcode')}
-                          value={field.value}
-                          onChange={field.onChange}
-                          className="w-full"
-                        />
+                        <div className="flex gap-2">
+                          <InlineBarcodeInput
+                            onBarcodeEntered={(barcode) => {
+                              field.onChange(barcode)
+                            }}
+                            placeholder={t('enter_or_scan_barcode')}
+                            value={field.value}
+                            onChange={field.onChange}
+                            className="flex-1"
+                          />
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={generateBarcode}
+                            className="whitespace-nowrap"
+                          >
+                            {t('generate')}
+                          </Button>
+                        </div>
                         <div className="text-center">
                           <MobileCameraScanner
                             onScanResult={(barcode) => {
