@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, ShoppingCart, Package, BarChart3 } from 'lucide-react'
+import { FileText, ShoppingCart, Package, BarChart3, Users, Truck, Receipt } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useNavigate } from '@tanstack/react-router'
 
@@ -33,12 +33,30 @@ export function QuickActions() {
       onClick: () => navigate({ to: '/reports' }),
       color: 'bg-orange-500 hover:bg-orange-600',
     },
+    {
+      icon: <Users className='h-5 w-5' />,
+      label: t('Customer Ledgers'),
+      onClick: () => navigate({ to: '/accounting', search: { tab: 'customers' } }),
+      color: 'bg-cyan-500 hover:bg-cyan-600',
+    },
+    {
+      icon: <Truck className='h-5 w-5' />,
+      label: t('Supplier Ledgers'),
+      onClick: () => navigate({ to: '/accounting', search: { tab: 'suppliers' } }),
+      color: 'bg-teal-500 hover:bg-teal-600',
+    },
+    {
+      icon: <Receipt className='h-5 w-5' />,
+      label: t('Expense Management'),
+      onClick: () => navigate({ to: '/accounting', search: { tab: 'expenses' } }),
+      color: 'bg-pink-500 hover:bg-pink-600',
+    },
   ]
 
   return (
     <Card>
       <CardContent className='pt-6'>
-        <div className='grid grid-cols-2 sm:grid-cols-4 gap-4'>
+        <div className='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4'>
           {actions.map((action, index) => (
             <Button
               key={index}
@@ -47,7 +65,7 @@ export function QuickActions() {
               variant='default'
             >
               {action.icon}
-              <span className='text-sm font-medium'>{action.label}</span>
+              <span className='text-sm font-medium text-wrap text-center'>{action.label}</span>
             </Button>
           ))}
         </div>

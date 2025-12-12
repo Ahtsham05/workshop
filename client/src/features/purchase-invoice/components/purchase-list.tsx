@@ -441,11 +441,6 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
           </TableHeader>
           <TableBody>
             {purchase.items?.map((item: any, index: number) => {
-              // Debug each item
-              console.log(`Item ${index}:`, item)
-              console.log(`Item ${index} product:`, item.product)
-              console.log(`Item ${index} product type:`, typeof item.product)
-              
               // Extract product name with multiple fallbacks
               let productName = 'Unknown Product'
               
@@ -459,6 +454,10 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                 // Try direct fields on item
                 productName = item.name || item.productName || item.title || 'Unknown Product'
               }
+              
+              // Get price with multiple fallbacks
+              const price = item.priceAtPurchase || item.price || item.unitPrice || item?.product?.cost || 0
+              const total = item.total || (item.quantity * price) || 0
               
               return (
                 <TableRow key={index}>
@@ -480,16 +479,12 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                             {item.product?.barcode || item.barcode}
                           </div>
                         )}
-                        {/* Show product ID for debugging */}
-                        {/* <div className="text-xs text-muted-foreground">
-                          ID: {typeof item.product === 'string' ? item.product : item.product?.id || item.product?._id || 'No ID'}
-                        </div> */}
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{item.quantity} {item.unit || 'pcs'}</TableCell>
-                  <TableCell>Rs{item.priceAtPurchase?.toFixed(2) || '0.00'}</TableCell>
-                  <TableCell>Rs{item.total?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>{item.quantity || 0} {item.unit || 'pcs'}</TableCell>
+                  <TableCell>Rs{Number(price).toFixed(2)}</TableCell>
+                  <TableCell>Rs{Number(total).toFixed(2)}</TableCell>
                 </TableRow>
               )
             })}

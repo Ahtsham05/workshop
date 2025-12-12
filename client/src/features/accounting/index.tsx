@@ -23,7 +23,9 @@ export default function AccountingPage() {
   const activeTab = searchParams?.tab === 'customer-ledger' && searchParams?.customerId 
     ? 'customers' 
     : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId 
-    ? 'suppliers' 
+    ? 'suppliers'
+    : searchParams?.tab && ['dashboard', 'expenses', 'customers', 'suppliers'].includes(searchParams.tab)
+    ? searchParams.tab
     : 'dashboard';
 
   const [manualTab, setManualTab] = useState<string | null>(null);

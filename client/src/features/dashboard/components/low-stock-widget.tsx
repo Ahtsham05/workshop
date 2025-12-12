@@ -73,7 +73,7 @@ export function LowStockWidget() {
                       )}
                       <div>
                         <p className='text-sm font-medium'>{product.name}</p>
-                        <p className='text-xs text-muted-foreground'>{product.category}</p>
+                        {/* <p className='text-xs text-muted-foreground'>{product.category}</p> */}
                       </div>
                     </div>
                     <Badge variant='destructive' className='text-xs'>0</Badge>
@@ -110,7 +110,7 @@ export function LowStockWidget() {
                       )}
                       <div>
                         <p className='text-sm font-medium'>{product.name}</p>
-                        <p className='text-xs text-muted-foreground'>{product.category}</p>
+                        {/* <p className='text-xs text-muted-foreground'>{product.category}</p> */}
                       </div>
                     </div>
                     <Badge variant='outline' className='text-xs bg-orange-100 dark:bg-orange-950'>
