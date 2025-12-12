@@ -13,6 +13,7 @@ import {
 import { useUsers } from '../context/users-context'
 import { Product } from '../data/schema'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 
 interface DataTableRowActionsProps {
   row: Row<Product>
@@ -21,6 +22,15 @@ interface DataTableRowActionsProps {
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
   const { t } = useLanguage()
+  const { hasPermission } = usePermissions()
+  
+  const canEdit = hasPermission('editProducts' as any)
+  const canDelete = hasPermission('deleteProducts' as any)
+  
+  // Don't show actions menu if user has no permissions
+  if (!canEdit && !canDelete) {
+    return null
+  }
   
   return (
     <>
@@ -35,30 +45,34 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-[160px]'>
-          <DropdownMenuItem
-            onClick={() => {
-              setCurrentRow(row.original)
-              setOpen('edit')
-            }}
-          >
-            {t('edit')}
-            <DropdownMenuShortcut>
-              <IconEdit size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setCurrentRow(row.original)
-              setOpen('delete')
-            }}
-            className='text-red-500!'
-          >
-            {t('delete')}
-            <DropdownMenuShortcut>
-              <IconTrash size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(row.original)
+                setOpen('edit')
+              }}
+            >
+              {t('edit')}
+              <DropdownMenuShortcut>
+                <IconEdit size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+          {canEdit && canDelete && <DropdownMenuSeparator />}
+          {canDelete && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(row.original)
+                setOpen('delete')
+              }}
+              className='text-red-500!'
+            >
+              {t('delete')}
+              <DropdownMenuShortcut>
+                <IconTrash size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </>

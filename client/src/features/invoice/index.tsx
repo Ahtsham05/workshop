@@ -4,7 +4,8 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
-// import { useLanguage } from '@/context/language-context'
+import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { useState, useEffect, useCallback } from 'react'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
@@ -84,7 +85,8 @@ export interface Category {
 }
 
 export default function InvoicePage() {
-  // const { t, language } = useLanguage()
+  const { t } = useLanguage()
+  const { hasPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()
   
   // View state management
@@ -627,6 +629,12 @@ export default function InvoicePage() {
   }
 
   const handleEdit = (invoiceData: any) => {
+    // Check permission before allowing edit
+    if (!hasPermission('editInvoices' as any)) {
+      toast.error(t('no_permission_edit_invoice') || 'You do not have permission to edit invoices')
+      return
+    }
+    
     // Reset the saved flag when starting to edit
     setInvoiceSaved(false)
     

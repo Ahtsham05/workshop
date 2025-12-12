@@ -6,6 +6,8 @@ import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
 import { ProductCatalog } from './components/product-catalog';
 import { toast } from 'sonner';
+import { useLanguage } from '@/context/language-context';
+import { usePermissions } from '@/context/permission-context';
 import type { Product, Category } from '../invoice/index';
 
 // Purchase Item Interface - simpler than invoice, no profit tracking
@@ -47,6 +49,8 @@ type ViewType = 'create' | 'list' | 'details';
 
 const PurchaseInvoicePage = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { t } = useLanguage();
+  const { hasPermission } = usePermissions();
   const [currentView, setCurrentView] = useState<ViewType>('create');
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
@@ -288,6 +292,12 @@ const PurchaseInvoicePage = () => {
 
   // Handle edit
   const handleEdit = useCallback((purchaseToEdit: any) => {
+    // Check permission before allowing edit
+    if (!hasPermission('editPurchases' as any)) {
+      toast.error(t('no_permission_edit_purchase') || 'You do not have permission to edit purchases');
+      return;
+    }
+    
     console.log('Editing purchase:', purchaseToEdit);
     setCurrentView('create');
     setIsEditing(true);
