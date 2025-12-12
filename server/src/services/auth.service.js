@@ -17,6 +17,8 @@ const loginUserWithEmailAndPassword = async (email, password) => {
   let user = await userService.getUserByEmail(email);
   
   if (user && (await user.isPasswordMatch(password))) {
+    // Populate role with permissions
+    await user.populate('role');
     return user;
   }
   
@@ -39,6 +41,8 @@ const loginUserWithEmailAndPassword = async (email, password) => {
         });
       }
       
+      // Populate role with permissions
+      await companyUser.populate('role');
       return companyUser;
     }
   } catch (error) {
@@ -73,6 +77,8 @@ const refreshAuth = async (refreshToken) => {
     if (!user) {
       throw new Error();
     }
+    // Populate role with permissions
+    await user.populate('role');
     await refreshTokenDoc.remove();
     return tokenService.generateAuthTokens(user);
   } catch (error) {

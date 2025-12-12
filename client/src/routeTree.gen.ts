@@ -29,9 +29,11 @@ import { Route as authOtpImport } from './routes/(auth)/otp'
 import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
+import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
@@ -159,6 +161,13 @@ const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
+const AuthenticatedUsersManagementIndexRoute =
+  AuthenticatedUsersManagementIndexImport.update({
+    id: '/users-management/',
+    path: '/users-management/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedTasksIndexRoute = AuthenticatedTasksIndexImport.update({
   id: '/tasks/',
   path: '/tasks/',
@@ -179,6 +188,12 @@ const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any,
 )
+
+const AuthenticatedRolesIndexRoute = AuthenticatedRolesIndexImport.update({
+  id: '/roles/',
+  path: '/roles/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedPurchaseInvoiceIndexRoute =
   AuthenticatedPurchaseInvoiceIndexImport.update({
@@ -503,6 +518,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPurchaseInvoiceIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/roles/': {
+      id: '/_authenticated/roles/'
+      path: '/roles'
+      fullPath: '/roles'
+      preLoaderRoute: typeof AuthenticatedRolesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -522,6 +544,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof AuthenticatedTasksIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/users-management/': {
+      id: '/_authenticated/users-management/'
+      path: '/users-management'
+      fullPath: '/users-management'
+      preLoaderRoute: typeof AuthenticatedUsersManagementIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/users/': {
@@ -593,8 +622,10 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
+  AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
+  AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedProductsBulkEditIndexRoute: typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -616,8 +647,11 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
+  AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
+  AuthenticatedUsersManagementIndexRoute:
+    AuthenticatedUsersManagementIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedProductsBulkEditIndexRoute:
     AuthenticatedProductsBulkEditIndexRoute,
@@ -659,9 +693,11 @@ export interface FileRoutesByFullPath {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
+  '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -696,9 +732,11 @@ export interface FileRoutesByTo {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
+  '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -736,9 +774,11 @@ export interface FileRoutesById {
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
+  '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
 }
@@ -777,9 +817,11 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/roles'
     | '/settings/'
     | '/suppliers'
     | '/tasks'
+    | '/users-management'
     | '/users'
     | '/products/bulk-edit'
   fileRoutesByTo: FileRoutesByTo
@@ -813,9 +855,11 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/roles'
     | '/settings'
     | '/suppliers'
     | '/tasks'
+    | '/users-management'
     | '/users'
     | '/products/bulk-edit'
   id:
@@ -851,9 +895,11 @@ export interface FileRouteTypes {
     | '/_authenticated/invoice/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
+    | '/_authenticated/roles/'
     | '/_authenticated/settings/'
     | '/_authenticated/suppliers/'
     | '/_authenticated/tasks/'
+    | '/_authenticated/users-management/'
     | '/_authenticated/users/'
     | '/_authenticated/products/bulk-edit/'
   fileRoutesById: FileRoutesById
@@ -928,8 +974,10 @@ export const routeTree = rootRoute
         "/_authenticated/invoice/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
+        "/_authenticated/roles/",
         "/_authenticated/suppliers/",
         "/_authenticated/tasks/",
+        "/_authenticated/users-management/",
         "/_authenticated/users/",
         "/_authenticated/products/bulk-edit/"
       ]
@@ -1054,6 +1102,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/purchase-invoice/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/roles/": {
+      "filePath": "_authenticated/roles/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/settings/": {
       "filePath": "_authenticated/settings/index.tsx",
       "parent": "/_authenticated/settings"
@@ -1064,6 +1116,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/tasks/": {
       "filePath": "_authenticated/tasks/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/users-management/": {
+      "filePath": "_authenticated/users-management/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/users/": {

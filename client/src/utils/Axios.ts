@@ -25,7 +25,7 @@ const removeTokens = (): void => {
 };
 
 // Refresh token logic
-const refreshTokens = async (navigate: Function): Promise<string> => {
+const refreshTokens = async (): Promise<string> => {
   try {
     const refreshtoken = getRefreshToken();
     if (!refreshtoken) {
@@ -45,7 +45,8 @@ const refreshTokens = async (navigate: Function): Promise<string> => {
   } catch (error) {
     console.error("Error refreshing tokens", error);
     removeTokens();
-    navigate({to:'/sign-in', replace: true});
+    // Redirect to login page
+    window.location.href = '/sign-in';
     throw error;
   }
 };
@@ -76,11 +77,7 @@ Axios.interceptors.response.use(
     if (originRequest && error.response?.status === 401 && !originRequest._retry) {
       originRequest._retry = true;
       try {
-        // Here we pass the navigate function to refreshTokens
-        const newAccessToken = await refreshTokens((navigate:any) => {
-          // You can define navigation logic here or handle redirect
-          navigate({to:'/sign-in', replace: true});
-        });
+        const newAccessToken = await refreshTokens();
         originRequest.headers!.Authorization = `Bearer ${newAccessToken}`;
         return Axios(originRequest);
       } catch (refreshError) {

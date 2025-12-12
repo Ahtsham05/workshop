@@ -12,6 +12,7 @@ import {
   // IconUserCog,
   IconUsers,
   IconCategory,
+  IconShield,
   // IconRefresh,
 } from '@tabler/icons-react'
 import { Command } from 'lucide-react'
@@ -48,31 +49,37 @@ export const sidebarData: SidebarData = {
           title: 'Suppliers',
           url: '/suppliers',
           icon: IconUsers,
+          permission: 'viewSuppliers',
         },
         {
           title: 'Customers',
           url: '/customers',
           icon: IconUsers,
+          permission: 'viewCustomers',
         },
         {
           title: 'Categories',
           url: '/categories',
           icon: IconCategory,
+          permission: 'viewCategories',
         },
         {
           title: 'Products',
           url: '/products',
           icon: IconPackages,
+          permission: 'viewProducts',
         },
         {
-          title: 'PURCHASES',
+          title: 'Purchases',
           url: '/purchase-invoice',
           icon: IconPackages,
+          permission: 'viewPurchases',
         },
         {
-          title: 'INVOICES',
+          title: 'Invoices',
           url: '/invoice',
           icon: IconPackages,
+          permission: 'viewInvoices',
         },
         // {
         //   title: 'Returns',
@@ -83,6 +90,7 @@ export const sidebarData: SidebarData = {
           title: 'Accounts',
           url: '/accounting',
           icon: IconChecklist,
+          // No specific permission for accounting - will always show if user is authenticated
         },
         // {
         //   title: 'Chats',
@@ -93,12 +101,30 @@ export const sidebarData: SidebarData = {
       ],
     },
     {
+      title: 'Administration',
+      items: [
+        {
+          title: 'Users Management',
+          url: '/users-management',
+          icon: IconUsers,
+          permission: 'viewUsers',
+        },
+        {
+          title: 'Roles & Permissions',
+          url: '/roles',
+          icon: IconShield,
+          permission: 'viewRoles',
+        },
+      ],
+    },
+    {
       title: 'Reports',
       items: [
         {
           title: 'Reports',
           url: '/reports',
           icon: IconLockAccess,
+          permission: 'viewReports',
         },
         // {
         //   title: 'Errors',

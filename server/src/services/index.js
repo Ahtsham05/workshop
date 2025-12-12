@@ -4,6 +4,7 @@ module.exports.authService = require('./auth.service.js');
 module.exports.emailService = require('./email.service.js');
 module.exports.tokenService = require('./token.service.js');
 module.exports.userService = require('./user.service.js');
+module.exports.roleService = require('./role.service.js');
 module.exports.productService = require('./product.service.js');
 module.exports.categoryService = require('./category.service.js');
 module.exports.customerService = require('./customer.service.js');

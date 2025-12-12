@@ -13,6 +13,7 @@ import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
 import { LanguageProvider } from './context/language-context'
 import { AuthProvider } from './context/auth-context'
+import { PermissionWrapper } from './context/permission-wrapper'
 import { AuthErrorBoundary } from './components/auth-error-boundary'
 import { Provider } from "react-redux";
 import { store } from './stores/store'
@@ -47,14 +48,16 @@ if (!rootElement.innerHTML) {
       <Provider store={store}>
         <AuthErrorBoundary>
           <AuthProvider>
-            <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
-              <LanguageProvider>
-                <FontProvider>
-                  <RouterProvider router={router} />
-                  <Toaster />
-                </FontProvider>
-              </LanguageProvider>
-            </ThemeProvider>
+            <PermissionWrapper>
+              <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
+                <LanguageProvider>
+                  <FontProvider>
+                    <RouterProvider router={router} />
+                    <Toaster />
+                  </FontProvider>
+                </LanguageProvider>
+              </ThemeProvider>
+            </PermissionWrapper>
           </AuthProvider>
         </AuthErrorBoundary>
       </Provider>

@@ -42,8 +42,9 @@ export function NavGroup({ title, items }: NavGroup) {
       <SidebarMenu>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
-          // Get the translated title
-          const translatedTitle = t(item.title.toLowerCase().replace(/ /g, '_'))
+          // Get the translated title - remove special characters and convert to translation key
+          const translationKey = item.title.toLowerCase().replace(/[& ]/g, '_').replace(/_+/g, '_')
+          const translatedTitle = t(translationKey)
           
           if (!item.items)
             return <SidebarMenuLink 
