@@ -27,12 +27,12 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
-import { useLanguage } from '@/context/language-context'
+// import { useLanguage } from '@/context/language-context'
 import { NoTranslate } from '@/components/no-translate'
 
 export function NavGroup({ title, items }: NavGroup) {
   const { state } = useSidebar()
-  const { t } = useLanguage()
+  // const { t } = useLanguage()
   const href = useLocation({ select: (location) => location.href })
   return (
     <SidebarGroup>
@@ -105,7 +105,7 @@ const SidebarMenuCollapsible = ({
   href: string
 }) => {
   const { setOpenMobile } = useSidebar()
-  const { t } = useLanguage()
+  // const { t } = useLanguage()
   return (
     <Collapsible
       asChild
@@ -158,7 +158,7 @@ const SidebarMenuCollapsedDropdown = ({
   item: NavCollapsible
   href: string
 }) => {
-  const { t } = useLanguage()
+  // const { t } = useLanguage()
   return (
     <SidebarMenuItem>
       <DropdownMenu>
