@@ -59,7 +59,7 @@ export default function AttendanceTracking() {
 
   const handleCheckIn = async (employeeId: string) => {
     try {
-      const result = await checkIn({ employee: employeeId }).unwrap();
+      await checkIn({ employee: employeeId }).unwrap();
       toast.success(t('Check-in successful'));
       // Small delay to ensure backend has processed, then force refetch
       setTimeout(() => {
@@ -72,7 +72,7 @@ export default function AttendanceTracking() {
 
   const handleCheckOut = async (employeeId: string) => {
     try {
-      const result = await checkOut({ employee: employeeId }).unwrap();
+      await checkOut({ employee: employeeId }).unwrap();
       toast.success(t('Check-out successful'));
       // Small delay to ensure backend has processed, then force refetch
       setTimeout(() => {
