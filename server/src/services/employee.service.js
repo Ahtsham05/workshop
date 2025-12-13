@@ -14,10 +14,29 @@ const createEmployee = async (employeeBody) => {
   if (await Employee.findOne({ employeeId: employeeBody.employeeId })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID already exists');
   }
-  if (await Employee.findOne({ cnic: employeeBody.cnic })) {
+  if (employeeBody.cnic && await Employee.findOne({ cnic: employeeBody.cnic })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
   }
-  return Employee.create(employeeBody);
+  
+  // Clean up invalid ObjectIds (for mock data compatibility)
+  const cleanedBody = { ...employeeBody };
+  
+  // If designation is not a valid ObjectId (e.g., mock data), remove it
+  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.designation;
+  }
+  
+  // If shift is not a valid ObjectId, remove it
+  if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.shift;
+  }
+  
+  // If reportingManager is not a valid ObjectId, remove it
+  if (cleanedBody.reportingManager && !cleanedBody.reportingManager.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.reportingManager;
+  }
+  
+  return Employee.create(cleanedBody);
 };
 
 /**
@@ -86,7 +105,26 @@ const updateEmployeeById = async (employeeId, updateBody) => {
   if (updateBody.cnic && (await Employee.findOne({ cnic: updateBody.cnic, _id: { $ne: employeeId } }))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
   }
-  Object.assign(employee, updateBody);
+  
+  // Clean up invalid ObjectIds (for mock data compatibility)
+  const cleanedBody = { ...updateBody };
+  
+  // If designation is not a valid ObjectId (e.g., mock data), remove it
+  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.designation;
+  }
+  
+  // If shift is not a valid ObjectId, remove it
+  if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.shift;
+  }
+  
+  // If reportingManager is not a valid ObjectId, remove it
+  if (cleanedBody.reportingManager && !cleanedBody.reportingManager.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.reportingManager;
+  }
+  
+  Object.assign(employee, cleanedBody);
   await employee.save();
   return employee;
 };

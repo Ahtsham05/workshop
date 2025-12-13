@@ -11,8 +11,6 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
-
 export const Route = createFileRoute('/_authenticated/hr/employees/create')({
   component: CreateEmployee,
 });
@@ -45,14 +43,14 @@ function CreateEmployee() {
     try {
       await createEmployee(data).unwrap();
       toast.success(t('Employee created successfully'));
-      navigate({ to: '/hr/employees' } as NavigateOptions);
+      navigate({ to: '/hr/employees' as any });
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to create employee'));
     }
   };
 
   const handleCancel = () => {
-    navigate({ to: '/hr/employees' } as NavigateOptions);
+    navigate({ to: '/hr/employees' as any });
   };
 
   return (
@@ -63,7 +61,7 @@ function CreateEmployee() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate({ to: '/hr/employees' } as NavigateOptions)}
+              onClick={() => navigate({ to: '/hr/employees' as any })}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>

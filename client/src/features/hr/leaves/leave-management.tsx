@@ -5,6 +5,7 @@ import {
   useCreateLeaveMutation,
   useApproveLeaveMutation,
   useRejectLeaveMutation,
+  useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,13 +62,18 @@ export default function LeaveManagement() {
     status: statusFilter || undefined,
   });
 
+  const { data: employeesData } = useGetEmployeesQuery({
+    limit: 100,
+    employmentStatus: 'Active',
+  });
+
   const [createLeave, { isLoading: isCreating }] = useCreateLeaveMutation();
   const [approveLeave, { isLoading: isApproving }] = useApproveLeaveMutation();
   const [rejectLeave, { isLoading: isRejecting }] = useRejectLeaveMutation();
 
   const [formData, setFormData] = useState({
     employee: '',
-    leaveType: 'Sick Leave',
+    leaveType: 'Sick',
     startDate: '',
     endDate: '',
     reason: '',
@@ -81,7 +87,7 @@ export default function LeaveManagement() {
       setShowApplyDialog(false);
       setFormData({
         employee: '',
-        leaveType: 'Sick Leave',
+        leaveType: 'Sick',
         startDate: '',
         endDate: '',
         reason: '',
@@ -125,14 +131,18 @@ export default function LeaveManagement() {
   };
 
   const leaveTypes = [
-    'Sick Leave',
-    'Casual Leave',
-    'Annual Leave',
-    'Maternity Leave',
-    'Paternity Leave',
-    'Unpaid Leave',
-    'Compensatory Leave',
+    { value: 'Casual', label: 'Casual Leave' },
+    { value: 'Sick', label: 'Sick Leave' },
+    { value: 'Annual', label: 'Annual Leave' },
+    { value: 'Maternity', label: 'Maternity Leave' },
+    { value: 'Paternity', label: 'Paternity Leave' },
+    { value: 'Unpaid', label: 'Unpaid Leave' },
+    { value: 'Emergency', label: 'Emergency Leave' },
   ];
+
+  const getLeaveTypeLabel = (value: string) => {
+    return leaveTypes.find(type => type.value === value)?.label || value;
+  };
 
   return (
     <div className="h-full w-full p-4 space-y-4">
@@ -277,7 +287,7 @@ export default function LeaveManagement() {
                       <TableCell className="font-medium">
                         {leave.employee?.firstName} {leave.employee?.lastName}
                       </TableCell>
-                      <TableCell>{leave.leaveType}</TableCell>
+                      <TableCell>{getLeaveTypeLabel(leave.leaveType)}</TableCell>
                       <TableCell>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
@@ -359,6 +369,25 @@ export default function LeaveManagement() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>{t('Employee')}</Label>
+              <Select
+                value={formData.employee}
+                onValueChange={(value) => setFormData({ ...formData, employee: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Select employee')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeesData?.results?.map((emp: any) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName} ({emp.employeeId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>{t('Leave Type')}</Label>
               <Select
                 value={formData.leaveType}
@@ -369,8 +398,8 @@ export default function LeaveManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   {leaveTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {t(type)}
+                    <SelectItem key={type.value} value={type.value}>
+                      {t(type.label)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -409,7 +438,10 @@ export default function LeaveManagement() {
             <Button variant="outline" onClick={() => setShowApplyDialog(false)}>
               {t('Cancel')}
             </Button>
-            <Button onClick={handleApplyLeave} disabled={isCreating}>
+            <Button 
+              onClick={handleApplyLeave} 
+              disabled={isCreating || !formData.employee || !formData.startDate || !formData.endDate}
+            >
               {isCreating ? t('Submitting...') : t('Submit')}
             </Button>
           </DialogFooter>

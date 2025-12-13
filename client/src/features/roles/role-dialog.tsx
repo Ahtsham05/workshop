@@ -103,8 +103,8 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
           <DialogTitle>{isEdit ? t('edit_role') || 'Edit Role' : t('create_role') || 'Create Role'}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? t('edit_role_description') || 'Update role information. Permissions can be managed separately.'
-              : t('create_role_description') || 'Create a new role. You can set permissions after creation.'}
+              ? t('Edit Role Description') || 'Update role information. Permissions can be managed separately.'
+              : t('Create Role Description') || 'Create a new role. You can set permissions after creation.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -139,7 +139,7 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
                     />
                   </FormControl>
                   <FormDescription>
-                    {t('role_description_hint') || 'Brief description of the role and its purpose'}
+                    {t('Role Description Hint') || 'Brief description of the role and its purpose'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -152,9 +152,9 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                   <div className="space-y-0.5">
-                    <FormLabel className="text-base">{t('active_status') || 'Active Status'}</FormLabel>
+                    <FormLabel className="text-base">{t('Active Status') || 'Active Status'}</FormLabel>
                     <FormDescription>
-                      {t('active_status_description') || 'Inactive roles cannot be assigned to users'}
+                      {t('Active Status Description') || 'Inactive roles cannot be assigned to users'}
                     </FormDescription>
                   </div>
                   <FormControl>

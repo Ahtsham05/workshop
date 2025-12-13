@@ -13,8 +13,16 @@ const getAttendances = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'status', 'startDate', 'endDate']);
   if (filter.startDate || filter.endDate) {
     filter.date = {};
-    if (filter.startDate) filter.date.$gte = new Date(filter.startDate);
-    if (filter.endDate) filter.date.$lte = new Date(filter.endDate);
+    if (filter.startDate) {
+      const startDate = new Date(filter.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      filter.date.$gte = startDate;
+    }
+    if (filter.endDate) {
+      const endDate = new Date(filter.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      filter.date.$lte = endDate;
+    }
     delete filter.startDate;
     delete filter.endDate;
   }

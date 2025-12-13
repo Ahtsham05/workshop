@@ -97,10 +97,13 @@ const markCheckIn = async (employeeId, locationData = {}) => {
   if (existingAttendance) {
     Object.assign(existingAttendance, attendanceData);
     await existingAttendance.save();
+    await existingAttendance.populate('employee shift');
     return existingAttendance;
   }
   
-  return Attendance.create(attendanceData);
+  const newAttendance = await Attendance.create(attendanceData);
+  await newAttendance.populate('employee shift');
+  return newAttendance;
 };
 
 const markCheckOut = async (employeeId) => {
@@ -129,6 +132,7 @@ const markCheckOut = async (employeeId) => {
   }
   
   await attendance.save();
+  await attendance.populate('employee shift');
   return attendance;
 };
 

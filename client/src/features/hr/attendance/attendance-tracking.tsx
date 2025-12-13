@@ -4,6 +4,7 @@ import {
   useGetAttendancesQuery,
   useMarkCheckInMutation,
   useMarkCheckOutMutation,
+  useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,12 +36,22 @@ export default function AttendanceTracking() {
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const { data, isLoading, refetch } = useGetAttendancesQuery({
-    page,
-    limit: 10,
-    startDate: selectedDate,
-    endDate: selectedDate,
-    search: search || undefined,
+  const { data, isLoading, refetch } = useGetAttendancesQuery(
+    {
+      page,
+      limit: 10,
+      startDate: selectedDate,
+      endDate: selectedDate,
+      search: search || undefined,
+    },
+    {
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  const { data: employeesData } = useGetEmployeesQuery({
+    limit: 100,
+    employmentStatus: 'Active',
   });
 
   const [checkIn, { isLoading: isCheckingIn }] = useMarkCheckInMutation();
@@ -48,9 +59,12 @@ export default function AttendanceTracking() {
 
   const handleCheckIn = async (employeeId: string) => {
     try {
-      await checkIn({ employee: employeeId }).unwrap();
+      const result = await checkIn({ employee: employeeId }).unwrap();
       toast.success(t('Check-in successful'));
-      refetch();
+      // Small delay to ensure backend has processed, then force refetch
+      setTimeout(() => {
+        refetch();
+      }, 100);
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to check-in'));
     }
@@ -58,9 +72,12 @@ export default function AttendanceTracking() {
 
   const handleCheckOut = async (employeeId: string) => {
     try {
-      await checkOut({ employee: employeeId }).unwrap();
+      const result = await checkOut({ employee: employeeId }).unwrap();
       toast.success(t('Check-out successful'));
-      refetch();
+      // Small delay to ensure backend has processed, then force refetch
+      setTimeout(() => {
+        refetch();
+      }, 100);
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to check-out'));
     }
@@ -211,67 +228,90 @@ export default function AttendanceTracking() {
                       {t('Loading...')}
                     </TableCell>
                   </TableRow>
-                ) : data?.results?.length === 0 ? (
+                ) : !employeesData?.results?.length ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {t('No attendance records found')}
+                      {t('No employees found')}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  data?.results?.map((attendance: any) => (
-                    <TableRow key={attendance.id}>
-                      <TableCell className="font-medium">
-                        {attendance.employee?.firstName} {attendance.employee?.lastName}
-                      </TableCell>
-                      <TableCell>{format(new Date(attendance.date), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>
-                        {attendance.checkIn
-                          ? format(new Date(attendance.checkIn), 'hh:mm a')
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {attendance.checkOut
-                          ? format(new Date(attendance.checkOut), 'hh:mm a')
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {attendance.workingHours
-                          ? attendance.workingHours.toFixed(2) + ' hrs'
-                          : calculateWorkingHours(attendance.checkIn, attendance.checkOut)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge {...getStatusBadge(attendance.status)}>
-                          {attendance.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {!attendance.checkIn && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCheckIn(attendance.employee.id)}
-                              disabled={isCheckingIn}
-                            >
-                              <LogIn className="h-4 w-4 mr-1" />
-                              {t('Check In')}
-                            </Button>
-                          )}
-                          {attendance.checkIn && !attendance.checkOut && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCheckOut(attendance.employee.id)}
-                              disabled={isCheckingOut}
-                            >
-                              <LogOut className="h-4 w-4 mr-1" />
-                              {t('Check Out')}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  employeesData?.results
+                    ?.filter((emp: any) => 
+                      !search || 
+                      `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
+                      emp.employeeId?.toLowerCase().includes(search.toLowerCase())
+                    )
+                    .map((employee: any) => {
+                      // Match attendance by comparing employee IDs (handle both string and populated object)
+                      const attendance = data?.results?.find((a: any) => {
+                        const attendanceEmpId = typeof a.employee === 'string' ? a.employee : a.employee?.id;
+                        return attendanceEmpId === employee.id;
+                      });
+                      
+                      return (
+                        <TableRow key={employee.id}>
+                          <TableCell className="font-medium">
+                            {employee.firstName} {employee.lastName}
+                            <p className="text-xs text-muted-foreground">{employee.employeeId}</p>
+                          </TableCell>
+                          <TableCell>{format(new Date(selectedDate), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell>
+                            {attendance?.checkIn
+                              ? format(new Date(attendance.checkIn), 'hh:mm a')
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {attendance?.checkOut
+                              ? format(new Date(attendance.checkOut), 'hh:mm a')
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {attendance?.workingHours
+                              ? attendance.workingHours.toFixed(2) + ' hrs'
+                              : attendance?.checkIn && attendance?.checkOut
+                              ? calculateWorkingHours(attendance.checkIn, attendance.checkOut)
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {attendance ? (
+                              <Badge {...getStatusBadge(attendance.status)}>
+                                {attendance.status}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-gray-100 text-gray-700">
+                                {t('Not Marked')}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {!attendance?.checkIn && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleCheckIn(employee.id)}
+                                  disabled={isCheckingIn}
+                                >
+                                  <LogIn className="h-4 w-4 mr-1" />
+                                  {t('Check In')}
+                                </Button>
+                              )}
+                              {attendance?.checkIn && !attendance?.checkOut && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleCheckOut(employee.id)}
+                                  disabled={isCheckingOut}
+                                >
+                                  <LogOut className="h-4 w-4 mr-1" />
+                                  {t('Check Out')}
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                 )}
               </TableBody>
             </Table>

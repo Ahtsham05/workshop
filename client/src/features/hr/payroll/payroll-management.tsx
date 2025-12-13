@@ -5,6 +5,7 @@ import {
   useGeneratePayrollMutation,
   useProcessPayrollMutation,
   useMarkPayrollPaidMutation,
+  useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,6 +55,12 @@ export default function PayrollManagement() {
   const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
+  const [selectedPayrollId, setSelectedPayrollId] = useState('');
+  const [paymentData, setPaymentData] = useState({
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: 'Bank Transfer',
+  });
 
   const { data, isLoading, refetch } = useGetPayrollsQuery({
     page,
@@ -69,8 +76,14 @@ export default function PayrollManagement() {
   const [markPaid, { isLoading: isMarkingPaid }] = useMarkPayrollPaidMutation();
 
   const [generateData, setGenerateData] = useState({
+    employee: '',
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
+  });
+
+  const { data: employeesData } = useGetEmployeesQuery({
+    limit: 100,
+    employmentStatus: 'Active',
   });
 
   const handleGenerate = async () => {
@@ -78,6 +91,11 @@ export default function PayrollManagement() {
       await generatePayroll(generateData).unwrap();
       toast.success(t('Payroll generated successfully'));
       setShowGenerateDialog(false);
+      setGenerateData({
+        employee: '',
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+      });
       refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to generate payroll'));
@@ -94,14 +112,27 @@ export default function PayrollManagement() {
     }
   };
 
-  const handleMarkPaid = async (payrollId: string) => {
+  const handleMarkPaid = async () => {
     try {
-      await markPaid({ id: payrollId }).unwrap();
+      await markPaid({ 
+        id: selectedPayrollId,
+        ...paymentData 
+      }).unwrap();
       toast.success(t('Payroll marked as paid'));
+      setShowMarkPaidDialog(false);
+      setPaymentData({
+        paymentDate: new Date().toISOString().split('T')[0],
+        paymentMethod: 'Bank Transfer',
+      });
       refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to mark as paid'));
     }
+  };
+
+  const openMarkPaidDialog = (payrollId: string) => {
+    setSelectedPayrollId(payrollId);
+    setShowMarkPaidDialog(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -344,8 +375,7 @@ export default function PayrollManagement() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleMarkPaid(payroll.id)}
-                              disabled={isMarkingPaid}
+                              onClick={() => openMarkPaidDialog(payroll.id)}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               {t('Mark Paid')}
@@ -403,6 +433,27 @@ export default function PayrollManagement() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>{t('Employee')}</Label>
+              <Select
+                value={generateData.employee}
+                onValueChange={(value) =>
+                  setGenerateData({ ...generateData, employee: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Select employee')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeesData?.results?.map((emp: any) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName} ({emp.employeeId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>{t('Month')}</Label>
               <Select
                 value={generateData.month.toString()}
@@ -445,15 +496,63 @@ export default function PayrollManagement() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              {t('This will generate payroll for all active employees based on their attendance and leave records.')}
+              {t('This will generate payroll for the selected employee based on their attendance and leave records.')}
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>
               {t('Cancel')}
             </Button>
-            <Button onClick={handleGenerate} disabled={isGenerating}>
+            <Button onClick={handleGenerate} disabled={isGenerating || !generateData.employee}>
               {isGenerating ? t('Generating...') : t('Generate')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Paid Dialog */}
+      <Dialog open={showMarkPaidDialog} onOpenChange={setShowMarkPaidDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Mark Payroll as Paid')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Payment Date')}</Label>
+              <Input
+                type="date"
+                value={paymentData.paymentDate}
+                onChange={(e) =>
+                  setPaymentData({ ...paymentData, paymentDate: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('Payment Method')}</Label>
+              <Select
+                value={paymentData.paymentMethod}
+                onValueChange={(value) =>
+                  setPaymentData({ ...paymentData, paymentMethod: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">{t('Cash')}</SelectItem>
+                  <SelectItem value="Bank Transfer">{t('Bank Transfer')}</SelectItem>
+                  <SelectItem value="Cheque">{t('Cheque')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMarkPaidDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleMarkPaid} disabled={isMarkingPaid}>
+              {isMarkingPaid ? t('Processing...') : t('Mark as Paid')}
             </Button>
           </DialogFooter>
         </DialogContent>

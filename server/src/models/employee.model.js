@@ -33,13 +33,13 @@ const employeeSchema = mongoose.Schema(
     },
     cnic: {
       type: String,
-      required: true,
-      unique: true,
+      required: false,
       trim: true,
+      sparse: true,
     },
     dateOfBirth: {
       type: Date,
-      required: true,
+      required: false,
     },
     gender: {
       type: String,
@@ -66,7 +66,7 @@ const employeeSchema = mongoose.Schema(
     designation: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Designation',
-      required: true,
+      required: false,
     },
     shift: {
       type: mongoose.Schema.Types.ObjectId,

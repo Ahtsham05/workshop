@@ -83,7 +83,11 @@ export const hrApi = createApi({
     // Attendance
     getAttendances: builder.query({
       query: (params) => ({ url: '/attendance', params }),
-      providesTags: ['Attendance'],
+      providesTags: (result) => 
+        result?.results
+          ? [...result.results.map(({ id }: any) => ({ type: 'Attendance' as const, id })), { type: 'Attendance', id: 'LIST' }]
+          : [{ type: 'Attendance', id: 'LIST' }],
+      keepUnusedDataFor: 0,
     }),
     getAttendance: builder.query({
       query: (id) => `/attendance/${id}`,
@@ -95,11 +99,11 @@ export const hrApi = createApi({
     }),
     markCheckIn: builder.mutation({
       query: (data) => ({ url: '/attendance/checkin', method: 'POST', body: data }),
-      invalidatesTags: ['Attendance'],
+      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance'],
     }),
     markCheckOut: builder.mutation({
       query: (data) => ({ url: '/attendance/checkout', method: 'POST', body: data }),
-      invalidatesTags: ['Attendance'],
+      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance'],
     }),
     updateAttendance: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/attendance/${id}`, method: 'PATCH', body: data }),

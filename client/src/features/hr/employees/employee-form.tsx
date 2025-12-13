@@ -31,7 +31,7 @@ const employeeSchema = z.object({
     city: z.string().optional(),
     state: z.string().optional(),
     country: z.string().optional(),
-    zipCode: z.string().optional(),
+    postalCode: z.string().optional(),
   }).optional(),
   
   // Professional Information
@@ -47,27 +47,16 @@ const employeeSchema = z.object({
   // Salary Information
   salary: z.object({
     basicSalary: z.number().min(0, 'Basic salary must be positive'),
-    allowances: z.object({
-      housing: z.number(),
-      transport: z.number(),
-      medical: z.number(),
-      food: z.number(),
-      other: z.number(),
-    }),
-    deductions: z.object({
-      tax: z.number(),
-      insurance: z.number(),
-      providentFund: z.number(),
-      other: z.number(),
-    }),
+    allowances: z.number().min(0),
+    deductions: z.number().min(0),
   }),
   
   // Bank Information
   bankDetails: z.object({
     accountNumber: z.string().optional(),
     bankName: z.string().optional(),
-    branchName: z.string().optional(),
-    ifscCode: z.string().optional(),
+    accountTitle: z.string().optional(),
+    branchCode: z.string().optional(),
   }).optional(),
   
   // Emergency Contact
@@ -119,8 +108,8 @@ export default function EmployeeForm({
       employmentStatus: 'Active',
       salary: {
         basicSalary: 0,
-        allowances: { housing: 0, transport: 0, medical: 0, food: 0, other: 0 },
-        deductions: { tax: 0, insurance: 0, providentFund: 0, other: 0 },
+        allowances: 0,
+        deductions: 0,
       },
       address: {},
       bankDetails: {},
@@ -221,7 +210,7 @@ export default function EmployeeForm({
                   <Input placeholder={t('City')} {...register('address.city')} />
                   <Input placeholder={t('State')} {...register('address.state')} />
                   <Input placeholder={t('Country')} {...register('address.country')} />
-                  <Input placeholder={t('Zip Code')} {...register('address.zipCode')} />
+                  <Input placeholder={t('Postal Code')} {...register('address.postalCode')} />
                 </div>
               </div>
             </CardContent>
@@ -394,60 +383,23 @@ export default function EmployeeForm({
               </div>
 
               <div className="space-y-2">
-                <Label>{t('Allowances')}</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder={t('Housing')}
-                    type="number"
-                    {...register('salary.allowances.housing', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Transport')}
-                    type="number"
-                    {...register('salary.allowances.transport', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Medical')}
-                    type="number"
-                    {...register('salary.allowances.medical', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Food')}
-                    type="number"
-                    {...register('salary.allowances.food', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Other')}
-                    type="number"
-                    {...register('salary.allowances.other', { valueAsNumber: true })}
-                  />
-                </div>
+                <Label htmlFor="allowances">{t('Total Allowances')}</Label>
+                <Input
+                  id="allowances"
+                  type="number"
+                  placeholder="0"
+                  {...register('salary.allowances', { valueAsNumber: true })}
+                />
               </div>
 
               <div className="space-y-2">
-                <Label>{t('Deductions')}</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder={t('Tax')}
-                    type="number"
-                    {...register('salary.deductions.tax', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Insurance')}
-                    type="number"
-                    {...register('salary.deductions.insurance', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Provident Fund')}
-                    type="number"
-                    {...register('salary.deductions.providentFund', { valueAsNumber: true })}
-                  />
-                  <Input
-                    placeholder={t('Other')}
-                    type="number"
-                    {...register('salary.deductions.other', { valueAsNumber: true })}
-                  />
-                </div>
+                <Label htmlFor="deductions">{t('Total Deductions')}</Label>
+                <Input
+                  id="deductions"
+                  type="number"
+                  placeholder="0"
+                  {...register('salary.deductions', { valueAsNumber: true })}
+                />
               </div>
 
               <div className="space-y-2">
@@ -459,10 +411,10 @@ export default function EmployeeForm({
                   />
                   <Input placeholder={t('Bank Name')} {...register('bankDetails.bankName')} />
                   <Input
-                    placeholder={t('Branch Name')}
-                    {...register('bankDetails.branchName')}
+                    placeholder={t('Account Title')}
+                    {...register('bankDetails.accountTitle')}
                   />
-                  <Input placeholder={t('IFSC Code')} {...register('bankDetails.ifscCode')} />
+                  <Input placeholder={t('Branch Code')} {...register('bankDetails.branchCode')} />
                 </div>
               </div>
             </CardContent>

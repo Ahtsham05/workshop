@@ -8,8 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Briefcase, DollarSign, User } from 'lucide-react';
 import { format } from 'date-fns';
 
-type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
-
 export const Route = createFileRoute('/_authenticated/hr/employees/$id')({
   component: EmployeeDetails,
 });
@@ -55,7 +53,7 @@ function EmployeeDetails() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate({ to: '/hr/employees' } as NavigateOptions)}
+            onClick={() => navigate({ to: '/hr/employees' as any })}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -71,7 +69,7 @@ function EmployeeDetails() {
             {employee.employmentStatus}
           </Badge>
           <Button
-            onClick={() => navigate({ to: `/hr/employees/${id}/edit` } as NavigateOptions)}
+            onClick={() => navigate({ to: `/hr/employees/${id}/edit` as any })}
           >
             {t('Edit')}
           </Button>
@@ -93,7 +91,7 @@ function EmployeeDetails() {
                 <User className="h-12 w-12 text-muted-foreground" />
               </div>
             )}
-            <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -287,11 +285,11 @@ function EmployeeDetails() {
                         ? (Object.values(employee.salary.allowances as Record<string, number>).reduce((a, b) => a + b, 0)).toLocaleString()
                         : '0'}
                   </p>
-                </div>Argument of type '"/_authenticated/hr/employees/create"' is not assignable to parameter of type 'keyof FileRoutesByPath'.ts(2345)
+                </div>
 
               </div>
 
-              {employee.salary?.allowances && (
+              {/* {employee.salary?.allowances && typeof employee.salary.allowances === 'object' && (
                 <div>
                   <p className="text-sm font-semibold mb-3">{t('Allowances Breakdown')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -303,9 +301,9 @@ function EmployeeDetails() {
                     ))}
                   </div>
                 </div>
-              )}
+              )} */}
 
-              {employee.salary?.deductions && (
+              {/* {employee.salary?.deductions && typeof employee.salary.deductions === 'object' && (
                 <div>
                   <p className="text-sm font-semibold mb-3">{t('Deductions')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -317,7 +315,7 @@ function EmployeeDetails() {
                     ))}
                   </div>
                 </div>
-              )}
+              )} */}
 
               {employee.bankDetails && (
                 <div>
@@ -332,12 +330,12 @@ function EmployeeDetails() {
                       <p className="font-medium">{employee.bankDetails.accountNumber || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">{t('Branch')}</p>
-                      <p className="font-medium">{employee.bankDetails.branchName || '-'}</p>
+                      <p className="text-xs text-muted-foreground">{t('Account Title')}</p>
+                      <p className="font-medium">{employee.bankDetails.accountTitle || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">{t('IFSC Code')}</p>
-                      <p className="font-medium">{employee.bankDetails.ifscCode || '-'}</p>
+                      <p className="text-xs text-muted-foreground">{t('Branch Code')}</p>
+                      <p className="font-medium">{employee.bankDetails.branchCode || '-'}</p>
                     </div>
                   </div>
                 </div>
