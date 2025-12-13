@@ -66,7 +66,7 @@ export default function ReportsPage() {
           <CardDescription>{t('select_date_range_for_reports')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className='flex gap-4 items-center'>
+          <div className='flex  flex-col sm:flex-row gap-4 items-center'>
             <div className='flex flex-col gap-2'>
               <label className='text-sm font-medium'>{t('start_date')}</label>
               <Popover>
@@ -166,7 +166,7 @@ export default function ReportsPage() {
 
       {/* Reports Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className='grid grid-cols-5 lg:grid-cols-9 w-full'>
+        <TabsList className='grid grid-cols-4 lg:grid-cols-9 gap-1 w-full'>
           <TabsTrigger value='sales'>{t('sales')}</TabsTrigger>
           <TabsTrigger value='purchases'>{t('purchases')}</TabsTrigger>
           <TabsTrigger value='products'>{t('products')}</TabsTrigger>

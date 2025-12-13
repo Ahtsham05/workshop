@@ -142,7 +142,7 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
                 value={formData.category}
                 onValueChange={(value) => handleChange('category', value)}
               >
-                <SelectTrigger className={errors.category ? 'border-red-500' : ''}>
+                <SelectTrigger className={errors.category ? 'border-red-500 w-full' : 'w-full'}>
                   <SelectValue placeholder={t('Select category')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -185,7 +185,7 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
                 value={formData.paymentMethod}
                 onValueChange={(value) => handleChange('paymentMethod', value)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

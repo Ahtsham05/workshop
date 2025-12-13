@@ -125,8 +125,7 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
               className="pl-10"
             />
           </div>
-          <div className="space-y-2">
-            {/* <Label>{t('Records per page')}</Label> */}
+          {/* <div className="space-y-2">
             <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
               <SelectTrigger>
                 <SelectValue />
@@ -138,7 +137,7 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
                 <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
         </div>
 
         {loading ? (

@@ -178,7 +178,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
           <div className="space-y-2">
             <Label htmlFor="role">{t('role') || 'Role'}</Label>
             <Select value={roleValue} onValueChange={(value) => setValue('role', value)}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder={t('select_role') || 'Select a role'} />
               </SelectTrigger>
               <SelectContent>
