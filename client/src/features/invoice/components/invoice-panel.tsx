@@ -136,10 +136,15 @@ export function InvoicePanel({
       const htmlContent = generateInvoiceHTML(printData)
       openPrintWindow(htmlContent)
       
-      toast.success('Invoice sent to printer')
-    } catch (error) {
+      // Don't show success toast - let the print dialog speak for itself
+    } catch (error: any) {
       console.error('Print error:', error)
-      toast.error('Failed to print invoice')
+      // Only show error if window couldn't be opened (popup blocker)
+      if (error.message && error.message.includes('popup blocker')) {
+        toast.error('Please allow popups to print. Check your browser settings.')
+      } else {
+        toast.error('Failed to open print window')
+      }
     }
   }, [t, invoice.customerName, companyData])
 
@@ -181,10 +186,15 @@ export function InvoicePanel({
       const htmlContent = generateA4InvoiceHTML(printData)
       openA4PrintWindow(htmlContent)
       
-      toast.success('A4 Invoice sent to printer')
-    } catch (error) {
+      // Don't show success toast - let the print dialog speak for itself
+    } catch (error: any) {
       console.error('A4 Print error:', error)
-      toast.error('Failed to print A4 invoice')
+      // Only show error if window couldn't be opened (popup blocker)
+      if (error.message && error.message.includes('popup blocker')) {
+        toast.error('Please allow popups to print. Check your browser settings.')
+      } else {
+        toast.error('Failed to open print window')
+      }
     }
   }, [t, invoice.customerName, companyData])
 

@@ -513,16 +513,16 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     customerName,
     walkInCustomerName,
     type,
-    subtotal,
-    tax,
-    discount,
+    // subtotal,
+    // tax,
+    // discount,
     total,
     paidAmount,
     balance,
     dueDate,
     notes,
-    deliveryCharge = 0,
-    serviceCharge = 0,
+    // deliveryCharge = 0,
+    // serviceCharge = 0,
     companyName,
     companyAddress,
     companyPhone,
@@ -632,7 +632,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 30px;
-      border-bottom: 3px solid #007bff;
+      border-bottom: 3px solid black;
       padding-bottom: 20px;
     }
     
@@ -716,12 +716,11 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       border-collapse: collapse;
       margin-bottom: 30px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      border: 2px solid #007bff;
+      border: 2px solid black;
     }
     
     .items-table th {
-      background: #007bff;
-      color: white;
+    
       padding: 12px 8px;
       text-align: right;
       font-weight: 800;
@@ -756,7 +755,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .items-table tbody tr:last-child td {
-      border-bottom: 2px solid #007bff;
+      border-bottom: 2px solid black;
     }
     
     .items-table .text-right {
@@ -780,7 +779,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     .totals-table {
       width: 300px;
       border-collapse: collapse;
-      border: 2px solid #007bff;
+      border: 2px solid black;
       border-radius: 8px;
       overflow: hidden;
     }
@@ -805,8 +804,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .totals-table .final-total {
-      background: #007bff;
-      color: white;
+      background: white;
+      color: black;
       font-weight: bold;
       font-size: 16px;
       border-bottom: none;
@@ -814,8 +813,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .totals-table .final-total .total-label,
     .totals-table .final-total .total-amount {
-      background: #007bff;
-      color: white;
+      background: white;
+      color: black;
       border-right: none;
     }
     
@@ -853,7 +852,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       margin: 30px 0;
       padding: 15px;
       background: #f8f9fa;
-      border-right: 4px solid #007bff;
+      border-right: 4px solid black;
       border-radius: 8px 0 0 8px;
     }
     
@@ -938,7 +937,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 <body>
   <div class="invoice-header">
     <div class="company-info">
-      <img src="/images/logo-light.png" alt="786 Engineering Works" class="company-logo" />
       <div class="company-name">${urduTexts.business_name}</div>
       <div class="company-details">
         ${urduTexts.business_address}<br>
@@ -1003,47 +1001,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       `).join('')}
     </tbody>
   </table>
-  
-  <div class="totals-section">
-    <table class="totals-table">
-      <tr>
-        <td class="total-label">${urduTexts.subtotal}:</td>
-        <td class="total-amount">${formatCurrency(subtotal)}</td>
-      </tr>
-      ${discount > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.discount}:</td>
-        <td class="total-amount" style="color: #d32f2f;">-${formatCurrency(discount)}</td>
-      </tr>
-      ` : ''}
-      ${deliveryCharge > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.delivery_charge}:</td>
-        <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
-      </tr>
-      ` : ''}
-      ${serviceCharge > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.service_charge}:</td>
-        <td class="total-amount">${formatCurrency(serviceCharge)}</td>
-      </tr>
-      ` : ''}
-      ${tax > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.tax}:</td>
-        <td class="total-amount">${formatCurrency(tax)}</td>
-      </tr>
-      ` : ''}
-      <tr class="final-total">
-        <td class="total-label">${urduTexts.total} ${urduTexts.amount}:</td>
-        <td class="total-amount">${formatCurrency(total)}</td>
-      </tr>
-    </table>
-  </div>
 
   ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
-    <div style="border-top: 2px solid #007bff; padding-top: 15px; margin-top: 15px; margin-bottom: 20px;">
+    <div style="padding-top: 15px; margin-top: 15px; margin-bottom: 20px;">
       <table class="totals-table" style="width: 400px;">
+        <tr>
+          <td class="total-label">${urduTexts.current_invoice}:</td>
+          <td class="total-amount" style="color: #d32f2f; font-size: 14px;">${formatCurrency(total)} (Dr)</td>
+        </tr>
         <tr>
           <td class="total-label">${urduTexts.previous_balance}:</td>
           <td class="total-amount" style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}; font-size: 14px;">
@@ -1051,10 +1016,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
           </td>
         </tr>
         <tr>
-          <td class="total-label">${urduTexts.current_invoice}:</td>
-          <td class="total-amount" style="color: #d32f2f; font-size: 14px;">${formatCurrency(total)} (Dr)</td>
-        </tr>
-        <tr class="final-total">
           <td class="total-label">${urduTexts.net_balance}:</td>
           <td class="total-amount" style="font-size: 16px;">
             ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
@@ -1142,12 +1103,27 @@ export const openPrintWindow = (htmlContent: string): void => {
     printWindow.document.write(htmlContent)
     printWindow.document.close()
     
-    // Auto print after content loads
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print()
-      }, 500) // Increased delay for better loading
+    // Wait for all resources including fonts and images to load
+    const waitForLoad = () => {
+      if (printWindow.document.readyState === 'complete') {
+        // Additional delay to ensure fonts are rendered
+        setTimeout(() => {
+          try {
+            printWindow.print()
+          } catch (error) {
+            console.error('Print error:', error)
+            // Fallback: close window if print fails
+            printWindow.close()
+          }
+        }, 1000)
+      } else {
+        setTimeout(waitForLoad, 100)
+      }
     }
+    
+    printWindow.onload = waitForLoad
+    // Fallback in case onload doesn't trigger
+    setTimeout(waitForLoad, 500)
   } else {
     throw new Error('Unable to open print window. Please check your popup blocker.')
   }
@@ -1160,12 +1136,64 @@ export const openA4PrintWindow = (htmlContent: string): void => {
     printWindow.document.write(htmlContent)
     printWindow.document.close()
     
-    // Auto print after content loads
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print()
-      }, 500) // Increased delay for better loading
+    // Wait for all resources including fonts and images to load
+    const waitForLoad = () => {
+      if (printWindow.document.readyState === 'complete') {
+        // Check if fonts are loaded
+        if (printWindow.document.fonts && printWindow.document.fonts.status === 'loaded') {
+          // Additional delay to ensure everything is rendered properly
+          setTimeout(() => {
+            try {
+              printWindow.print()
+            } catch (error) {
+              console.error('A4 Print error:', error)
+              // Fallback: close window if print fails
+              printWindow.close()
+            }
+          }, 1500)
+        } else {
+          // Wait for fonts to load
+          if (printWindow.document.fonts && printWindow.document.fonts.ready) {
+            printWindow.document.fonts.ready.then(() => {
+              setTimeout(() => {
+                try {
+                  printWindow.print()
+                } catch (error) {
+                  console.error('A4 Print error:', error)
+                  printWindow.close()
+                }
+              }, 1000)
+            }).catch(() => {
+              // If font loading fails, still try to print
+              setTimeout(() => {
+                try {
+                  printWindow.print()
+                } catch (error) {
+                  console.error('A4 Print error:', error)
+                  printWindow.close()
+                }
+              }, 1000)
+            })
+          } else {
+            // Fallback if fonts API not available
+            setTimeout(() => {
+              try {
+                printWindow.print()
+              } catch (error) {
+                console.error('A4 Print error:', error)
+                printWindow.close()
+              }
+            }, 1500)
+          }
+        }
+      } else {
+        setTimeout(waitForLoad, 100)
+      }
     }
+    
+    printWindow.onload = waitForLoad
+    // Fallback in case onload doesn't trigger
+    setTimeout(waitForLoad, 500)
   } else {
     throw new Error('Unable to open print window. Please check your popup blocker.')
   }
