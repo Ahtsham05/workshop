@@ -517,8 +517,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     // tax,
     // discount,
     total,
-    paidAmount,
-    balance,
+    // paidAmount,
+    // balance,
     dueDate,
     notes,
     // deliveryCharge = 0,
@@ -1025,35 +1025,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
   ` : ''}
   
-  ${type !== 'pending' ? `
-    <div class="payment-info">
-      <div>
-        <div class="info-title">${urduTexts.payment_information}:</div>
-        <div class="info-row">
-          <span class="info-label">${urduTexts.amount_paid}:</span>
-          <span style="color: #2e7d32; font-weight: bold;">${formatCurrency(paidAmount)}</span>
-        </div>
-        ${balance > 0 ? `
-        <div class="info-row">
-          <span class="info-label"><strong>${urduTexts.balance_due}:</strong></span>
-          <span style="color: #d32f2f; font-weight: bold; font-size: 16px;">${formatCurrency(balance)}</span>
-        </div>
-        ` : ''}
-        ${balance === 0 ? `
-        <div class="info-row">
-          <span style="color: #2e7d32; font-weight: bold;">✓ ${urduTexts.paid_in_full}</span>
-          <span></span>
-        </div>
-        ` : ''}
-      </div>
-      <div>
-        <div class="info-title">${urduTexts.payment_status}:</div>
-        <div style="font-size: 16px; font-weight: bold; ${balance === 0 ? 'color: #2e7d32;' : 'color: #d32f2f;'}">
-          ${balance === 0 ? `✓ ${urduTexts.completed}` : `⚠ ${urduTexts.pending_payment}`}
-        </div>
-      </div>
-    </div>
-  ` : ''}
+ 
   
   <div class="barcode-section">
     <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${urduTexts.invoice_barcode}</div>
