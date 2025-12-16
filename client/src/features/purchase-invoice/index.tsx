@@ -16,6 +16,7 @@ export interface PurchaseItem {
   quantity: number;
   unit?: string; // Unit of measurement
   purchasePrice: number; // price we bought it at
+  isManualEntry?: boolean; // flag for manual product selection
 }
 
 // Supplier Interface
@@ -349,6 +350,7 @@ const PurchaseInvoicePage = () => {
               onSaveSuccess={handleSaveSuccess}
               isEditing={isEditing}
               editingPurchase={editingPurchase}
+              products={products}
             />
           </div>
 

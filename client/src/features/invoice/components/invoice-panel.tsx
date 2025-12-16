@@ -1054,6 +1054,7 @@ export function InvoicePanel({
                           const qty = parseInt(e.target.value) || 1
                           updateQuantity(item.id, qty)
                         }}
+                        onFocus={(e) => e.target.select()}
                         className='h-6 w-12 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                       />
                       <Button
@@ -1121,6 +1122,7 @@ export function InvoicePanel({
                           }))
                         }
                       }}
+                      onFocus={(e) => e.target.select()}
                       className='h-6 w-16 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                     />
                   </div>

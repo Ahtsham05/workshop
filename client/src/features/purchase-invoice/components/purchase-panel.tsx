@@ -10,6 +10,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command'
 import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -32,6 +39,7 @@ interface PurchasePanelProps {
   onSaveSuccess?: () => void
   isEditing?: boolean
   editingPurchase?: any
+  products: any[]
 }
 
 export default function PurchasePanel({
@@ -45,6 +53,7 @@ export default function PurchasePanel({
   onSaveSuccess,
   isEditing = false,
   editingPurchase,
+  products,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
@@ -52,6 +61,8 @@ export default function PurchasePanel({
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [supplierBalance, setSupplierBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(false)
+  const [productSelectOpen, setProductSelectOpen] = useState<string>('')
+  const [productSearchQuery, setProductSearchQuery] = useState('')
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
@@ -130,6 +141,26 @@ export default function PurchasePanel({
     [purchase.supplier, t]
   )
 
+  // Handle product selection for manual entries
+  const handleProductSelect = useCallback(
+    (itemIndex: number, product: any) => {
+      setPurchase((prev) => {
+        const newItems = [...prev.items]
+        newItems[itemIndex] = {
+          product: product,
+          quantity: newItems[itemIndex].quantity || 1,
+          unit: product.unit || 'pcs',
+          purchasePrice: product.cost || 0,
+          isManualEntry: false
+        }
+        return { ...prev, items: newItems }
+      })
+      setProductSelectOpen('')
+      setProductSearchQuery('')
+    },
+    [setPurchase]
+  )
+
   // Handle save purchase
   const handleSavePurchase = useCallback(
     async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
@@ -142,6 +173,13 @@ export default function PurchasePanel({
 
       if (purchase.items.length === 0) {
         toast.error(t('Please add at least one item to the purchase'))
+        return
+      }
+
+      // Check for incomplete manual entries
+      const hasIncompleteItems = purchase.items.some((item) => item.isManualEntry && !item.product.id && !item.product._id)
+      if (hasIncompleteItems) {
+        toast.error(t('Please select products for all items or remove empty rows'))
         return
       }
 
@@ -432,7 +470,37 @@ export default function PurchasePanel({
       {/* Items List Card */}
       <Card>
         <CardHeader>
-          <CardTitle>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
+          <div className='flex items-center justify-between'>
+            <CardTitle>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                // Add a new empty row for manual product selection
+                const newItem: PurchaseItem = {
+                  product: {
+                    id: '',
+                    _id: '',
+                    name: '',
+                    price: 0,
+                    cost: 0,
+                    stockQuantity: 0,
+                  } as Product,
+                  quantity: 1,
+                  purchasePrice: 0,
+                  isManualEntry: true
+                }
+                setPurchase(prev => ({
+                  ...prev,
+                  items: [...prev.items, newItem]
+                }))
+              }}
+              className='flex items-center gap-1'
+            >
+              <Plus className='h-4 w-4' />
+              {t('Add Item')}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-4">
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -443,6 +511,94 @@ export default function PurchasePanel({
             ) : (
               purchase.items.map((item: PurchaseItem, index: number) => {
                 const productId = item.product.id || (item.product as any)._id;
+                
+                // Show product selector for manual entries
+                if (item.isManualEntry && !productId) {
+                  return (
+                    <div key={`manual-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg border-2 border-dashed border-primary/30">
+                      {/* Product Selector */}
+                      <Popover 
+                        open={productSelectOpen === `manual-${index}`}
+                        onOpenChange={(open) => {
+                          setProductSelectOpen(open ? `manual-${index}` : '')
+                          if (!open) setProductSearchQuery('')
+                        }}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="flex-1 justify-start">
+                            <Plus className="h-4 w-4 mr-2" />
+                            {t('Select Product')}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder={t('Search products...')}
+                              value={productSearchQuery}
+                              onValueChange={setProductSearchQuery}
+                            />
+                            <CommandEmpty>{t('No products found')}</CommandEmpty>
+                            <CommandGroup className="max-h-64 overflow-auto">
+                              {products
+                                .filter((product: any) => {
+                                  if (!productSearchQuery) return true
+                                  const query = productSearchQuery.toLowerCase()
+                                  return (
+                                    product.name?.toLowerCase().includes(query) ||
+                                    product.barcode?.toLowerCase().includes(query)
+                                  )
+                                })
+                                .map((product: any) => (
+                                  <CommandItem
+                                    key={product.id || product._id}
+                                    onSelect={() => handleProductSelect(index, product)}
+                                    className="flex items-center gap-2 cursor-pointer"
+                                  >
+                                    {product.image?.url ? (
+                                      <img
+                                        src={product.image.url}
+                                        alt={product.name}
+                                        className="w-10 h-10 object-cover rounded"
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                                        <Package className="h-5 w-5 text-gray-400" />
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium truncate">{product.name}</div>
+                                      {product.barcode && (
+                                        <div className="text-xs text-muted-foreground">{product.barcode}</div>
+                                      )}
+                                      <div className="text-xs text-muted-foreground">
+                                        Cost: Rs{product.cost?.toFixed(2) || '0.00'}
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      
+                      {/* Remove Button */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          setPurchase(prev => ({
+                            ...prev,
+                            items: prev.items.filter((_, i) => i !== index)
+                          }))
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                }
+                
                 return (
                 <div key={`${productId}-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
                   {/* Product Image */}
@@ -483,6 +639,7 @@ export default function PurchasePanel({
                         min="1"
                         value={item.quantity}
                         onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
+                        onFocus={(e) => e.target.select()}
                         className="h-6 w-12 text-center text-xs p-1"
                       />
                       <Button
@@ -508,6 +665,7 @@ export default function PurchasePanel({
                       step="0.01"
                       value={item.purchasePrice || 0}
                       onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
                       className="h-6 w-16 text-center text-xs p-1"
                     />
                   </div>
