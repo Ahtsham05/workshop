@@ -8,7 +8,10 @@ const createLedgerEntry = {
       'purchase',
       'payment_made',
       'payment_received',
+      'purchase_return',
       'refund',
+      'credit_note',
+      'debit_note',
       'adjustment',
       'opening_balance'
     ),

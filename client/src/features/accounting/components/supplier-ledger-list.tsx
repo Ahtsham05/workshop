@@ -151,8 +151,8 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Supplier Name')}</TableHead>
-                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Balance')}</TableHead>
+                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead>{t('Last Transaction')}</TableHead>
                   <TableHead className="text-right">{t('Actions')}</TableHead>
@@ -166,10 +166,10 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
                     onClick={() => onSelectSupplier(supplier)}
                   >
                     <TableCell className="font-medium">{supplier.name}</TableCell>
-                    <TableCell className="text-gray-600 text-sm">{supplier.phone || '-'}</TableCell>
                     <TableCell className={getBalanceColor(supplier.balance)}>
                       Rs{formatBalance(supplier.balance)}
                     </TableCell>
+                    <TableCell className="text-gray-600 text-sm">{supplier.phone || '-'}</TableCell>
                     <TableCell>
                       {supplier.balance > 0 ? (
                         <Badge variant="destructive">{t('Payable')}</Badge>

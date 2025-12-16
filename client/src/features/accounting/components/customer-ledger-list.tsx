@@ -151,8 +151,8 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Customer Name')}</TableHead>
-                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Balance')}</TableHead>
+                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead>{t('Last Transaction')}</TableHead>
                   <TableHead className="text-right">{t('Actions')}</TableHead>
@@ -166,10 +166,10 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
                     onClick={() => onSelectCustomer(customer)}
                   >
                     <TableCell className="font-medium">{customer.name}</TableCell>
-                    <TableCell className="text-gray-600 text-sm">{customer.phone || '-'}</TableCell>
                     <TableCell className={getBalanceColor(customer.balance)}>
                       Rs{formatBalance(customer.balance)}
                     </TableCell>
+                    <TableCell className="text-gray-600 text-sm">{customer.phone || '-'}</TableCell>
                     <TableCell>
                       {customer.balance > 0 ? (
                         <Badge variant="destructive">{t('Receivable')}</Badge>

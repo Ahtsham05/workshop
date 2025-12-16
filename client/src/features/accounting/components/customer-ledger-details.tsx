@@ -39,7 +39,7 @@ interface CustomerLedgerDetailsProps {
 // Invoice dialog content component
 function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string; customerName: string }) {
   const { t } = useLanguage();
-  
+
   if (!invoiceId) {
     return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
   }
@@ -157,8 +157,8 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     try {
       setLoading(true);
       const response = await Axios.get(summery.fetchCustomerLedgerEntries.url, {
-        params: { 
-          customer: customer._id, 
+        params: {
+          customer: customer._id,
           sortBy: 'transactionDate:asc',
           page: currentPage,
           limit: pageSize
@@ -248,7 +248,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     // Find the previous balance from the entry before this one
     const entryIndex = entries.findIndex(e => (e.id || e._id) === (entry.id || entry._id));
     const previousBalance = entryIndex > 0 ? entries[entryIndex - 1].balance : entry.balance - entry.credit + entry.debit;
-    
+
     setSelectedPayment({
       entry,
       previousBalance,
@@ -294,13 +294,13 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={onBack}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          {t('Back to Customers')}
-        </Button>
-        <div className="flex gap-2 items-center">
-          <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end sm:justify-between sm:flex-row flex-col gap-4">
+        <div className='flex gap-2 justify-between'>
+          <Button variant="ghost" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            {t('Back to Customers')}
+          </Button>
+          <div className="flex items-center gap-4">
             <Label className="text-sm">{t('Show')}</Label>
             <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
               <SelectTrigger className="w-20">
@@ -314,6 +314,8 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
               </SelectContent>
             </Select>
           </div>
+        </div>
+        <div className="flex gap-2 items-center">
           <Button variant="outline" size="sm" onClick={exportToExcel}>
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
@@ -345,13 +347,13 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                 handleCloseForm();
                 fetchLedgerEntries();
                 fetchCustomerBalance();
-                
+
                 // Auto-generate receipt for payment received
                 if (createdEntry && createdEntry.transactionType === 'payment_received') {
                   setTimeout(() => {
                     const previousBalance = currentBalance || 0;
                     const newBalance = previousBalance - createdEntry.credit;
-                    
+
                     setSelectedPayment({
                       entry: createdEntry,
                       previousBalance: previousBalance,

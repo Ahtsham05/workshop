@@ -247,7 +247,7 @@ export function LedgerEntryForm({
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal"
+                    className="w-full justify-start text-left font-normal overflow-hidden"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {format(date, 'PPP')}
