@@ -45,6 +45,7 @@ interface InvoicePanelProps {
   taxRate: number
   setTaxRate: (rate: number) => void
   customers: any[]
+  customersLoading?: boolean
   products: any[]
   setProducts: React.Dispatch<React.SetStateAction<any[]>>
   calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
@@ -64,6 +65,7 @@ export function InvoicePanel({
   taxRate,
   // setTaxRate,
   customers,
+  customersLoading = false,
   products,
   setProducts,
   calculateTotals,
@@ -739,7 +741,14 @@ export function InvoicePanel({
                         />
                       </div>
                     </div>
-                    <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
+                    {customersLoading ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                        {t('Loading customers...')}
+                      </div>
+                    ) : (
+                      <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
+                    )}
                     <CommandList className="max-h-[300px] overflow-y-auto">
                       <CommandGroup>
                         <CommandItem

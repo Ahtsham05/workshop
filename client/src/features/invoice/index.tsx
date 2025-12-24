@@ -843,6 +843,7 @@ export default function InvoicePage() {
               taxRate={taxRate}
               setTaxRate={setTaxRate}
               customers={customers}
+              customersLoading={loading}
               products={products}
               setProducts={setProducts}
               calculateTotals={calculateTotals}

@@ -63,6 +63,7 @@ export default function PurchasePanel({
   const [loadingBalance, setLoadingBalance] = useState(false)
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
@@ -80,6 +81,15 @@ export default function PurchasePanel({
   // RTK Query mutations
   const [createPurchase] = useCreatePurchaseMutation()
   const [updatePurchase] = useUpdatePurchaseMutation()
+
+  // Track suppliers loading state
+  useEffect(() => {
+    if (!suppliersData || suppliers.length === 0) {
+      setSuppliersLoading(true)
+    } else {
+      setSuppliersLoading(false)
+    }
+  }, [suppliersData, suppliers.length])
 
   // Initialize form when editing - removed because parent component already handles transformation
   // useEffect(() => {
@@ -376,7 +386,12 @@ export default function PurchasePanel({
                   </div>
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
-                  {filteredSuppliers.length === 0 ? (
+                  {suppliersLoading ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                      {t('Loading suppliers...')}
+                    </div>
+                  ) : filteredSuppliers.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       {t('No suppliers found')}
                     </div>
