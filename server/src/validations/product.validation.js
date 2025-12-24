@@ -25,6 +25,7 @@ const createProduct = {
       url: Joi.string(),
       publicId: Joi.string(),
     }).optional(),
+    unit: Joi.string().allow('').optional(),
   }),
 };
 
@@ -77,6 +78,7 @@ const updateProduct = {
       url: Joi.string(),
       publicId: Joi.string(),
     }).optional(),
+    unit: Joi.string().allow(''),
   }),
 };
 
