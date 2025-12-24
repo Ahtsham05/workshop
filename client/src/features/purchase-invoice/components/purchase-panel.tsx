@@ -485,7 +485,7 @@ export default function PurchasePanel({
                     price: 0,
                     cost: 0,
                     stockQuantity: 0,
-                  } as Product,
+                  } as any,
                   quantity: 1,
                   purchasePrice: 0,
                   isManualEntry: true
