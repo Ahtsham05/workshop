@@ -15,6 +15,11 @@ router
   .route('/all')
   .get(auth('getCustomers'), customerController.getAllCustomers);
 
+// Bulk add (import) route
+router
+  .route('/bulk')
+  .post(auth('manageCustomers'), validate(customerValidation.bulkAddCustomers), customerController.bulkAddCustomers);
+
 router
   .route('/:customerId')
   .get(auth('getCustomers'), validate(customerValidation.getCustomer), customerController.getCustomer)

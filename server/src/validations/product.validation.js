@@ -101,6 +101,36 @@ const bulkUpdateProducts = {
   }),
 };
 
+const bulkAddProducts = {
+  body: Joi.object().keys({
+    products: Joi.array().items(
+      Joi.object().keys({
+        name: Joi.string().required(),
+        price: Joi.number().required(),
+        cost: Joi.number().required(),
+        stockQuantity: Joi.number().required(),
+        barcode: Joi.string().allow('', null).optional(),
+        description: Joi.string().allow('').optional(),
+        category: Joi.string().allow('').optional(),
+        categories: Joi.array().items(
+          Joi.object().keys({
+            _id: Joi.string().required(),
+            name: Joi.string().required(),
+            image: Joi.object().keys({
+              url: Joi.string(),
+              publicId: Joi.string(),
+            }).optional(),
+          })
+        ).optional(),
+        supplier: Joi.string().allow('', null).optional(),
+        unit: Joi.string().allow('').optional(),
+        sku: Joi.string().allow('').optional(),
+        lowStockThreshold: Joi.number().optional(),
+      })
+    ).required().min(1)
+  }),
+};
+
 module.exports = {
   createProduct,
   getProducts,
@@ -108,5 +138,6 @@ module.exports = {
   updateProduct,
   deleteProduct,
   getAllProducts,
-  bulkUpdateProducts
+  bulkUpdateProducts,
+  bulkAddProducts,
 };

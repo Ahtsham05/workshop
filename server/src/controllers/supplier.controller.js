@@ -38,11 +38,32 @@ const getAllSuppliers = catchAsync(async (req, res) => {
   res.send(suppliers);
 });
 
+const bulkAddSuppliers = catchAsync(async (req, res) => {
+  try {
+    const { suppliers } = req.body;
+    
+    if (!suppliers || !Array.isArray(suppliers) || suppliers.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Suppliers array is required');
+    }
+
+    const result = await supplierService.bulkAddSuppliers(suppliers);
+    
+    res.status(httpStatus.CREATED).send({
+      message: `Successfully imported ${result.insertedCount} suppliers`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Bulk add error:', error);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk import failed: ' + error.message);
+  }
+});
+
 module.exports = {
   createSupplier,
   getSuppliers,
   getSupplier,
   updateSupplier,
   deleteSupplier,
-  getAllSuppliers
+  getAllSuppliers,
+  bulkAddSuppliers,
 };

@@ -81,6 +81,17 @@ export const getSupplierPurchaseAndTransactions = createAsyncThunk(
   })
 )
 
+export const bulkAddSuppliers = createAsyncThunk(
+  'supplier/bulkAddSuppliers',
+  catchAsync(async (data: any) => {
+    const response = await Axios({
+      ...summery.bulkAddSuppliers,
+      data,
+    });
+    return response.data;
+  })
+);
+
 const supplierSlice = createSlice({
   name: "supplier",
   initialState,
@@ -122,6 +133,10 @@ const supplierSlice = createSlice({
       .addCase(fetchAllSuppliers.fulfilled, (state, action) => {
         state.data = action.payload.map((supplier: any) => ({ value: supplier.id, label: supplier.name, ...supplier }));
       })
+      .addCase(bulkAddSuppliers.fulfilled, (_, __) => {
+        // Handle bulk add success - could refresh the list or append new suppliers
+        // For simplicity, we'll let the component refetch after import
+      })
       .addMatcher(
         isAnyOf(
           ...reduxToolKitCaseBuilder([
@@ -130,7 +145,8 @@ const supplierSlice = createSlice({
             updateSupplier,
             deleteSupplier,
             fetchAllSuppliers,
-            getSupplierPurchaseAndTransactions
+            getSupplierPurchaseAndTransactions,
+            bulkAddSuppliers,
           ])
         ),
         handleLoadingErrorParamsForAsycThunk

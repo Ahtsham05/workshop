@@ -70,11 +70,59 @@ const getAllCustomers = async () => {
   return Customer.find();
 }
 
+/**
+ * Bulk add customers (import from Excel)
+ * @param {Array} customersToAdd - Array of customers to create
+ * @returns {Promise<Object>}
+ */
+const bulkAddCustomers = async (customersToAdd) => {
+  try {
+    // Process each customer to ensure proper data format
+    const processedCustomers = customersToAdd.map(customer => ({
+      name: customer.name,
+      email: customer.email || '',
+      phone: customer.phone || '',
+      whatsapp: customer.whatsapp || '',
+      address: customer.address || '',
+      balance: customer.balance ? Number(customer.balance) : 0,
+    }));
+
+    // Insert customers
+    const insertedCustomers = await Customer.insertMany(processedCustomers, { 
+      ordered: false // Continue inserting even if some fail (e.g., duplicates)
+    });
+
+    return {
+      success: true,
+      insertedCount: insertedCustomers.length,
+      customers: insertedCustomers
+    };
+  } catch (error) {
+    // Handle bulk insert errors
+    if (error.writeErrors) {
+      const successfulInserts = error.insertedDocs || [];
+      const failedInserts = error.writeErrors.map(err => ({
+        index: err.index,
+        error: err.errmsg
+      }));
+
+      return {
+        success: true,
+        insertedCount: successfulInserts.length,
+        customers: successfulInserts,
+        errors: failedInserts
+      };
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   createCustomer,
   queryCustomers,
   getCustomerById,
   updateCustomerById,
   deleteCustomerById,
-  getAllCustomers
+  getAllCustomers,
+  bulkAddCustomers,
 };

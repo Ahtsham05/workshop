@@ -39,11 +39,32 @@ const getAllCustomers = catchAsync(async (req, res) => {
   res.send(customers);
 })
 
+const bulkAddCustomers = catchAsync(async (req, res) => {
+  try {
+    const { customers } = req.body;
+    
+    if (!customers || !Array.isArray(customers) || customers.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Customers array is required');
+    }
+
+    const result = await customerService.bulkAddCustomers(customers);
+    
+    res.status(httpStatus.CREATED).send({
+      message: `Successfully imported ${result.insertedCount} customers`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Bulk add error:', error);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk import failed: ' + error.message);
+  }
+});
+
 module.exports = {
   createCustomer,
   getCustomers,
   getCustomer,
   updateCustomer,
   deleteCustomer,
-  getAllCustomers
+  getAllCustomers,
+  bulkAddCustomers,
 };

@@ -26,6 +26,11 @@ router
   .route('/bulk-update')
   .patch(auth('manageProducts'), validate(productValidation.bulkUpdateProducts), productController.bulkUpdateProducts);
 
+// Bulk add (import) route
+router
+  .route('/bulk')
+  .post(auth('manageProducts'), validate(productValidation.bulkAddProducts), productController.bulkAddProducts);
+
 // Image upload routes
 router
   .route('/upload-image')

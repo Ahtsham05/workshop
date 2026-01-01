@@ -84,6 +84,17 @@ export const bulkUpdateProducts = createAsyncThunk(
     })
 )
 
+export const bulkAddProducts = createAsyncThunk(
+    'product/bulkAddProducts',
+    catchAsync(async (data: { products: any[] }) => {
+        const response = await Axios({
+            ...summery.bulkAddProducts,
+            data: data
+        });
+        return response.data;
+    })
+)
+
 const productSlice = createSlice({
     name: "product",
     initialState,
@@ -140,6 +151,19 @@ const productSlice = createSlice({
                     });
                 }
             })
+            .addCase(bulkAddProducts.fulfilled, (state, action) => {
+                // Add the newly created products to state
+                if (Array.isArray(state.data) && action.payload.products) {
+                    state.data = [...state.data, ...action.payload.products];
+                    // Update products dropdown list
+                    const newProducts = action.payload.products.map((product: any) => ({
+                        ...product,
+                        value: product.id,
+                        label: product.name
+                    }));
+                    state.products = [...state.products, ...newProducts];
+                }
+            })
             .addMatcher(
                 isAnyOf(
                     ...reduxToolKitCaseBuilder([
@@ -148,7 +172,8 @@ const productSlice = createSlice({
                         updateProduct,
                         deleteProduct,
                         fetchAllProducts,
-                        bulkUpdateProducts
+                        bulkUpdateProducts,
+                        bulkAddProducts
                     ])
                 ),
                 handleLoadingErrorParamsForAsycThunk

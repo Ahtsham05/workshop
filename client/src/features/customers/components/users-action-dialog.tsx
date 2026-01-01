@@ -33,8 +33,9 @@ const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   email: z.string().optional(),
   phone: z.string().optional(),
-  whatsapp: z.string().optional(),  // Added whatsapp field
+  whatsapp: z.string().optional(),
   address: z.string().optional(),
+  balance: z.coerce.number().optional(),
 })
 
 type customerForm = z.infer<typeof formSchema>
@@ -59,8 +60,9 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           name: '',
           email: 'customer@gmail.com',
           phone: '03',
-          whatsapp: '03',  // Added whatsapp field
+          whatsapp: '03',
           address: 'address',
+          balance: 0,
         },
   })
 
@@ -187,6 +189,27 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                     <FormControl>
                       <Input
                         placeholder={t('whatsapp')}
+                        className='col-span-4'
+                        autoComplete='off'
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='balance'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 text-right'>
+                      {t('balance')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder={t('balance')}
                         className='col-span-4'
                         autoComplete='off'
                         {...field}

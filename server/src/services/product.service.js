@@ -103,6 +103,59 @@ const bulkUpdateProducts = async (productsToUpdate) => {
   return updatedProducts;
 };
 
+/**
+ * Bulk add products (import from Excel)
+ * @param {Array} productsToAdd - Array of products to create
+ * @returns {Promise<Object>}
+ */
+const bulkAddProducts = async (productsToAdd) => {
+  try {
+    // Process each product to ensure proper data format
+    const processedProducts = productsToAdd.map(product => ({
+      name: product.name,
+      description: product.description || '',
+      barcode: product.barcode || null,
+      price: Number(product.price),
+      cost: Number(product.cost),
+      stockQuantity: Number(product.stockQuantity),
+      unit: product.unit || 'pcs',
+      sku: product.sku || '',
+      category: product.category || '',
+      categories: product.categories || [],
+      supplier: product.supplier || null,
+      lowStockThreshold: product.lowStockThreshold ? Number(product.lowStockThreshold) : undefined,
+    }));
+
+    // Insert products
+    const insertedProducts = await Product.insertMany(processedProducts, { 
+      ordered: false // Continue inserting even if some fail (e.g., duplicates)
+    });
+
+    return {
+      success: true,
+      insertedCount: insertedProducts.length,
+      products: insertedProducts
+    };
+  } catch (error) {
+    // Handle bulk insert errors
+    if (error.writeErrors) {
+      const successfulInserts = error.insertedDocs || [];
+      const failedInserts = error.writeErrors.map(err => ({
+        index: err.index,
+        error: err.errmsg
+      }));
+
+      return {
+        success: true,
+        insertedCount: successfulInserts.length,
+        products: successfulInserts,
+        errors: failedInserts
+      };
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   createProduct,
   queryProducts,
@@ -111,4 +164,5 @@ module.exports = {
   deleteProductById,
   getAllProducts,
   bulkUpdateProducts,
+  bulkAddProducts,
 };

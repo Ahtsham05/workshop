@@ -14,6 +14,11 @@ router
 router
   .route('/all')
   .get(auth('getSuppliers'), validate(supplierValidation.getAllSuppliers), supplierController.getAllSuppliers);
+
+// Bulk add (import) route
+router
+  .route('/bulk')
+  .post(auth('manageSuppliers'), validate(supplierValidation.bulkAddSuppliers), supplierController.bulkAddSuppliers);
   
 router
   .route('/:supplierId')

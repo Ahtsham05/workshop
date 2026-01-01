@@ -55,6 +55,10 @@ const summery = {
     url: '/products/bulk-update',
     method: 'patch'
   },
+  bulkAddProducts: {
+    url: '/products/bulk',
+    method: 'post'
+  },
 
   // customers
   addCustomer: {
@@ -80,6 +84,10 @@ const summery = {
   getCustomerSalesAndTransactions: {
     url: '/customers/ledger',
     method: 'get'
+  },
+  bulkAddCustomers: {
+    url: '/customers/bulk',
+    method: 'POST'
   },
 
 
@@ -107,6 +115,10 @@ const summery = {
   getSupplierPurchaseAndTransactions: {
     url: '/suppliers/ledger',
     method: 'get'
+  },
+  bulkAddSuppliers: {
+    url: '/suppliers/bulk',
+    method: 'POST'
   },
 
   // categories

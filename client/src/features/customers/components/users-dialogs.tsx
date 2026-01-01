@@ -2,9 +2,30 @@ import { useCustomers } from '../context/users-context'
 import { CustomersActionDialog } from './users-action-dialog'
 import { CustomersDeleteDialog } from './users-delete-dialog'
 import { UsersInviteDialog } from './users-invite-dialog'
+import { CustomerImportDialog } from './customer-import-dialog'
+import { useDispatch } from 'react-redux'
+import { AppDispatch } from '@/stores/store'
+import { bulkAddCustomers } from '@/stores/customer.slice'
 
 export default function UsersDialogs({setFetch}:any) {
   const { open, setOpen, currentRow, setCurrentRow } = useCustomers()
+  const dispatch = useDispatch<AppDispatch>()
+
+  const handleImport = async (customers: any[]) => {
+    try {
+      const result = await dispatch(bulkAddCustomers({ customers }))
+      
+      if (result.meta.requestStatus === 'fulfilled') {
+        setFetch((prev: boolean) => !prev)
+        return Promise.resolve()
+      } else {
+        throw new Error(result.payload || 'Import failed')
+      }
+    } catch (error) {
+      console.error('Import error:', error)
+      throw error
+    }
+  }
   return (
     <>
       <CustomersActionDialog
@@ -49,6 +70,13 @@ export default function UsersDialogs({setFetch}:any) {
           />
         </>
       )}
+
+      <CustomerImportDialog
+        key='customer-import'
+        open={open === 'import'}
+        onOpenChange={() => setOpen('import')}
+        onImport={handleImport}
+      />
     </>
   )
 }

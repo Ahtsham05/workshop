@@ -7,6 +7,7 @@ const createSupplier = {
     phone: Joi.string().optional(),
     whatsapp: Joi.string().optional(),
     address: Joi.string().optional(),
+    balance: Joi.number().optional(),
   }),
 };
 
@@ -40,6 +41,7 @@ const updateSupplier = {
     phone: Joi.string(),
     whatsapp: Joi.string(),
     address: Joi.string(),
+    balance: Joi.number().optional(),
   }),
 };
 
@@ -49,10 +51,26 @@ const deleteSupplier = {
   }),
 };
 
+const bulkAddSuppliers = {
+  body: Joi.object().keys({
+    suppliers: Joi.array().items(
+      Joi.object().keys({
+        name: Joi.string().required(),
+        email: Joi.string().email().allow('').optional(),
+        phone: Joi.string().allow('').optional(),
+        whatsapp: Joi.string().allow('').optional(),
+        address: Joi.string().allow('').optional(),
+        balance: Joi.number().optional(),
+      })
+    ).required().min(1)
+  }),
+};
+
 module.exports = {
   createSupplier,
   getSuppliers,
   getSupplier,
   updateSupplier,
-  deleteSupplier
+  deleteSupplier,
+  bulkAddSuppliers,
 };

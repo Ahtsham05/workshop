@@ -68,11 +68,59 @@ const getAllSuppliers = async () => {
   return Supplier.find();
 };
 
+/**
+ * Bulk add suppliers (import from Excel)
+ * @param {Array} suppliersToAdd - Array of suppliers to create
+ * @returns {Promise<Object>}
+ */
+const bulkAddSuppliers = async (suppliersToAdd) => {
+  try {
+    // Process each supplier to ensure proper data format
+    const processedSuppliers = suppliersToAdd.map(supplier => ({
+      name: supplier.name,
+      email: supplier.email || '',
+      phone: supplier.phone || '',
+      whatsapp: supplier.whatsapp || '',
+      address: supplier.address || '',
+      balance: supplier.balance ? Number(supplier.balance) : 0,
+    }));
+
+    // Insert suppliers
+    const insertedSuppliers = await Supplier.insertMany(processedSuppliers, { 
+      ordered: false // Continue inserting even if some fail
+    });
+
+    return {
+      success: true,
+      insertedCount: insertedSuppliers.length,
+      suppliers: insertedSuppliers
+    };
+  } catch (error) {
+    // Handle bulk insert errors
+    if (error.writeErrors) {
+      const successfulInserts = error.insertedDocs || [];
+      const failedInserts = error.writeErrors.map(err => ({
+        index: err.index,
+        error: err.errmsg
+      }));
+
+      return {
+        success: true,
+        insertedCount: successfulInserts.length,
+        suppliers: successfulInserts,
+        errors: failedInserts
+      };
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   createSupplier,
   querySuppliers,
   getSupplierById,
   updateSupplierById,
   deleteSupplierById,
-  getAllSuppliers
+  getAllSuppliers,
+  bulkAddSuppliers,
 };

@@ -82,6 +82,14 @@ export const getCustomerSalesAndTransactions = createAsyncThunk(
     return response.data
   }))
 
+export const bulkAddCustomers = createAsyncThunk(
+  'customer/bulkAddCustomers',
+  catchAsync(async ({ customers }: { customers: any[] }) => {
+    const response = await Axios.post(summery.bulkAddCustomers.url, { customers })
+    return response.data
+  })
+)
+
 const customerSlice = createSlice({
   name: "customer",
   initialState,
@@ -123,6 +131,10 @@ const customerSlice = createSlice({
       .addCase(fetchAllCutomers.fulfilled, (state, action) => {
         state.data = action.payload.map((customer: any) => ({ value: customer.id, label: customer.name, ...customer }));
       })
+      .addCase(bulkAddCustomers.fulfilled, (state, action) => {
+        // Bulk customers added, backend returns the list
+        console.log('Bulk customers added:', action.payload)
+      })
       .addMatcher(
         isAnyOf(
           ...reduxToolKitCaseBuilder([
@@ -131,7 +143,8 @@ const customerSlice = createSlice({
             updateCustomer,
             deleteCustomer,
             fetchAllCutomers,
-            getCustomerSalesAndTransactions
+            getCustomerSalesAndTransactions,
+            bulkAddCustomers
           ])
         ),
         handleLoadingErrorParamsForAsycThunk

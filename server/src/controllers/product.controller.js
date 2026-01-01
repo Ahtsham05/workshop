@@ -181,6 +181,39 @@ const bulkUpdateProducts = catchAsync(async (req, res) => {
   }
 });
 
+const bulkAddProducts = catchAsync(async (req, res) => {
+  try {
+    const { products } = req.body;
+    
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
+    }
+
+    const result = await productService.bulkAddProducts(products);
+    
+    res.status(httpStatus.CREATED).send({
+      message: `Successfully imported ${result.insertedCount} products`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Bulk add error:', error);
+    
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      const value = error.keyValue ? error.keyValue[field] : 'unknown';
+      
+      if (field === 'name') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Skipping duplicates.`);
+      } else if (field === 'barcode') {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Skipping duplicates.`);
+      }
+    }
+    
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk import failed: ' + error.message);
+  }
+});
+
 module.exports = {
   createProduct,
   getProducts,
@@ -191,4 +224,5 @@ module.exports = {
   uploadProductImage,
   deleteProductImage,
   bulkUpdateProducts,
+  bulkAddProducts,
 };
