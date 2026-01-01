@@ -50,6 +50,7 @@ app.use(cors({
       /^https?:\/\/127\.0\.0\.1:\d+$/,
       /^https?:\/\/192\.168\.100\.8:\d+$/,
       /^https?:\/\/.*\.vercel\.app$/,  // Allow all Vercel deployments
+      'https://jhulelal.vercel.app',
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
@@ -61,6 +62,7 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
