@@ -6,7 +6,6 @@ import { ProductImportDialog } from './product-import-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddProducts } from '@/stores/product.slice'
-import { toast } from 'sonner'
 
 export default function UsersDialogs({setFetch}:any) {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()

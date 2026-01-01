@@ -131,7 +131,7 @@ const customerSlice = createSlice({
       .addCase(fetchAllCutomers.fulfilled, (state, action) => {
         state.data = action.payload.map((customer: any) => ({ value: customer.id, label: customer.name, ...customer }));
       })
-      .addCase(bulkAddCustomers.fulfilled, (state, action) => {
+      .addCase(bulkAddCustomers.fulfilled, (_, action) => {
         // Bulk customers added, backend returns the list
         console.log('Bulk customers added:', action.payload)
       })
