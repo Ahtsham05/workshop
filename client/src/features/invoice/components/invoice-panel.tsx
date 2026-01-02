@@ -958,7 +958,7 @@ export function InvoicePanel({
                   )}
                   
                   {/* Product Info / Selection */}
-                  <div className='flex-1 min-w-0'>
+                  <div className='flex-1 min-w-28'>
                     {item.isManualEntry ? (
                       <div className='space-y-1'>
                         <Popover 
@@ -1044,7 +1044,7 @@ export function InvoicePanel({
                         </Popover>
                       </div>
                     ) : (
-                      <div className="min-w-0">
+                      <div className="min-w-28">
                         <p className={getTextClasses(item.name, 'font-medium truncate')} title={item.name}>{item.name}</p>
                         <p className='text-xs text-muted-foreground'>
                           Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
