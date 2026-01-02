@@ -64,7 +64,7 @@ export function ProductCatalog({
   // Set default selected category to "Other" on first load
   useEffect(() => {
     if (allCategories.length > 0 && !selectedCategoryId) {
-      const otherCategory = allCategories.find(cat => cat.name.toLowerCase() === 'other')
+      const otherCategory = allCategories.find(cat => cat.name?.toLowerCase() === 'other')
       if (otherCategory) {
         setSelectedCategoryId(otherCategory._id)
       } else {
@@ -82,9 +82,9 @@ export function ProductCatalog({
       filtered = categorizedProducts.map(category => ({
         ...category,
         products: category.products.filter(product =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.barcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.description?.toLowerCase().includes(searchTerm.toLowerCase())
+          (product.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (product.barcode?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (product.description?.toLowerCase() || '').includes(searchTerm.toLowerCase())
         )
       })).filter(category => category.products.length > 0)
     } else {
