@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Customer } = require('../models');
+const { Customer, CustomerLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -91,6 +91,27 @@ const bulkAddCustomers = async (customersToAdd) => {
     const insertedCustomers = await Customer.insertMany(processedCustomers, { 
       ordered: false // Continue inserting even if some fail (e.g., duplicates)
     });
+
+    // Create opening balance ledger entries for customers with balance > 0
+    const ledgerEntries = [];
+    for (const customer of insertedCustomers) {
+      if (customer.balance && customer.balance > 0) {
+        ledgerEntries.push({
+          customer: customer._id,
+          transactionType: 'opening_balance',
+          transactionDate: new Date(),
+          description: 'Opening Balance',
+          debit: customer.balance,
+          credit: 0,
+          balance: customer.balance,
+        });
+      }
+    }
+
+    // Batch insert ledger entries if any
+    if (ledgerEntries.length > 0) {
+      await CustomerLedger.insertMany(ledgerEntries);
+    }
 
     return {
       success: true,
