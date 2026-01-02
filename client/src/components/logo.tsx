@@ -27,7 +27,7 @@ export function Logo({ className = '', width = 120, height = 80 }: LogoProps) {
   return (
     <img
       src={isDark ? '/images/logo-dark.png' : '/images/logo-light.png'}
-      alt="786 Engineering Works"
+      alt="Jhulelal"
       className={`${className} transition-opacity duration-200`}
       style={{
         width: width ? `${width}px` : 'auto',

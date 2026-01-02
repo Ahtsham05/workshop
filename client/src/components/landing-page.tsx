@@ -34,7 +34,7 @@ export default function LandingPage() {
           <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-foreground">Welcome to 786 Engineering Works</h2>
+          <h2 className="text-xl font-semibold text-foreground">Welcome to Jhulelal</h2>
           <p className="text-muted-foreground">Redirecting you to the application...</p>
         </div>
       </div>

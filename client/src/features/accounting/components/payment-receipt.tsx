@@ -58,7 +58,7 @@ export function PaymentReceipt({
       payment,
       balance,
       company: company || {
-        name: '786 Engineering Works',
+        name: 'Jhulelal',
         address: '',
         phone: '',
         email: ''
@@ -307,7 +307,7 @@ export function PaymentReceipt({
 </head>
 <body>
   <div class="receipt-header">
-    <img src="/images/logo-light.png" alt="786 Engineering Works" class="company-logo" />
+    <img src="/images/logo-light.png" alt="Jhulelal" class="company-logo" />
     <div class="business-name">${data.company.name}</div>
     ${data.company.address ? `<div class="business-info">${data.company.address}</div>` : ''}
     ${data.company.phone || data.company.email ? `
@@ -638,7 +638,7 @@ export function PaymentReceipt({
       <div className="receipt-content">
         <div className="receipt-header">
           <div className="company-name">
-            {company?.name || '786 Engineering Works'}
+            {company?.name || 'Jhulelal'}
           </div>
           {company?.address && (
             <div style={{ fontSize: '14px', marginBottom: '5px', color: '#000' }}>
