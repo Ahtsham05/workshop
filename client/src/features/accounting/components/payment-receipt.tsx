@@ -307,7 +307,7 @@ export function PaymentReceipt({
 </head>
 <body>
   <div class="receipt-header">
-    <img src="/images/logo-light.png" alt="Jhulelal" class="company-logo" />
+    <img src="/images/logo-light.jpeg" alt="Jhulelal" class="company-logo" />
     <div class="business-name">${data.company.name}</div>
     ${data.company.address ? `<div class="business-info">${data.company.address}</div>` : ''}
     ${data.company.phone || data.company.email ? `

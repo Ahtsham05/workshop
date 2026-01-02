@@ -26,7 +26,7 @@ export function Logo({ className = '', width = 120, height = 80 }: LogoProps) {
 
   return (
     <img
-      src={isDark ? '/images/logo-dark.png' : '/images/logo-light.png'}
+      src={isDark ? '/images/logo-dark.jpeg' : '/images/logo-light.jpeg'}
       alt="Jhulelal"
       className={`${className} transition-opacity duration-200`}
       style={{
@@ -58,7 +58,7 @@ export function LogoIcon({ className = '', size = 32 }: { className?: string; si
 
   return (
     <img
-      src={isDark ? '/images/logo-dark.png' : '/images/logo-light.png'}
+      src={isDark ? '/images/logo-dark.jpeg' : '/images/logo-light.jpeg'}
       alt="786"
       className={`${className} transition-opacity duration-200`}
       style={{
