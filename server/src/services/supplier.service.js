@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Supplier, Purchase, Transaction } = require('../models');
+const { Supplier, Purchase, Transaction, SupplierLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -89,6 +89,27 @@ const bulkAddSuppliers = async (suppliersToAdd) => {
     const insertedSuppliers = await Supplier.insertMany(processedSuppliers, { 
       ordered: false // Continue inserting even if some fail
     });
+
+    // Create opening balance ledger entries for suppliers with balance > 0
+    const ledgerEntries = [];
+    for (const supplier of insertedSuppliers) {
+      if (supplier.balance && supplier.balance > 0) {
+        ledgerEntries.push({
+          supplier: supplier._id,
+          transactionType: 'opening_balance',
+          transactionDate: new Date(),
+          description: 'Opening Balance',
+          debit: 0,
+          credit: supplier.balance,
+          balance: supplier.balance,
+        });
+      }
+    }
+
+    // Batch insert ledger entries if any
+    if (ledgerEntries.length > 0) {
+      await SupplierLedger.insertMany(ledgerEntries);
+    }
 
     return {
       success: true,

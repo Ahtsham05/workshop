@@ -8,9 +8,9 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<SupplierLedger>}
  */
 const createLedgerEntry = async (ledgerBody) => {
-  // Get the last balance for this supplier
+  // Get the last balance for this supplier based on transaction date (or creation order)
   const lastEntry = await SupplierLedger.findOne({ supplier: ledgerBody.supplier })
-    .sort({ createdAt: -1 });
+    .sort({ transactionDate: -1, createdAt: -1 });
 
   const previousBalance = lastEntry ? lastEntry.balance : 0;
 
