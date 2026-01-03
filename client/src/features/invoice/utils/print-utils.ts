@@ -420,12 +420,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
   </div>
   
-  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
+  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') || (data.previousBalance === 0 && customerId !== 'walk-in') ? `
     <div class="payment-section" style="border-top: 1px solid #000; margin-top: 8px;">
       <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
         <span>${urduTexts.previous_balance}:</span>
-        <span style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}">
-          ${formatCurrency(Math.abs(data.previousBalance || 0))} ${data.previousBalance > 0 ? '(Dr)' : data.previousBalance < 0 ? '(Cr)' : ''}
+        <span style="color: ${(data.previousBalance || 0) > 0 ? '#d32f2f' : (data.previousBalance || 0) < 0 ? '#2e7d32' : '#666'}">
+          ${formatCurrency(Math.abs(data.previousBalance || 0))} ${(data.previousBalance || 0) > 0 ? '(Dr)' : (data.previousBalance || 0) < 0 ? '(Cr)' : ''}
         </span>
       </div>
       <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
@@ -434,8 +434,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       </div>
       <div class="total-row" style="font-weight: bold; border-top: 1px dotted #000; padding-top: 3px;">
         <span>${urduTexts.net_balance}:</span>
-        <span style="color: ${(data.previousBalance || 0) + total > 0 ? '#d32f2f' : '#2e7d32'}">
-          ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
+        <span style="color: ${(data.previousBalance || 0) + total - (paidAmount || 0) > 0 ? '#d32f2f' : '#2e7d32'}">
+          ${formatCurrency(Math.abs((data.previousBalance || 0) + total - (paidAmount || 0)))} ${(data.previousBalance || 0) + total - (paidAmount || 0) > 0 ? '(Receivable)' : '(Payable)'}
         </span>
       </div>
     </div>
@@ -445,15 +445,15 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     <div class="payment-section">
       <div class="total-row">
         <span>${urduTexts.paid}:</span>
-        <span class="highlight">${formatCurrency(paidAmount)}</span>
+        <span class="highlight">${formatCurrency(paidAmount || 0)}</span>
       </div>
-      ${balance > 0 ? `
+      ${(balance || 0) > 0 ? `
       <div class="total-row" style="color: #d32f2f;">
         <span><strong>${urduTexts.balance_due}:</strong></span>
-        <span><strong>${formatCurrency(balance)}</strong></span>
+        <span><strong>${formatCurrency(balance || 0)}</strong></span>
       </div>
       ` : ''}
-      ${balance === 0 ? `
+      ${(balance || 0) === 0 ? `
       <div class="total-row" style="color: #2e7d32;">
         <span><strong>${urduTexts.paid_in_full}</strong></span>
         <span>✓</span>
@@ -513,16 +513,16 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     customerName,
     walkInCustomerName,
     type,
-    // subtotal,
-    // tax,
-    // discount,
+    subtotal,
+    tax,
+    discount,
     total,
-    // paidAmount,
-    // balance,
+    paidAmount,
+    balance,
     dueDate,
     notes,
-    // deliveryCharge = 0,
-    // serviceCharge = 0,
+    deliveryCharge = 0,
+    serviceCharge = 0,
     companyName,
     companyAddress,
     companyPhone,
@@ -1002,30 +1002,90 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     </tbody>
   </table>
 
-  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') ? `
+  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
+    <table class="totals-table" style="width: 400px;">
+      ${subtotal > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.subtotal}:</td>
+        <td class="total-amount">${formatCurrency(subtotal)}</td>
+      </tr>
+      ` : ''}
+      ${discount > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.discount}:</td>
+        <td class="total-amount">-${formatCurrency(discount)}</td>
+      </tr>
+      ` : ''}
+      ${deliveryCharge > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.delivery_charge}:</td>
+        <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
+      </tr>
+      ` : ''}
+      ${serviceCharge > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.service_charge}:</td>
+        <td class="total-amount">${formatCurrency(serviceCharge)}</td>
+      </tr>
+      ` : ''}
+      ${tax > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.tax}:</td>
+        <td class="total-amount">${formatCurrency(tax)}</td>
+      </tr>
+      ` : ''}
+      <tr class="final-total">
+        <td class="total-label">${urduTexts.total}:</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
+      </tr>
+    </table>
+  </div>
+
+  ${type !== 'pending' ? `
+  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
+    <table class="totals-table" style="width: 400px;">
+      <tr style="background: #e3f2fd;">
+        <td class="total-label" style="background: #e3f2fd;">${urduTexts.amount_paid}:</td>
+        <td class="total-amount" style="background: #e3f2fd; font-size: 14px; font-weight: bold;">${formatCurrency(paidAmount || 0)}</td>
+      </tr>
+      ${(balance || 0) > 0 ? `
+      <tr style="background: #ffebee;">
+        <td class="total-label" style="background: #ffebee; color: #d32f2f;">${urduTexts.balance_due}:</td>
+        <td class="total-amount" style="background: #ffebee; color: #d32f2f; font-size: 14px; font-weight: bold;">${formatCurrency(balance || 0)}</td>
+      </tr>
+      ` : ''}
+      ${(balance || 0) === 0 ? `
+      <tr style="background: #e8f5e9;">
+        <td class="total-label" style="background: #e8f5e9; color: #2e7d32;">${urduTexts.paid_in_full}:</td>
+        <td class="total-amount" style="background: #e8f5e9; color: #2e7d32;">✓</td>
+      </tr>
+      ` : ''}
+    </table>
+  </div>
+  ` : ''}
+
+  ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') || (data.previousBalance === 0 && customerId !== 'walk-in') ? `
     <div style="padding-top: 15px; margin-top: 15px; margin-bottom: 20px;">
       <table class="totals-table" style="width: 400px;">
         <tr>
-          <td class="total-label">${urduTexts.current_invoice}:</td>
-          <td class="total-amount" style="color: #d32f2f; font-size: 14px;">${formatCurrency(total)} (Dr)</td>
-        </tr>
-        <tr>
-          <td class="total-label">${urduTexts.previous_balance}:</td>
-          <td class="total-amount" style="color: ${data.previousBalance > 0 ? '#d32f2f' : data.previousBalance < 0 ? '#2e7d32' : '#666'}; font-size: 14px;">
-            ${formatCurrency(Math.abs(data.previousBalance || 0))} ${data.previousBalance > 0 ? '(Dr)' : data.previousBalance < 0 ? '(Cr)' : ''}
+          <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
+          <td class="total-amount" style="background: #f5f5f5; color: ${(data.previousBalance || 0) > 0 ? '#d32f2f' : (data.previousBalance || 0) < 0 ? '#2e7d32' : '#666'}; font-size: 13px;">
+            ${formatCurrency(Math.abs(data.previousBalance || 0))} ${(data.previousBalance || 0) > 0 ? '(Dr)' : (data.previousBalance || 0) < 0 ? '(Cr)' : ''}
           </td>
         </tr>
         <tr>
-          <td class="total-label">${urduTexts.net_balance}:</td>
-          <td class="total-amount" style="font-size: 16px;">
-            ${formatCurrency(Math.abs((data.previousBalance || 0) + total))} ${(data.previousBalance || 0) + total > 0 ? '(Receivable)' : '(Payable)'}
+          <td class="total-label" style="background: #f5f5f5;">${urduTexts.current_invoice}:</td>
+          <td class="total-amount" style="background: #f5f5f5; color: #d32f2f; font-size: 13px;">${formatCurrency(total)} (Dr)</td>
+        </tr>
+        <tr>
+          <td class="total-label" style="background: #fff3e0; font-weight: bold;">${urduTexts.net_balance}:</td>
+          <td class="total-amount" style="background: #fff3e0; font-size: 14px; font-weight: bold; color: ${(data.previousBalance || 0) + total - (paidAmount || 0) > 0 ? '#d32f2f' : '#2e7d32'};">
+            ${formatCurrency(Math.abs((data.previousBalance || 0) + total - (paidAmount || 0)))} ${(data.previousBalance || 0) + total - (paidAmount || 0) > 0 ? '(Receivable)' : '(Payable)'}
           </td>
         </tr>
       </table>
     </div>
   ` : ''}
-  
- 
   
   <div class="barcode-section">
     <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${urduTexts.invoice_barcode}</div>
