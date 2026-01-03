@@ -37,12 +37,15 @@ import {
   Plus,
   Search,
   Filter,
-  // Download,
+  Printer,
   Receipt,
   // RotateCcw,
   Clock,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
+import { useGetCompanyQuery } from '@/stores/company.api'
+import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow, PrintInvoiceData } from '../utils/print-utils'
+import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 
@@ -81,6 +84,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
+  const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
 
   // Debounce search term
   useEffect(() => {
@@ -109,6 +113,10 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   
   const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
   const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const { data: companyData } = useGetCompanyQuery(undefined, {
+    refetchOnMountOrArgChange: false,
+    refetchOnFocus: false,
+  })
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -209,6 +217,62 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         })
       }
     })
+  }
+
+  const handlePrintInvoice = (invoice: any, format: 'receipt' | 'a4' = 'receipt') => {
+    try {
+      setPrintingInvoiceId(invoice._id)
+      
+      // Resolve customer name
+      const customerName = getCustomerName(invoice)
+      const walkInCustomerName = invoice.walkInCustomerName
+      
+      // Prepare print data
+      const printData: PrintInvoiceData = {
+        invoiceNumber: invoice.invoiceNumber,
+        items: (invoice.items || []).map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal
+        })),
+        customerId: invoice.customerId,
+        customerName: customerName,
+        walkInCustomerName: walkInCustomerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal || 0,
+        tax: invoice.tax || 0,
+        discount: invoice.discount || 0,
+        total: invoice.total || 0,
+        paidAmount: invoice.paidAmount || 0,
+        balance: invoice.balance || 0,
+        dueDate: invoice.dueDate,
+        notes: invoice.notes,
+        deliveryCharge: invoice.deliveryCharge || 0,
+        serviceCharge: invoice.serviceCharge || 0,
+        companyName: companyData?.name,
+        companyAddress: companyData?.address,
+        companyPhone: companyData?.phone,
+        companyEmail: companyData?.email,
+        companyTaxNumber: companyData?.taxNumber
+      }
+
+      if (format === 'receipt') {
+        const htmlContent = generateInvoiceHTML(printData)
+        openPrintWindow(htmlContent)
+      } else {
+        const htmlContent = generateA4InvoiceHTML(printData)
+        openA4PrintWindow(htmlContent)
+      }
+      
+      toast.success(`Printing invoice ${invoice.invoiceNumber}`)
+    } catch (error) {
+      console.error('Print error:', error)
+      toast.error('Failed to print invoice')
+    } finally {
+      setPrintingInvoiceId(null)
+    }
   }
 
   const handleDelete = (invoice: any) => {
@@ -441,11 +505,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                               <Eye className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl">
-                            <DialogHeader>
+                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader className="sticky top-0 bg-white z-10">
                               <DialogTitle>{t('invoice_details')} - {invoice.invoiceNumber}</DialogTitle>
                             </DialogHeader>
-                            {selectedInvoice && <InvoiceDetails invoice={selectedInvoice} getCustomerName={getCustomerName} />}
+                            <div className="overflow-y-auto pr-4">
+                              {selectedInvoice && <InvoiceDetails invoice={selectedInvoice} getCustomerName={getCustomerName} />}
+                            </div>
                           </DialogContent>
                         </Dialog>
 
@@ -457,26 +523,27 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           <Edit className="h-4 w-4" />
                         </Button>
 
-                        {/* <Button
+                        {/* Print Receipt Button */}
+                        <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            // TODO: Implement print/download functionality
-                            console.log('Download invoice:', invoice.invoiceNumber)
-                          }}
+                          onClick={() => handlePrintInvoice(invoice, 'receipt')}
+                          disabled={printingInvoiceId === invoice._id}
+                          title="Print receipt"
                         >
-                          <Download className="h-4 w-4" />
-                        </Button> */}
+                          <Printer className="h-4 w-4" />
+                        </Button>
 
-                        {/* <Button
+                        {/* Print A4 Button */}
+                        <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleReturn(invoice)}
-                          className="text-orange-600 hover:text-orange-700"
-                          title={t('return_items')}
+                          onClick={() => handlePrintInvoice(invoice, 'a4')}
+                          disabled={printingInvoiceId === invoice._id}
+                          title="Print A4 invoice"
                         >
-                          <RotateCcw className="h-4 w-4" />
-                        </Button> */}
+                          <Receipt className="h-4 w-4" />
+                        </Button>
 
                         <Button
                           variant="ghost"
@@ -626,7 +693,7 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
   const { t } = useLanguage()
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 pb-4">
       {/* Invoice Info */}
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -653,69 +720,71 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
         </div>
       </div>
 
-      {/* Invoice Items */}
+      {/* Invoice Items - Scrollable */}
       <div>
         <Label>{t('invoice_items')}</Label>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('product_name')}</TableHead>
-              <TableHead>{t('qty')}</TableHead>
-              <TableHead>{t('unit_price')}</TableHead>
-              <TableHead>{t('total')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {invoice.items?.map((item: any, index: number) => (
-              <TableRow key={index}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {item.image && (
-                      <img 
-                        src={item.image.url} 
-                        alt={item.name}
-                        className="w-8 h-8 rounded object-cover"
-                      />
-                    )}
-                    {item.name}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {item.quantity} {item.unit || 'pcs'}
-                </TableCell>
-                <TableCell>Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
-                <TableCell>Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
+        <div className="overflow-x-auto max-h-64 border rounded-lg">
+          <Table className="text-sm">
+            <TableHeader className="sticky top-0 bg-muted z-10">
+              <TableRow>
+                <TableHead className="whitespace-nowrap">{t('product_name')}</TableHead>
+                <TableHead className="whitespace-nowrap">{t('qty')}</TableHead>
+                <TableHead className="whitespace-nowrap">{t('unit_price')}</TableHead>
+                <TableHead className="whitespace-nowrap text-right">{t('total')}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {invoice.items?.map((item: any, index: number) => (
+                <TableRow key={index} className="hover:bg-muted/50">
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {item.image && (
+                        <img 
+                          src={item.image.url} 
+                          alt={item.name}
+                          className="w-8 h-8 rounded object-cover"
+                        />
+                      )}
+                      <span className="truncate max-w-xs">{item.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {item.quantity} {item.unit || 'pcs'}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell className="whitespace-nowrap text-right">Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Invoice Summary */}
-      <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+      <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg text-sm">
         <div>
-          <Label>{t('subtotal')}</Label>
-          <p className="text-lg font-bold">Rs{invoice.subtotal?.toFixed(2) || '0.00'}</p>
+          <Label className="text-xs">{t('subtotal')}</Label>
+          <p className="font-bold">Rs{invoice.subtotal?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>{t('tax')}</Label>
-          <p className="text-lg font-bold">Rs{invoice.tax?.toFixed(2) || '0.00'}</p>
+          <Label className="text-xs">{t('tax')}</Label>
+          <p className="font-bold">Rs{invoice.tax?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>{t('discount')}</Label>
-          <p className="text-lg font-bold text-red-600">-Rs{invoice.discount?.toFixed(2) || '0.00'}</p>
+          <Label className="text-xs">{t('discount')}</Label>
+          <p className="font-bold text-red-600">-Rs{invoice.discount?.toFixed(2) || '0.00'}</p>
         </div>
         <div>
-          <Label>{t('total')} {t('amount')}</Label>
-          <p className="text-lg font-bold text-green-600">Rs{invoice.total?.toFixed(2) || '0.00'}</p>
+          <Label className="text-xs">{t('total')} {t('amount')}</Label>
+          <p className="font-bold text-green-600">Rs{invoice.total?.toFixed(2) || '0.00'}</p>
         </div>
       </div>
 
       {/* Notes */}
       {invoice.notes && (
         <div>
-          <Label>{t('notes')}</Label>
-          <p className="text-sm">{invoice.notes}</p>
+          <Label className="text-sm">{t('notes')}</Label>
+          <p className="text-sm bg-muted p-2 rounded">{invoice.notes}</p>
         </div>
       )}
     </div>
