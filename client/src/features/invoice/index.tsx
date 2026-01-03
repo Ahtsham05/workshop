@@ -183,7 +183,7 @@ export default function InvoicePage() {
     // Fetch customers
     const fetchCustomersPromise = dispatch(fetchCustomers({
       page: 1,
-      limit: 100
+      limit: 1000
     }))
       .then((data) => {
         console.log('Customers response:', data)
