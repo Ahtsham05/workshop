@@ -66,6 +66,19 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   } = data
   console.log("data",data)
 
+  // Resolve balances - prefer explicit fields from `data` when provided
+  const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
+    ? data.previousBalance
+    : 0
+  const hasPrevious = (data.previousBalance !== undefined && data.previousBalance !== null)
+  const currentInvoice = total || 0
+  const paid = paidAmount || 0
+  const totalWithPrev = previousBalance + currentInvoice
+  const balanceDue = Math.abs(totalWithPrev - paid)
+  // const netBalance = (data.netBalance !== undefined && data.netBalance !== null)
+  //   ? data.netBalance
+  //   : totalWithPrev - paid
+
   // Urdu translations
   const urduTexts = {
     business_name: companyName || 'آپ کا کاروبار',
@@ -426,25 +439,25 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
         <span>${urduTexts.current_invoice}:</span>
         <span>${formatCurrency(total)}</span>
       </div>
-      ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') || (data.previousBalance === 0 && customerId !== 'walk-in') ? `
+      ${(hasPrevious && customerId !== 'walk-in') ? `
       <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
         <span>${urduTexts.previous_balance}:</span>
-        <span style="color: ${(data.previousBalance || 0) > 0 ? '#d32f2f' : (data.previousBalance || 0) < 0 ? '#2e7d32' : '#666'}">
-          ${formatCurrency(Math.abs(data.previousBalance || 0))} ${(data.previousBalance || 0) > 0 ? '(Dr)' : (data.previousBalance || 0) < 0 ? '(Cr)' : ''}
+        <span style="color: ${previousBalance > 0 ? '#d32f2f' : previousBalance < 0 ? '#2e7d32' : '#666'}">
+          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </span>
       </div>
       ` : ''}
       <div class="total-row" style="font-size: 11px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #d32f2f;">
         <span>کل رقم:</span>
-        <span>${formatCurrency((data.previousBalance || 0) + total)}</span>
+        <span>${formatCurrency(totalWithPrev)}</span>
       </div>
       <div class="total-row" style="margin-bottom: 3px;">
         <span>${urduTexts.paid}:</span>
-        <span class="highlight">${formatCurrency(paidAmount || 0)}</span>
+        <span class="highlight">${formatCurrency(paid)}</span>
       </div>
-      <div class="total-row" style="color: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">
+      <div class="total-row" style="color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">
         <span><strong>${urduTexts.balance_due}:</strong></span>
-        <span><strong>${formatCurrency(Math.abs((data.previousBalance || 0) + total - (paidAmount || 0)))}</strong></span>
+        <span><strong>${formatCurrency(balanceDue)}</strong></span>
       </div>
     </div>
   ` : ''}
@@ -580,6 +593,19 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       default: return type
     }
   }
+
+  // Resolve balances for A4 - prefer explicit fields from `data` when provided
+  const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
+    ? data.previousBalance
+    : 0
+  const hasPrevious = (data.previousBalance !== undefined && data.previousBalance !== null)
+  const currentInvoice = total || 0
+  const paid = paidAmount || 0
+  const totalWithPrev = previousBalance + currentInvoice
+  // const balanceDue = Math.abs(totalWithPrev - paid)
+  // const netBalance = (data.netBalance !== undefined && data.netBalance !== null)
+  //   ? data.netBalance
+  //   : totalWithPrev - paid
 
   return `
 <!DOCTYPE html>
@@ -1035,25 +1061,25 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
         <td class="total-label" style="background: #e3f2fd; font-weight: bold;">${urduTexts.current_invoice}:</td>
         <td class="total-amount" style="background: #e3f2fd; font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
-      ${(data.previousBalance !== undefined && data.previousBalance !== null && customerId !== 'walk-in') || (data.previousBalance === 0 && customerId !== 'walk-in') ? `
+      ${(hasPrevious && customerId !== 'walk-in') ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: ${(data.previousBalance || 0) > 0 ? '#d32f2f' : (data.previousBalance || 0) < 0 ? '#2e7d32' : '#666'}; font-size: 13px;">
-          ${formatCurrency(Math.abs(data.previousBalance || 0))} ${(data.previousBalance || 0) > 0 ? '(Dr)' : (data.previousBalance || 0) < 0 ? '(Cr)' : ''}
+        <td class="total-amount" style="background: #f5f5f5; color: ${previousBalance > 0 ? '#d32f2f' : previousBalance < 0 ? '#2e7d32' : '#666'}; font-size: 13px;">
+          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
       ` : ''}
       <tr style="background: #fff3e0; border-top: 2px solid #d32f2f;">
         <td class="total-label" style="background: #fff3e0; font-weight: bold;">کل رقم:</td>
-        <td class="total-amount" style="background: #fff3e0; font-size: 14px; font-weight: bold; color: #d32f2f;">${formatCurrency((data.previousBalance || 0) + total)}</td>
+        <td class="total-amount" style="background: #fff3e0; font-size: 14px; font-weight: bold; color: #d32f2f;">${formatCurrency(totalWithPrev)}</td>
       </tr>
       <tr style="background: #e8f5e9;">
         <td class="total-label" style="background: #e8f5e9;">${urduTexts.amount_paid}:</td>
-        <td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paidAmount || 0)}</td>
+        <td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
       </tr>
-      <tr style="background: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#ffebee' : '#e8f5e9'};">
-        <td class="total-label" style="background: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#ffebee' : '#e8f5e9'}; color: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="background: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#ffebee' : '#e8f5e9'}; color: ${((data.previousBalance || 0) + total - (paidAmount || 0)) > 0 ? '#d32f2f' : '#2e7d32'}; font-size: 14px; font-weight: bold;">${formatCurrency(Math.abs((data.previousBalance || 0) + total - (paidAmount || 0)))}</td>
+      <tr style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'};">
+        <td class="total-label" style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'}; color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">${urduTexts.balance_due}:</td>
+        <td class="total-amount" style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'}; color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-size: 14px; font-weight: bold;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
     </table>
   </div>
