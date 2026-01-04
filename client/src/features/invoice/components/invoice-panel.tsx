@@ -103,6 +103,9 @@ export function InvoicePanel({
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
     try {
+      const prevBal = invoiceData.previousBalance ?? customerBalance
+      const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
+
       const printData: PrintInvoiceData = {
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
@@ -125,8 +128,8 @@ export function InvoicePanel({
         notes: invoiceData.notes,
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
-        previousBalance: customerBalance,
-        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0),
+        previousBalance: prevBal,
+        netBalance: netBal,
         companyName: companyData?.name,
         companyAddress: companyData?.address,
         companyPhone: companyData?.phone,
@@ -148,11 +151,14 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, companyData])
+  }, [t, invoice.customerName, companyData, customerBalance])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
     try {
+      const prevBal = invoiceData.previousBalance ?? customerBalance
+      const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
+
       const printData: PrintInvoiceData = {
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
@@ -175,8 +181,8 @@ export function InvoicePanel({
         notes: invoiceData.notes,
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
-        previousBalance: customerBalance,
-        netBalance: customerBalance + invoiceData.total - (invoiceData.paidAmount || 0),
+        previousBalance: prevBal,
+        netBalance: netBal,
         companyName: companyData?.name,
         companyAddress: companyData?.address,
         companyPhone: companyData?.phone,
@@ -516,12 +522,15 @@ export function InvoicePanel({
         onSaveSuccess()
       }
 
-      // Refresh customer balance after successful save
+      // Refresh customer balance after successful save and prepare print data
+      let updatedBalance = customerBalance
       if (invoice.customerId && invoice.customerId !== 'walk-in') {
         try {
           const url = `${summery.fetchCustomerBalance.url}/${invoice.customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
           const response = await Axios.get(url)
-          setCustomerBalance(response.data.balance || 0)
+          updatedBalance = response.data.balance || 0
+          setCustomerBalance(updatedBalance)
+          console.log('Customer balance refreshed:', updatedBalance)
         } catch (error) {
           console.error('Failed to refresh customer balance:', error)
         }
@@ -547,13 +556,23 @@ export function InvoicePanel({
                                  : null)
         }
         
+        // Calculate previous balance before current invoice:
+        // server returned `updatedBalance` which likely includes this invoice.
+        // invoiceEffect = current invoice total - paid now
+        const invoiceTotal = result.total ?? invoice.total ?? 0
+        const invoicePaid = result.paidAmount ?? invoice.paidAmount ?? 0
+        const invoiceEffect = invoiceTotal - invoicePaid
+        const previousBalanceBeforeInvoice = updatedBalance - invoiceEffect
+
         const printData = {
           ...result, // Use the API response data
           invoiceNumber: result.invoiceNumber || editingInvoice?.invoiceNumber,
           items: validItems,
           customerId: result.customerId || invoice.customerId || editingInvoice?.customerId,
           customerName: resolvedCustomerName,
-          walkInCustomerName: resolvedWalkInCustomerName
+          walkInCustomerName: resolvedWalkInCustomerName,
+          previousBalance: previousBalanceBeforeInvoice, // balance before this invoice
+          newBalance: updatedBalance // balance after this invoice (server value)
         }
         
         if (printType === 'receipt') {
