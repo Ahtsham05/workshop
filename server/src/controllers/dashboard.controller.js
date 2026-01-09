@@ -42,6 +42,12 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const lowStockCount = allProducts.filter(p => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
   const outOfStockCount = allProducts.filter(p => p.stockQuantity === 0).length;
 
+  // Calculate total inventory stock value
+  const totalInventoryValue = allProducts.reduce((sum, product) => {
+    const productValue = (product.stockQuantity || 0) * (product.cost || product.price || 0);
+    return sum + productValue;
+  }, 0);
+
   // Pending invoices
   const pendingInvoices = await Invoice.find({
     status: 'pending',
@@ -81,6 +87,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
     totalSalesChange,
     lowStockCount,
     outOfStockCount,
+    totalInventoryValue,
     pendingInvoices: pendingInvoices.length,
     pendingInvoicesAmount,
     todayRevenue,
