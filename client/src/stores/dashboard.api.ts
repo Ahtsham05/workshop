@@ -38,6 +38,7 @@ export interface DashboardStats {
   totalSalesChange: number
   lowStockCount: number
   outOfStockCount: number
+  totalInventoryValue: number
   pendingInvoices: number
   pendingInvoicesAmount: number
   todayRevenue: number

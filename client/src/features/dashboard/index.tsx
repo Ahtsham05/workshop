@@ -14,7 +14,7 @@ import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
-import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw } from 'lucide-react'
+import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 
 export default function Dashboard() {
   const { t } = useLanguage()
@@ -51,7 +51,7 @@ export default function Dashboard() {
         </div>
 
         {/* Statistics Cards */}
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6'>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6'>
           <StatCard
             title={t('Total Revenue')}
             value={stats?.totalRevenue || 0}
@@ -67,6 +67,14 @@ export default function Dashboard() {
             change={stats?.totalSalesChange}
             icon={<ShoppingCart className='h-4 w-4' />}
             description={t('from last month')}
+            isLoading={isLoading}
+          />
+          <StatCard
+            title={t('Inventory Value')}
+            value={stats?.totalInventoryValue || 0}
+            icon={<Package className='h-4 w-4' />}
+            valuePrefix='Rs'
+            description={t('Total stock value')}
             isLoading={isLoading}
           />
           <StatCard
