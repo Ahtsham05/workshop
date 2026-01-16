@@ -3,29 +3,58 @@ const { SupplierLedger, Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
+ * Recalculate balances for all entries after a specific transaction date
+ * @param {ObjectId} supplierId
+ * @param {Date} fromTransactionDate
+ * @returns {Promise<void>}
+ */
+const recalculateBalances = async (supplierId, fromTransactionDate) => {
+  // Get all entries for this supplier ordered by transaction date and then by creation order
+  const allEntries = await SupplierLedger.find({ supplier: supplierId })
+    .sort({ transactionDate: 1, createdAt: 1 });
+
+  let runningBalance = 0;
+  let shouldUpdate = false;
+
+  for (const entry of allEntries) {
+    // Check if this is where we should start recalculating
+    if (entry.transactionDate >= fromTransactionDate) {
+      shouldUpdate = true;
+    }
+
+    if (shouldUpdate) {
+      const newBalance = runningBalance + (entry.credit || 0) - (entry.debit || 0);
+      
+      if (entry.balance !== newBalance) {
+        entry.balance = newBalance;
+        await entry.save();
+      }
+    }
+
+    runningBalance += (entry.credit || 0) - (entry.debit || 0);
+  }
+
+  // Update supplier balance to the final running balance
+  await Supplier.findByIdAndUpdate(supplierId, { balance: runningBalance });
+};
+
+/**
  * Create a supplier ledger entry
  * @param {Object} ledgerBody
  * @returns {Promise<SupplierLedger>}
  */
 const createLedgerEntry = async (ledgerBody) => {
-  // Get the last balance for this supplier based on transaction date (or creation order)
-  const lastEntry = await SupplierLedger.findOne({ supplier: ledgerBody.supplier })
-    .sort({ transactionDate: -1, createdAt: -1 });
-
-  const previousBalance = lastEntry ? lastEntry.balance : 0;
-
-  // Calculate new balance (credit increases balance owed, debit decreases it)
-  const newBalance = previousBalance + (ledgerBody.credit || 0) - (ledgerBody.debit || 0);
-
+  // Create the entry first
   const entry = await SupplierLedger.create({
     ...ledgerBody,
-    balance: newBalance,
+    balance: 0, // Temporary, will be recalculated
   });
 
-  // Update supplier balance
-  await Supplier.findByIdAndUpdate(ledgerBody.supplier, { balance: newBalance });
+  // Recalculate all balances from this transaction date onwards
+  await recalculateBalances(ledgerBody.supplier, ledgerBody.transactionDate);
 
-  return entry;
+  // Fetch and return the updated entry
+  return SupplierLedger.findById(entry._id);
 };
 
 /**
@@ -145,31 +174,13 @@ const deleteLedgerEntry = async (id) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
 
-  // Recalculate all balances after this entry
-  const laterEntries = await SupplierLedger.find({
-    supplier: entry.supplier,
-    createdAt: { $gt: entry.createdAt },
-  }).sort({ createdAt: 1 });
+  const supplierId = entry.supplier;
+  const transactionDate = entry.transactionDate;
 
-  await entry.remove();
+  await entry.deleteOne();
 
-  // Get the previous balance before the deleted entry
-  const previousEntry = await SupplierLedger.findOne({
-    supplier: entry.supplier,
-    createdAt: { $lt: entry.createdAt },
-  }).sort({ createdAt: -1 });
-
-  let runningBalance = previousEntry ? previousEntry.balance : 0;
-
-  // Update all later entries
-  for (const laterEntry of laterEntries) {
-    runningBalance = runningBalance + laterEntry.credit - laterEntry.debit;
-    laterEntry.balance = runningBalance;
-    await laterEntry.save();
-  }
-
-  // Update supplier balance
-  await Supplier.findByIdAndUpdate(entry.supplier, { balance: runningBalance });
+  // Recalculate all balances from the deleted entry's transaction date
+  await recalculateBalances(supplierId, transactionDate);
 
   return entry;
 };
