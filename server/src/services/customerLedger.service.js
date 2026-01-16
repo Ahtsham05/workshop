@@ -3,29 +3,58 @@ const { CustomerLedger, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
+ * Recalculate balances for all entries after a specific transaction date
+ * @param {ObjectId} customerId
+ * @param {Date} fromTransactionDate
+ * @returns {Promise<void>}
+ */
+const recalculateBalances = async (customerId, fromTransactionDate) => {
+  // Get all entries for this customer ordered by transaction date and then by creation order
+  const allEntries = await CustomerLedger.find({ customer: customerId })
+    .sort({ transactionDate: 1, createdAt: 1 });
+
+  let runningBalance = 0;
+  let shouldUpdate = false;
+
+  for (const entry of allEntries) {
+    // Check if this is where we should start recalculating
+    if (entry.transactionDate >= fromTransactionDate) {
+      shouldUpdate = true;
+    }
+
+    if (shouldUpdate) {
+      const newBalance = runningBalance + (entry.debit || 0) - (entry.credit || 0);
+      
+      if (entry.balance !== newBalance) {
+        entry.balance = newBalance;
+        await entry.save();
+      }
+    }
+
+    runningBalance += (entry.debit || 0) - (entry.credit || 0);
+  }
+
+  // Update customer balance to the final running balance
+  await Customer.findByIdAndUpdate(customerId, { balance: runningBalance });
+};
+
+/**
  * Create a customer ledger entry
  * @param {Object} ledgerBody
  * @returns {Promise<CustomerLedger>}
  */
 const createLedgerEntry = async (ledgerBody) => {
-  // Get the last balance for this customer based on transaction date (or creation order)
-  const lastEntry = await CustomerLedger.findOne({ customer: ledgerBody.customer })
-    .sort({ transactionDate: -1, createdAt: -1 });
-
-  const previousBalance = lastEntry ? lastEntry.balance : 0;
-
-  // Calculate new balance (debit increases balance, credit decreases it)
-  const newBalance = previousBalance + (ledgerBody.debit || 0) - (ledgerBody.credit || 0);
-
+  // Create the entry first
   const entry = await CustomerLedger.create({
     ...ledgerBody,
-    balance: newBalance,
+    balance: 0, // Temporary, will be recalculated
   });
 
-  // Update customer balance
-  await Customer.findByIdAndUpdate(ledgerBody.customer, { balance: newBalance });
+  // Recalculate all balances from this transaction date onwards
+  await recalculateBalances(ledgerBody.customer, ledgerBody.transactionDate);
 
-  return entry;
+  // Fetch and return the updated entry
+  return CustomerLedger.findById(entry._id);
 };
 
 /**
@@ -145,31 +174,13 @@ const deleteLedgerEntry = async (id) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
 
-  // Recalculate all balances after this entry
-  const laterEntries = await CustomerLedger.find({
-    customer: entry.customer,
-    createdAt: { $gt: entry.createdAt },
-  }).sort({ createdAt: 1 });
+  const customerId = entry.customer;
+  const transactionDate = entry.transactionDate;
 
-  await entry.remove();
+  await entry.deleteOne();
 
-  // Get the previous balance before the deleted entry
-  const previousEntry = await CustomerLedger.findOne({
-    customer: entry.customer,
-    createdAt: { $lt: entry.createdAt },
-  }).sort({ createdAt: -1 });
-
-  let runningBalance = previousEntry ? previousEntry.balance : 0;
-
-  // Update all later entries
-  for (const laterEntry of laterEntries) {
-    runningBalance = runningBalance + laterEntry.debit - laterEntry.credit;
-    laterEntry.balance = runningBalance;
-    await laterEntry.save();
-  }
-
-  // Update customer balance
-  await Customer.findByIdAndUpdate(entry.customer, { balance: runningBalance });
+  // Recalculate all balances from the deleted entry's transaction date
+  await recalculateBalances(customerId, transactionDate);
 
   return entry;
 };
