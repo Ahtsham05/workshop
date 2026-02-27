@@ -60,7 +60,7 @@ const deleteSupplierById = async (supplierId) => {
   if (!supplier) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Supplier not found');
   }
-  await supplier.remove();
+  await supplier.deleteOne();
   return supplier;
 };
 

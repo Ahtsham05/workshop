@@ -63,7 +63,7 @@ const deleteProductById = async (productId) => {
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
-  await product.remove();
+  await product.deleteOne();
   return product;
 };
 
