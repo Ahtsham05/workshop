@@ -62,7 +62,7 @@ const deleteCustomerById = async (customerId) => {
   if (!customer) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
   }
-  await customer.remove();
+  await customer.deleteOne();
   return customer;
 };
 
