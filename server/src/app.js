@@ -49,6 +49,7 @@ app.use(cors({
       /^https?:\/\/localhost:\d+$/,
       /^https?:\/\/127\.0\.0\.1:\d+$/,
       /^https?:\/\/192\.168\.100\.8:\d+$/,
+      /^https?:\/\/.*\.logixplussolutions\.com$/,  // Allow all Vercel deployments
       'https://logixplussolutions.com/',
       process.env.FRONTEND_URL
     ].filter(Boolean);
