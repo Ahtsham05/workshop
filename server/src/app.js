@@ -39,37 +39,61 @@ app.use(mongoSanitize());
 app.use(compression());
 
 // enable cors
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Allow localhost and your network IP on any port
-    const allowedOrigins = [
-      /^https?:\/\/localhost:\d+$/,
-      /^https?:\/\/127\.0\.0\.1:\d+$/,
-      /^https?:\/\/192\.168\.100\.8:\d+$/,
-      /^https?:\/\/.*\.logixplussolutions\.com$/,  // Allow all Vercel deployments
-      'https://logixplussolutions.com/',
-      process.env.FRONTEND_URL
-    ].filter(Boolean);
-    
-    const isAllowed = allowedOrigins.some(pattern => {
-      if (typeof pattern === 'string') return pattern === origin;
-      return pattern.test(origin);
-    });
-    
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+const normalizeOrigin = (value) => {
+  if (!value) {
+    return value;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch (error) {
+    return value.replace(/\/+$/, '');
+  }
+};
+
+const allowedExactOrigins = new Set(
+  [
+    'https://logixplussolutions.com',
+    process.env.FRONTEND_URL,
+  ]
+    .filter(Boolean)
+    .map(normalizeOrigin)
+);
+
+const allowedOriginPatterns = [
+  /^https?:\/\/localhost:\d+$/,
+  /^https?:\/\/127\.0\.0\.1:\d+$/,
+  /^https?:\/\/192\.168\.100\.8:\d+$/,
+  /^https?:\/\/([a-z0-9-]+\.)*logixplussolutions\.com$/i,
+  /^https?:\/\/[a-z0-9-]+\.vercel\.app$/i,
+];
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow requests with no origin (mobile apps, server-to-server)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    const normalizedOrigin = normalizeOrigin(origin);
+    const isPatternAllowed = allowedOriginPatterns.some((pattern) => pattern.test(normalizedOrigin));
+    const isAllowed = allowedExactOrigins.has(normalizedOrigin) || isPatternAllowed;
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    console.log('CORS blocked origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
   },
-  credentials: true, // If using cookies or Authorization headers
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma'],
-}));
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // jwt authentication
 app.use(passport.initialize());
