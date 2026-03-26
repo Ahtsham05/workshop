@@ -53,7 +53,7 @@ const normalizeOrigin = (value) => {
 
 const allowedExactOrigins = new Set(
   [
-    'https://logixplussolutions.com',
+    'https://app.logixplussolutions.com',
     process.env.FRONTEND_URL,
   ]
     .filter(Boolean)
