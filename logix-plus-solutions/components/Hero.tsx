@@ -79,7 +79,7 @@ export default function Hero() {
         {/* CTA Buttons */}
         <div className="reveal flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
           <a
-            href="http://localhost:5173"
+            href="http://https://app.logixplussolutions.com"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-glow group flex items-center gap-3 px-8 py-4 rounded-2xl text-base font-bold text-white shadow-2xl"

@@ -133,7 +133,7 @@ export default function Services() {
 
                 <div className="mt-6 pt-5 border-t border-white/5 flex justify-end">
                   <a
-                    href="http://localhost:5173"
+                    href="http://https://app.logixplussolutions.com"
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`inline-flex items-center gap-2 text-sm font-semibold ${service.accent} hover:opacity-80 transition-opacity group`}
