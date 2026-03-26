@@ -54,6 +54,8 @@ const normalizeOrigin = (value) => {
 const allowedExactOrigins = new Set(
   [
     'https://app.logixplussolutions.com',
+    'https://logixplussolutions.com',
+    'https://www.logixplussolutions.com',
     process.env.FRONTEND_URL,
   ]
     .filter(Boolean)
@@ -70,7 +72,7 @@ const allowedOriginPatterns = [
 
 const corsOptions = {
   origin(origin, callback) {
-    // Allow requests with no origin (mobile apps, server-to-server)
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) {
       return callback(null, true);
     }
@@ -89,6 +91,8 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400,
   optionsSuccessStatus: 204,
 };
 
