@@ -46,7 +46,7 @@ export default function CTA() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="http://https://app.logixplussolutions.com"
+              href="https://app.logixplussolutions.com"
               target="_blank"
               rel="noopener noreferrer"
               className="btn-glow group flex items-center justify-center gap-3 px-10 py-4 rounded-2xl text-base font-bold text-white"
