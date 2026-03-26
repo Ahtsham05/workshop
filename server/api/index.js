@@ -62,7 +62,15 @@ async function connectToDatabase() {
 
 // Export handler for Vercel serverless
 module.exports = async (req, res) => {
-  // Handle CORS preflight immediately — before Express processes anything
+  // Guarantee CORS headers survive any downstream middleware (helmet, errors, etc.)
+  // by re-applying them right before every response is flushed to the client.
+  const _end = res.end.bind(res);
+  res.end = function (chunk, encoding) {
+    setCorsHeaders(req, res);
+    return _end(chunk, encoding);
+  };
+
+  // Handle preflight immediately — no Express needed
   setCorsHeaders(req, res);
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -75,7 +83,7 @@ module.exports = async (req, res) => {
     console.error('Error:', error);
     return res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message
+      message: error.message,
     });
   }
 };
