@@ -22,9 +22,23 @@ if (config.env !== 'test') {
   app.use(morgan.errorHandler);
 }
 
-// CORS must run before helmet so its headers are not overridden
-// enable cors
+// set security HTTP headers
+app.use(helmet());
 
+// parse json request body
+app.use(express.json());
+
+// parse urlencoded request body
+app.use(express.urlencoded({ extended: true }));
+
+// sanitize request data
+app.use(xss());
+app.use(mongoSanitize());
+
+// gzip compression
+app.use(compression());
+
+// enable cors
 const normalizeOrigin = (value) => {
   if (!value) {
     return value;
@@ -84,30 +98,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-
-// set security HTTP headers — after cors so helmet never overwrites CORS headers.
-// crossOriginResourcePolicy is set to cross-origin so Helmet's CORP header doesn't
-// block legitimate cross-origin API fetches.
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginOpenerPolicy: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
-
-// parse json request body
-app.use(express.json());
-
-// parse urlencoded request body
-app.use(express.urlencoded({ extended: true }));
-
-// sanitize request data
-app.use(xss());
-app.use(mongoSanitize());
-
-// gzip compression
-app.use(compression());
 
 // jwt authentication
 app.use(passport.initialize());
