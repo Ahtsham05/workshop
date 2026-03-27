@@ -87,7 +87,7 @@ const deleteRoleById = async (roleId) => {
   if (usersWithRole > 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot delete role. ${usersWithRole} user(s) are assigned to this role`);
   }
-  await role.remove();
+  await role.deleteOne();
   return role;
 };
 

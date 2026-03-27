@@ -43,7 +43,7 @@ const deleteDepartmentById = async (departmentId) => {
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
-  await department.remove();
+  await department.deleteOne();
   return department;
 };
 

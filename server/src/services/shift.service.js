@@ -42,7 +42,7 @@ const deleteShiftById = async (shiftId) => {
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   }
-  await shift.remove();
+  await shift.deleteOne();
   return shift;
 };
 

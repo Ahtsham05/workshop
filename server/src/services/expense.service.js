@@ -88,7 +88,7 @@ const deleteExpenseById = async (expenseId) => {
   if (!expense) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
   }
-  await expense.remove();
+  await expense.deleteOne();
   return expense;
 };
 

@@ -66,7 +66,7 @@ const deleteLeaveById = async (leaveId) => {
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
-  await leave.remove();
+  await leave.deleteOne();
   return leave;
 };
 

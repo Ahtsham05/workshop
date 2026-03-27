@@ -43,7 +43,7 @@ const deleteDesignationById = async (designationId) => {
   if (!designation) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Designation not found');
   }
-  await designation.remove();
+  await designation.deleteOne();
   return designation;
 };
 

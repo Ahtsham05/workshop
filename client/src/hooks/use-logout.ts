@@ -11,7 +11,8 @@ export function useLogout() {
   const handleLogout = async () => {
     try {
       // Call logout API if needed
-      await dispatch(logout({}))
+      const refreshToken = localStorage.getItem('refreshToken')
+      await dispatch(logout({ refreshToken }))
       
       // Clear local storage
       localStorage.removeItem('accessToken')
@@ -22,7 +23,7 @@ export function useLogout() {
       toast.success('Logged out successfully')
       
       // Redirect to login
-      navigate({ to: '/sign-in', search: { redirect: '/_authenticated/' }, replace: true })
+      navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
     } catch (error) {
       console.error('Logout error:', error)
       // Even if API call fails, clear local data
@@ -30,7 +31,7 @@ export function useLogout() {
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
       
-      navigate({ to: '/sign-in', search: { redirect: '/_authenticated/' }, replace: true })
+      navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
     }
   }
 

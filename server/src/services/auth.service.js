@@ -58,11 +58,11 @@ const loginUserWithEmailAndPassword = async (email, password) => {
  * @returns {Promise}
  */
 const logout = async (refreshToken) => {
+  if (!refreshToken) return;
   const refreshTokenDoc = await Token.findOne({ token: refreshToken, type: tokenTypes.REFRESH, blacklisted: false });
-  if (!refreshTokenDoc) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Not found');
+  if (refreshTokenDoc) {
+    await refreshTokenDoc.deleteOne();
   }
-  await refreshTokenDoc.remove();
 };
 
 /**
@@ -79,7 +79,7 @@ const refreshAuth = async (refreshToken) => {
     }
     // Populate role with permissions
     await user.populate('role');
-    await refreshTokenDoc.remove();
+    await refreshTokenDoc.deleteOne();
     return tokenService.generateAuthTokens(user);
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');

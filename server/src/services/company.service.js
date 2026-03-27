@@ -87,7 +87,7 @@ const deleteCompany = async () => {
   if (!company) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Company profile not found');
   }
-  await company.remove();
+  await company.deleteOne();
   return company;
 };
 

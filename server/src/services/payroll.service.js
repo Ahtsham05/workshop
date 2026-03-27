@@ -72,7 +72,7 @@ const deletePayrollById = async (payrollId) => {
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
-  await payroll.remove();
+  await payroll.deleteOne();
   return payroll;
 };
 

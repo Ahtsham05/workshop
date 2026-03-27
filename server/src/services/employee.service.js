@@ -139,7 +139,7 @@ const deleteEmployeeById = async (employeeId) => {
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
-  await employee.remove();
+  await employee.deleteOne();
   return employee;
 };
 

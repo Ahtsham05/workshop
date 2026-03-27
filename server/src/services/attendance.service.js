@@ -63,7 +63,7 @@ const deleteAttendanceById = async (attendanceId) => {
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Attendance not found');
   }
-  await attendance.remove();
+  await attendance.deleteOne();
   return attendance;
 };
 

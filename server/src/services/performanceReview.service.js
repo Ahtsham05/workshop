@@ -56,7 +56,7 @@ const deletePerformanceReviewById = async (reviewId) => {
   if (!review) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Performance review not found');
   }
-  await review.remove();
+  await review.deleteOne();
   return review;
 };
 
