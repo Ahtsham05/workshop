@@ -17,6 +17,7 @@ interface BaseNavItem {
   badge?: string
   icon?: React.ElementType
   permission?: string
+  systemRole?: string[]
 }
 
 type NavLink = BaseNavItem & {
