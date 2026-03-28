@@ -2,14 +2,16 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { customerLedgerService } = require('../services');
 const pick = require('../utils/pick');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createLedgerEntry = catchAsync(async (req, res) => {
-  const entry = await customerLedgerService.createLedgerEntry(req.body);
+  const entry = await customerLedgerService.createLedgerEntry({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(entry);
 });
 
 const getLedgerEntries = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['customer', 'transactionType']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate']);
   const result = await customerLedgerService.queryLedgerEntries(filter, options);
   res.send(result);

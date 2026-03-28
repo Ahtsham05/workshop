@@ -3,13 +3,16 @@ import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuild
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
 
-// Define the initial state type
 interface AuthState {
-  data:any | null; // More specific user type instead of any
+  data: any | null;
+  activeBranchId: string | null;
+  activeBranchName: string | null;
 }
 
 const initialState: AuthState = {
   data: null,
+  activeBranchId: localStorage.getItem('activeBranchId') || null,
+  activeBranchName: localStorage.getItem('activeBranchName') || null,
 };
 
 // Define the data type expected in the signupWithEmailPassword action
@@ -63,9 +66,22 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    setUser(state,action: PayloadAction<any>){
+    setUser(state, action: PayloadAction<any>) {
       state.data = action.payload
-    }
+    },
+    setActiveBranch(state, action: PayloadAction<{ id: string; name: string } | null>) {
+      if (action.payload) {
+        state.activeBranchId = action.payload.id;
+        state.activeBranchName = action.payload.name;
+        localStorage.setItem('activeBranchId', action.payload.id);
+        localStorage.setItem('activeBranchName', action.payload.name);
+      } else {
+        state.activeBranchId = null;
+        state.activeBranchName = null;
+        localStorage.removeItem('activeBranchId');
+        localStorage.removeItem('activeBranchName');
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -80,10 +96,14 @@ const authSlice = createSlice({
       })
       .addCase(logout.fulfilled, (state, action) => {
         console.log("logout",action.payload);
-        state.data = null; // Assuming payload has the user data
+        state.data = null;
+        state.activeBranchId = null;
+        state.activeBranchName = null;
         localStorage.removeItem("user");
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
+        localStorage.removeItem("activeBranchId");
+        localStorage.removeItem("activeBranchName");
       })
       .addMatcher(
         isAnyOf(
@@ -99,6 +119,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser } = authSlice.actions;
+export const { setUser, setActiveBranch } = authSlice.actions;
 
 export default authSlice.reducer;

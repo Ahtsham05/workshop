@@ -1,7 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
-import errorReducer from './error.slice'; // Import your error slice reducer
+import errorReducer from './error.slice';
 import authReducer from './auth.slice';
-import productReducer from './product.slice'; // Import your product slice reducer
+import productReducer from './product.slice';
 import customerReducer from './customer.slice';
 import supplierReducer from './supplier.slice';
 import categoryReducer from './category.slice';
@@ -14,17 +14,18 @@ import { companyApi } from './company.api';
 import { rolesApi } from './roles.api';
 import { usersApi } from './users.api';
 import { hrApi } from './hr.api';
+import { organizationApi } from './organization.api';
+import { branchApi } from './branch.api';
+import { membershipApi } from './membership.api';
 
 export const store = configureStore({
   reducer: {
-    // Add your reducers here, specifying their types if necessary
     handleErrors: errorReducer,
     auth: authReducer,
     product: productReducer,
     customer: customerReducer,
     supplier: supplierReducer,
     category: categoryReducer,
-    // Add RTK Query API reducers
     [invoiceApi.reducerPath]: invoiceApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
     [purchaseApi.reducerPath]: purchaseApi.reducer,
@@ -34,6 +35,9 @@ export const store = configureStore({
     [rolesApi.reducerPath]: rolesApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
     [hrApi.reducerPath]: hrApi.reducer,
+    [organizationApi.reducerPath]: organizationApi.reducer,
+    [branchApi.reducerPath]: branchApi.reducer,
+    [membershipApi.reducerPath]: membershipApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -45,7 +49,10 @@ export const store = configureStore({
       companyApi.middleware,
       rolesApi.middleware,
       usersApi.middleware,
-      hrApi.middleware
+      hrApi.middleware,
+      organizationApi.middleware,
+      branchApi.middleware,
+      membershipApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

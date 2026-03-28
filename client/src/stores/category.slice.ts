@@ -104,6 +104,10 @@ const categorySlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
+    resetCategories: (state) => {
+      state.categories = []
+      state.error = null
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -182,5 +186,5 @@ const categorySlice = createSlice({
   },
 })
 
-export const { clearError } = categorySlice.actions
+export const { clearError, resetCategories } = categorySlice.actions
 export default categorySlice.reducer

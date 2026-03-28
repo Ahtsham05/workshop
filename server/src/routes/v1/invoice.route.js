@@ -1,61 +1,63 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
+const branchScope = require('../../middlewares/branchScope');
 const invoiceValidation = require('../../validations/invoice.validation');
 const invoiceController = require('../../controllers/invoice.controller');
 
 const router = express.Router();
+router.use(auth(), branchScope());
 
 router
   .route('/')
-  .post(auth('manageInvoices'), validate(invoiceValidation.createInvoice), invoiceController.createInvoice)
-  .get(auth('getInvoices'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
+  .post(auth('createInvoices'), validate(invoiceValidation.createInvoice), invoiceController.createInvoice)
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
 
 router
   .route('/generate-bill-number')
-  .get(auth('manageInvoices'), invoiceController.generateBillNumber);
+  .get(auth('viewInvoices'), invoiceController.generateBillNumber);
 
 router
   .route('/statistics')
-  .get(auth('getInvoices'), validate(invoiceValidation.getInvoiceStatistics), invoiceController.getInvoiceStatistics);
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoiceStatistics), invoiceController.getInvoiceStatistics);
 
 router
   .route('/reports/daily')
-  .get(auth('getInvoices'), validate(invoiceValidation.getDailySalesReport), invoiceController.getDailySalesReport);
+  .get(auth('viewInvoices'), validate(invoiceValidation.getDailySalesReport), invoiceController.getDailySalesReport);
 
 router
   .route('/outstanding')
-  .get(auth('getInvoices'), validate(invoiceValidation.getOutstandingInvoices), invoiceController.getOutstandingInvoices);
+  .get(auth('viewInvoices'), validate(invoiceValidation.getOutstandingInvoices), invoiceController.getOutstandingInvoices);
 
 router
   .route('/customer/:customerId')
-  .get(auth('getInvoices'), validate(invoiceValidation.getInvoicesByCustomer), invoiceController.getInvoicesByCustomer);
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoicesByCustomer), invoiceController.getInvoicesByCustomer);
 
 router
   .route('/customer/:customerId/product/:productId/history')
-  .get(auth('getInvoices'), invoiceController.getCustomerProductHistory);
+  .get(auth('viewInvoices'), invoiceController.getCustomerProductHistory);
 
 router
   .route('/:invoiceId')
-  .get(auth('getInvoices'), validate(invoiceValidation.getInvoice), invoiceController.getInvoice)
-  .patch(auth('manageInvoices'), validate(invoiceValidation.updateInvoice), invoiceController.updateInvoice)
-  .delete(auth('manageInvoices'), validate(invoiceValidation.deleteInvoice), invoiceController.deleteInvoice);
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoice), invoiceController.getInvoice)
+  .patch(auth('editInvoices'), validate(invoiceValidation.updateInvoice), invoiceController.updateInvoice)
+  .delete(auth('deleteInvoices'), validate(invoiceValidation.deleteInvoice), invoiceController.deleteInvoice);
 
 router
   .route('/:invoiceId/finalize')
-  .patch(auth('manageInvoices'), validate(invoiceValidation.finalizeInvoice), invoiceController.finalizeInvoice);
+  .patch(auth('editInvoices'), validate(invoiceValidation.finalizeInvoice), invoiceController.finalizeInvoice);
 
 router
   .route('/:invoiceId/payment')
-  .post(auth('manageInvoices'), validate(invoiceValidation.processPayment), invoiceController.processPayment);
+  .post(auth('createInvoices'), validate(invoiceValidation.processPayment), invoiceController.processPayment);
 
 router
   .route('/:invoiceId/cancel')
-  .patch(auth('manageInvoices'), validate(invoiceValidation.cancelInvoice), invoiceController.cancelInvoice);
+  .patch(auth('editInvoices'), validate(invoiceValidation.cancelInvoice), invoiceController.cancelInvoice);
 
 router
   .route('/:invoiceId/duplicate')
-  .post(auth('manageInvoices'), validate(invoiceValidation.duplicateInvoice), invoiceController.duplicateInvoice);
+  .post(auth('createInvoices'), validate(invoiceValidation.duplicateInvoice), invoiceController.duplicateInvoice);
 
 module.exports = router;
 

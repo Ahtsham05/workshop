@@ -1,48 +1,50 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
+const branchScope = require('../../middlewares/branchScope');
 const reportsController = require('../../controllers/reports.controller');
 
 const router = express.Router();
+router.use(auth(), branchScope());
 
 router
   .route('/sales')
-  .get(auth(), reportsController.getSalesReport);
+  .get(auth('viewReports'), reportsController.getSalesReport);
 
 router
   .route('/purchases')
-  .get(auth(), reportsController.getPurchaseReport);
+  .get(auth('viewReports'), reportsController.getPurchaseReport);
 
 router
   .route('/products')
-  .get(auth(), reportsController.getProductReport);
+  .get(auth('viewReports'), reportsController.getProductReport);
 
 router
   .route('/products/:productId')
-  .get(auth(), reportsController.getProductDetailReport);
+  .get(auth('viewReports'), reportsController.getProductDetailReport);
 
 router
   .route('/customers')
-  .get(auth(), reportsController.getCustomerReport);
+  .get(auth('viewReports'), reportsController.getCustomerReport);
 
 router
   .route('/suppliers')
-  .get(auth(), reportsController.getSupplierReport);
+  .get(auth('viewReports'), reportsController.getSupplierReport);
 
 router
   .route('/expenses')
-  .get(auth(), reportsController.getExpenseReport);
+  .get(auth('viewReports'), reportsController.getExpenseReport);
 
 router
   .route('/profit-loss')
-  .get(auth(), reportsController.getProfitLossReport);
+  .get(auth('viewReports'), reportsController.getProfitLossReport);
 
 router
   .route('/inventory')
-  .get(auth(), reportsController.getInventoryReport);
+  .get(auth('viewReports'), reportsController.getInventoryReport);
 
 router
   .route('/tax')
-  .get(auth(), reportsController.getTaxReport);
+  .get(auth('viewReports'), reportsController.getTaxReport);
 
 module.exports = router;
 

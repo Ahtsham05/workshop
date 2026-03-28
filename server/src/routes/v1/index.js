@@ -17,6 +17,9 @@ const dashboardRoute = require('./dashboard.route');
 const reportsRoute = require('./reports.route');
 const companyRoute = require('./company.route');
 const unitsRoute = require('./units.route');
+const organizationRoute = require('./organization.route');
+const branchRoute = require('./branch.route');
+const membershipRoute = require('./membership.route');
 
 // HR Routes
 const employeeRoute = require('./employee.route');
@@ -91,6 +94,18 @@ const defaultRoutes = [
   {
     path: '/units',
     route: unitsRoute
+  },
+  {
+    path: '/organizations',
+    route: organizationRoute
+  },
+  {
+    path: '/branches',
+    route: branchRoute
+  },
+  {
+    path: '/memberships',
+    route: membershipRoute
   },
   // HR Routes
   {

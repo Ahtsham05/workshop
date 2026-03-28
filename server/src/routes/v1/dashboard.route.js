@@ -1,8 +1,10 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
+const branchScope = require('../../middlewares/branchScope');
 const dashboardController = require('../../controllers/dashboard.controller');
 
 const router = express.Router();
+router.use(auth(), branchScope());
 
 router
   .route('/stats')

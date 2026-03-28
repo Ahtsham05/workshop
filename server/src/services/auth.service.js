@@ -1,55 +1,29 @@
 const httpStatus = require('http-status');
 const tokenService = require('./token.service');
 const userService = require('./user.service');
-const companyService = require('./company.service');
 const Token = require('../models/token.model');
 const ApiError = require('../utils/ApiError');
 const { tokenTypes } = require('../config/tokens');
 
 /**
- * Login with username and password (supports both user and company login)
+ * Login with username and password
  * @param {string} email
  * @param {string} password
  * @returns {Promise<User>}
  */
 const loginUserWithEmailAndPassword = async (email, password) => {
-  // First, try to find a user with this email
-  let user = await userService.getUserByEmail(email);
-  
-  if (user && (await user.isPasswordMatch(password))) {
-    // Populate role with permissions
+  const user = await userService.getUserByEmail(email);
+
+  if (!user || !(await user.isPasswordMatch(password))) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+  }
+
+  // Populate role with permissions
+  if (user.role) {
     await user.populate('role');
-    return user;
   }
-  
-  // If no user found or password doesn't match, try company login
-  try {
-    const company = await companyService.getCompany();
-    
-    if (company && company.email === email && (await company.isPasswordMatch(password))) {
-      // Company login successful - create or get a user for this company
-      // Check if a user with company email already exists
-      let companyUser = await userService.getUserByEmail(company.email);
-      
-      if (!companyUser) {
-        // Create a user account for the company
-        companyUser = await userService.createUser({
-          name: company.name,
-          email: company.email,
-          password: password, // Will be hashed by user model
-          role: 'admin' // Company users are admins
-        });
-      }
-      
-      // Populate role with permissions
-      await companyUser.populate('role');
-      return companyUser;
-    }
-  } catch (error) {
-    // Company not found or error occurred, continue to throw auth error
-  }
-  
-  throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+
+  return user;
 };
 
 /**

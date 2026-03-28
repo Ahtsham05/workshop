@@ -91,7 +91,21 @@ const InvoiceSchema = new mongoose.Schema({
         enum: ['draft', 'finalized', 'paid', 'cancelled', 'refunded'], 
         default: 'draft' 
     },
-    
+
+    // Multi-tenant fields
+    organizationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        required: true,
+        index: true,
+    },
+    branchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Branch',
+        required: true,
+        index: true,
+    },
+
     // Audit fields
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -99,6 +113,8 @@ const InvoiceSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+
+InvoiceSchema.index({ organizationId: 1, branchId: 1 });
 
 // add plugin that converts mongoose to json
 InvoiceSchema.plugin(toJSON);

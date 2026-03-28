@@ -47,7 +47,12 @@ export const Route = createFileRoute('/_authenticated')({
       if (!userData.id) {
         throw new Error('Invalid user data')
       }
+      // If onboarding is not complete, redirect to onboarding
+      if (userData.onboardingComplete === false) {
+        throw redirect({ to: '/onboarding' })
+      }
     } catch (error) {
+      if ((error as any)?.redirect) throw error
       // Clear invalid data
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')

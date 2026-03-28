@@ -111,102 +111,84 @@ const updateRolePermissions = async (roleId, permissions) => {
 };
 
 /**
- * Create default roles
+ * Create default roles (upsert — safe to run multiple times)
  * @returns {Promise<void>}
  */
 const createDefaultRoles = async () => {
-  // Create Admin role if not exists
-  const adminRole = await getRoleByName('Admin');
-  if (!adminRole) {
-    await Role.create({
+  const adminPermissions = {
+    viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
+    viewInvoices: true, createInvoices: true, editInvoices: true, deleteInvoices: true, printInvoices: true,
+    viewPurchases: true, createPurchases: true, editPurchases: true, deletePurchases: true,
+    viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
+    viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
+    viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,
+    viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
+    viewCustomerReports: true, viewSupplierReports: true, viewProductReports: true, exportReports: true,
+    viewUsers: true, createUsers: true, editUsers: true, deleteUsers: true,
+    viewRoles: true, createRoles: true, editRoles: true, deleteRoles: true,
+    viewSettings: true, editSettings: true, viewDashboard: true,
+    viewPayments: true, createPayments: true, editPayments: true, deletePayments: true,
+  };
+
+  const defaultRoles = [
+    {
       name: 'Admin',
       description: 'Full system access with all permissions',
-      permissions: Role.getAdminPermissions(),
+      permissions: adminPermissions,
       isSystemRole: true,
       isActive: true,
-    });
-  }
-
-  // Create Manager role if not exists
-  const managerRole = await getRoleByName('Manager');
-  if (!managerRole) {
-    await Role.create({
+    },
+    {
       name: 'Manager',
       description: 'Can manage products, invoices, purchases, and view reports',
       permissions: {
-        viewProducts: true,
-        createProducts: true,
-        editProducts: true,
-        deleteProducts: true,
-        viewInvoices: true,
-        createInvoices: true,
-        editInvoices: true,
-        printInvoices: true,
-        viewPurchases: true,
-        createPurchases: true,
-        editPurchases: true,
-        viewCustomers: true,
-        createCustomers: true,
-        editCustomers: true,
-        viewSuppliers: true,
-        createSuppliers: true,
-        editSuppliers: true,
-        viewCategories: true,
-        createCategories: true,
-        editCategories: true,
-        viewReports: true,
-        viewSalesReports: true,
-        viewPurchaseReports: true,
-        viewInventoryReports: true,
+        viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
+        viewInvoices: true, createInvoices: true, editInvoices: true, printInvoices: true,
+        viewPurchases: true, createPurchases: true, editPurchases: true,
+        viewCustomers: true, createCustomers: true, editCustomers: true,
+        viewSuppliers: true, createSuppliers: true, editSuppliers: true,
+        viewCategories: true, createCategories: true, editCategories: true,
+        viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewDashboard: true,
       },
       isSystemRole: true,
       isActive: true,
-    });
-  }
-
-  // Create Cashier role if not exists
-  const cashierRole = await getRoleByName('Cashier');
-  if (!cashierRole) {
-    await Role.create({
+    },
+    {
       name: 'Cashier',
       description: 'Can create invoices and view products',
       permissions: {
         viewProducts: true,
-        viewInvoices: true,
-        createInvoices: true,
-        printInvoices: true,
-        viewCustomers: true,
-        createCustomers: true,
+        viewInvoices: true, createInvoices: true, printInvoices: true,
+        viewCustomers: true, createCustomers: true,
         viewDashboard: true,
       },
       isSystemRole: true,
       isActive: true,
-    });
-  }
-
-  // Create Viewer role if not exists
-  const viewerRole = await getRoleByName('Viewer');
-  if (!viewerRole) {
-    await Role.create({
+    },
+    {
       name: 'Viewer',
       description: 'Read-only access to view data',
       permissions: {
-        viewProducts: true,
-        viewInvoices: true,
-        viewPurchases: true,
-        viewCustomers: true,
-        viewSuppliers: true,
-        viewCategories: true,
-        viewReports: true,
-        viewSalesReports: true,
-        viewPurchaseReports: true,
-        viewInventoryReports: true,
+        viewProducts: true, viewInvoices: true, viewPurchases: true,
+        viewCustomers: true, viewSuppliers: true, viewCategories: true,
+        viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewDashboard: true,
       },
       isSystemRole: true,
       isActive: true,
-    });
+    },
+  ];
+
+  for (const roleData of defaultRoles) {
+    await Role.findOneAndUpdate(
+      { name: roleData.name },
+      {
+        $set: { permissions: roleData.permissions, isActive: roleData.isActive },
+        $setOnInsert: { name: roleData.name, description: roleData.description, isSystemRole: roleData.isSystemRole },
+      },
+      { upsert: true, new: true }
+    );
   }
 };
 

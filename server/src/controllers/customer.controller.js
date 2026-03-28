@@ -3,14 +3,16 @@ const catchAsync = require('../utils/catchAsync');
 const { customerService } = require('../services');
 const pick = require('../utils/pick');
 const { Sale, Transaction } = require('../models');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createCustomer = catchAsync(async (req, res) => {
-  const customer = await customerService.createCustomer(req.body);
+  const customer = await customerService.createCustomer({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(customer);
 });
 
 const getCustomers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'email', 'phone']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await customerService.queryCustomers(filter, options);
   res.send(result);
@@ -35,7 +37,9 @@ const deleteCustomer = catchAsync(async (req, res) => {
 });
 
 const getAllCustomers = catchAsync(async (req, res) => {
-  const customers = await customerService.getAllCustomers();
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const customers = await customerService.getAllCustomers(filter);
   res.send(customers);
 })
 

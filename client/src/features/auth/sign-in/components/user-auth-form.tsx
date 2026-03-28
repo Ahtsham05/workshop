@@ -66,6 +66,12 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
         localStorage.setItem("refreshToken", action.payload?.tokens?.refresh?.token)
         localStorage.setItem("user", JSON.stringify(action.payload?.user))
         
+        // Redirect to onboarding if not completed
+        if (!action.payload?.user?.onboardingComplete) {
+          navigate({ to: '/onboarding', replace: true })
+          return
+        }
+
         // Navigate to redirect URL or home page
         const redirectTo = search.redirect || '/'
         navigate({ to: redirectTo, replace: true })

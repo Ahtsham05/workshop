@@ -19,6 +19,8 @@ import {
   IconCash,
   IconBuilding,
   IconSettings,
+  IconUsersGroup,
+  IconBuildingStore,
 } from '@tabler/icons-react'
 import { Command } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -159,6 +161,18 @@ export const sidebarData: SidebarData = {
           url: '/roles',
           icon: IconShield,
           permission: 'viewRoles',
+        },
+        {
+          title: 'Branch Management',
+          url: '/branches',
+          icon: IconBuildingStore,
+          systemRole: ['superAdmin'],
+        },
+        {
+          title: 'Staff Management',
+          url: '/staff',
+          icon: IconUsersGroup,
+          systemRole: ['superAdmin', 'branchAdmin'],
         },
       ],
     },

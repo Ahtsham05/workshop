@@ -4,6 +4,7 @@ const { productService } = require('../services');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createProduct = catchAsync(async (req, res) => {
   let productData = req.body;
@@ -25,7 +26,7 @@ const createProduct = catchAsync(async (req, res) => {
   }
   
   try {
-    const product = await productService.createProduct(productData);
+    const product = await productService.createProduct({ ...productData, ...getBranchContext(req) });
     res.status(httpStatus.CREATED).send(product);
   } catch (error) {
     // Handle MongoDB duplicate key errors
@@ -47,6 +48,7 @@ const createProduct = catchAsync(async (req, res) => {
 
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'category', 'description']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
   res.send(result);
@@ -163,7 +165,9 @@ const deleteProductImage = catchAsync(async (req, res) => {
 });
 
 const getAllProducts = catchAsync(async (req, res) => {
-  const products = await productService.getAllProducts();
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const products = await productService.getAllProducts(filter);
   res.send(products);
 });
 

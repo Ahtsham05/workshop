@@ -4,6 +4,7 @@ const { categoryService } = require('../services');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createCategory = catchAsync(async (req, res) => {
   let categoryData = req.body;
@@ -24,12 +25,13 @@ const createCategory = catchAsync(async (req, res) => {
     }
   }
   
-  const category = await categoryService.createCategory(categoryData);
+  const category = await categoryService.createCategory({ ...categoryData, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(category);
 });
 
 const getCategories = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'description']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await categoryService.queryCategories(filter, options);
   res.send(result);
@@ -37,6 +39,7 @@ const getCategories = catchAsync(async (req, res) => {
 
 const getAllCategories = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['search', 'fieldName']);
+  applyBranchFilter(filter, req);
   const result = await categoryService.getAllCategories(filter);
   res.send(result);
 });

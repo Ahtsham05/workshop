@@ -64,8 +64,8 @@ const deleteSupplierById = async (supplierId) => {
   return supplier;
 };
 
-const getAllSuppliers = async () => {
-  return Supplier.find();
+const getAllSuppliers = async (filter = {}) => {
+  return Supplier.find(filter);
 };
 
 /**

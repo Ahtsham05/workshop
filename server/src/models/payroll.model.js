@@ -3,6 +3,18 @@ const { toJSON, paginate } = require('./plugins');
 
 const payrollSchema = mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      required: true,
+      index: true,
+    },
     employee: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
@@ -106,8 +118,9 @@ const payrollSchema = mongoose.Schema(
 payrollSchema.plugin(toJSON);
 payrollSchema.plugin(paginate);
 
-// Compound index to ensure one payroll per employee per month
-payrollSchema.index({ employee: 1, month: 1, year: 1 }, { unique: true });
+// Compound index to ensure one payroll per employee per month per branch
+payrollSchema.index({ organizationId: 1, branchId: 1, employee: 1, month: 1, year: 1 }, { unique: true });
+payrollSchema.index({ organizationId: 1, branchId: 1 });
 
 const Payroll = mongoose.model('Payroll', payrollSchema);
 

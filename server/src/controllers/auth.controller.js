@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
+const ApiError = require('../utils/ApiError');
 const { authService, userService, tokenService, emailService } = require('../services');
 
 const register = catchAsync(async (req, res) => {
@@ -47,11 +48,22 @@ const verifyEmail = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const loginRefresh = catchAsync(async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
+  }
+  const refreshToken = authHeader.split(' ')[1];
+  const tokens = await authService.refreshAuth(refreshToken);
+  res.send({ data: { accessToken: tokens.access.token, refreshToken: tokens.refresh.token } });
+});
+
 module.exports = {
   register,
   login,
   logout,
   refreshTokens,
+  loginRefresh,
   forgotPassword,
   resetPassword,
   sendVerificationEmail,

@@ -13,6 +13,18 @@ const transactionTypes = {
 };
 
 const customerLedgerSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true,
+    index: true,
+  },
   customer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Customer',
@@ -70,6 +82,7 @@ customerLedgerSchema.plugin(paginate);
 // Index for faster queries
 customerLedgerSchema.index({ customer: 1, transactionDate: -1 });
 customerLedgerSchema.index({ customer: 1, createdAt: -1 });
+customerLedgerSchema.index({ organizationId: 1, branchId: 1 });
 
 const CustomerLedger = mongoose.model('CustomerLedger', customerLedgerSchema);
 

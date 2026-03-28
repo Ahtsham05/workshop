@@ -2,14 +2,16 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { supplierService } = require('../services');
 const pick = require('../utils/pick');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createSupplier = catchAsync(async (req, res) => {
-  const supplier = await supplierService.createSupplier(req.body);
+  const supplier = await supplierService.createSupplier({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(supplier);
 });
 
 const getSuppliers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'email', 'phone']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await supplierService.querySuppliers(filter, options);
   res.send(result);
@@ -34,7 +36,9 @@ const deleteSupplier = catchAsync(async (req, res) => {
 });
 
 const getAllSuppliers = catchAsync(async (req, res) => {
-  const suppliers = await supplierService.getAllSuppliers();
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const suppliers = await supplierService.getAllSuppliers(filter);
   res.send(suppliers);
 });
 

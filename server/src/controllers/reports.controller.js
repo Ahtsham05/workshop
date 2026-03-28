@@ -2,12 +2,14 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense } = require('../models');
+const { applyBranchFilter } = require('../utils/branchFilter');
 
 /**
  * Get Sales Report
  * @route GET /v1/reports/sales
  */
 const getSalesReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate, groupBy = 'day' } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -58,6 +60,7 @@ const getSalesReport = catchAsync(async (req, res) => {
   const summary = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -88,12 +91,14 @@ const getSalesReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/purchases
  */
 const getPurchaseReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate, supplierId } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const end = endDate ? new Date(endDate) : new Date();
 
   const matchQuery = {
+    ...bf,
     createdAt: { $gte: start, $lte: end }
   };
 
@@ -155,6 +160,7 @@ const getPurchaseReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/products
  */
 const getProductReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate, categoryId } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -164,6 +170,7 @@ const getProductReport = catchAsync(async (req, res) => {
   const productSales = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -211,6 +218,9 @@ const getProductReport = catchAsync(async (req, res) => {
   // Get stock summary
   const stockSummary = await Product.aggregate([
     {
+      $match: { ...bf }
+    },
+    {
       $group: {
         _id: null,
         totalProducts: { $sum: 1 },
@@ -241,6 +251,7 @@ const getProductReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/products/:productId
  */
 const getProductDetailReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { productId } = req.params;
   const { startDate, endDate } = req.query;
 
@@ -257,6 +268,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
   const salesData = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -348,6 +360,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
   const purchaseData = await Purchase.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end }
       }
     },
@@ -426,6 +439,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/customers
  */
 const getCustomerReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate, top = 20 } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -434,6 +448,7 @@ const getCustomerReport = catchAsync(async (req, res) => {
   const customerData = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' },
         customerId: { $exists: true, $ne: 'walk-in' }
@@ -473,6 +488,7 @@ const getCustomerReport = catchAsync(async (req, res) => {
   const summary = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -507,6 +523,7 @@ const getCustomerReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/suppliers
  */
 const getSupplierReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -515,6 +532,7 @@ const getSupplierReport = catchAsync(async (req, res) => {
   const supplierData = await Purchase.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end }
       }
     },
@@ -549,6 +567,7 @@ const getSupplierReport = catchAsync(async (req, res) => {
   const summary = await Purchase.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end }
       }
     },
@@ -575,12 +594,14 @@ const getSupplierReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/expenses
  */
 const getExpenseReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate, category } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const end = endDate ? new Date(endDate) : new Date();
 
   const matchQuery = {
+    ...bf,
     date: { $gte: start, $lte: end }
   };
 
@@ -647,6 +668,7 @@ const getExpenseReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/profit-loss
  */
 const getProfitLossReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -656,6 +678,7 @@ const getProfitLossReport = catchAsync(async (req, res) => {
   const revenueData = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -674,6 +697,7 @@ const getProfitLossReport = catchAsync(async (req, res) => {
   const expenseData = await Expense.aggregate([
     {
       $match: {
+        ...bf,
         date: { $gte: start, $lte: end }
       }
     },
@@ -714,14 +738,15 @@ const getProfitLossReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/inventory
  */
 const getInventoryReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { status } = req.query;
 
-  let matchQuery = {};
+  let matchQuery = { ...bf };
   
   if (status === 'low') {
-    matchQuery = { $expr: { $lte: ['$stockQuantity', 10] } };
+    matchQuery = { ...bf, $expr: { $lte: ['$stockQuantity', 10] } };
   } else if (status === 'out') {
-    matchQuery = { stockQuantity: 0 };
+    matchQuery = { ...bf, stockQuantity: 0 };
   }
 
   const inventoryData = await Product.aggregate([
@@ -773,6 +798,9 @@ const getInventoryReport = catchAsync(async (req, res) => {
 
   const summary = await Product.aggregate([
     {
+      $match: { ...bf }
+    },
+    {
       $group: {
         _id: null,
         totalProducts: { $sum: 1 },
@@ -804,6 +832,7 @@ const getInventoryReport = catchAsync(async (req, res) => {
  * @route GET /v1/reports/tax
  */
 const getTaxReport = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { startDate, endDate } = req.query;
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -812,6 +841,7 @@ const getTaxReport = catchAsync(async (req, res) => {
   const taxData = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }
@@ -832,6 +862,7 @@ const getTaxReport = catchAsync(async (req, res) => {
   const summary = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: start, $lte: end },
         status: { $ne: 'cancelled' }
       }

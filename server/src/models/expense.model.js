@@ -2,6 +2,18 @@ const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 
 const expenseSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true,
+    index: true,
+  },
   expenseNumber: {
     type: String,
     unique: true,
@@ -67,6 +79,8 @@ const expenseSchema = new mongoose.Schema({
 // Add plugins
 expenseSchema.plugin(toJSON);
 expenseSchema.plugin(paginate);
+
+expenseSchema.index({ organizationId: 1, branchId: 1 });
 
 // Generate expense number
 expenseSchema.pre('save', async function(next) {

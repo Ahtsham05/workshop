@@ -67,8 +67,8 @@ const deleteProductById = async (productId) => {
   return product;
 };
 
-const getAllProducts = async () => {
-  const products = await Product.find();
+const getAllProducts = async (filter = {}) => {
+  const products = await Product.find(filter);
   return products;
 }
 

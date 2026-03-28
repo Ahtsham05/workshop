@@ -26,12 +26,14 @@ import { Route as authSignUpImport } from './routes/(auth)/sign-up'
 import { Route as authSignIn2Import } from './routes/(auth)/sign-in-2'
 import { Route as authSignInImport } from './routes/(auth)/sign-in'
 import { Route as authOtpImport } from './routes/(auth)/otp'
+import { Route as authOnboardingImport } from './routes/(auth)/onboarding'
 import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
+import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
@@ -42,6 +44,7 @@ import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authentic
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
+import { Route as AuthenticatedBranchesIndexImport } from './routes/_authenticated/branches/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
@@ -151,6 +154,12 @@ const authOtpRoute = authOtpImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const authOnboardingRoute = authOnboardingImport.update({
+  id: '/(auth)/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const authForgotPasswordRoute = authForgotPasswordImport.update({
   id: '/(auth)/forgot-password',
   path: '/forgot-password',
@@ -190,6 +199,12 @@ const AuthenticatedSuppliersIndexRoute =
     path: '/suppliers/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedStaffIndexRoute = AuthenticatedStaffIndexImport.update({
+  id: '/staff/',
+  path: '/staff/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
   {
@@ -258,6 +273,14 @@ const AuthenticatedCategoriesIndexRoute =
     path: '/categories/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedBranchesIndexRoute = AuthenticatedBranchesIndexImport.update(
+  {
+    id: '/branches/',
+    path: '/branches/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
 
 const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   id: '/apps/',
@@ -401,6 +424,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof authForgotPasswordImport
+      parentRoute: typeof rootRoute
+    }
+    '/(auth)/onboarding': {
+      id: '/(auth)/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof authOnboardingImport
       parentRoute: typeof rootRoute
     }
     '/(auth)/otp': {
@@ -550,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/branches/': {
+      id: '/_authenticated/branches/'
+      path: '/branches'
+      fullPath: '/branches'
+      preLoaderRoute: typeof AuthenticatedBranchesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/categories/': {
       id: '/_authenticated/categories/'
       path: '/categories'
@@ -619,6 +656,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/staff/': {
+      id: '/_authenticated/staff/'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof AuthenticatedStaffIndexImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/suppliers/': {
       id: '/_authenticated/suppliers/'
@@ -780,6 +824,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
+  AuthenticatedBranchesIndexRoute: typeof AuthenticatedBranchesIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
@@ -789,6 +834,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
+  AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
@@ -813,6 +859,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
+  AuthenticatedBranchesIndexRoute: AuthenticatedBranchesIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
@@ -823,6 +870,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
+  AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersManagementIndexRoute:
@@ -848,6 +896,7 @@ export interface FileRoutesByFullPath {
   '': typeof AuthenticatedRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
+  '/onboarding': typeof authOnboardingRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
   '/sign-in-2': typeof authSignIn2Route
@@ -869,6 +918,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/branches': typeof AuthenticatedBranchesIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -879,6 +929,7 @@ export interface FileRoutesByFullPath {
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/staff': typeof AuthenticatedStaffIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
@@ -897,6 +948,7 @@ export interface FileRoutesByFullPath {
 
 export interface FileRoutesByTo {
   '/forgot-password': typeof authForgotPasswordRoute
+  '/onboarding': typeof authOnboardingRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
   '/sign-in-2': typeof authSignIn2Route
@@ -918,6 +970,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/branches': typeof AuthenticatedBranchesIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -928,6 +981,7 @@ export interface FileRoutesByTo {
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/staff': typeof AuthenticatedStaffIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
@@ -949,6 +1003,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
+  '/(auth)/onboarding': typeof authOnboardingRoute
   '/(auth)/otp': typeof authOtpRoute
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-in-2': typeof authSignIn2Route
@@ -970,6 +1025,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
+  '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -980,6 +1036,7 @@ export interface FileRoutesById {
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
@@ -1002,6 +1059,7 @@ export interface FileRouteTypes {
     | ''
     | '/settings'
     | '/forgot-password'
+    | '/onboarding'
     | '/otp'
     | '/sign-in'
     | '/sign-in-2'
@@ -1023,6 +1081,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/accounting'
     | '/apps'
+    | '/branches'
     | '/categories'
     | '/chats'
     | '/customers'
@@ -1033,6 +1092,7 @@ export interface FileRouteTypes {
     | '/purchase-invoice'
     | '/roles'
     | '/settings/'
+    | '/staff'
     | '/suppliers'
     | '/tasks'
     | '/users-management'
@@ -1050,6 +1110,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
+    | '/onboarding'
     | '/otp'
     | '/sign-in'
     | '/sign-in-2'
@@ -1071,6 +1132,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/accounting'
     | '/apps'
+    | '/branches'
     | '/categories'
     | '/chats'
     | '/customers'
@@ -1081,6 +1143,7 @@ export interface FileRouteTypes {
     | '/purchase-invoice'
     | '/roles'
     | '/settings'
+    | '/staff'
     | '/suppliers'
     | '/tasks'
     | '/users-management'
@@ -1100,6 +1163,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/_authenticated/settings'
     | '/(auth)/forgot-password'
+    | '/(auth)/onboarding'
     | '/(auth)/otp'
     | '/(auth)/sign-in'
     | '/(auth)/sign-in-2'
@@ -1121,6 +1185,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/accounting/'
     | '/_authenticated/apps/'
+    | '/_authenticated/branches/'
     | '/_authenticated/categories/'
     | '/_authenticated/chats/'
     | '/_authenticated/customers/'
@@ -1131,6 +1196,7 @@ export interface FileRouteTypes {
     | '/_authenticated/purchase-invoice/'
     | '/_authenticated/roles/'
     | '/_authenticated/settings/'
+    | '/_authenticated/staff/'
     | '/_authenticated/suppliers/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
@@ -1151,6 +1217,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   authForgotPasswordRoute: typeof authForgotPasswordRoute
+  authOnboardingRoute: typeof authOnboardingRoute
   authOtpRoute: typeof authOtpRoute
   authSignInRoute: typeof authSignInRoute
   authSignIn2Route: typeof authSignIn2Route
@@ -1165,6 +1232,7 @@ export interface RootRouteChildren {
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   authForgotPasswordRoute: authForgotPasswordRoute,
+  authOnboardingRoute: authOnboardingRoute,
   authOtpRoute: authOtpRoute,
   authSignInRoute: authSignInRoute,
   authSignIn2Route: authSignIn2Route,
@@ -1188,6 +1256,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated",
         "/(auth)/forgot-password",
+        "/(auth)/onboarding",
         "/(auth)/otp",
         "/(auth)/sign-in",
         "/(auth)/sign-in-2",
@@ -1210,6 +1279,7 @@ export const routeTree = rootRoute
         "/_authenticated/",
         "/_authenticated/accounting/",
         "/_authenticated/apps/",
+        "/_authenticated/branches/",
         "/_authenticated/categories/",
         "/_authenticated/chats/",
         "/_authenticated/customers/",
@@ -1219,6 +1289,7 @@ export const routeTree = rootRoute
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
         "/_authenticated/roles/",
+        "/_authenticated/staff/",
         "/_authenticated/suppliers/",
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
@@ -1247,6 +1318,9 @@ export const routeTree = rootRoute
     },
     "/(auth)/forgot-password": {
       "filePath": "(auth)/forgot-password.tsx"
+    },
+    "/(auth)/onboarding": {
+      "filePath": "(auth)/onboarding.tsx"
     },
     "/(auth)/otp": {
       "filePath": "(auth)/otp.tsx"
@@ -1326,6 +1400,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/apps/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/branches/": {
+      "filePath": "_authenticated/branches/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/categories/": {
       "filePath": "_authenticated/categories/index.tsx",
       "parent": "/_authenticated"
@@ -1365,6 +1443,10 @@ export const routeTree = rootRoute
     "/_authenticated/settings/": {
       "filePath": "_authenticated/settings/index.tsx",
       "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/staff/": {
+      "filePath": "_authenticated/staff/index.tsx",
+      "parent": "/_authenticated"
     },
     "/_authenticated/suppliers/": {
       "filePath": "_authenticated/suppliers/index.tsx",

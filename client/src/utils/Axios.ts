@@ -24,31 +24,39 @@ const removeTokens = (): void => {
   localStorage.removeItem("refreshToken");
 };
 
-// Refresh token logic
+// Serialise concurrent refresh calls so only one runs at a time
+let isRefreshing = false;
+let refreshQueue: Array<{ resolve: (token: string) => void; reject: (error: unknown) => void }> = [];
+
+const processQueue = (error: unknown, token: string | null = null) => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (token) resolve(token);
+    else reject(error);
+  });
+  refreshQueue = [];
+};
+
+// Refresh token logic — uses raw axios (NOT the intercepted Axios instance)
+// so the request interceptor cannot overwrite the Authorization header
 const refreshTokens = async (): Promise<string> => {
-  try {
-    const refreshtoken = getRefreshToken();
-    if (!refreshtoken) {
-      throw new Error("No refresh token available");
-    }
-
-    const response: AxiosResponse = await Axios({
-      ...summery.loginRefresh,
-      headers: {
-        Authorization: `Bearer ${refreshtoken}`,
-      },
-    });
-
-    const { accessToken, refreshToken } = response.data.data;
-    saveTokens(accessToken, refreshToken);
-    return accessToken;
-  } catch (error) {
-    console.error("Error refreshing tokens", error);
+  const refreshtoken = getRefreshToken();
+  if (!refreshtoken) {
     removeTokens();
-    // Redirect to login page
     window.location.href = '/sign-in';
-    throw error;
+    throw new Error("No refresh token available");
   }
+
+  const response: AxiosResponse = await axios({
+    ...summery.loginRefresh,
+    baseURL: baseUrl,
+    headers: {
+      Authorization: `Bearer ${refreshtoken}`,
+    },
+  });
+
+  const { accessToken, refreshToken } = response.data.data;
+  saveTokens(accessToken, refreshToken);
+  return accessToken;
 };
 
 // Custom AxiosRequestConfig interface
@@ -63,6 +71,10 @@ Axios.interceptors.request.use(
     if (accessToken) {
       config.headers!.Authorization = `Bearer ${accessToken}`;
     }
+    const activeBranchId = localStorage.getItem('activeBranchId');
+    if (activeBranchId) {
+      config.headers!['x-branch-id'] = activeBranchId;
+    }
     return config;
   },
   (error: AxiosError) => Promise.reject(error)
@@ -74,14 +86,38 @@ Axios.interceptors.response.use(
   async (error: AxiosError) => {
     const originRequest = error.config as CustomAxiosRequestConfig;
 
-    if (originRequest && error.response?.status === 401 && !originRequest._retry) {
+    // Never retry the refresh endpoint itself — prevents infinite loop
+    const isRefreshUrl = originRequest?.url?.includes('/auth/login-refresh');
+
+    if (originRequest && error.response?.status === 401 && !originRequest._retry && !isRefreshUrl) {
       originRequest._retry = true;
+
+      if (isRefreshing) {
+        // Another refresh is already in flight — queue this request
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({
+            resolve: (token) => {
+              originRequest.headers!.Authorization = `Bearer ${token}`;
+              resolve(Axios(originRequest));
+            },
+            reject,
+          });
+        });
+      }
+
+      isRefreshing = true;
       try {
         const newAccessToken = await refreshTokens();
+        processQueue(null, newAccessToken);
         originRequest.headers!.Authorization = `Bearer ${newAccessToken}`;
         return Axios(originRequest);
       } catch (refreshError) {
+        processQueue(refreshError, null);
+        removeTokens();
+        window.location.href = '/sign-in';
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
     return Promise.reject(error);

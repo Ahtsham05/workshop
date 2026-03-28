@@ -2,6 +2,18 @@ const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 
 const supplierLedgerSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true,
+    index: true,
+  },
   supplier: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supplier',
@@ -58,6 +70,7 @@ supplierLedgerSchema.plugin(paginate);
 
 // Index for faster queries
 supplierLedgerSchema.index({ supplier: 1, transactionDate: -1 });
+supplierLedgerSchema.index({ organizationId: 1, branchId: 1 });
 supplierLedgerSchema.index({ supplier: 1, createdAt: -1 });
 
 const SupplierLedger = mongoose.model('SupplierLedger', supplierLedgerSchema);

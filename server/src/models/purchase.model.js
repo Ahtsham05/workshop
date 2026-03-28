@@ -5,6 +5,22 @@ const Product = require('./product.model');
 const { DEFAULT_UNIT } = require('../config/units');
 
 const PurchaseSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true,
+    index: true,
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
   invoiceNumber: { type: String, required: true, unique: true },
   items: [
@@ -30,6 +46,8 @@ const PurchaseSchema = new mongoose.Schema({
 // Add plugin that converts mongoose to JSON
 PurchaseSchema.plugin(toJSON);
 PurchaseSchema.plugin(paginate);
+
+PurchaseSchema.index({ organizationId: 1, branchId: 1 });
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 

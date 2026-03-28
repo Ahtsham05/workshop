@@ -1,15 +1,22 @@
 const httpStatus = require('http-status');
-const { User } = require('../models');
+const { User, Role } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
- * Create a user
+ * Create a user — auto-assigns the Admin role if no role is specified
  * @param {Object} userBody
  * @returns {Promise<User>}
  */
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+  // Auto-assign Admin role when no role is provided
+  if (!userBody.role) {
+    const adminRole = await Role.findOne({ name: 'Admin' });
+    if (adminRole) {
+      userBody.role = adminRole._id;
+    }
   }
   return User.create(userBody);
 };

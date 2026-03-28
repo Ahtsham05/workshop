@@ -3,7 +3,11 @@ const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 
 const verifyCallback = (req, resolve, reject) => async (err, user, info) => {
-  if (err || info || !user) {
+  if (err) {
+    // A real error (e.g. MongoNetworkError) — propagate as-is, not masked as 401
+    return reject(err);
+  }
+  if (info || !user) {
     return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate'));
   }
   req.user = user;

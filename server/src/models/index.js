@@ -13,6 +13,9 @@ module.exports.Expense = require('./expense.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
 module.exports.Company = require('./company.model');
+module.exports.Organization = require('./organization.model');
+module.exports.Branch = require('./branch.model');
+module.exports.Membership = require('./membership.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

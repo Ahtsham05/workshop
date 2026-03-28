@@ -1,32 +1,34 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
+const branchScope = require('../../middlewares/branchScope');
 const { attendanceValidation } = require('../../validations');
 const { attendanceController } = require('../../controllers');
 
 const router = express.Router();
+router.use(auth(), branchScope());
 
 router
   .route('/')
-  .post(auth(), validate(attendanceValidation.createAttendance), attendanceController.createAttendance)
-  .get(auth(), validate(attendanceValidation.getAttendances), attendanceController.getAttendances);
+  .post(auth('createAttendance'), validate(attendanceValidation.createAttendance), attendanceController.createAttendance)
+  .get(auth('getAttendance'), validate(attendanceValidation.getAttendances), attendanceController.getAttendances);
 
 router
   .route('/checkin')
-  .post(auth(), validate(attendanceValidation.markCheckIn), attendanceController.markCheckIn);
+  .post(auth('createAttendance'), validate(attendanceValidation.markCheckIn), attendanceController.markCheckIn);
 
 router
   .route('/checkout')
-  .post(auth(), validate(attendanceValidation.markCheckOut), attendanceController.markCheckOut);
+  .post(auth('createAttendance'), validate(attendanceValidation.markCheckOut), attendanceController.markCheckOut);
 
 router
   .route('/employee/:employeeId')
-  .get(auth(), attendanceController.getEmployeeAttendance);
+  .get(auth('getAttendance'), attendanceController.getEmployeeAttendance);
 
 router
   .route('/:attendanceId')
-  .get(auth(), validate(attendanceValidation.getAttendance), attendanceController.getAttendance)
-  .patch(auth(), validate(attendanceValidation.updateAttendance), attendanceController.updateAttendance)
-  .delete(auth(), validate(attendanceValidation.deleteAttendance), attendanceController.deleteAttendance);
+  .get(auth('getAttendance'), validate(attendanceValidation.getAttendance), attendanceController.getAttendance)
+  .patch(auth('manageAttendance'), validate(attendanceValidation.updateAttendance), attendanceController.updateAttendance)
+  .delete(auth('deleteAttendance'), validate(attendanceValidation.deleteAttendance), attendanceController.deleteAttendance);
 
 module.exports = router;

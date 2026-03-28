@@ -40,6 +40,20 @@ const userSchema = mongoose.Schema(
       ref: 'Role',
       required: false,
     },
+    organizationId: {
+      type: mongoose.SchemaTypes.ObjectId,
+      ref: 'Organization',
+      default: null,
+    },
+    systemRole: {
+      type: String,
+      enum: ['superAdmin', 'branchAdmin', 'staff'],
+      default: 'staff',
+    },
+    onboardingComplete: {
+      type: Boolean,
+      default: false,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

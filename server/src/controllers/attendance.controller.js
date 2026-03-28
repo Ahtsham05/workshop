@@ -3,14 +3,16 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { attendanceService } = require('../services');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.createAttendance(req.body);
+  const attendance = await attendanceService.createAttendance({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(attendance);
 });
 
 const getAttendances = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'status', 'startDate', 'endDate']);
+  applyBranchFilter(filter, req);
   if (filter.startDate || filter.endDate) {
     filter.date = {};
     if (filter.startDate) {
@@ -51,7 +53,7 @@ const deleteAttendance = catchAsync(async (req, res) => {
 });
 
 const markCheckIn = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.markCheckIn(req.body.employee, { location: req.body.location });
+  const attendance = await attendanceService.markCheckIn(req.body.employee, { location: req.body.location, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(attendance);
 });
 

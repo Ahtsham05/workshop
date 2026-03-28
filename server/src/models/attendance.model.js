@@ -3,6 +3,18 @@ const { toJSON, paginate } = require('./plugins');
 
 const attendanceSchema = mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      required: true,
+      index: true,
+    },
     employee: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
@@ -66,7 +78,9 @@ attendanceSchema.plugin(toJSON);
 attendanceSchema.plugin(paginate);
 
 // Compound index for efficient querying
-attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ employee: 1, date: 1 }, { unique: false });
+attendanceSchema.index({ organizationId: 1, branchId: 1 });
+attendanceSchema.index({ organizationId: 1, branchId: 1, employee: 1, date: 1 }, { unique: true });
 
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 

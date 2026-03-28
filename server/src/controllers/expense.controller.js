@@ -2,15 +2,17 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { expenseService } = require('../services');
 const pick = require('../utils/pick');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createExpense = catchAsync(async (req, res) => {
-  const expenseData = { ...req.body, createdBy: req.user.id };
+  const expenseData = { ...req.body, ...getBranchContext(req) };
   const expense = await expenseService.createExpense(expenseData);
   res.status(httpStatus.CREATED).send(expense);
 });
 
 const getExpenses = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['category', 'paymentMethod']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate', 'category']);
   const result = await expenseService.queryExpenses(filter, options);
   res.send(result);

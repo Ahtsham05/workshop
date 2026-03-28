@@ -66,8 +66,8 @@ const deleteCustomerById = async (customerId) => {
   return customer;
 };
 
-const getAllCustomers = async () => {
-  return Customer.find();
+const getAllCustomers = async (filter = {}) => {
+  return Customer.find(filter);
 }
 
 /**

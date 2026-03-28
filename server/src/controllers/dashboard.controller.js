@@ -1,18 +1,21 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier } = require('../models');
+const { applyBranchFilter } = require('../utils/branchFilter');
 
 /**
  * Get dashboard statistics
  * @route GET /v1/dashboard/stats
  */
 const getDashboardStats = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
   const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
 
   // Current month revenue and sales
   const currentMonthInvoices = await Invoice.find({
+    ...bf,
     createdAt: { $gte: lastMonth },
     status: { $ne: 'cancelled' }
   });
@@ -22,6 +25,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
 
   // Previous month for comparison
   const previousMonthInvoices = await Invoice.find({
+    ...bf,
     createdAt: { $gte: twoMonthsAgo, $lt: lastMonth },
     status: { $ne: 'cancelled' }
   });
@@ -38,7 +42,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
     : 0;
 
   // Low stock and out of stock products
-  const allProducts = await Product.find({});
+  const allProducts = await Product.find({ ...bf });
   const lowStockCount = allProducts.filter(p => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
   const outOfStockCount = allProducts.filter(p => p.stockQuantity === 0).length;
 
@@ -50,6 +54,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
 
   // Pending invoices
   const pendingInvoices = await Invoice.find({
+    ...bf,
     status: 'pending',
     type: { $in: ['credit', 'pending'] }
   });
@@ -59,6 +64,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
   // Today's revenue
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayInvoices = await Invoice.find({
+    ...bf,
     createdAt: { $gte: startOfToday },
     status: { $ne: 'cancelled' }
   });
@@ -67,6 +73,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
   // Yesterday's revenue for comparison
   const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   const yesterdayInvoices = await Invoice.find({
+    ...bf,
     createdAt: { $gte: startOfYesterday, $lt: startOfToday },
     status: { $ne: 'cancelled' }
   });
@@ -77,8 +84,8 @@ const getDashboardStats = catchAsync(async (req, res) => {
     : 0;
 
   // Total customers and products
-  const totalCustomers = await Customer.countDocuments();
-  const totalProducts = await Product.countDocuments();
+  const totalCustomers = await Customer.countDocuments({ ...bf });
+  const totalProducts = await Product.countDocuments({ ...bf });
 
   res.status(httpStatus.OK).send({
     totalRevenue,
@@ -102,6 +109,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/revenue?period=week
  */
 const getRevenueData = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { period = 'week' } = req.query;
   const now = new Date();
   let startDate;
@@ -136,6 +144,7 @@ const getRevenueData = catchAsync(async (req, res) => {
   const revenueData = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: startDate },
         status: { $ne: 'cancelled' }
       }
@@ -194,6 +203,7 @@ const getRevenueData = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/top-products?limit=5
  */
 const getTopProducts = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { limit = 5 } = req.query;
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
@@ -201,6 +211,7 @@ const getTopProducts = catchAsync(async (req, res) => {
   const topProducts = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: lastMonth },
         status: { $ne: 'cancelled' }
       }
@@ -245,6 +256,7 @@ const getTopProducts = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/top-customers?limit=5
  */
 const getTopCustomers = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { limit = 5 } = req.query;
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
@@ -252,6 +264,7 @@ const getTopCustomers = catchAsync(async (req, res) => {
   const topCustomers = await Invoice.aggregate([
     {
       $match: {
+        ...bf,
         createdAt: { $gte: lastMonth },
         status: { $ne: 'cancelled' },
         customerId: { $exists: true, $ne: 'walk-in' }
@@ -297,7 +310,9 @@ const getTopCustomers = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/low-stock
  */
 const getLowStockProducts = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const products = await Product.find({
+    ...bf,
     $or: [
       { stockQuantity: { $lte: 10 } },
       { stockQuantity: 0 }
@@ -324,17 +339,18 @@ const getLowStockProducts = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/recent-activities?limit=10
  */
 const getRecentActivities = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
   const { limit = 10 } = req.query;
 
   // Get recent invoices
-  const recentInvoices = await Invoice.find()
+  const recentInvoices = await Invoice.find({ ...bf })
     .sort({ createdAt: -1 })
     .limit(parseInt(limit) / 2)
     .populate('customerId', 'name')
     .lean();
 
   // Get recent purchases
-  const recentPurchases = await Purchase.find()
+  const recentPurchases = await Purchase.find({ ...bf })
     .sort({ createdAt: -1 })
     .limit(parseInt(limit) / 2)
     .populate('supplier', 'name')

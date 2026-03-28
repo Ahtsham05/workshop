@@ -78,12 +78,20 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
     }
     const action = await dispatch(signupWithEmailPassword(newData))
     if(action.payload?.user){
-      toast.success("User created Successfully!")
-      navigate({
-        to : "/sign-in", 
-        search: { redirect: "/" },
-        replace: true
-      })
+      toast.success("Account created! Let's set up your company.")
+      // Store auth tokens from signup response if backend returns them
+      if (action.payload?.tokens) {
+        localStorage.setItem("accessToken", action.payload.tokens?.access?.token)
+        localStorage.setItem("refreshToken", action.payload.tokens?.refresh?.token)
+        localStorage.setItem("user", JSON.stringify(action.payload.user))
+        navigate({ to: '/onboarding', replace: true })
+      } else {
+        navigate({
+          to: '/sign-in',
+          search: { redirect: '/' },
+          replace: true,
+        })
+      }
     }
     setIsLoading(false)
   }

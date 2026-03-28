@@ -40,7 +40,16 @@ module.exports = {
   port: envVars.PORT,
   mongoose: {
     url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
-    options: {},
+    options: {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      heartbeatFrequencyMS: 10000,  // ping Atlas every 10s to keep connections alive
+      maxPoolSize: 10,
+      minPoolSize: 2,               // keep 2 connections warm to avoid cold reconnects
+      retryWrites: true,
+      retryReads: true,
+      connectTimeoutMS: 10000,
+    },
   },
   jwt: {
     secret: envVars.JWT_SECRET,

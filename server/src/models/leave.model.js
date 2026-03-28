@@ -3,6 +3,18 @@ const { toJSON, paginate } = require('./plugins');
 
 const leaveSchema = mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      required: true,
+      index: true,
+    },
     employee: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
@@ -80,6 +92,7 @@ leaveSchema.plugin(paginate);
 // Index for better query performance
 leaveSchema.index({ employee: 1, startDate: 1 });
 leaveSchema.index({ status: 1 });
+leaveSchema.index({ organizationId: 1, branchId: 1 });
 
 const Leave = mongoose.model('Leave', leaveSchema);
 

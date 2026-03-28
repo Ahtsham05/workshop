@@ -3,7 +3,23 @@ const { paginate, toJSON } = require('./plugins');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
 
 const ProductSchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
+    organizationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        required: true,
+        index: true,
+    },
+    branchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Branch',
+        required: true,
+        index: true,
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    name: { type: String, required: true },
     description: { type: String },
     barcode: { 
         type: String, 
@@ -59,6 +75,9 @@ ProductSchema.pre(['updateOne', 'findOneAndUpdate'], function(next) {
 // add plugin that converts mongoose to json
 ProductSchema.plugin(toJSON);
 ProductSchema.plugin(paginate);
+
+ProductSchema.index({ organizationId: 1, branchId: 1 });
+ProductSchema.index({ organizationId: 1, branchId: 1, name: 1 }, { unique: false });
 
 const Product = mongoose.model('Product', ProductSchema);
 

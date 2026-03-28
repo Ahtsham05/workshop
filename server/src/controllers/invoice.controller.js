@@ -3,14 +3,16 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { invoiceService } = require('../services');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createInvoice = catchAsync(async (req, res) => {
-  const invoice = await invoiceService.createInvoice(req.body, req.user.id);
+  const invoice = await invoiceService.createInvoice({ ...req.body, ...getBranchContext(req) }, req.user.id);
   res.status(httpStatus.CREATED).send(invoice);
 });
 
 const getInvoices = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['customerId', 'type', 'status', 'invoiceNumber']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   
   // Set default options if not provided
@@ -163,6 +165,7 @@ const processPayment = catchAsync(async (req, res) => {
 
 const getInvoiceStatistics = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['dateFrom', 'dateTo', 'customerId', 'type']);
+  applyBranchFilter(filter, req);
   const stats = await invoiceService.getInvoiceStatistics(filter);
   res.send(stats);
 });
@@ -175,6 +178,7 @@ const getDailySalesReport = catchAsync(async (req, res) => {
 
 const getInvoicesByCustomer = catchAsync(async (req, res) => {
   const filter = { customerId: req.params.customerId };
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await invoiceService.queryInvoices(filter, options);
   res.send(result);
@@ -186,6 +190,7 @@ const getOutstandingInvoices = catchAsync(async (req, res) => {
     balance: { $gt: 0 },
     status: { $ne: 'cancelled' }
   };
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await invoiceService.queryInvoices(filter, options);
   res.send(result);

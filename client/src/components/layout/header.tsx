@@ -6,9 +6,9 @@ import { setUser } from '../../stores/auth.slice'
 import { useNavigate } from '@tanstack/react-router'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { fetchAllProducts } from '@/stores/product.slice'
-import { fetchAllSuppliers } from '@/stores/supplier.slice'
-import { fetchAllCutomers } from '@/stores/customer.slice'
+// import { fetchAllProducts } from '@/stores/product.slice'
+// import { fetchAllSuppliers } from '@/stores/supplier.slice'
+// import { fetchAllCutomers } from '@/stores/customer.slice'
 
 interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
   fixed?: boolean
@@ -42,9 +42,9 @@ export const Header = ({
           refreshToken
         }
       }))
-      dispatch(fetchAllProducts({}))
-      dispatch(fetchAllSuppliers({}))
-      dispatch(fetchAllCutomers({}))
+      // dispatch(fetchAllProducts({}))
+      // dispatch(fetchAllSuppliers({}))
+      // dispatch(fetchAllCutomers({}))
       
     }else{
       navigate({

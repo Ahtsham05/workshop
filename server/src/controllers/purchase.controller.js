@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { purchaseService } = require('../services');
 const pick = require('../utils/pick');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createPurchase = catchAsync(async (req, res) => {
   // Fetch the last purchase invoice (assuming 'purchase' model has 'invoiceNumber' field)
@@ -15,7 +16,8 @@ const createPurchase = catchAsync(async (req, res) => {
   // Prepare the data for the new purchase with the updated invoice number
   const newPurchaseData = {
     ...req.body,
-    invoiceNumber: newInvoiceNumber, // Add the incremented invoice number
+    invoiceNumber: newInvoiceNumber,
+    ...getBranchContext(req),
   };
 
   // Create the new purchase with the updated invoice number
@@ -27,6 +29,7 @@ const createPurchase = catchAsync(async (req, res) => {
 
 const getPurchases = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['supplier', 'purchaseDate']);
+  applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await purchaseService.queryPurchases(filter, options);
   res.send(result);

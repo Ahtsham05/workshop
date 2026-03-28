@@ -3,14 +3,16 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { leaveService } = require('../services');
+const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.createLeave(req.body);
+  const leave = await leaveService.createLeave({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(leave);
 });
 
 const getLeaves = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'leaveType', 'status', 'startDate', 'endDate']);
+  applyBranchFilter(filter, req);
   if (filter.startDate || filter.endDate) {
     const dateFilter = {};
     if (filter.startDate) dateFilter.$gte = new Date(filter.startDate);

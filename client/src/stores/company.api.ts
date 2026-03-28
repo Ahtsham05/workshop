@@ -15,6 +15,10 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
       if (token) {
         headers.set('authorization', `Bearer ${token}`)
       }
+      const activeBranchId = localStorage.getItem('activeBranchId')
+      if (activeBranchId) {
+        headers.set('x-branch-id', activeBranchId)
+      }
       return headers
     },
   })

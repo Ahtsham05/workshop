@@ -15,16 +15,19 @@ export const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
       if (token) {
         headers.set('authorization', `Bearer ${token}`);
       }
+      // Inject active branch context for all requests
+      const activeBranchId = localStorage.getItem('activeBranchId');
+      if (activeBranchId) {
+        headers.set('x-branch-id', activeBranchId);
+      }
       return headers;
     },
   });
 
   const result = await rawBaseQuery(args, api, extraOptions);
 
-  // Handle 401 errors
   if (result.error && result.error.status === 401) {
     console.error('Authentication failed. Please login again.');
-    // Optionally redirect to login or refresh token
   }
 
   return result;

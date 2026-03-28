@@ -2,6 +2,22 @@ const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 
 const CustomerSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true,
+    index: true,
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   name: { type: String, required: true },
   email: { type: String },
   phone: { type: String },
@@ -11,6 +27,8 @@ const CustomerSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
+
+CustomerSchema.index({ organizationId: 1, branchId: 1 });
 
 // Add plugin that converts mongoose to json
 CustomerSchema.plugin(toJSON);
