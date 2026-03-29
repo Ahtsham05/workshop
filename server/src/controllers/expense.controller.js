@@ -38,12 +38,14 @@ const deleteExpense = catchAsync(async (req, res) => {
 
 const getExpenseSummary = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['startDate', 'endDate']);
+  applyBranchFilter(filter, req);
   const summary = await expenseService.getExpenseSummary(filter);
   res.send(summary);
 });
 
 const getExpenseTrends = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['startDate', 'endDate']);
+  applyBranchFilter(filter, req);
   const trends = await expenseService.getExpenseTrends(filter);
   res.send(trends);
 });

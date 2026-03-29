@@ -94,11 +94,19 @@ const deleteExpenseById = async (expenseId) => {
 
 /**
  * Get expense summary by category
- * @param {Object} filter - Date range filter
+ * @param {Object} filter - Date range and organization/branch filter
  * @returns {Promise<Array>}
  */
 const getExpenseSummary = async (filter = {}) => {
   const matchStage = {};
+  
+  // Add organization and branch filters
+  if (filter.organizationId) {
+    matchStage.organizationId = filter.organizationId;
+  }
+  if (filter.branchId) {
+    matchStage.branchId = filter.branchId;
+  }
   
   if (filter.startDate || filter.endDate) {
     matchStage.date = {};
@@ -123,11 +131,19 @@ const getExpenseSummary = async (filter = {}) => {
 
 /**
  * Get expense trends
- * @param {Object} filter
+ * @param {Object} filter - Date range and organization/branch filter
  * @returns {Promise<Array>}
  */
 const getExpenseTrends = async (filter = {}) => {
   const matchStage = {};
+  
+  // Add organization and branch filters
+  if (filter.organizationId) {
+    matchStage.organizationId = filter.organizationId;
+  }
+  if (filter.branchId) {
+    matchStage.branchId = filter.branchId;
+  }
   
   if (filter.startDate || filter.endDate) {
     matchStage.date = {};

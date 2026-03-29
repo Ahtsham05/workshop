@@ -21,6 +21,9 @@ import {
   IconSettings,
   IconUsersGroup,
   IconBuildingStore,
+  IconCreditCard,
+  IconChartBar,
+  IconCrown,
 } from '@tabler/icons-react'
 import { Command } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -166,13 +169,47 @@ export const sidebarData: SidebarData = {
           title: 'Branch Management',
           url: '/branches',
           icon: IconBuildingStore,
-          systemRole: ['superAdmin'],
+          systemRole: ['superAdmin', 'system_admin'],
         },
         {
           title: 'Staff Management',
           url: '/staff',
           icon: IconUsersGroup,
-          systemRole: ['superAdmin', 'branchAdmin'],
+          systemRole: ['superAdmin', 'branchAdmin', 'system_admin'],
+        },
+      ],
+    },
+    {
+      title: 'Subscription',
+      items: [
+        {
+          title: 'My Subscription',
+          url: '/subscription',
+          icon: IconCrown,
+          systemRole: ['superAdmin', 'system_admin'],
+        },
+        {
+          title: 'Pricing & Plans',
+          url: '/subscription/pricing',
+          icon: IconChartBar,
+          systemRole: ['superAdmin', 'system_admin'],
+        },
+        {
+          title: 'Buy / Renew Plan',
+          url: '/subscription/payment',
+          icon: IconCreditCard,
+          systemRole: ['superAdmin', 'system_admin'],
+        },
+      ],
+    },
+    {
+      title: 'System Admin',
+      items: [
+        {
+          title: 'Payment Requests',
+          url: '/admin',
+          icon: IconCreditCard,
+          systemRole: ['system_admin'],
         },
       ],
     },

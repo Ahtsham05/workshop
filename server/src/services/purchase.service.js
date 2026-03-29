@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Purchase, Product } = require('../models');
+const { Purchase, Product, SupplierLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
 
@@ -46,6 +46,8 @@ const createPurchase = async (purchaseBody) => {
 
       // Create purchase entry (credit - we owe supplier)
       const purchaseEntry = await supplierLedgerService.createLedgerEntry({
+        organizationId: purchase.organizationId,
+        branchId: purchase.branchId,
         supplier: purchase.supplier,
         transactionType: 'purchase',
         transactionDate: purchase.purchaseDate || new Date(),
@@ -66,6 +68,8 @@ const createPurchase = async (purchaseBody) => {
         paymentDate.setSeconds(paymentDate.getSeconds() + 1);
 
         const paymentEntry = await supplierLedgerService.createLedgerEntry({
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
           supplier: purchase.supplier,
           transactionType: 'payment_made',
           transactionDate: paymentDate,
@@ -135,6 +139,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalTotalAmount = purchase.totalAmount;
   const originalPaidAmount = purchase.paidAmount || 0;
   const originalSupplier = purchase.supplier?._id || purchase.supplier;
+  const originalPaymentType = purchase.paymentType;
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
@@ -203,11 +208,14 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const newSupplier = purchase.supplier?._id || purchase.supplier;
   const newTotalAmount = purchase.totalAmount;
   const newPaidAmount = purchase.paidAmount || 0;
+  const hasLedgerEntries = await SupplierLedger.exists({ referenceId: purchase._id });
 
   if (originalSupplier && (
     originalTotalAmount !== newTotalAmount || 
     originalPaidAmount !== newPaidAmount ||
-    originalSupplier.toString() !== newSupplier.toString()
+    originalSupplier.toString() !== newSupplier.toString() ||
+    originalPaymentType !== purchase.paymentType ||
+    !hasLedgerEntries
   )) {
     try {
       console.log('Updating supplier ledger entries for purchase:', {
@@ -227,6 +235,8 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         
         // Create new entries for new supplier
         await supplierLedgerService.createLedgerEntry({
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
           supplier: newSupplier,
           transactionType: 'purchase',
           transactionDate: purchase.purchaseDate || new Date(),
@@ -244,6 +254,8 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           paymentDate.setSeconds(paymentDate.getSeconds() + 1);
 
           await supplierLedgerService.createLedgerEntry({
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
             supplier: newSupplier,
             transactionType: 'payment_made',
             transactionDate: paymentDate,
@@ -259,12 +271,15 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
       } else {
         // Same supplier - update existing entries
         await supplierLedgerService.updateLedgerEntriesByReference(purchase._id, {
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
+          supplierId: newSupplier,
           totalAmount: newTotalAmount,
           paidAmount: newPaidAmount,
           invoiceNumber: purchase.invoiceNumber,
           purchaseDate: purchase.purchaseDate,
           paymentMethod: purchase.paymentType,
-          itemsCount: purchase.items.length
+          itemsCount: purchase.items.length,
         });
       }
 

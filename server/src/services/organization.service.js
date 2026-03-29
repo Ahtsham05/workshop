@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Organization, Branch, Membership, User, Role } = require('../models');
 const ApiError = require('../utils/ApiError');
+const PLANS = require('../config/plans');
 
 /**
  * Setup organization during user onboarding
@@ -18,7 +19,21 @@ const setupOrganization = async (userId, orgData) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Onboarding already completed');
   }
 
-  const organization = await Organization.create({ ...orgData, owner: userId });
+  const organization = await Organization.create({
+    ...orgData,
+    owner: userId,
+    subscription: {
+      planType: 'trial',
+      status: 'active',
+      isTrial: true,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + PLANS.trial.durationDays * 24 * 60 * 60 * 1000),
+      limits: {
+        maxBranches: PLANS.trial.maxBranches,
+        maxUsers: PLANS.trial.maxUsers,
+      },
+    },
+  });
 
   // Create the default branch
   const branch = await Branch.create({
@@ -105,4 +120,18 @@ module.exports = {
   getOrganizationByUserId,
   getOrganizationForUser,
   updateOrganization,
+  getAllOrganizations,
 };
+
+/**
+ * Get all organizations (system_admin only)
+ * @param {Object} filter
+ * @param {Object} options
+ * @returns {Promise<QueryResult>}
+ */
+async function getAllOrganizations(filter = {}, options = {}) {
+  return Organization.paginate(filter, {
+    ...options,
+    populate: 'owner',
+  });
+}

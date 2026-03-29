@@ -12,16 +12,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useDispatch, useSelector } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
+import { AppDispatch, RootState } from '@/stores/store'
 import { logout } from '@/stores/auth.slice'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
-import { useGetCompanyQuery } from '@/stores/company.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import { Building2 } from 'lucide-react'
 
 export function ProfileDropdown() {
   const user = useSelector((state: any) => state.auth.data?.user)
-  const { data: company } = useGetCompanyQuery()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branch } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
   const { t } = useLanguage()
@@ -48,20 +49,22 @@ export function ProfileDropdown() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56' align='end' forceMount>
-        {company ? (
+        {branch ? (
           <>
             <DropdownMenuLabel className='font-normal'>
               <div className='flex flex-col space-y-1'>
                 <div className='flex items-center gap-2'>
                   <Building2 className='h-3 w-3' />
-                  <p className='text-sm leading-none font-medium'>{company.name}</p>
+                  <p className='text-sm leading-none font-medium'>{branch.name}</p>
                 </div>
-                <p className='text-muted-foreground text-xs leading-none'>
-                  {company.email}
-                </p>
-                {company.phone && (
+                {branch.email && (
                   <p className='text-muted-foreground text-xs leading-none'>
-                    {company.phone}
+                    {branch.email}
+                  </p>
+                )}
+                {branch.phone && (
+                  <p className='text-muted-foreground text-xs leading-none'>
+                    {branch.phone}
                   </p>
                 )}
               </div>
@@ -81,15 +84,6 @@ export function ProfileDropdown() {
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link to='/company'>
-              {t('company_profile')}
-              <DropdownMenuShortcut>⇧⌘C</DropdownMenuShortcut>
-            </Link>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link to='/settings'>

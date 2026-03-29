@@ -29,8 +29,8 @@ const branchScope = (required = false) => async (req, res, next) => {
     // Attach organizationId from user
     req.organizationId = req.user.organizationId;
 
-    // SuperAdmins can access all branches in their organization
-    if (req.user.systemRole === 'superAdmin') {
+    // SuperAdmins and system_admins bypass branch membership checks
+    if (req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin') {
       req.branchId = branchId;
       return next();
     }

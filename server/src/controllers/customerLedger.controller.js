@@ -46,7 +46,9 @@ const deleteLedgerEntry = catchAsync(async (req, res) => {
 });
 
 const getAllCustomersWithBalances = catchAsync(async (req, res) => {
-  const customers = await customerLedgerService.getAllCustomersWithBalances();
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const customers = await customerLedgerService.getAllCustomersWithBalances(filter);
   res.send(customers);
 });
 

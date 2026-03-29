@@ -5,6 +5,28 @@ const catchAsync = require('../utils/catchAsync');
 const { attendanceService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const parseDateOnlyAsLocal = (dateString, endOfDay = false) => {
+  if (!dateString) return null;
+
+  // Handle YYYY-MM-DD without timezone drift from Date('YYYY-MM-DD').
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return endOfDay
+      ? new Date(year, month - 1, day, 23, 59, 59, 999)
+      : new Date(year, month - 1, day, 0, 0, 0, 0);
+  }
+
+  const parsed = new Date(dateString);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  if (endOfDay) {
+    parsed.setHours(23, 59, 59, 999);
+  } else {
+    parsed.setHours(0, 0, 0, 0);
+  }
+  return parsed;
+};
+
 const createAttendance = catchAsync(async (req, res) => {
   const attendance = await attendanceService.createAttendance({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(attendance);
@@ -15,16 +37,21 @@ const getAttendances = catchAsync(async (req, res) => {
   applyBranchFilter(filter, req);
   if (filter.startDate || filter.endDate) {
     filter.date = {};
+
     if (filter.startDate) {
-      const startDate = new Date(filter.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      filter.date.$gte = startDate;
+      const startDate = parseDateOnlyAsLocal(filter.startDate, false);
+      if (startDate) {
+        filter.date.$gte = startDate;
+      }
     }
+
     if (filter.endDate) {
-      const endDate = new Date(filter.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      filter.date.$lte = endDate;
+      const endDate = parseDateOnlyAsLocal(filter.endDate, true);
+      if (endDate) {
+        filter.date.$lte = endDate;
+      }
     }
+
     delete filter.startDate;
     delete filter.endDate;
   }

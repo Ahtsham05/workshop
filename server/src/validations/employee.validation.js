@@ -57,6 +57,7 @@ const getEmployees = {
     department: Joi.string().custom(objectId),
     designation: Joi.string().custom(objectId),
     employmentStatus: Joi.string().valid('Active', 'On Leave', 'Terminated', 'Resigned'),
+    search: Joi.string(),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),

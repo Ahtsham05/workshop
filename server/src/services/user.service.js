@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Role } = require('../models');
+const { User, Role, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -11,6 +11,27 @@ const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
+
+  // Enforce subscription user limit when adding a user to an organization
+  if (userBody.organizationId) {
+    const org = await Organization.findById(userBody.organizationId).select('subscription');
+    if (org && org.subscription && org.subscription.limits) {
+      const maxUsers = org.subscription.limits.maxUsers;
+      if (maxUsers != null) {
+        const currentCount = await User.countDocuments({
+          organizationId: userBody.organizationId,
+          isActive: true,
+        });
+        if (currentCount >= maxUsers) {
+          throw new ApiError(
+            httpStatus.FORBIDDEN,
+            `User limit reached. Your plan allows ${maxUsers} user(s). Please upgrade your subscription.`
+          );
+        }
+      }
+    }
+  }
+
   // Auto-assign Admin role when no role is provided
   if (!userBody.role) {
     const adminRole = await Role.findOne({ name: 'Admin' });

@@ -7,16 +7,24 @@ import { useNavigate } from '@tanstack/react-router';
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
 import { useGetEmployeesQuery, useGetLeavesQuery, useGetAttendancesQuery, useGetPayrollsQuery } from '@/stores/hr.api';
 
+const getLocalDateString = () => {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - offsetMs).toISOString().split('T')[0];
+};
+
 export default function HRDashboard() {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const today = getLocalDateString();
 
   // Fetch dashboard data
   const { data: employeesData } = useGetEmployeesQuery({ limit: 1 });
   const { data: leavesData } = useGetLeavesQuery({ status: 'Pending', limit: 10 });
-  const { data: attendanceData } = useGetAttendancesQuery({ 
-    startDate: new Date().toISOString().split('T')[0],
-    limit: 100 
+  const { data: attendanceData } = useGetAttendancesQuery({
+    startDate: today,
+    endDate: today,
+    limit: 1000,
   });
   const { data: payrollData } = useGetPayrollsQuery({ 
     status: 'Pending',
@@ -27,7 +35,9 @@ export default function HRDashboard() {
 
   const totalEmployees = employeesData?.totalResults || 0;
   const pendingLeaves = leavesData?.totalResults || 0;
-  const todayPresent = attendanceData?.results?.filter((a: any) => a.status === 'Present').length || 0;
+  const todayAttendances = attendanceData?.results || [];
+  const todayPresent = todayAttendances.filter((a: any) => ['Present', 'Late', 'Half-Day'].includes(a.status)).length;
+  const todayOnLeave = todayAttendances.filter((a: any) => a.status === 'On Leave').length;
   const pendingPayrolls = payrollData?.totalResults || 0;
 
   const stats = [
@@ -210,6 +220,10 @@ export default function HRDashboard() {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">{t('Present')}</span>
                 <span className="text-2xl font-bold text-green-600">{todayPresent}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{t('On Leave')}</span>
+                <span className="text-2xl font-bold text-blue-600">{todayOnLeave}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">{t('Total Employees')}</span>

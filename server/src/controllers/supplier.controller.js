@@ -50,7 +50,7 @@ const bulkAddSuppliers = catchAsync(async (req, res) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Suppliers array is required');
     }
 
-    const result = await supplierService.bulkAddSuppliers(suppliers);
+    const result = await supplierService.bulkAddSuppliers(suppliers, getBranchContext(req));
     
     res.status(httpStatus.CREATED).send({
       message: `Successfully imported ${result.insertedCount} suppliers`,

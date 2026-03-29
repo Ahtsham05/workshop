@@ -18,6 +18,7 @@ module.exports.companyService = require('./company.service.js');
 module.exports.organizationService = require('./organization.service.js');
 module.exports.branchService = require('./branch.service.js');
 module.exports.membershipService = require('./membership.service.js');
+module.exports.paymentService = require('./payment.service.js');
 
 // HR Services
 module.exports.employeeService = require('./employee.service.js');

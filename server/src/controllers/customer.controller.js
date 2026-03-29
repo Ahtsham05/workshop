@@ -51,7 +51,7 @@ const bulkAddCustomers = catchAsync(async (req, res) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Customers array is required');
     }
 
-    const result = await customerService.bulkAddCustomers(customers);
+    const result = await customerService.bulkAddCustomers(customers, getBranchContext(req));
     
     res.status(httpStatus.CREATED).send({
       message: `Successfully imported ${result.insertedCount} customers`,

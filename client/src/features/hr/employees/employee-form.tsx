@@ -17,6 +17,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, X } from 'lucide-react';
 
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
 const employeeSchema = z.object({
   // Personal Information
   firstName: z.string().min(1, 'First name is required'),
@@ -37,11 +39,11 @@ const employeeSchema = z.object({
   // Professional Information
   employeeId: z.string().min(1, 'Employee ID is required'),
   department: z.string().min(1, 'Department is required'),
-  designation: z.string().min(1, 'Designation is required'),
+  designation: z.string().optional(),
   shift: z.string().optional(),
   joiningDate: z.string().min(1, 'Joining date is required'),
-  employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Internship']),
-  employmentStatus: z.enum(['Active', 'Inactive', 'OnLeave', 'Terminated']),
+  employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Intern']),
+  employmentStatus: z.enum(['Active', 'On Leave', 'Terminated', 'Resigned']),
   reportingManager: z.string().optional(),
   
   // Salary Information
@@ -94,6 +96,23 @@ export default function EmployeeForm({
 }: EmployeeFormProps) {
   const { t } = useLanguage();
 
+  const sanitizeObjectId = (value?: string) => {
+    if (!value || !OBJECT_ID_REGEX.test(value)) {
+      return undefined;
+    }
+    return value;
+  };
+
+  const hasMeaningfulValue = (value: unknown) => {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return true;
+  };
+
   const {
     register,
     handleSubmit,
@@ -126,7 +145,46 @@ export default function EmployeeForm({
   }, [initialData, setValue]);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form
+      onSubmit={handleSubmit(async (values) => {
+        const payload: any = {
+          ...values,
+          designation: sanitizeObjectId(values.designation),
+          shift: sanitizeObjectId(values.shift),
+          reportingManager: sanitizeObjectId(values.reportingManager),
+        };
+
+        if (payload.employmentStatus === 'Inactive') {
+          payload.employmentStatus = 'Resigned';
+        }
+        if (payload.employmentStatus === 'OnLeave') {
+          payload.employmentStatus = 'On Leave';
+        }
+
+        if (!payload.designation) {
+          delete payload.designation;
+        }
+        if (!payload.shift) {
+          delete payload.shift;
+        }
+        if (!payload.reportingManager) {
+          delete payload.reportingManager;
+        }
+
+        if (payload.address && !Object.values(payload.address).some(hasMeaningfulValue)) {
+          delete payload.address;
+        }
+        if (payload.bankDetails && !Object.values(payload.bankDetails).some(hasMeaningfulValue)) {
+          delete payload.bankDetails;
+        }
+        if (payload.emergencyContact && !Object.values(payload.emergencyContact).some(hasMeaningfulValue)) {
+          delete payload.emergencyContact;
+        }
+
+        await onSubmit(payload);
+      })}
+      className="space-y-4"
+    >
       <Tabs defaultValue="personal" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="personal">{t('Personal')}</TabsTrigger>
@@ -318,7 +376,7 @@ export default function EmployeeForm({
                       <SelectItem value="Full-Time">{t('Full-Time')}</SelectItem>
                       <SelectItem value="Part-Time">{t('Part-Time')}</SelectItem>
                       <SelectItem value="Contract">{t('Contract')}</SelectItem>
-                      <SelectItem value="Internship">{t('Internship')}</SelectItem>
+                      <SelectItem value="Intern">{t('Intern')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -333,9 +391,9 @@ export default function EmployeeForm({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Active">{t('Active')}</SelectItem>
-                      <SelectItem value="Inactive">{t('Inactive')}</SelectItem>
-                      <SelectItem value="OnLeave">{t('On Leave')}</SelectItem>
+                      <SelectItem value="On Leave">{t('On Leave')}</SelectItem>
                       <SelectItem value="Terminated">{t('Terminated')}</SelectItem>
+                      <SelectItem value="Resigned">{t('Resigned')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

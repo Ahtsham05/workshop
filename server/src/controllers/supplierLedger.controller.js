@@ -46,7 +46,9 @@ const deleteLedgerEntry = catchAsync(async (req, res) => {
 });
 
 const getAllSuppliersWithBalances = catchAsync(async (req, res) => {
-  const suppliers = await supplierLedgerService.getAllSuppliersWithBalances();
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const suppliers = await supplierLedgerService.getAllSuppliersWithBalances(filter);
   res.send(suppliers);
 });
 

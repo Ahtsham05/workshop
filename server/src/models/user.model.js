@@ -47,7 +47,7 @@ const userSchema = mongoose.Schema(
     },
     systemRole: {
       type: String,
-      enum: ['superAdmin', 'branchAdmin', 'staff'],
+      enum: ['system_admin', 'superAdmin', 'branchAdmin', 'staff'],
       default: 'staff',
     },
     onboardingComplete: {
@@ -61,6 +61,11 @@ const userSchema = mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    preferredLanguage: {
+      type: String,
+      enum: ['en', 'ur'],
+      default: 'en',
     },
   },
   {

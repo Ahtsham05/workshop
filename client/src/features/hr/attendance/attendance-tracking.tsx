@@ -30,11 +30,27 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+const resolveId = (value: any): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    if (typeof value.id === 'string') return value.id;
+    if (typeof value._id === 'string') return value._id;
+  }
+  return undefined;
+};
+
+const getLocalDateString = () => {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - offsetMs).toISOString().split('T')[0];
+};
+
 export default function AttendanceTracking() {
   const { t } = useLanguage();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
 
   const { data, isLoading, refetch } = useGetAttendancesQuery(
     {
@@ -57,14 +73,19 @@ export default function AttendanceTracking() {
   const [checkIn, { isLoading: isCheckingIn }] = useMarkCheckInMutation();
   const [checkOut, { isLoading: isCheckingOut }] = useMarkCheckOutMutation();
 
+  const attendanceByEmployeeId = new Map<string, any>();
+  data?.results?.forEach((attendance: any) => {
+    const attendanceEmployeeId = resolveId(attendance.employee);
+    if (attendanceEmployeeId) {
+      attendanceByEmployeeId.set(attendanceEmployeeId, attendance);
+    }
+  });
+
   const handleCheckIn = async (employeeId: string) => {
     try {
       await checkIn({ employee: employeeId }).unwrap();
       toast.success(t('Check-in successful'));
-      // Small delay to ensure backend has processed, then force refetch
-      setTimeout(() => {
-        refetch();
-      }, 100);
+      refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to check-in'));
     }
@@ -74,10 +95,7 @@ export default function AttendanceTracking() {
     try {
       await checkOut({ employee: employeeId }).unwrap();
       toast.success(t('Check-out successful'));
-      // Small delay to ensure backend has processed, then force refetch
-      setTimeout(() => {
-        refetch();
-      }, 100);
+      refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to check-out'));
     }
@@ -242,14 +260,11 @@ export default function AttendanceTracking() {
                       emp.employeeId?.toLowerCase().includes(search.toLowerCase())
                     )
                     .map((employee: any) => {
-                      // Match attendance by comparing employee IDs (handle both string and populated object)
-                      const attendance = data?.results?.find((a: any) => {
-                        const attendanceEmpId = typeof a.employee === 'string' ? a.employee : a.employee?.id;
-                        return attendanceEmpId === employee.id;
-                      });
+                      const employeeId = resolveId(employee);
+                      const attendance = employeeId ? attendanceByEmployeeId.get(employeeId) : undefined;
                       
                       return (
-                        <TableRow key={employee.id}>
+                        <TableRow key={employeeId || employee.employeeId || employee.email}>
                           <TableCell className="font-medium">
                             {employee.firstName} {employee.lastName}
                             <p className="text-xs text-muted-foreground">{employee.employeeId}</p>
@@ -289,8 +304,8 @@ export default function AttendanceTracking() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleCheckIn(employee.id)}
-                                  disabled={isCheckingIn}
+                                  onClick={() => employeeId && handleCheckIn(employeeId)}
+                                  disabled={isCheckingIn || !employeeId}
                                 >
                                   <LogIn className="h-4 w-4 mr-1" />
                                   {t('Check In')}
@@ -300,8 +315,8 @@ export default function AttendanceTracking() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleCheckOut(employee.id)}
-                                  disabled={isCheckingOut}
+                                  onClick={() => employeeId && handleCheckOut(employeeId)}
+                                  disabled={isCheckingOut || !employeeId}
                                 >
                                   <LogOut className="h-4 w-4 mr-1" />
                                   {t('Check Out')}

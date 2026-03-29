@@ -5,6 +5,17 @@ const catchAsync = require('../utils/catchAsync');
 const { employeeService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getEmployeeScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const createEmployee = catchAsync(async (req, res) => {
   const employee = await employeeService.createEmployee({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(employee);
@@ -20,7 +31,7 @@ const getEmployees = catchAsync(async (req, res) => {
 });
 
 const getEmployee = catchAsync(async (req, res) => {
-  const employee = await employeeService.getEmployeeById(req.params.employeeId);
+  const employee = await employeeService.getEmployeeById(req.params.employeeId, getEmployeeScope(req));
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
@@ -28,17 +39,17 @@ const getEmployee = catchAsync(async (req, res) => {
 });
 
 const updateEmployee = catchAsync(async (req, res) => {
-  const employee = await employeeService.updateEmployeeById(req.params.employeeId, req.body);
+  const employee = await employeeService.updateEmployeeById(req.params.employeeId, req.body, getEmployeeScope(req));
   res.send(employee);
 });
 
 const deleteEmployee = catchAsync(async (req, res) => {
-  await employeeService.deleteEmployeeById(req.params.employeeId);
+  await employeeService.deleteEmployeeById(req.params.employeeId, getEmployeeScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 
 const getEmployeesByDepartment = catchAsync(async (req, res) => {
-  const employees = await employeeService.getEmployeesByDepartment(req.params.departmentId);
+  const employees = await employeeService.getEmployeesByDepartment(req.params.departmentId, getEmployeeScope(req));
   res.send(employees);
 });
 

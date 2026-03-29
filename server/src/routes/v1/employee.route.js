@@ -6,7 +6,7 @@ const { employeeValidation } = require('../../validations');
 const { employeeController } = require('../../controllers');
 
 const router = express.Router();
-router.use(auth(), branchScope());
+router.use(auth(), branchScope(true));
 
 router
   .route('/')

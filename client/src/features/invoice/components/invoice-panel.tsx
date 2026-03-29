@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +21,12 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
-import { useGetCompanyQuery } from '@/stores/company.api'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useUpdateLanguageMutation } from '@/stores/user-preferences.api'
+import { setPreferredLanguage } from '@/stores/auth.slice'
+import { resolveInvoiceLanguage, type InvoiceLanguage } from '../utils/language'
 import {
   Command,
   CommandEmpty,
@@ -34,6 +40,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+
+const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
 interface InvoicePanelProps {
   invoice: Invoice
@@ -75,6 +83,7 @@ export function InvoicePanel({
   editingInvoice
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
   // const [discountInput, setDiscountInput] = useState('0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
@@ -93,13 +102,17 @@ export function InvoicePanel({
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
+  const [updateLanguagePreference, { isLoading: isUpdatingLanguage }] = useUpdateLanguageMutation()
   
-  // Fetch company data for invoice printing (skip error if not found)
-  const { data: companyData } = useGetCompanyQuery(undefined, {
-    refetchOnMountOrArgChange: false,
-    refetchOnFocus: false,
+  // Fetch active branch data for invoice printing
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const resolvedInvoiceLanguage = resolveInvoiceLanguage({
+    language: invoice.language,
+    isUrduOnly: invoice.isUrduOnly,
+    userPreferredLanguage: preferredLanguage,
   })
-  console.log("invoice",invoice)
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
     try {
@@ -130,11 +143,14 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
-        companyName: companyData?.name,
-        companyAddress: companyData?.address,
-        companyPhone: companyData?.phone,
-        companyEmail: companyData?.email,
-        companyTaxNumber: companyData?.taxNumber
+        companyName: branchData?.name,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyTaxNumber: undefined,
+        language: invoiceData.language,
+        isUrduOnly: invoiceData.isUrduOnly,
+        userPreferredLanguage: preferredLanguage,
       }
 
       // Force Urdu/RTL for print
@@ -151,7 +167,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, companyData, customerBalance])
+  }, [t, invoice.customerName, branchData, customerBalance, preferredLanguage])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
@@ -183,11 +199,14 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
-        companyName: companyData?.name,
-        companyAddress: companyData?.address,
-        companyPhone: companyData?.phone,
-        companyEmail: companyData?.email,
-        companyTaxNumber: companyData?.taxNumber
+        companyName: branchData?.name,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyTaxNumber: undefined,
+        language: invoiceData.language,
+        isUrduOnly: invoiceData.isUrduOnly,
+        userPreferredLanguage: preferredLanguage,
       }
 
       // Force Urdu/RTL for print
@@ -204,7 +223,60 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, companyData])
+  }, [t, invoice.customerName, branchData, preferredLanguage])
+
+  const handleInvoiceLanguageChange = useCallback(async (language: InvoiceLanguage) => {
+    const previousPreferredLanguage = preferredLanguage as InvoiceLanguage
+    const previousInvoiceLanguage = (invoice.language || preferredLanguage) as InvoiceLanguage
+
+    setInvoice((prev) => ({
+      ...prev,
+      language,
+    }))
+    dispatch(setPreferredLanguage(language))
+
+    try {
+      await updateLanguagePreference({ language }).unwrap()
+    } catch (error) {
+      dispatch(setPreferredLanguage(previousPreferredLanguage))
+      setInvoice((prev) => ({
+        ...prev,
+        language: previousInvoiceLanguage,
+      }))
+      toast.error(t('Failed to update invoice language preference'))
+    }
+  }, [dispatch, invoice.language, preferredLanguage, setInvoice, t, updateLanguagePreference])
+
+  const handleUrduOnlyToggle = useCallback(async (checked: boolean) => {
+    const previousPreferredLanguage = preferredLanguage as InvoiceLanguage
+    const previousInvoiceLanguage = (invoice.language || preferredLanguage) as InvoiceLanguage
+    const previousIsUrduOnly = Boolean(invoice.isUrduOnly)
+
+    const nextLanguage: InvoiceLanguage = checked
+      ? 'ur'
+      : ((invoice.language || preferredLanguage || 'en') as InvoiceLanguage)
+
+    setInvoice((prev) => ({
+      ...prev,
+      isUrduOnly: checked,
+      language: checked ? 'ur' : prev.language || preferredLanguage,
+    }))
+    localStorage.setItem(INVOICE_URDU_ONLY_PREF_KEY, checked ? 'true' : 'false')
+    dispatch(setPreferredLanguage(nextLanguage))
+
+    try {
+      await updateLanguagePreference({ language: nextLanguage }).unwrap()
+    } catch (error) {
+      dispatch(setPreferredLanguage(previousPreferredLanguage))
+      localStorage.setItem(INVOICE_URDU_ONLY_PREF_KEY, previousIsUrduOnly ? 'true' : 'false')
+      setInvoice((prev) => ({
+        ...prev,
+        isUrduOnly: previousIsUrduOnly,
+        language: previousInvoiceLanguage,
+      }))
+      toast.error(t('Failed to update invoice language preference'))
+    }
+  }, [dispatch, invoice.isUrduOnly, invoice.language, preferredLanguage, setInvoice, t, updateLanguagePreference])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -496,7 +568,9 @@ export function InvoicePanel({
         loyaltyPoints: invoice.loyaltyPoints,
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
-        notes: invoice.notes
+        notes: invoice.notes,
+        language: invoice.language,
+        isUrduOnly: invoice.isUrduOnly,
       }
 
       // Don't include status in the payload as it's not allowed in updates
@@ -572,7 +646,9 @@ export function InvoicePanel({
           customerName: resolvedCustomerName,
           walkInCustomerName: resolvedWalkInCustomerName,
           previousBalance: previousBalanceBeforeInvoice, // balance before this invoice
-          newBalance: updatedBalance // balance after this invoice (server value)
+          newBalance: updatedBalance, // balance after this invoice (server value)
+          language: result.language || invoice.language,
+          isUrduOnly: result.isUrduOnly ?? invoice.isUrduOnly,
         }
         
         if (printType === 'receipt') {
@@ -625,15 +701,49 @@ export function InvoicePanel({
       {/* Customer and Type Selection */}
       <Card>
         <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            {onBackToList && (
-              <Button variant="ghost" size="sm" onClick={onBackToList}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            )}
-            <DollarSign className='h-5 w-5' />
-            {t('invoice_details')}
-          </CardTitle>
+          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+            <CardTitle className='flex items-center gap-2'>
+              {onBackToList && (
+                <Button variant="ghost" size="sm" onClick={onBackToList}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <DollarSign className='h-5 w-5' />
+              {t('invoice_details')}
+            </CardTitle>
+
+            <div className='flex flex-col gap-3 sm:items-end'>
+              <div className='flex items-center gap-2 rounded-lg border p-1'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant={resolvedInvoiceLanguage === 'en' && !invoice.isUrduOnly ? 'default' : 'ghost'}
+                  disabled={Boolean(invoice.isUrduOnly) || isUpdatingLanguage}
+                  onClick={() => handleInvoiceLanguageChange('en')}
+                >
+                  English
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant={resolvedInvoiceLanguage === 'ur' ? 'default' : 'ghost'}
+                  disabled={isUpdatingLanguage}
+                  onClick={() => handleInvoiceLanguageChange('ur')}
+                >
+                  اردو
+                </Button>
+              </div>
+
+              <div className='flex items-center gap-2'>
+                <Switch
+                  checked={Boolean(invoice.isUrduOnly)}
+                  disabled={isUpdatingLanguage}
+                  onCheckedChange={handleUrduOnlyToggle}
+                />
+                <Label className='text-sm'>Urdu-only invoice</Label>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className='space-y-4'>
           {/* Show invoice number in edit mode */}

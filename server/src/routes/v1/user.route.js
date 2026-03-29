@@ -13,6 +13,10 @@ router
   .get(auth(), checkPermission('viewUsers'), validate(userValidation.getUsers), userController.getUsers);
 
 router
+  .route('/language')
+  .patch(auth(), validate(userValidation.updateLanguage), userController.updateLanguage);
+
+router
   .route('/:userId')
   .get(auth(), checkPermission('viewUsers'), validate(userValidation.getUser), userController.getUser)
   .patch(auth(), checkPermission('editUsers'), validate(userValidation.updateUser), userController.updateUser)

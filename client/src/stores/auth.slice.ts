@@ -69,6 +69,21 @@ const authSlice = createSlice({
     setUser(state, action: PayloadAction<any>) {
       state.data = action.payload
     },
+    setPreferredLanguage(state, action: PayloadAction<'en' | 'ur'>) {
+      if (state.data?.user) {
+        state.data.user.preferredLanguage = action.payload;
+        const existingUser = localStorage.getItem('user')
+        if (existingUser) {
+          try {
+            const parsedUser = JSON.parse(existingUser)
+            parsedUser.preferredLanguage = action.payload
+            localStorage.setItem('user', JSON.stringify(parsedUser))
+          } catch (error) {
+            console.warn('Failed to persist preferredLanguage in localStorage', error)
+          }
+        }
+      }
+    },
     setActiveBranch(state, action: PayloadAction<{ id: string; name: string } | null>) {
       if (action.payload) {
         state.activeBranchId = action.payload.id;
@@ -90,6 +105,11 @@ const authSlice = createSlice({
       })
       .addCase(signinWithEmailPassword.fulfilled, (state, action) => {
         state.data = action.payload; // Assuming payload has the user data
+        // Clear stale branch from previous user on new login
+        state.activeBranchId = null;
+        state.activeBranchName = null;
+        localStorage.removeItem('activeBranchId');
+        localStorage.removeItem('activeBranchName');
       })
       .addCase(refreshToken.fulfilled, (state, action) => {
         state.data = { ...state?.data, tokens: action.payload}; // Assuming payload has the user data
@@ -119,6 +139,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, setActiveBranch } = authSlice.actions;
+export const { setUser, setPreferredLanguage, setActiveBranch } = authSlice.actions;
 
 export default authSlice.reducer;

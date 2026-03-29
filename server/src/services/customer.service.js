@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
-const { Customer, CustomerLedger } = require('../models');
+const { Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
+const customerLedgerService = require('./customerLedger.service');
 
 /**
  * Create a customer
@@ -8,7 +9,17 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Customer>}
  */
 const createCustomer = async (customerBody) => {
-  return Customer.create(customerBody);
+  const customer = await Customer.create(customerBody);
+
+  await customerLedgerService.syncOpeningBalanceEntry({
+    customerId: customer._id,
+    amount: customer.balance || 0,
+    organizationId: customer.organizationId,
+    branchId: customer.branchId,
+    transactionDate: customer.createdAt,
+  });
+
+  return customer;
 };
 
 /**
@@ -47,8 +58,24 @@ const updateCustomerById = async (customerId, updateBody) => {
   if (!customer) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
   }
+
+  const originalBalance = Number(customer.balance || 0);
   Object.assign(customer, updateBody);
   await customer.save();
+
+  if (Object.prototype.hasOwnProperty.call(updateBody, 'balance')) {
+    const newBalance = Number(customer.balance || 0);
+    if (originalBalance !== newBalance) {
+      await customerLedgerService.syncOpeningBalanceEntry({
+        customerId: customer._id,
+        amount: newBalance,
+        organizationId: customer.organizationId,
+        branchId: customer.branchId,
+        transactionDate: customer.createdAt,
+      });
+    }
+  }
+
   return customer;
 };
 
@@ -75,7 +102,7 @@ const getAllCustomers = async (filter = {}) => {
  * @param {Array} customersToAdd - Array of customers to create
  * @returns {Promise<Object>}
  */
-const bulkAddCustomers = async (customersToAdd) => {
+const bulkAddCustomers = async (customersToAdd, branchContext = {}) => {
   try {
     // Process each customer to ensure proper data format
     const processedCustomers = customersToAdd.map(customer => ({
@@ -85,6 +112,8 @@ const bulkAddCustomers = async (customersToAdd) => {
       whatsapp: customer.whatsapp || '',
       address: customer.address || '',
       balance: customer.balance ? Number(customer.balance) : 0,
+      organizationId: branchContext.organizationId,
+      branchId: branchContext.branchId,
     }));
 
     // Insert customers
@@ -92,25 +121,15 @@ const bulkAddCustomers = async (customersToAdd) => {
       ordered: false // Continue inserting even if some fail (e.g., duplicates)
     });
 
-    // Create opening balance ledger entries for customers with balance > 0
-    const ledgerEntries = [];
+    // Sync opening balance ledger entries for imported customers
     for (const customer of insertedCustomers) {
-      if (customer.balance && customer.balance > 0) {
-        ledgerEntries.push({
-          customer: customer._id,
-          transactionType: 'opening_balance',
-          transactionDate: new Date(),
-          description: 'Opening Balance',
-          debit: customer.balance,
-          credit: 0,
-          balance: customer.balance,
-        });
-      }
-    }
-
-    // Batch insert ledger entries if any
-    if (ledgerEntries.length > 0) {
-      await CustomerLedger.insertMany(ledgerEntries);
+      await customerLedgerService.syncOpeningBalanceEntry({
+        customerId: customer._id,
+        amount: customer.balance || 0,
+        organizationId: customer.organizationId,
+        branchId: customer.branchId,
+        transactionDate: customer.createdAt,
+      });
     }
 
     return {

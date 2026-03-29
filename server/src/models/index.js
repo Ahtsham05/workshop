@@ -16,6 +16,7 @@ module.exports.Company = require('./company.model');
 module.exports.Organization = require('./organization.model');
 module.exports.Branch = require('./branch.model');
 module.exports.Membership = require('./membership.model');
+module.exports.Payment = require('./payment.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

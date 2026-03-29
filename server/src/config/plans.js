@@ -1,0 +1,56 @@
+/**
+ * Subscription plan definitions.
+ * Each plan defines limits and pricing.
+ * Prices are in PKR (Pakistani Rupees).
+ */
+const PLANS = {
+  trial: {
+    planType: 'trial',
+    label: 'Free Trial',
+    durationDays: 14,
+    maxBranches: 1,
+    maxUsers: 2,
+    price: 0,
+    description: '14-day free trial to explore all features.',
+    features: [
+      '1 Branch',
+      'Up to 2 Users',
+      'All core features',
+      'Email support',
+    ],
+  },
+  single: {
+    planType: 'single',
+    label: 'Single Shop',
+    maxBranches: 1,
+    maxUsers: 5,
+    pricePerMonth: 2999,
+    description: 'Perfect for a single store location.',
+    features: [
+      '1 Branch',
+      'Up to 5 Users',
+      'All core features',
+      'Invoicing & POS',
+      'Inventory management',
+      'Priority support',
+    ],
+  },
+  multi: {
+    planType: 'multi',
+    label: 'Multi Branch',
+    maxBranches: 10,
+    maxUsers: 50,
+    pricePerMonth: 7999,
+    description: 'Ideal for businesses with multiple locations.',
+    features: [
+      'Up to 10 Branches',
+      'Up to 50 Users',
+      'All core features',
+      'Multi-branch management',
+      'Advanced analytics',
+      'Dedicated support',
+    ],
+  },
+};
+
+module.exports = PLANS;

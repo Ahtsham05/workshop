@@ -13,6 +13,11 @@ const checkPermission = (...permissions) => {
         throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
       }
 
+      // superAdmin and system_admin bypass all permission checks
+      if (req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin') {
+        return next();
+      }
+
       // Populate role if not already populated
       if (!req.user.role || typeof req.user.role === 'string') {
         await req.user.populate('role');
@@ -55,6 +60,11 @@ const checkAllPermissions = (...permissions) => {
     try {
       if (!req.user) {
         throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
+      }
+
+      // superAdmin and system_admin bypass all permission checks
+      if (req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin') {
+        return next();
       }
 
       // Populate role if not already populated

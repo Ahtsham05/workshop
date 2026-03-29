@@ -18,6 +18,8 @@ export function useLogout() {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
+      localStorage.removeItem('activeBranchId')
+      localStorage.removeItem('activeBranchName')
       
       // Show success message
       toast.success('Logged out successfully')
@@ -30,6 +32,8 @@ export function useLogout() {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
+      localStorage.removeItem('activeBranchId')
+      localStorage.removeItem('activeBranchName')
       
       navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
     }

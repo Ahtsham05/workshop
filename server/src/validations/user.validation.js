@@ -48,10 +48,17 @@ const deleteUser = {
   }),
 };
 
+const updateLanguage = {
+  body: Joi.object().keys({
+    language: Joi.string().valid('en', 'ur').required(),
+  }),
+};
+
 module.exports = {
   createUser,
   getUsers,
   getUser,
   updateUser,
   deleteUser,
+  updateLanguage,
 };

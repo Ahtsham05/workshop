@@ -4,9 +4,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { useSetupOrganizationMutation } from '@/stores/organization.api'
-import { setActiveBranch } from '@/stores/auth.slice'
-import { useDispatch } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
+import { setActiveBranch, setUser } from '@/stores/auth.slice'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,6 +60,7 @@ export default function OnboardingPage() {
   const dispatch = useDispatch<AppDispatch>()
   const [step, setStep] = useState(1)
   const [setupOrganization, { isLoading }] = useSetupOrganizationMutation()
+  const authData = useSelector((state: RootState) => state.auth.data)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -81,15 +82,21 @@ export default function OnboardingPage() {
     try {
       const result = await setupOrganization(data).unwrap()
 
-      // Update user in localStorage with onboardingComplete = true
-      const userStr = localStorage.getItem('user')
-      if (userStr) {
-        const user = JSON.parse(userStr)
-        user.onboardingComplete = true
-        user.systemRole = 'superAdmin'
-        user.organizationId = result.organization.id
-        localStorage.setItem('user', JSON.stringify(user))
+      // Update user in localStorage and Redux store with onboardingComplete = true
+      const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
+      const updatedUser = {
+        ...existingUser,
+        onboardingComplete: true,
+        systemRole: 'superAdmin',
+        organizationId: result.organization.id,
       }
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+
+      // Update Redux store so sidebar & permissions reflect immediately
+      dispatch(setUser({
+        ...authData,
+        user: updatedUser,
+      }))
 
       // Set the default branch as active
       if (result.branch) {

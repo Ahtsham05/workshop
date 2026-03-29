@@ -71,9 +71,10 @@ const getAllSuppliers = async (filter = {}) => {
 /**
  * Bulk add suppliers (import from Excel)
  * @param {Array} suppliersToAdd - Array of suppliers to create
+ * @param {Object} branchContext - Organization and branch context
  * @returns {Promise<Object>}
  */
-const bulkAddSuppliers = async (suppliersToAdd) => {
+const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
   try {
     // Process each supplier to ensure proper data format
     const processedSuppliers = suppliersToAdd.map(supplier => ({
@@ -83,6 +84,8 @@ const bulkAddSuppliers = async (suppliersToAdd) => {
       whatsapp: supplier.whatsapp || '',
       address: supplier.address || '',
       balance: supplier.balance ? Number(supplier.balance) : 0,
+      organizationId: branchContext.organizationId,
+      branchId: branchContext.branchId,
     }));
 
     // Insert suppliers

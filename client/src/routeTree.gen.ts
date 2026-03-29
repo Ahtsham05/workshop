@@ -15,7 +15,6 @@ import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
-import { Route as AuthenticatedCompanyImport } from './routes/_authenticated/company'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
@@ -33,6 +32,7 @@ import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
+import { Route as AuthenticatedSubscriptionIndexImport } from './routes/_authenticated/subscription/index'
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
@@ -46,12 +46,14 @@ import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
 import { Route as AuthenticatedBranchesIndexImport } from './routes/_authenticated/branches/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
+import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
+import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
+import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
-import { Route as AuthenticatedCompanySetupImport } from './routes/_authenticated/company/setup'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
@@ -85,12 +87,6 @@ const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
 const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-
-const AuthenticatedCompanyRoute = AuthenticatedCompanyImport.update({
-  id: '/company',
-  path: '/company',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -200,6 +196,13 @@ const AuthenticatedSuppliersIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedSubscriptionIndexRoute =
+  AuthenticatedSubscriptionIndexImport.update({
+    id: '/subscription/',
+    path: '/subscription/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedStaffIndexRoute = AuthenticatedStaffIndexImport.update({
   id: '/staff/',
   path: '/staff/',
@@ -288,10 +291,30 @@ const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
 const AuthenticatedAccountingIndexRoute =
   AuthenticatedAccountingIndexImport.update({
     id: '/accounting/',
     path: '/accounting/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedSubscriptionPricingRoute =
+  AuthenticatedSubscriptionPricingImport.update({
+    id: '/subscription/pricing',
+    path: '/subscription/pricing',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedSubscriptionPaymentRoute =
+  AuthenticatedSubscriptionPaymentImport.update({
+    id: '/subscription/payment',
+    path: '/subscription/payment',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -322,12 +345,6 @@ const AuthenticatedSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
-
-const AuthenticatedCompanySetupRoute = AuthenticatedCompanySetupImport.update({
-  id: '/setup',
-  path: '/setup',
-  getParentRoute: () => AuthenticatedCompanyRoute,
-} as any)
 
 const AuthenticatedProductsBulkEditIndexRoute =
   AuthenticatedProductsBulkEditIndexImport.update({
@@ -503,13 +520,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
       parentRoute: typeof AuthenticatedImport
     }
-    '/_authenticated/company': {
-      id: '/_authenticated/company'
-      path: '/company'
-      fullPath: '/company'
-      preLoaderRoute: typeof AuthenticatedCompanyImport
-      parentRoute: typeof AuthenticatedImport
-    }
     '/_authenticated/reports': {
       id: '/_authenticated/reports'
       path: '/reports'
@@ -530,13 +540,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexImport
       parentRoute: typeof AuthenticatedImport
-    }
-    '/_authenticated/company/setup': {
-      id: '/_authenticated/company/setup'
-      path: '/setup'
-      fullPath: '/company/setup'
-      preLoaderRoute: typeof AuthenticatedCompanySetupImport
-      parentRoute: typeof AuthenticatedCompanyImport
     }
     '/_authenticated/settings/account': {
       id: '/_authenticated/settings/account'
@@ -566,11 +569,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/subscription/payment': {
+      id: '/_authenticated/subscription/payment'
+      path: '/subscription/payment'
+      fullPath: '/subscription/payment'
+      preLoaderRoute: typeof AuthenticatedSubscriptionPaymentImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/subscription/pricing': {
+      id: '/_authenticated/subscription/pricing'
+      path: '/subscription/pricing'
+      fullPath: '/subscription/pricing'
+      preLoaderRoute: typeof AuthenticatedSubscriptionPricingImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/accounting/': {
       id: '/_authenticated/accounting/'
       path: '/accounting'
       fullPath: '/accounting'
       preLoaderRoute: typeof AuthenticatedAccountingIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/apps/': {
@@ -662,6 +686,13 @@ declare module '@tanstack/react-router' {
       path: '/staff'
       fullPath: '/staff'
       preLoaderRoute: typeof AuthenticatedStaffIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/subscription/': {
+      id: '/_authenticated/subscription/'
+      path: '/subscription'
+      fullPath: '/subscription'
+      preLoaderRoute: typeof AuthenticatedSubscriptionIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/suppliers/': {
@@ -790,17 +821,6 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
-interface AuthenticatedCompanyRouteChildren {
-  AuthenticatedCompanySetupRoute: typeof AuthenticatedCompanySetupRoute
-}
-
-const AuthenticatedCompanyRouteChildren: AuthenticatedCompanyRouteChildren = {
-  AuthenticatedCompanySetupRoute: AuthenticatedCompanySetupRoute,
-}
-
-const AuthenticatedCompanyRouteWithChildren =
-  AuthenticatedCompanyRoute._addFileChildren(AuthenticatedCompanyRouteChildren)
-
 interface AuthenticatedHrEmployeesIdRouteChildren {
   AuthenticatedHrEmployeesIdEditRoute: typeof AuthenticatedHrEmployeesIdEditRoute
 }
@@ -818,11 +838,13 @@ const AuthenticatedHrEmployeesIdRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
-  AuthenticatedCompanyRoute: typeof AuthenticatedCompanyRouteWithChildren
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
+  AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedBranchesIndexRoute: typeof AuthenticatedBranchesIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
@@ -835,6 +857,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
+  AuthenticatedSubscriptionIndexRoute: typeof AuthenticatedSubscriptionIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
@@ -853,11 +876,13 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
-  AuthenticatedCompanyRoute: AuthenticatedCompanyRouteWithChildren,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
+  AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedBranchesIndexRoute: AuthenticatedBranchesIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
@@ -871,6 +896,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedPurchaseInvoiceIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
+  AuthenticatedSubscriptionIndexRoute: AuthenticatedSubscriptionIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersManagementIndexRoute:
@@ -907,16 +933,17 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
-  '/company': typeof AuthenticatedCompanyRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
-  '/company/setup': typeof AuthenticatedCompanySetupRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
+  '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -930,6 +957,7 @@ export interface FileRoutesByFullPath {
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
@@ -959,16 +987,17 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
-  '/company': typeof AuthenticatedCompanyRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
-  '/company/setup': typeof AuthenticatedCompanySetupRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
+  '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -982,6 +1011,7 @@ export interface FileRoutesByTo {
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
@@ -1014,16 +1044,17 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
-  '/_authenticated/company': typeof AuthenticatedCompanyRouteWithChildren
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/company/setup': typeof AuthenticatedCompanySetupRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
+  '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
@@ -1037,6 +1068,7 @@ export interface FileRoutesById {
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
+  '/_authenticated/subscription/': typeof AuthenticatedSubscriptionIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
@@ -1070,16 +1102,17 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
-    | '/company'
     | '/reports'
     | '/voice-demo'
     | '/'
-    | '/company/setup'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/subscription/payment'
+    | '/subscription/pricing'
     | '/accounting'
+    | '/admin'
     | '/apps'
     | '/branches'
     | '/categories'
@@ -1093,6 +1126,7 @@ export interface FileRouteTypes {
     | '/roles'
     | '/settings/'
     | '/staff'
+    | '/subscription'
     | '/suppliers'
     | '/tasks'
     | '/users-management'
@@ -1121,16 +1155,17 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
-    | '/company'
     | '/reports'
     | '/voice-demo'
     | '/'
-    | '/company/setup'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/subscription/payment'
+    | '/subscription/pricing'
     | '/accounting'
+    | '/admin'
     | '/apps'
     | '/branches'
     | '/categories'
@@ -1144,6 +1179,7 @@ export interface FileRouteTypes {
     | '/roles'
     | '/settings'
     | '/staff'
+    | '/subscription'
     | '/suppliers'
     | '/tasks'
     | '/users-management'
@@ -1174,16 +1210,17 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/barcode-demo'
-    | '/_authenticated/company'
     | '/_authenticated/reports'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
-    | '/_authenticated/company/setup'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
+    | '/_authenticated/subscription/payment'
+    | '/_authenticated/subscription/pricing'
     | '/_authenticated/accounting/'
+    | '/_authenticated/admin/'
     | '/_authenticated/apps/'
     | '/_authenticated/branches/'
     | '/_authenticated/categories/'
@@ -1197,6 +1234,7 @@ export interface FileRouteTypes {
     | '/_authenticated/roles/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
+    | '/_authenticated/subscription/'
     | '/_authenticated/suppliers/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
@@ -1273,11 +1311,13 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
-        "/_authenticated/company",
         "/_authenticated/reports",
         "/_authenticated/voice-demo",
         "/_authenticated/",
+        "/_authenticated/subscription/payment",
+        "/_authenticated/subscription/pricing",
         "/_authenticated/accounting/",
+        "/_authenticated/admin/",
         "/_authenticated/apps/",
         "/_authenticated/branches/",
         "/_authenticated/categories/",
@@ -1290,6 +1330,7 @@ export const routeTree = rootRoute
         "/_authenticated/purchase-invoice/",
         "/_authenticated/roles/",
         "/_authenticated/staff/",
+        "/_authenticated/subscription/",
         "/_authenticated/suppliers/",
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
@@ -1353,13 +1394,6 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/barcode-demo.tsx",
       "parent": "/_authenticated"
     },
-    "/_authenticated/company": {
-      "filePath": "_authenticated/company.tsx",
-      "parent": "/_authenticated",
-      "children": [
-        "/_authenticated/company/setup"
-      ]
-    },
     "/_authenticated/reports": {
       "filePath": "_authenticated/reports.tsx",
       "parent": "/_authenticated"
@@ -1371,10 +1405,6 @@ export const routeTree = rootRoute
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
       "parent": "/_authenticated"
-    },
-    "/_authenticated/company/setup": {
-      "filePath": "_authenticated/company/setup.tsx",
-      "parent": "/_authenticated/company"
     },
     "/_authenticated/settings/account": {
       "filePath": "_authenticated/settings/account.tsx",
@@ -1392,8 +1422,20 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/notifications.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/subscription/payment": {
+      "filePath": "_authenticated/subscription/payment.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/subscription/pricing": {
+      "filePath": "_authenticated/subscription/pricing.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/accounting/": {
       "filePath": "_authenticated/accounting/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/admin/": {
+      "filePath": "_authenticated/admin/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/apps/": {
@@ -1446,6 +1488,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/staff/": {
       "filePath": "_authenticated/staff/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/subscription/": {
+      "filePath": "_authenticated/subscription/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/suppliers/": {

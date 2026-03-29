@@ -2,19 +2,32 @@ const httpStatus = require('http-status');
 const { Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
 
+const getTenantFilter = (data = {}) => {
+  const filter = {};
+  if (data.organizationId) {
+    filter.organizationId = data.organizationId;
+  }
+  if (data.branchId) {
+    filter.branchId = data.branchId;
+  }
+  return filter;
+};
+
 /**
  * Create an employee
  * @param {Object} employeeBody
  * @returns {Promise<Employee>}
  */
 const createEmployee = async (employeeBody) => {
-  if (await Employee.findOne({ email: employeeBody.email })) {
+  const tenantFilter = getTenantFilter(employeeBody);
+
+  if (await Employee.findOne({ ...tenantFilter, email: employeeBody.email })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
-  if (await Employee.findOne({ employeeId: employeeBody.employeeId })) {
+  if (await Employee.findOne({ ...tenantFilter, employeeId: employeeBody.employeeId })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID already exists');
   }
-  if (employeeBody.cnic && await Employee.findOne({ cnic: employeeBody.cnic })) {
+  if (employeeBody.cnic && await Employee.findOne({ ...tenantFilter, cnic: employeeBody.cnic })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
   }
   
@@ -58,8 +71,9 @@ const queryEmployees = async (filter, options) => {
  * @param {ObjectId} id
  * @returns {Promise<Employee>}
  */
-const getEmployeeById = async (id) => {
-  const employee = await Employee.findById(id)
+const getEmployeeById = async (id, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  const employee = await Employee.findOne({ _id: id, ...tenantFilter })
     .populate('department')
     .populate('designation')
     .populate('shift')
@@ -91,18 +105,28 @@ const getEmployeeByEmployeeId = async (employeeId) => {
  * @param {Object} updateBody
  * @returns {Promise<Employee>}
  */
-const updateEmployeeById = async (employeeId, updateBody) => {
-  const employee = await getEmployeeById(employeeId);
+const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  const employee = await getEmployeeById(employeeId, tenantFilter);
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
-  if (updateBody.email && (await Employee.findOne({ email: updateBody.email, _id: { $ne: employeeId } }))) {
+  if (
+    updateBody.email
+    && (await Employee.findOne({ ...tenantFilter, email: updateBody.email, _id: { $ne: employeeId } }))
+  ) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
-  if (updateBody.employeeId && (await Employee.findOne({ employeeId: updateBody.employeeId, _id: { $ne: employeeId } }))) {
+  if (
+    updateBody.employeeId
+    && (await Employee.findOne({ ...tenantFilter, employeeId: updateBody.employeeId, _id: { $ne: employeeId } }))
+  ) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID already exists');
   }
-  if (updateBody.cnic && (await Employee.findOne({ cnic: updateBody.cnic, _id: { $ne: employeeId } }))) {
+  if (
+    updateBody.cnic
+    && (await Employee.findOne({ ...tenantFilter, cnic: updateBody.cnic, _id: { $ne: employeeId } }))
+  ) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
   }
   
@@ -134,8 +158,8 @@ const updateEmployeeById = async (employeeId, updateBody) => {
  * @param {ObjectId} employeeId
  * @returns {Promise<Employee>}
  */
-const deleteEmployeeById = async (employeeId) => {
-  const employee = await getEmployeeById(employeeId);
+const deleteEmployeeById = async (employeeId, scope = {}) => {
+  const employee = await getEmployeeById(employeeId, scope);
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
@@ -148,16 +172,18 @@ const deleteEmployeeById = async (employeeId) => {
  * @param {ObjectId} departmentId
  * @returns {Promise<Employee[]>}
  */
-const getEmployeesByDepartment = async (departmentId) => {
-  return Employee.find({ department: departmentId, isActive: true }).populate('designation');
+const getEmployeesByDepartment = async (departmentId, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  return Employee.find({ ...tenantFilter, department: departmentId, isActive: true }).populate('designation');
 };
 
 /**
  * Get active employees count
  * @returns {Promise<number>}
  */
-const getActiveEmployeesCount = async () => {
-  return Employee.countDocuments({ employmentStatus: 'Active' });
+const getActiveEmployeesCount = async (scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  return Employee.countDocuments({ ...tenantFilter, employmentStatus: 'Active' });
 };
 
 module.exports = {

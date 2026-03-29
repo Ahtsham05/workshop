@@ -76,13 +76,15 @@ export function RecentActivities() {
                   <div>
                     <p className='text-sm font-medium'>{activity.description}</p>
                     <p className='text-xs text-muted-foreground'>
-                      {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                      {activity.timestamp
+                        ? (() => { try { return formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) } catch { return '—' } })()
+                        : '—'}
                     </p>
                   </div>
                 </div>
                 <div className='flex items-center gap-2'>
                   <span className='text-sm font-semibold'>
-                    Rs{activity.amount.toLocaleString()}
+                    Rs{(activity.amount ?? 0).toLocaleString()}
                   </span>
                   <Badge variant={getStatusColor(activity.status)} className='text-xs'>
                     {t(activity.status)}

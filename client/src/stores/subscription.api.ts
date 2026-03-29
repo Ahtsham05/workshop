@@ -1,0 +1,180 @@
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQuery } from './base-query';
+
+export interface Payment {
+  id: string;
+  organizationId: string | { id: string; name: string; email?: string };
+  userId: string | { id: string; name: string; email: string };
+  planType: 'single' | 'multi';
+  months: number;
+  amount: number;
+  paymentMethod: 'bank_transfer';
+  transactionId?: string;
+  screenshotUrl?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string | { id: string; name: string; email: string };
+  approvedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanConfig {
+  planType: string;
+  label: string;
+  durationDays?: number;
+  maxBranches: number;
+  maxUsers: number;
+  price?: number;
+  pricePerMonth?: number;
+  description: string;
+  features: string[];
+}
+
+export interface BankDetails {
+  bankName: string;
+  accountTitle: string;
+  accountNumber: string;
+  iban: string;
+  swiftCode?: string;
+  branch?: string;
+  instructions: string[];
+}
+
+export interface BankDetailsResponse {
+  bankDetails: BankDetails;
+  plans: Record<string, PlanConfig>;
+}
+
+export interface PaymentsResponse {
+  results: Payment[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+export interface SubmitPaymentRequest {
+  planType: 'single' | 'multi';
+  months: number;
+  transactionId?: string;
+  screenshotUrl?: string;
+  screenshotPublicId?: string;
+}
+
+export interface RejectPaymentRequest {
+  rejectionReason: string;
+}
+
+export interface UploadScreenshotResponse {
+  url: string;
+  publicId: string;
+}
+
+export const subscriptionApi = createApi({
+  reducerPath: 'subscriptionApi',
+  baseQuery,
+  tagTypes: ['Payment', 'AdminPayment'],
+  endpoints: (builder) => ({
+    // -- User-facing endpoints --
+
+    getBankDetails: builder.query<BankDetailsResponse, void>({
+      query: () => '/payments/bank-details',
+    }),
+
+    submitPayment: builder.mutation<Payment, SubmitPaymentRequest>({
+      query: (body) => ({
+        url: '/payments',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Payment'],
+    }),
+
+    getMyPayments: builder.query<PaymentsResponse, { status?: string; page?: number; limit?: number }>({
+      query: (params = {}) => ({
+        url: '/payments/my',
+        params,
+      }),
+      providesTags: ['Payment'],
+    }),
+
+    getPayment: builder.query<Payment, string>({
+      query: (paymentId) => `/payments/${paymentId}`,
+      providesTags: (_result, _err, id) => [{ type: 'Payment', id }],
+    }),
+
+    // -- Admin endpoints --
+
+    adminGetAllPayments: builder.query<
+      PaymentsResponse,
+      { status?: string; planType?: string; page?: number; limit?: number }
+    >({
+      query: (params = {}) => ({
+        url: '/admin/payments',
+        params,
+      }),
+      providesTags: ['AdminPayment'],
+    }),
+
+    adminGetPayment: builder.query<Payment, string>({
+      query: (paymentId) => `/admin/payments/${paymentId}`,
+      providesTags: (_result, _err, id) => [{ type: 'AdminPayment', id }],
+    }),
+
+    adminApprovePayment: builder.mutation<Payment, string>({
+      query: (paymentId) => ({
+        url: `/admin/payments/${paymentId}/approve`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['AdminPayment', 'Payment'],
+    }),
+
+    adminRejectPayment: builder.mutation<Payment, { paymentId: string; rejectionReason: string }>({
+      query: ({ paymentId, rejectionReason }) => ({
+        url: `/admin/payments/${paymentId}/reject`,
+        method: 'PATCH',
+        body: { rejectionReason },
+      }),
+      invalidatesTags: ['AdminPayment', 'Payment'],
+    }),
+
+    adminGetAllOrganizations: builder.query<
+      { results: any[]; page: number; limit: number; totalPages: number; totalResults: number },
+      { page?: number; limit?: number }
+    >({
+      query: (params = {}) => ({
+        url: '/admin/organizations',
+        params,
+      }),
+    }),
+
+    adminGetOrganization: builder.query<
+      { organization: any; totalUsers: number; payments: Payment[] },
+      string
+    >({
+      query: (orgId) => `/admin/organizations/${orgId}`,
+    }),
+
+    adminGetDashboard: builder.query<
+      { stats: { totalOrgs: number; totalUsers: number; pendingPayments: number; approvedPayments: number }; recentPending: Payment[] },
+      void
+    >({
+      query: () => '/admin/dashboard',
+    }),
+  }),
+});
+
+export const {
+  useGetBankDetailsQuery,
+  useSubmitPaymentMutation,
+  useGetMyPaymentsQuery,
+  useGetPaymentQuery,
+  useAdminGetAllPaymentsQuery,
+  useAdminGetPaymentQuery,
+  useAdminApprovePaymentMutation,
+  useAdminRejectPaymentMutation,
+  useAdminGetAllOrganizationsQuery,
+  useAdminGetOrganizationQuery,
+  useAdminGetDashboardQuery,
+} = subscriptionApi;

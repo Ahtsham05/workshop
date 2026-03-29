@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Popover,
   PopoverContent,
@@ -23,6 +24,7 @@ import { Separator } from '@/components/ui/separator'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -67,7 +69,9 @@ export default function PurchasePanel({
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const suppliers: Supplier[] = suppliersData?.results || []
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   // Filter suppliers by search query
   const filteredSuppliers = suppliers.filter(supplier => {
@@ -125,16 +129,37 @@ export default function PurchasePanel({
     fetchSupplierBalance()
   }, [purchase.supplier])
 
+  useEffect(() => {
+    if (purchase.paymentType === 'Cash') {
+      const currentTotal = calculateTotals().total
+      if ((purchase.paidAmount || 0) !== currentTotal || (purchase.balance || 0) !== 0) {
+        setPurchase((prev) => ({
+          ...prev,
+          paidAmount: currentTotal,
+          balance: 0,
+        }))
+      }
+    }
+  }, [purchase.paymentType, purchase.paidAmount, purchase.balance, calculateTotals, setPurchase])
+
   // Print functionality
   const printPurchase = useCallback(
     (purchaseData: any, printType: 'receipt' | 'a4') => {
       try {
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
+          const branchDetails = {
+            name: branchData?.name,
+            address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+              .filter(Boolean)
+              .join(', '),
+            phone: branchData?.phone,
+            email: branchData?.email,
+          }
           const html =
             printType === 'receipt'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t)
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t)
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails)
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails)
 
           const printWindow = window.open('', '_blank')
           if (printWindow) {
@@ -148,7 +173,7 @@ export default function PurchasePanel({
         toast.error(t('Failed to print'))
       }
     },
-    [purchase.supplier, t]
+    [branchData, purchase.supplier, t]
   )
 
   // Handle product selection for manual entries
@@ -479,6 +504,36 @@ export default function PurchasePanel({
                 className="w-full"
               />
             </div>
+
+            <div>
+              <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
+              <Select
+                value={purchase.paymentType || 'Cash'}
+                onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit') => {
+                  const currentTotal = calculateTotals().total
+                  setPurchase((prev) => {
+                    const nextPaid = value === 'Cash' ? currentTotal : (prev.paidAmount || 0)
+                    return {
+                      ...prev,
+                      paymentType: value,
+                      paidAmount: nextPaid,
+                      balance: currentTotal - nextPaid,
+                    }
+                  })
+                }}
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='Cash'>{t('cash')}</SelectItem>
+                  <SelectItem value='Credit'>{t('credit')}</SelectItem>
+                  {/* <SelectItem value='Card'>{t('Card')}</SelectItem>
+                  <SelectItem value='Bank Transfer'>{t('Bank Transfer')}</SelectItem>
+                  <SelectItem value='Cheque'>{t('Cheque')}</SelectItem> */}
+                </SelectContent>
+              </Select>
+            </div>
         </CardContent>
       </Card>
 
@@ -751,6 +806,7 @@ export default function PurchasePanel({
                   min="0"
                   max={totals.total}
                   value={purchase.paidAmount || 0}
+                  disabled={purchase.paymentType === 'Cash'}
                   onChange={(e) => {
                     const value = parseFloat(e.target.value) || 0
                     const currentTotal = calculateTotals().total
@@ -769,7 +825,7 @@ export default function PurchasePanel({
                   <span>{t('Balance Due')}:</span>
                   <span>Rs{(totals.total - (purchase.paidAmount || 0)).toFixed(2)}</span>
                 </div>
-              )} */}x1
+              )} */}
             </div>
 
             {/* Supplier Balance After Payment - Only show in create mode */}

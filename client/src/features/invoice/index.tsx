@@ -7,12 +7,19 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useState, useEffect, useCallback } from 'react'
-import { useDispatch } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
 import { toast } from 'sonner'
+
+const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
+
+const getInitialUrduOnlyPreference = (): boolean => {
+  const stored = localStorage.getItem(INVOICE_URDU_ONLY_PREF_KEY)
+  return stored === 'true'
+}
 
 export interface InvoiceItem {
   id: string
@@ -33,6 +40,8 @@ export interface Invoice {
   customerId?: string
   customerName?: string
   walkInCustomerName?: string
+  language?: 'en' | 'ur'
+  isUrduOnly?: boolean
   type: 'cash' | 'credit' | 'pending'
   status?: 'draft' | 'finalized' | 'paid' | 'cancelled' | 'refunded'
   subtotal: number
@@ -88,6 +97,7 @@ export default function InvoicePage() {
   const { t } = useLanguage()
   const { hasPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   
   // View state management
   const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>('create')
@@ -96,6 +106,8 @@ export default function InvoicePage() {
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
     items: [],
+    language: preferredLanguage,
+    isUrduOnly: getInitialUrduOnlyPreference(),
     type: 'credit',
     subtotal: 0,
     tax: 0,
@@ -238,6 +250,18 @@ export default function InvoicePage() {
     
     setCategorizedProducts(Array.from(categoryMap.values()))
   }, [products])
+
+  useEffect(() => {
+    setInvoice((prev) => {
+      if (prev.isUrduOnly) {
+        return prev.language === 'ur' ? prev : { ...prev, language: 'ur' }
+      }
+      if (prev.language) {
+        return prev
+      }
+      return { ...prev, language: preferredLanguage }
+    })
+  }, [preferredLanguage])
 
   // Calculate invoice totals
   const calculateTotals = useCallback((items: InvoiceItem[], discountAmount: number = 0, deliveryCharge: number = 0, serviceCharge: number = 0) => {
@@ -606,9 +630,12 @@ export default function InvoicePage() {
     
     setCurrentView('create')
     setEditingInvoice(null)
+    const preferredUrduOnly = getInitialUrduOnlyPreference()
     // Reset invoice state
     setInvoice({
       items: [],
+      language: preferredUrduOnly ? 'ur' : preferredLanguage,
+      isUrduOnly: preferredUrduOnly,
       type: 'credit',
       subtotal: 0,
       tax: 0,
@@ -676,6 +703,8 @@ export default function InvoicePage() {
     
     setInvoice({
       items: itemsWithUniqueIds,
+      language: invoiceData.language || preferredLanguage,
+      isUrduOnly: invoiceData.isUrduOnly || false,
       type: invoiceData.type || 'cash',
       subtotal: invoiceData.subtotal || 0,
       tax: invoiceData.tax || 0,
@@ -742,10 +771,13 @@ export default function InvoicePage() {
     // Reset to create new invoice instead of going to list
     setCurrentView('create')
     setEditingInvoice(null)
+    const preferredUrduOnly = getInitialUrduOnlyPreference()
     
     // Reset invoice state for new invoice
     setInvoice({
       items: [],
+      language: preferredUrduOnly ? 'ur' : preferredLanguage,
+      isUrduOnly: preferredUrduOnly,
       type: 'credit',
       subtotal: 0,
       tax: 0,
@@ -769,7 +801,7 @@ export default function InvoicePage() {
     
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
-  }, [refreshProducts])
+  }, [preferredLanguage, refreshProducts])
 
   const handleConvertPending = () => {
     setCurrentView('convert-pending')

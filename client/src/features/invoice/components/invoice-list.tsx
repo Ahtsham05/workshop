@@ -43,7 +43,9 @@ import {
   Clock,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
-import { useGetCompanyQuery } from '@/stores/company.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
 import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow, PrintInvoiceData } from '../utils/print-utils'
 import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
@@ -75,6 +77,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   // onReturn, 
   onConvertPending }: InvoiceListProps) {
   const { t } = useLanguage()
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -113,10 +116,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   
   const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
   const { data: customersData } = useGetAllCustomersQuery(undefined)
-  const { data: companyData } = useGetCompanyQuery(undefined, {
-    refetchOnMountOrArgChange: false,
-    refetchOnFocus: false,
-  })
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -251,11 +252,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         notes: invoice.notes,
         deliveryCharge: invoice.deliveryCharge || 0,
         serviceCharge: invoice.serviceCharge || 0,
-        companyName: companyData?.name,
-        companyAddress: companyData?.address,
-        companyPhone: companyData?.phone,
-        companyEmail: companyData?.email,
-        companyTaxNumber: companyData?.taxNumber
+        companyName: branchData?.name,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyTaxNumber: undefined,
+        language: invoice.language,
+        isUrduOnly: invoice.isUrduOnly,
+        userPreferredLanguage: preferredLanguage,
       }
 
       if (format === 'receipt') {

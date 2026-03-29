@@ -28,6 +28,10 @@ const attendanceRoute = require('./attendance.route');
 const leaveRoute = require('./leave.route');
 const payrollRoute = require('./payroll.route');
 
+// Subscription & Admin Routes
+const paymentRoute = require('./payment.route');
+const adminRoute = require('./admin.route');
+
 const router = express.Router();
 
 const defaultRoutes = [
@@ -127,6 +131,15 @@ const defaultRoutes = [
   {
     path: '/payroll',
     route: payrollRoute
+  },
+  // Subscription & Admin
+  {
+    path: '/payments',
+    route: paymentRoute,
+  },
+  {
+    path: '/admin',
+    route: adminRoute,
   },
 ];
 

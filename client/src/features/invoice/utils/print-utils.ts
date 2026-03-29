@@ -1,3 +1,5 @@
+import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
+
 export interface PrintInvoiceData {
   invoiceNumber: string
   items: Array<{
@@ -29,6 +31,9 @@ export interface PrintInvoiceData {
   companyPhone?: string
   companyEmail?: string
   companyTaxNumber?: string
+  language?: InvoiceLanguage
+  isUrduOnly?: boolean
+  userPreferredLanguage?: InvoiceLanguage
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -64,7 +69,23 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     companyEmail,
     companyTaxNumber
   } = data
-  console.log("data",data)
+
+  const language = resolveInvoiceLanguage(data)
+  const labels = receiptLabels[language]
+  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
+  const dir = language === 'ur' ? 'rtl' : 'ltr'
+  const startAlign = language === 'ur' ? 'right' : 'left'
+
+  const formatDisplayDate = (value?: string) => {
+    if (!value) return labels.not_available
+    try {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return labels.not_available
+      return date.toLocaleDateString(locale)
+    } catch {
+      return labels.not_available
+    }
+  }
 
   // Resolve balances - prefer explicit fields from `data` when provided
   const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
@@ -79,45 +100,13 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   //   ? data.netBalance
   //   : totalWithPrev - paid
 
-  // Urdu translations
   const urduTexts = {
-    business_name: companyName || 'آپ کا کاروبار',
-    business_address: companyAddress || 'آپ کا پتہ، شہر، ملک',
-    business_phone: companyPhone || '+92 300 1234567',
-    business_email: companyEmail || 'info@yourbusiness.com',
-    tax_id: companyTaxNumber ? `ٹیکس آئی ڈی: ${companyTaxNumber}` : 'ٹیکس آئی ڈی: 123456789',
-    invoice_title: 'رسید',
-    invoice_number: 'رسید نمبر',
-    date: 'تاریخ',
-    time: 'وقت',
-    type: 'قسم',
-    customer: 'کسٹمر',
-    due_date: 'آخری تاریخ',
-    walk_in_customer: 'واک ان کسٹمر',
-    items_purchased: 'خریدی گئی اشیاء',
-    subtotal: 'ذیلی ٹوٹل',
-    discount: 'رعایت',
-    delivery_charge: 'ڈیلیوری چارج',
-    service_charge: 'سروس چارج',
-    tax: 'ٹیکس',
-    total: 'کل',
-    paid: 'ادا شدہ',
-    balance_due: 'باقی رقم',
-    paid_in_full: 'مکمل ادائیگی',
-    previous_balance: 'پچھلا بیلنس',
-    current_invoice: 'موجودہ انوائس',
-    net_balance: 'کل بیلنس',
-    notes: 'نوٹس',
-    thank_you: 'آپ کا شکریہ!',
-    keep_receipt: 'براہ کرم یہ رسید محفوظ رکھیں',
-    visit_again: 'دوبارہ تشریف لائیے گا',
-    powered_by: 'Logix Plus Software Solutions',
-    print_options: 'پرنٹ آپشنز',
-    print_receipt: '🖨️ رسید پرنٹ کریں',
-    close: '✕ بند کریں',
-    cash: 'cash',
-    credit: 'credit',
-    pending: 'pending'
+    ...labels,
+    business_name: companyName || labels.business_name,
+    business_address: companyAddress || labels.business_address,
+    business_phone: companyPhone || labels.business_phone,
+    business_email: companyEmail || labels.business_email,
+    tax_id: `${labels.tax_id_prefix} ${companyTaxNumber || labels.tax_id_fallback}`,
   }
 
   const getTypeText = (type: string) => {
@@ -131,7 +120,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 
   return `
 <!DOCTYPE html>
-<html dir="rtl" lang="ur">
+<html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
   <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
@@ -160,7 +149,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       width: 300px;
       background: white;
       color: #000;
-      direction: rtl;
+      direction: ${dir};
+      text-align: ${startAlign};
     }
     
     .receipt-header {
@@ -367,7 +357,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.date}:</span>
-      <span>${new Date().toLocaleDateString('ur-PK')}</span>
+      <span>${new Date().toLocaleDateString(locale)}</span>
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.type}:</span>
@@ -375,12 +365,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.customer}:</span>
-      <span>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || 'N/A')}</span>
+      <span>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || urduTexts.not_available)}</span>
     </div>
     ${type === 'credit' && dueDate ? `
     <div class="info-row">
       <span class="info-label">${urduTexts.due_date}:</span>
-      <span>${new Date(dueDate).toLocaleDateString('ur-PK')}</span>
+      <span>${formatDisplayDate(dueDate)}</span>
     </div>
     ` : ''}
   </div>
@@ -448,7 +438,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       </div>
       ` : ''}
       <div class="total-row" style="font-size: 11px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #d32f2f;">
-        <span>کل رقم:</span>
+        <span>${urduTexts.net_balance}:</span>
         <span>${formatCurrency(totalWithPrev)}</span>
       </div>
       <div class="total-row" style="margin-bottom: 3px;">
@@ -530,59 +520,31 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     companyTaxNumber
   } = data
 
-  // Urdu translations for A4 invoice
+  const language = resolveInvoiceLanguage(data)
+  const labels = a4Labels[language]
+  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
+  const dir = language === 'ur' ? 'rtl' : 'ltr'
+  const startAlign = language === 'ur' ? 'right' : 'left'
+  const endAlign = language === 'ur' ? 'left' : 'right'
+
+  const formatDisplayDate = (value?: string) => {
+    if (!value) return labels.not_available
+    try {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return labels.not_available
+      return date.toLocaleDateString(locale)
+    } catch {
+      return labels.not_available
+    }
+  }
+
   const urduTexts = {
-    business_name: companyName || 'آپ کا کاروبار',
-    business_address: companyAddress || 'آپ کا پتہ، شہر، ملک',
-    business_phone: companyPhone || '+92 300 1234567',
-    business_email: companyEmail || 'info@yourbusiness.com',
-    tax_id: companyTaxNumber ? `ٹیکس آئی ڈی: ${companyTaxNumber}` : 'ٹیکس آئی ڈی: 123456789',
-    invoice_title: 'انوائس',
-    invoice_number: 'انوائس نمبر',
-    date: 'تاریخ',
-    time: 'وقت',
-    type: 'قسم',
-    customer: 'کسٹمر',
-    due_date: 'آخری تاریخ',
-    walk_in_customer: 'واک ان کسٹمر',
-    bill_to: 'بل کی معلومات',
-    invoice_details: 'انوائس کی تفصیلات',
-    issue_date: 'تاریخ',
-    items_count: 'اشیاء کی تعداد',
-    product_name: 'پروڈکٹ کا نام',
-    quantity: 'مقدار',
-    unit_price: 'قیمت',
-    total_amount: 'کل رقم',
-    subtotal: 'ذیلی ٹوٹل',
-    discount: 'رعایت',
-    delivery_charge: 'ڈیلیوری چارج',
-    service_charge: 'سروس چارج',
-    tax: 'ٹیکس',
-    total: 'کل',
-    amount: 'رقم',
-    payment_information: 'ادائیگی کی معلومات',
-    amount_paid: 'ادا شدہ رقم',
-    balance_due: 'باقی رقم',
-    paid_in_full: 'مکمل ادائیگی',
-    payment_status: 'ادائیگی کی صورتحال',
-    completed: 'مکمل',
-    pending_payment: 'ادائیگی باقی',
-    previous_balance: 'پچھلا بیلنس',
-    current_invoice: 'موجودہ انوائس',
-    net_balance: 'کل بیلنس',
-    invoice_barcode: 'انوائس بار کوڈ',
-    scan_to_verify: 'تصدیق کے لیے اسکین کریں',
-    additional_notes: 'اضافی نوٹس',
-    thank_you: 'آپ کا شکریہ!',
-    keep_receipt: 'براہ کرم یہ انوائس محفوظ رکھیں',
-    generated_on: 'تیار کیا گیا',
-    powered_by: 'Logix Plus Software Solutions',
-    print_options: 'پرنٹ آپشنز',
-    print_invoice: '🖨️ انوائس پرنٹ کریں',
-    close: '✕ بند کریں',
-    cash: 'cash',
-    credit: 'credit',
-    pending: 'pending'
+    ...labels,
+    business_name: companyName || labels.business_name,
+    business_address: companyAddress || labels.business_address,
+    business_phone: companyPhone || labels.business_phone,
+    business_email: companyEmail || labels.business_email,
+    tax_id: `${labels.tax_id_prefix} ${companyTaxNumber || labels.tax_id_fallback}`,
   }
 
   const getTypeText = (type: string) => {
@@ -609,7 +571,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 
   return `
 <!DOCTYPE html>
-<html dir="rtl" lang="ur">
+<html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
   <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
@@ -637,7 +599,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       padding: 20px;
       background: white;
       color: #000;
-      direction: rtl;
+      direction: ${dir};
+      text-align: ${startAlign};
     }
     
     .invoice-header {
@@ -674,7 +637,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .invoice-details {
-      text-align: left;
+      text-align: ${endAlign};
       flex: 1;
     }
     
@@ -735,7 +698,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     .items-table th {
     
       padding: 12px 8px;
-      text-align: right;
+      text-align: ${startAlign};
       font-weight: 800;
       font-size: 14px;
       border: 1px solid #0056b3;
@@ -748,7 +711,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .items-table th:last-child {
       border-radius: 8px 0 0 0;
-      text-align: left;
+      text-align: ${endAlign};
     }
     
     .items-table td {
@@ -772,7 +735,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .items-table .text-right {
-      text-align: left;
+      text-align: ${endAlign};
     }
     
     .items-table .text-center {
@@ -780,7 +743,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .items-table .text-left {
-      text-align: right;
+      text-align: ${startAlign};
     }
     
     .totals-section {
@@ -805,13 +768,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .totals-table .total-label {
       font-weight: 700;
-      text-align: left;
+      text-align: ${endAlign};
       background: #f8f9fa;
       border-right: 1px solid #dee2e6;
     }
     
     .totals-table .total-amount {
-      text-align: right;
+      text-align: ${startAlign};
       font-weight: 600;
       background: white;
     }
@@ -962,8 +925,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="invoice-title">${urduTexts.invoice_title}</div>
       <div class="invoice-meta">
         <div><strong>#${invoiceNumber}</strong></div>
-        <div>${urduTexts.date}: ${new Date().toLocaleDateString('ur-PK')}</div>
-        <div>${urduTexts.time}: ${new Date().toLocaleTimeString('ur-PK')}</div>
+        <div>${urduTexts.date}: ${new Date().toLocaleDateString(locale)}</div>
+        <div>${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>
     </div>
   </div>
@@ -973,13 +936,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="info-title">${urduTexts.bill_to}:</div>
       <div class="info-row">
         <span class="info-label">${urduTexts.customer}:</span>
-        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || 'N/A')}</strong></span>
+        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || urduTexts.not_available)}</strong></span>
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
       ${type === 'credit' && dueDate ? `
       <div class="info-row">
         <span class="info-label">${urduTexts.due_date}:</span>
-        <span><strong style="color: #d32f2f;">${new Date(dueDate).toLocaleDateString('ur-PK')}</strong></span>
+        <span><strong style="color: #d32f2f;">${formatDisplayDate(dueDate)}</strong></span>
       </div>
       ` : ''}
     </div>
@@ -987,7 +950,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="info-title">${urduTexts.invoice_details}:</div>
       <div class="info-row">
         <span class="info-label">${urduTexts.issue_date}:</span>
-        <span>${new Date().toLocaleDateString('ur-PK')}</span>
+        <span>${new Date().toLocaleDateString(locale)}</span>
       </div>
     </div>
   </div>

@@ -55,6 +55,17 @@ const organizationSchema = mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    subscription: {
+      planType: { type: String, enum: ['trial', 'single', 'multi'], default: 'trial' },
+      status: { type: String, enum: ['active', 'expired', 'pending'], default: 'pending' },
+      startDate: { type: Date },
+      endDate: { type: Date },
+      isTrial: { type: Boolean, default: true },
+      limits: {
+        maxBranches: { type: Number, default: 1 },
+        maxUsers: { type: Number, default: 2 },
+      },
+    },
     isActive: {
       type: Boolean,
       default: true,

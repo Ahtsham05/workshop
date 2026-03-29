@@ -17,6 +17,8 @@ import { hrApi } from './hr.api';
 import { organizationApi } from './organization.api';
 import { branchApi } from './branch.api';
 import { membershipApi } from './membership.api';
+import { subscriptionApi } from './subscription.api';
+import { userPreferencesApi } from './user-preferences.api';
 
 export const store = configureStore({
   reducer: {
@@ -38,6 +40,8 @@ export const store = configureStore({
     [organizationApi.reducerPath]: organizationApi.reducer,
     [branchApi.reducerPath]: branchApi.reducer,
     [membershipApi.reducerPath]: membershipApi.reducer,
+    [subscriptionApi.reducerPath]: subscriptionApi.reducer,
+    [userPreferencesApi.reducerPath]: userPreferencesApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -53,6 +57,8 @@ export const store = configureStore({
       organizationApi.middleware,
       branchApi.middleware,
       membershipApi.middleware,
+      subscriptionApi.middleware,
+      userPreferencesApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

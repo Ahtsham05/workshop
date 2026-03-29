@@ -22,7 +22,6 @@ const employeeSchema = mongoose.Schema(
     employeeId: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     firstName: {
@@ -38,7 +37,6 @@ const employeeSchema = mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       lowercase: true,
     },
@@ -171,8 +169,9 @@ employeeSchema.virtual('fullName').get(function () {
 });
 
 // Index for better query performance
-employeeSchema.index({ employeeId: 1 });
-employeeSchema.index({ email: 1 });
+employeeSchema.index({ organizationId: 1, branchId: 1, employeeId: 1 }, { unique: true });
+employeeSchema.index({ organizationId: 1, branchId: 1, email: 1 }, { unique: true });
+employeeSchema.index({ organizationId: 1, branchId: 1, cnic: 1 }, { unique: true, sparse: true });
 employeeSchema.index({ department: 1 });
 employeeSchema.index({ employmentStatus: 1 });
 

@@ -1,6 +1,26 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
 
+export interface SubscriptionLimits {
+  maxBranches: number;
+  maxUsers: number;
+}
+
+export interface Subscription {
+  planType: 'trial' | 'single' | 'multi';
+  status: 'active' | 'expired' | 'pending';
+  startDate?: string;
+  endDate?: string;
+  isTrial: boolean;
+  limits: SubscriptionLimits;
+}
+
+export interface SubscriptionUsage {
+  subscription: Subscription | null;
+  branchesUsed: number;
+  usersUsed: number;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -15,6 +35,7 @@ export interface Organization {
   description?: string;
   logo?: { url: string; publicId: string };
   owner: string | { id: string; name: string; email: string };
+  subscription?: Subscription;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -58,6 +79,10 @@ export const organizationApi = createApi({
       }),
       invalidatesTags: ['Organization'],
     }),
+    getSubscriptionUsage: builder.query<SubscriptionUsage, void>({
+      query: () => '/payments/subscription/usage',
+      providesTags: ['Organization'],
+    }),
   }),
 });
 
@@ -65,4 +90,5 @@ export const {
   useSetupOrganizationMutation,
   useGetMyOrganizationQuery,
   useUpdateOrganizationMutation,
+  useGetSubscriptionUsageQuery,
 } = organizationApi;

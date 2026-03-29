@@ -109,7 +109,11 @@ const InvoiceSchema = new mongoose.Schema({
     // Audit fields
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    convertedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    convertedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+    // Language preference (overrides user setting per invoice)
+    language: { type: String, enum: ['en', 'ur'] },
+    isUrduOnly: { type: Boolean, default: false },
 }, {
     timestamps: true
 });

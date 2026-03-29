@@ -53,14 +53,21 @@ const paginate = (schema) => {
     let docsPromise = this.find(filter).sort(sort).skip(skip).limit(limit);
 
     if (options.populate) {
-      options.populate.split(',').forEach((populateOption) => {
-        docsPromise = docsPromise.populate(
-          populateOption
-            .split('.')
-            .reverse()
-            .reduce((a, b) => ({ path: b, populate: a }))
-        );
-      });
+      if (Array.isArray(options.populate)) {
+        // Array of populate objects: [{ path, select, populate }, ...]
+        options.populate.forEach((populateOption) => {
+          docsPromise = docsPromise.populate(populateOption);
+        });
+      } else {
+        options.populate.split(',').forEach((populateOption) => {
+          docsPromise = docsPromise.populate(
+            populateOption
+              .split('.')
+              .reverse()
+              .reduce((a, b) => ({ path: b, populate: a }))
+          );
+        });
+      }
     }
 
     docsPromise = docsPromise.exec();

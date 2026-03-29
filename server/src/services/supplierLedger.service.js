@@ -187,10 +187,11 @@ const deleteLedgerEntry = async (id) => {
 
 /**
  * Get all suppliers with balances
+ * @param {Object} filter - Organization and branch filter
  * @returns {Promise<Array>}
  */
-const getAllSuppliersWithBalances = async () => {
-  const suppliers = await Supplier.find().select('name phone email balance');
+const getAllSuppliersWithBalances = async (filter = {}) => {
+  const suppliers = await Supplier.find(filter).select('name phone email balance');
   
   const suppliersWithBalances = await Promise.all(
     suppliers.map(async (supplier) => {
@@ -220,17 +221,67 @@ const getAllSuppliersWithBalances = async () => {
  * @returns {Promise<void>}
  */
 const updateLedgerEntriesByReference = async (referenceId, updateData) => {
-  const { totalAmount, paidAmount, invoiceNumber, purchaseDate, paymentMethod, itemsCount } = updateData;
+  const {
+    totalAmount,
+    paidAmount,
+    invoiceNumber,
+    purchaseDate,
+    paymentMethod,
+    itemsCount,
+    organizationId,
+    branchId,
+    supplierId,
+  } = updateData;
   
   // Find all entries related to this purchase
   const entries = await SupplierLedger.find({ referenceId }).sort({ transactionDate: 1 });
   
   if (entries.length === 0) {
-    console.log('No ledger entries found for reference:', referenceId);
+    if (!supplierId) {
+      console.log('No ledger entries found and supplier is missing for reference:', referenceId);
+      return;
+    }
+
+    console.log('No ledger entries found. Creating fresh entries for reference:', referenceId);
+
+    await createLedgerEntry({
+      organizationId,
+      branchId,
+      supplier: supplierId,
+      transactionType: 'purchase',
+      transactionDate: purchaseDate || new Date(),
+      reference: invoiceNumber,
+      referenceId,
+      description: `Purchase Invoice #${invoiceNumber}`,
+      debit: 0,
+      credit: totalAmount,
+      paymentMethod,
+      notes: `Purchase of ${itemsCount || 0} items`,
+    });
+
+    if (paidAmount > 0) {
+      const paymentDate = new Date(purchaseDate || new Date());
+      paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+
+      await createLedgerEntry({
+        organizationId,
+        branchId,
+        supplier: supplierId,
+        transactionType: 'payment_made',
+        transactionDate: paymentDate,
+        reference: invoiceNumber,
+        referenceId,
+        description: `Payment for Purchase #${invoiceNumber}`,
+        debit: paidAmount,
+        credit: 0,
+        paymentMethod,
+        notes: `Amount paid: Rs${paidAmount.toFixed(2)}`,
+      });
+    }
     return;
   }
 
-  const supplierId = entries[0].supplier;
+  const entrySupplierId = entries[0].supplier;
   
   // Find the purchase entry (credit)
   const purchaseEntry = entries.find(e => e.transactionType === 'purchase');
@@ -246,7 +297,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
     
     // Create new entry
     await createLedgerEntry({
-      supplier: supplierId,
+      organizationId: purchaseEntry.organizationId,
+      branchId: purchaseEntry.branchId,
+      supplier: entrySupplierId,
       transactionType: 'purchase',
       transactionDate: purchaseDate || purchaseEntry.transactionDate,
       reference: invoiceNumber,
@@ -274,7 +327,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
         
         // Create new payment entry
         await createLedgerEntry({
-          supplier: supplierId,
+          organizationId: paymentEntry.organizationId,
+          branchId: paymentEntry.branchId,
+          supplier: entrySupplierId,
           transactionType: 'payment_made',
           transactionDate: paymentDate,
           reference: invoiceNumber,
@@ -290,7 +345,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
       // Payment entry doesn't exist - create new one
       console.log(`Creating new payment entry: ${paidAmount}`);
       await createLedgerEntry({
-        supplier: supplierId,
+        organizationId: purchaseEntry ? purchaseEntry.organizationId : organizationId,
+        branchId: purchaseEntry ? purchaseEntry.branchId : branchId,
+        supplier: entrySupplierId,
         transactionType: 'payment_made',
         transactionDate: paymentDate,
         reference: invoiceNumber,

@@ -1,7 +1,68 @@
 // Purchase invoice print utilities - Receipt and A4 formats
 
-export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string, t: any): string {
+type BranchPrintDetails = {
+  name?: string
+  address?: string
+  phone?: string
+  email?: string
+}
+
+const resolvePrintLabel = (t: any, key: string, fallback: string): string => {
+  if (typeof t !== 'function') return fallback
+  const value = t(key)
+  if (!value || typeof value !== 'string') return fallback
+
+  const normalized = value.trim()
+  // If translation is missing, many i18n setups return the raw key (often snake_case).
+  if (!normalized || normalized === key || normalized.includes('_')) return fallback
+
+  return normalized
+}
+
+const resolveUnitPrice = (item: any): number => {
+  return Number(item?.priceAtPurchase ?? item?.purchasePrice ?? item?.unitPrice ?? 0)
+}
+
+const resolveLineTotal = (item: any): number => {
+  const explicitTotal = Number(item?.total ?? item?.subtotal)
+  if (!Number.isNaN(explicitTotal) && explicitTotal > 0) {
+    return explicitTotal
+  }
+  return Number(item?.quantity || 0) * resolveUnitPrice(item)
+}
+
+const resolvePaymentType = (purchase: any): string => {
+  if (purchase?.paymentType) return purchase.paymentType
+  const balance = Number(purchase?.balance || 0)
+  return balance > 0 ? 'Credit' : 'Cash'
+}
+
+const resolveTotalAmount = (purchase: any): number => {
+  return Number(purchase?.totalAmount ?? purchase?.total ?? 0)
+}
+
+const resolvePaidAmount = (purchase: any): number => {
+  return Number(purchase?.paidAmount || 0)
+}
+
+export function generatePurchaseInvoiceHTML(
+  purchase: any,
+  supplierName: string,
+  t: any,
+  branchDetails?: BranchPrintDetails
+): string {
   const items = purchase.items || []
+  const totalAmount = resolveTotalAmount(purchase)
+  const paidAmount = resolvePaidAmount(purchase)
+  const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
+  const paymentType = resolvePaymentType(purchase)
+  const tr = (key: string, fallback: string) => resolvePrintLabel(t, key, fallback)
+
+  const companyName = branchDetails?.name || tr('your_store_name', 'Your Store')
+  const companyAddress = branchDetails?.address || '-'
+  const companyPhone = branchDetails?.phone || '-'
+  const companyEmail = branchDetails?.email || '-'
+
   const itemsHTML = items
     .map(
       (item: any) => `
@@ -13,10 +74,10 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
         ${item.quantity} ${item.unit || 'pcs'}
       </td>
       <td style="padding: 8px 4px; text-align: right; border-bottom: 1px dashed #ddd;">
-        Rs ${item.priceAtPurchase?.toFixed(2) || '0.00'}
+        Rs ${resolveUnitPrice(item).toFixed(2)}
       </td>
       <td style="padding: 8px 4px; text-align: right; border-bottom: 1px dashed #ddd;">
-        Rs ${item.total?.toFixed(2) || '0.00'}
+        Rs ${resolveLineTotal(item).toFixed(2)}
       </td>
     </tr>
   `
@@ -28,7 +89,7 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>${t('purchase_invoice')} - ${purchase.invoiceNumber}</title>
+      <title>${tr('purchase_invoice', 'Purchase Invoice')} - ${purchase.invoiceNumber}</title>
       <style>
         @media print {
           @page {
@@ -119,29 +180,36 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
     </head>
     <body>
       <div class="header">
-        <div class="store-name">${t('your_store_name')}</div>
-        <div>${t('purchase_invoice')}</div>
+        <div class="store-name">${companyName}</div>
+        <div>${tr('address', 'Address')}: ${companyAddress}</div>
+        <div>${tr('phone', 'Phone')}: ${companyPhone}</div>
+        <div>${tr('email', 'Email')}: ${companyEmail}</div>
+        <div>${tr('purchase_invoice', 'Purchase Invoice')}</div>
         <div class="invoice-type">${purchase.invoiceNumber || ''}</div>
       </div>
 
       <div class="info-section">
         <div class="info-row">
-          <span><strong>${t('supplier')}:</strong></span>
+          <span><strong>${tr('supplier', 'Supplier')}:</strong></span>
           <span>${supplierName}</span>
         </div>
         <div class="info-row">
-          <span><strong>${t('date')}:</strong></span>
+          <span><strong>${tr('date', 'Date')}:</strong></span>
           <span>${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+        </div>
+        <div class="info-row">
+          <span><strong>${tr('payment_type', 'Payment Type')}:</strong></span>
+          <span>${paymentType}</span>
         </div>
       </div>
 
       <table>
         <thead>
           <tr>
-            <th>${t('item')}</th>
-            <th style="text-align: center;">${t('qty')}</th>
-            <th style="text-align: right;">${t('price')}</th>
-            <th style="text-align: right;">${t('total')}</th>
+            <th>${tr('item', 'Item')}</th>
+            <th style="text-align: center;">${tr('qty', 'Qty')}</th>
+            <th style="text-align: right;">${tr('price', 'Price')}</th>
+            <th style="text-align: right;">${tr('total', 'Total')}</th>
           </tr>
         </thead>
         <tbody>
@@ -151,24 +219,32 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
 
       <div class="totals">
         <div class="total-row">
-          <span>${t('subtotal')}:</span>
-          <span>Rs ${purchase.totalAmount?.toFixed(2) || '0.00'}</span>
+          <span>${tr('subtotal', 'Subtotal')}:</span>
+          <span>Rs ${totalAmount.toFixed(2)}</span>
+        </div>
+        <div class="total-row">
+          <span>${tr('paid', 'Paid')}:</span>
+          <span>Rs ${paidAmount.toFixed(2)}</span>
+        </div>
+        <div class="total-row">
+          <span>${tr('balance_due', 'Balance Due')}:</span>
+          <span>Rs ${Math.max(balance, 0).toFixed(2)}</span>
         </div>
         <div class="total-row total-amount">
-          <span>${t('total')}:</span>
-          <span>Rs ${purchase.totalAmount?.toFixed(2) || '0.00'}</span>
+          <span>${tr('total', 'Total')}:</span>
+          <span>Rs ${totalAmount.toFixed(2)}</span>
         </div>
       </div>
 
       ${purchase.notes ? `
         <div class="notes">
-          <strong>${t('notes')}:</strong><br>
+          <strong>${tr('notes', 'Notes')}:</strong><br>
           ${purchase.notes}
         </div>
       ` : ''}
 
       <div class="footer">
-        <p>${t('thank_you_for_your_business')}</p>
+        <p>${tr('thank_you_for_your_business', 'Thank you for your business')}</p>
         <p>${new Date().toLocaleString()}</p>
       </div>
     </body>
@@ -176,8 +252,24 @@ export function generatePurchaseInvoiceHTML(purchase: any, supplierName: string,
   `
 }
 
-export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: string, t: any): string {
+export function generatePurchaseInvoiceA4HTML(
+  purchase: any,
+  supplierName: string,
+  t: any,
+  branchDetails?: BranchPrintDetails
+): string {
   const items = purchase.items || []
+  const totalAmount = resolveTotalAmount(purchase)
+  const paidAmount = resolvePaidAmount(purchase)
+  const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
+  const paymentType = resolvePaymentType(purchase)
+  const tr = (key: string, fallback: string) => resolvePrintLabel(t, key, fallback)
+
+  const companyName = branchDetails?.name || tr('your_store_name', 'Your Store')
+  const companyAddress = branchDetails?.address || '-'
+  const companyPhone = branchDetails?.phone || '-'
+  const companyEmail = branchDetails?.email || '-'
+
   const itemsHTML = items
     .map(
       (item: any, index: number) => `
@@ -190,10 +282,10 @@ export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: strin
         ${item.quantity} ${item.unit || 'pcs'}
       </td>
       <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">
-        Rs ${item.priceAtPurchase?.toFixed(2) || '0.00'}
+        Rs ${resolveUnitPrice(item).toFixed(2)}
       </td>
       <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">
-        Rs ${item.total?.toFixed(2) || '0.00'}
+        Rs ${resolveLineTotal(item).toFixed(2)}
       </td>
     </tr>
   `
@@ -205,7 +297,7 @@ export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: strin
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>${t('purchase_invoice')} - ${purchase.invoiceNumber}</title>
+      <title>${tr('purchase_invoice', 'Purchase Invoice')} - ${purchase.invoiceNumber}</title>
       <style>
         @media print {
           @page {
@@ -344,35 +436,38 @@ export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: strin
       <div class="container">
         <div class="header">
           <div class="company-info">
-            <div class="company-name">${t('your_store_name')}</div>
+            <div class="company-name">${companyName}</div>
             <div class="company-details">
-              ${t('address')}: 123 Main St, City<br>
-              ${t('phone')}: (123) 456-7890<br>
-              ${t('email')}: info@yourstore.com
+              ${tr('address', 'Address')}: ${companyAddress}<br>
+              ${tr('phone', 'Phone')}: ${companyPhone}<br>
+              ${tr('email', 'Email')}: ${companyEmail}
             </div>
           </div>
           <div class="invoice-info">
-            <div class="invoice-type">${t('purchase_invoice')}</div>
+            <div class="invoice-type">${tr('purchase_invoice', 'Purchase Invoice')}</div>
             <div class="invoice-number">${purchase.invoiceNumber || ''}</div>
             <div class="invoice-date">
-              ${t('date')}: ${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString() : new Date().toLocaleDateString()}
+              ${tr('date', 'Date')}: ${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString() : new Date().toLocaleDateString()}
             </div>
           </div>
         </div>
 
         <div class="supplier-section">
-          <div class="section-title">${t('supplier_details')}</div>
+          <div class="section-title">${tr('supplier_details', 'Supplier Details')}</div>
           <div class="supplier-name">${supplierName}</div>
+          <div style="margin-top: 8px; color: #4b5563;">
+            <strong>${tr('payment_type', 'Payment Type')}:</strong> ${paymentType}
+          </div>
         </div>
 
         <table>
           <thead>
             <tr>
               <th style="width: 50px;">#</th>
-              <th>${t('item_description')}</th>
-              <th style="text-align: center; width: 100px;">${t('quantity')}</th>
-              <th style="text-align: right; width: 120px;">${t('unit_price')}</th>
-              <th style="text-align: right; width: 120px;">${t('total')}</th>
+              <th>${tr('item_description', 'Item Description')}</th>
+              <th style="text-align: center; width: 100px;">${tr('quantity', 'Quantity')}</th>
+              <th style="text-align: right; width: 120px;">${tr('unit_price', 'Unit Price')}</th>
+              <th style="text-align: right; width: 120px;">${tr('total', 'Total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -383,26 +478,34 @@ export function generatePurchaseInvoiceA4HTML(purchase: any, supplierName: strin
         <div class="totals-section">
           <table class="totals-table">
             <tr>
-              <td>${t('subtotal')}:</td>
-              <td style="text-align: right;">Rs ${purchase.totalAmount?.toFixed(2) || '0.00'}</td>
+              <td>${tr('subtotal', 'Subtotal')}:</td>
+              <td style="text-align: right;">Rs ${totalAmount.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>${tr('paid', 'Paid')}:</td>
+              <td style="text-align: right;">Rs ${paidAmount.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>${tr('balance_due', 'Balance Due')}:</td>
+              <td style="text-align: right;">Rs ${Math.max(balance, 0).toFixed(2)}</td>
             </tr>
             <tr class="total-row">
-              <td>${t('total_amount')}:</td>
-              <td style="text-align: right;">Rs ${purchase.totalAmount?.toFixed(2) || '0.00'}</td>
+              <td>${tr('total_amount', 'Total Amount')}:</td>
+              <td style="text-align: right;">Rs ${totalAmount.toFixed(2)}</td>
             </tr>
           </table>
         </div>
 
         ${purchase.notes ? `
           <div class="notes-section">
-            <div class="section-title">${t('notes')}</div>
+            <div class="section-title">${tr('notes', 'Notes')}</div>
             <div>${purchase.notes}</div>
           </div>
         ` : ''}
 
         <div class="footer">
-          <p>${t('thank_you_for_your_business')}</p>
-          <p>${t('printed_on')}: ${new Date().toLocaleString()}</p>
+          <p>${tr('thank_you_for_your_business', 'Thank you for your business')}</p>
+          <p>${tr('printed_on', 'Printed on')}: ${new Date().toLocaleString()}</p>
         </div>
       </div>
     </body>

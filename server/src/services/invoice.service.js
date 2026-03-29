@@ -94,6 +94,21 @@ const createInvoice = async (invoiceBody, userId) => {
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
     try {
+      const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
+      const hasExistingLedger = await CustomerLedger.exists({ customer: invoice.customerId });
+
+      // Backward compatibility: preserve legacy opening balances that were saved on customer
+      // but never written as opening_balance ledger transactions.
+      if (customer && !hasExistingLedger && Number(customer.balance || 0) !== 0) {
+        await customerLedgerService.syncOpeningBalanceEntry({
+          customerId: invoice.customerId,
+          amount: customer.balance,
+          organizationId: invoice.organizationId,
+          branchId: invoice.branchId,
+          transactionDate: customer.createdAt,
+        });
+      }
+
       // Determine reference and description based on whether this is a converted pending invoice with bill number
       const displayReference = invoice.billNumber ? `Bill #${invoice.billNumber}` : invoice.invoiceNumber;
       const description = invoice.billNumber 
@@ -102,6 +117,8 @@ const createInvoice = async (invoiceBody, userId) => {
       
       // For credit/cash invoices, create a sale entry (debit - customer owes us)
       await customerLedgerService.createLedgerEntry({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
         customer: invoice.customerId,
         transactionType: 'sale',
         transactionDate: invoice.invoiceDate || new Date(),
@@ -122,6 +139,8 @@ const createInvoice = async (invoiceBody, userId) => {
         paymentDate.setSeconds(paymentDate.getSeconds() + 1);
         
         await customerLedgerService.createLedgerEntry({
+          organizationId: invoice.organizationId,
+          branchId: invoice.branchId,
           customer: invoice.customerId,
           transactionType: 'payment_received',
           transactionDate: paymentDate,
@@ -303,6 +322,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   const originalTotal = invoice.total;
   const originalPaidAmount = invoice.paidAmount || 0;
   const originalCustomerId = invoice.customerId;
+  const originalType = invoice.type;
   
   // Prevent updating finalized invoices unless specifically allowed
   // if (invoice.status === 'finalized' || invoice.status === 'paid') {
@@ -386,11 +406,14 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   const newCustomerId = invoice.customerId;
   const newTotal = invoice.total;
   const newPaidAmount = invoice.paidAmount || 0;
+  const hasLedgerEntries = await CustomerLedger.exists({ referenceId: invoice._id });
 
   if (originalCustomerId && originalCustomerId !== 'walk-in' && (
     originalTotal !== newTotal || 
     originalPaidAmount !== newPaidAmount ||
-    originalCustomerId !== newCustomerId
+    originalCustomerId !== newCustomerId ||
+    originalType !== invoice.type ||
+    !hasLedgerEntries
   )) {
     try {
       console.log('Updating customer ledger entries for invoice:', {
@@ -411,6 +434,8 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         // Create new entries for new customer (if not walk-in)
         if (newCustomerId !== 'walk-in') {
           await customerLedgerService.createLedgerEntry({
+            organizationId: invoice.organizationId,
+            branchId: invoice.branchId,
             customer: newCustomerId,
             transactionType: 'sale',
             transactionDate: invoice.invoiceDate || new Date(),
@@ -428,6 +453,8 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
             paymentDate.setSeconds(paymentDate.getSeconds() + 1);
 
             await customerLedgerService.createLedgerEntry({
+              organizationId: invoice.organizationId,
+              branchId: invoice.branchId,
               customer: newCustomerId,
               transactionType: 'payment_received',
               transactionDate: paymentDate,
@@ -444,11 +471,16 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       } else {
         // Same customer - update existing entries
         await customerLedgerService.updateLedgerEntriesByReference(invoice._id, {
+          organizationId: invoice.organizationId,
+          branchId: invoice.branchId,
+          customerId: newCustomerId,
           total: newTotal,
           paidAmount: newPaidAmount,
           invoiceNumber: invoice.invoiceNumber,
           invoiceDate: invoice.invoiceDate,
-          paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer'
+          paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+          invoiceType: invoice.type,
+          notes: invoice.notes,
         });
       }
 

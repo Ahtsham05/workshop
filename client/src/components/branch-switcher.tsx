@@ -30,9 +30,9 @@ export function BranchSwitcher() {
   const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName)
   const user = useSelector((state: RootState) => state.auth.data?.user)
 
-  const isSuperAdmin = user?.systemRole === 'superAdmin'
+  const isSuperAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
 
-  const { data: branches = [] } = useGetMyBranchesQuery()
+  const { data: branches = [] } = useGetMyBranchesQuery(undefined, { refetchOnMountOrArgChange: true })
 
   // Auto-select the default branch (or first branch) on first load when no branch is selected
   useEffect(() => {

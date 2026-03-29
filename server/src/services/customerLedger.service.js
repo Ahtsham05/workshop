@@ -187,10 +187,11 @@ const deleteLedgerEntry = async (id) => {
 
 /**
  * Get all customers with balances
+ * @param {Object} filter - Organization and branch filter
  * @returns {Promise<Array>}
  */
-const getAllCustomersWithBalances = async () => {
-  const customers = await Customer.find().select('name phone email balance');
+const getAllCustomersWithBalances = async (filter = {}) => {
+  const customers = await Customer.find(filter).select('name phone email balance');
   
   const customersWithBalances = await Promise.all(
     customers.map(async (customer) => {
@@ -220,17 +221,69 @@ const getAllCustomersWithBalances = async () => {
  * @returns {Promise<void>}
  */
 const updateLedgerEntriesByReference = async (referenceId, updateData) => {
-  const { total, paidAmount, invoiceNumber, invoiceDate, paymentMethod } = updateData;
+  const {
+    total,
+    paidAmount,
+    invoiceNumber,
+    invoiceDate,
+    paymentMethod,
+    organizationId,
+    branchId,
+    customerId,
+    invoiceType,
+    notes,
+  } = updateData;
   
   // Find all entries related to this invoice
   const entries = await CustomerLedger.find({ referenceId }).sort({ transactionDate: 1 });
   
   if (entries.length === 0) {
-    console.log('No ledger entries found for reference:', referenceId);
+    // Backfill missing ledger entries (e.g. pending->credit conversion or old broken writes)
+    if (!customerId || customerId === 'walk-in') {
+      console.log('No ledger entries found and customer is invalid/walk-in for reference:', referenceId);
+      return;
+    }
+
+    console.log('No ledger entries found. Creating fresh entries for reference:', referenceId);
+
+    await createLedgerEntry({
+      organizationId,
+      branchId,
+      customer: customerId,
+      transactionType: 'sale',
+      transactionDate: invoiceDate || new Date(),
+      reference: invoiceNumber,
+      referenceId,
+      description: `Sale Invoice #${invoiceNumber}`,
+      debit: total,
+      credit: 0,
+      paymentMethod: invoiceType === 'cash' ? 'Cash' : paymentMethod,
+      notes: notes || 'Invoice ledger backfilled',
+    });
+
+    if (paidAmount > 0) {
+      const paymentDate = new Date(invoiceDate || new Date());
+      paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+
+      await createLedgerEntry({
+        organizationId,
+        branchId,
+        customer: customerId,
+        transactionType: 'payment_received',
+        transactionDate: paymentDate,
+        reference: invoiceNumber,
+        referenceId,
+        description: `Payment for Invoice #${invoiceNumber}`,
+        debit: 0,
+        credit: paidAmount,
+        paymentMethod: paymentMethod || 'Cash',
+        notes: `Amount paid: Rs${paidAmount.toFixed(2)}`,
+      });
+    }
     return;
   }
 
-  const customerId = entries[0].customer;
+  const entryCustomerId = entries[0].customer;
   
   // Find the sale entry (debit)
   const saleEntry = entries.find(e => e.transactionType === 'sale');
@@ -246,7 +299,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
     
     // Create new entry
     await createLedgerEntry({
-      customer: customerId,
+          organizationId: saleEntry.organizationId,
+          branchId: saleEntry.branchId,
+      customer: entryCustomerId,
       transactionType: 'sale',
       transactionDate: invoiceDate || saleEntry.transactionDate,
       reference: invoiceNumber,
@@ -274,7 +329,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
         
         // Create new payment entry
         await createLedgerEntry({
-          customer: customerId,
+          organizationId: paymentEntry.organizationId,
+          branchId: paymentEntry.branchId,
+          customer: entryCustomerId,
           transactionType: 'payment_received',
           transactionDate: paymentDate,
           reference: invoiceNumber,
@@ -290,7 +347,9 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
       // Payment entry doesn't exist - create new one
       console.log(`Creating new payment entry: ${paidAmount}`);
       await createLedgerEntry({
-        customer: customerId,
+        organizationId: saleEntry ? saleEntry.organizationId : organizationId,
+        branchId: saleEntry ? saleEntry.branchId : branchId,
+        customer: entryCustomerId,
         transactionType: 'payment_received',
         transactionDate: paymentDate,
         reference: invoiceNumber,
@@ -325,6 +384,68 @@ const deleteLedgerEntriesByReference = async (referenceId) => {
   }
 };
 
+/**
+ * Create or update opening balance entry and keep running balances consistent
+ * @param {Object} params
+ * @param {ObjectId} params.customerId
+ * @param {number} params.amount
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.branchId
+ * @param {Date} [params.transactionDate]
+ * @returns {Promise<void>}
+ */
+const syncOpeningBalanceEntry = async ({ customerId, amount, organizationId, branchId, transactionDate }) => {
+  const numericAmount = Number(amount || 0);
+  const openingDate = transactionDate ? new Date(transactionDate) : new Date();
+
+  const existing = await CustomerLedger.findOne({
+    customer: customerId,
+    transactionType: 'opening_balance',
+  }).sort({ transactionDate: 1, createdAt: 1 });
+
+  let recalcFrom = openingDate;
+
+  if (numericAmount === 0) {
+    if (existing) {
+      recalcFrom = existing.transactionDate;
+      await existing.deleteOne();
+      await recalculateBalances(customerId, recalcFrom);
+    }
+    return;
+  }
+
+  const debit = numericAmount > 0 ? numericAmount : 0;
+  const credit = numericAmount < 0 ? Math.abs(numericAmount) : 0;
+
+  if (existing) {
+    existing.organizationId = existing.organizationId || organizationId;
+    existing.branchId = existing.branchId || branchId;
+    existing.transactionDate = openingDate;
+    existing.description = 'Opening Balance';
+    existing.debit = debit;
+    existing.credit = credit;
+    existing.reference = 'OPENING-BALANCE';
+    recalcFrom = existing.transactionDate;
+    await existing.save();
+  } else {
+    const entry = await CustomerLedger.create({
+      organizationId,
+      branchId,
+      customer: customerId,
+      transactionType: 'opening_balance',
+      transactionDate: openingDate,
+      reference: 'OPENING-BALANCE',
+      description: 'Opening Balance',
+      debit,
+      credit,
+      balance: 0,
+    });
+    recalcFrom = entry.transactionDate;
+  }
+
+  await recalculateBalances(customerId, recalcFrom);
+};
+
 module.exports = {
   createLedgerEntry,
   queryLedgerEntries,
@@ -336,4 +457,5 @@ module.exports = {
   getAllCustomersWithBalances,
   updateLedgerEntriesByReference,
   deleteLedgerEntriesByReference,
+  syncOpeningBalanceEntry,
 };

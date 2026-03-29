@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,10 +17,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt } from 'lucide-react'
+import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt, Printer } from 'lucide-react'
 import { useGetPurchasesQuery } from '@/stores/purchase.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -28,6 +32,8 @@ interface PurchaseListProps {
 
 export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
   const { t } = useLanguage()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
@@ -52,6 +58,43 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   }
 
   const { data: purchasesResponse, isLoading, error } = useGetPurchasesQuery(queryParams)
+
+  const getPurchasePaymentType = useCallback((purchase: any) => {
+    if (purchase?.paymentType) return purchase.paymentType
+    return Number(purchase?.balance || 0) > 0 ? 'Credit' : 'Cash'
+  }, [])
+
+  const printPurchase = useCallback(
+    async (purchase: any, printType: 'receipt' | 'a4') => {
+      try {
+        const printModule = await import('@/utils/purchasePrintUtils')
+        const branchDetails = {
+          name: branchData?.name,
+          address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+            .filter(Boolean)
+            .join(', '),
+          phone: branchData?.phone,
+          email: branchData?.email,
+        }
+
+        const html =
+          printType === 'receipt'
+            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails)
+            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails)
+
+        const printWindow = window.open('', '_blank')
+        if (printWindow) {
+          printWindow.document.write(html)
+          printWindow.document.close()
+          printWindow.print()
+        }
+      } catch (printError) {
+        console.error('Failed to print purchase:', printError)
+        toast.error(t('Failed to print purchase'))
+      }
+    },
+    [branchData, t]
+  )
 
   const handleDelete = (purchase: any) => {
     setPurchaseToDelete(purchase)
@@ -185,6 +228,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                   {/* <TableHead>{t('Phone')}</TableHead> */}
                   <TableHead>{t('Items')}</TableHead>
                   <TableHead>{t('Date')}</TableHead>
+                  <TableHead>{t('Payment Type')}</TableHead>
                   <TableHead>{t('Amount')}</TableHead>
                   {/* <TableHead>{t('Status')}</TableHead> */}
                   <TableHead>{t('Actions')}</TableHead>
@@ -209,6 +253,18 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                     </TableCell>
                     <TableCell>
                       {format(new Date(purchase.purchaseDate || purchase.createdAt), 'MMM dd, yyyy')}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant='outline'
+                        className={
+                          getPurchasePaymentType(purchase) === 'Credit'
+                            ? 'border-blue-300 text-blue-700'
+                            : 'border-emerald-300 text-emerald-700'
+                        }
+                      >
+                        {getPurchasePaymentType(purchase)}
+                      </Badge>
                     </TableCell>
                     <TableCell>Rs{purchase.totalAmount?.toFixed(2) || '0.00'}</TableCell>
                     {/* <TableCell>
@@ -244,6 +300,22 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                             <Edit className="h-4 w-4" />
                           </Button>
                         )}
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => printPurchase(purchase, 'receipt')}
+                          title={t('Print receipt')}
+                        >
+                          <Printer className='h-4 w-4' />
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => printPurchase(purchase, 'a4')}
+                          title={t('Print A4')}
+                        >
+                          <Receipt className='h-4 w-4' />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

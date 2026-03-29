@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Branch, Membership, User } = require('../models');
+const { Branch, Membership, User, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -9,6 +9,20 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Branch>}
  */
 const createBranch = async (organizationId, branchData) => {
+  // Enforce subscription branch limit
+  const org = await Organization.findById(organizationId).select('subscription');
+  if (org && org.subscription && org.subscription.limits) {
+    const maxBranches = org.subscription.limits.maxBranches;
+    if (maxBranches != null) {
+      const currentCount = await Branch.countDocuments({ organizationId, isActive: true });
+      if (currentCount >= maxBranches) {
+        throw new ApiError(
+          httpStatus.FORBIDDEN,
+          `Branch limit reached. Your plan allows ${maxBranches} branch(es). Please upgrade your subscription.`
+        );
+      }
+    }
+  }
   return Branch.create({ ...branchData, organizationId });
 };
 
@@ -36,8 +50,8 @@ const getUserBranches = async (userId, organizationId) => {
   const user = await User.findById(userId);
   if (!user) return [];
 
-  // SuperAdmins have access to all branches
-  if (user.systemRole === 'superAdmin') {
+  // SuperAdmins and system_admins have access to all branches in their org
+  if (user.systemRole === 'superAdmin' || user.systemRole === 'system_admin') {
     return Branch.find({ organizationId, isActive: true });
   }
 
@@ -95,10 +109,19 @@ const deleteBranch = async (branchId) => {
   return branch;
 };
 
+/**
+ * Get all branches across all organizations (for system_admin)
+ * @returns {Promise<Branch[]>}
+ */
+const getAllBranches = async () => {
+  return Branch.find({ isActive: true }).sort({ organizationId: 1, createdAt: 1 });
+};
+
 module.exports = {
   createBranch,
   getBranchesByOrg,
   getUserBranches,
+  getAllBranches,
   getBranchById,
   updateBranch,
   deleteBranch,
