@@ -3,12 +3,12 @@
  * Update these values to match your actual business bank account.
  */
 const BANK_DETAILS = {
-  bankName: 'HBL (Habib Bank Limited)',
-  accountTitle: 'Logix Plus Solutions (Pvt) Ltd',
-  accountNumber: '01234567890123',
-  iban: 'PK36HABB0000001234567890',
-  swiftCode: 'HABBPKKA',
-  branch: 'Main Branch, Karachi',
+  bankName: 'ABL (Allied Bank Limited)',
+  accountTitle: 'Ahtsham Ali',
+  accountNumber: '06650010102824970014',
+  iban: 'PK90ABPA0010102824970014',
+  swiftCode: 'ABPAPKKA',
+  branch: 'Main Branch, Faisalabad',
   instructions: [
     'Transfer the exact plan amount to the bank account above.',
     'Use your Organization name as the payment reference.',

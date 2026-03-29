@@ -66,22 +66,62 @@ const getAllOrganizations = catchAsync(async (req, res) => {
  * Get a single organization with full billing/subscription detail.
  */
 const getOrganization = catchAsync(async (req, res) => {
-  const { Organization, User, Payment } = require('../models');
+  const { Organization, User, Payment, Branch, Membership } = require('../models');
   const org = await Organization.findById(req.params.orgId).populate('owner', 'name email');
   if (!org) {
     throw new ApiError(require('http-status').NOT_FOUND, 'Organization not found');
   }
 
-  const [totalUsers, payments] = await Promise.all([
+  const [totalUsers, totalBranches, payments, organizationUsers, organizationBranches] = await Promise.all([
     User.countDocuments({ organizationId: org._id, isActive: true }),
+    Branch.countDocuments({ organizationId: org._id, isActive: true }),
     Payment.find({ organizationId: org._id })
       .sort({ createdAt: -1 })
       .limit(20)
       .populate('userId', 'name email')
       .populate('approvedBy', 'name email'),
+    User.find({ organizationId: org._id })
+      .select('name email systemRole isActive isEmailVerified role createdAt')
+      .populate('role', 'name')
+      .sort({ createdAt: -1 }),
+    Branch.find({ organizationId: org._id, isActive: true })
+      .select('name email phone location isDefault manager createdAt')
+      .populate('manager', 'name email')
+      .sort({ name: 1 }),
   ]);
 
-  res.send({ organization: org, totalUsers, payments });
+  const userIds = organizationUsers.map((user) => user._id);
+  const memberships = await Membership.find({
+    organizationId: org._id,
+    userId: { $in: userIds },
+    isActive: true,
+  }).populate('branchId', 'name');
+
+  const branchesByUser = memberships.reduce((acc, membership) => {
+    const key = String(membership.userId);
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(membership.branchId);
+    return acc;
+  }, {});
+
+  const organizationUsersWithBranches = organizationUsers.map((user) => {
+    const userData = user.toJSON();
+    return {
+      ...userData,
+      branches: branchesByUser[String(user._id)] || [],
+    };
+  });
+
+  res.send({
+    organization: org,
+    totalUsers,
+    totalBranches,
+    payments,
+    organizationUsers: organizationUsersWithBranches,
+    organizationBranches,
+  });
 });
 
 /**

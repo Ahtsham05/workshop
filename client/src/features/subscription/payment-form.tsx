@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Copy, Upload, CheckCircle2, AlertTriangle, Loader2, X } from 'lucide-react'
+import { Copy, Upload, CheckCircle2, AlertTriangle, Loader2, X, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { useGetBankDetailsQuery, useSubmitPaymentMutation } from '@/stores/subscription.api'
+import { useGetBankDetailsQuery, useSubmitPaymentMutation, useGetTrialStatusQuery } from '@/stores/subscription.api'
 import Axios from '@/utils/Axios'
 
 const MONTH_OPTIONS = [
@@ -33,6 +33,7 @@ export default function PaymentFormPage() {
   const navigate = useNavigate()
 
   const { data: bankData, isLoading: bankLoading } = useGetBankDetailsQuery()
+    const { data: trialStatus } = useGetTrialStatusQuery()
   const [submitPayment, { isLoading: isSubmitting }] = useSubmitPaymentMutation()
 
   const [planType, setPlanType] = useState<'single' | 'multi'>(search.planType ?? 'single')
@@ -133,6 +134,27 @@ export default function PaymentFormPage() {
 
   return (
     <div className='p-6 max-w-4xl mx-auto space-y-6'>
+        {/* Trial Status Alert */}
+        {trialStatus?.trialExpired && (
+          <div className='bg-red-950 border border-red-500 rounded-lg p-4 flex gap-3'>
+            <AlertTriangle className='h-5 w-5 text-red-500 flex-shrink-0 mt-0.5' />
+            <div>
+              <p className='font-semibold text-red-100'>Trial Expired</p>
+              <p className='text-sm text-red-50'>Your trial has expired. Renew your plan to regain full access to the application.</p>
+            </div>
+          </div>
+        )}
+
+        {trialStatus && !trialStatus.trialExpired && trialStatus.daysRemaining > 0 && trialStatus.daysRemaining < 3 && (
+          <div className='bg-amber-950 border border-amber-500 rounded-lg p-4 flex gap-3'>
+            <Clock className='h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5' />
+            <div>
+              <p className='font-semibold text-amber-100'>Trial Ending Soon</p>
+              <p className='text-sm text-amber-50'>Your trial expires in {trialStatus.daysRemaining} day{trialStatus.daysRemaining !== 1 ? 's' : ''}. Renew now to avoid interruption.</p>
+            </div>
+          </div>
+        )}
+
       <div>
         <h1 className='text-2xl font-bold'>Payment — Bank Transfer</h1>
         <p className='text-muted-foreground'>
@@ -229,11 +251,11 @@ export default function PaymentFormPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value='single'>
-                      Single Shop — PKR{' '}
+                      Starter Plan — PKR{' '}
                       {bankData?.plans?.single?.pricePerMonth?.toLocaleString() ?? '—'}/mo
                     </SelectItem>
                     <SelectItem value='multi'>
-                      Multi Branch — PKR{' '}
+                      Growth Plan — PKR{' '}
                       {bankData?.plans?.multi?.pricePerMonth?.toLocaleString() ?? '—'}/mo
                     </SelectItem>
                   </SelectContent>

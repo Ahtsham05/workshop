@@ -21,8 +21,8 @@ import { useGetMyPaymentsQuery } from '@/stores/subscription.api'
 
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
-  single: 'Single Shop',
-  multi: 'Multi Branch',
+  single: 'Starter Plan',
+  multi: 'Growth Plan',
 }
 
 function StatusBadge({ status }: { status: string }) {

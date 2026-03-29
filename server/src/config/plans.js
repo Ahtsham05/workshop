@@ -21,10 +21,10 @@ const PLANS = {
   },
   single: {
     planType: 'single',
-    label: 'Single Shop',
+    label: 'Starter Plan',
     maxBranches: 1,
     maxUsers: 5,
-    pricePerMonth: 2999,
+    pricePerMonth: 1499,
     description: 'Perfect for a single store location.',
     features: [
       '1 Branch',
@@ -37,10 +37,10 @@ const PLANS = {
   },
   multi: {
     planType: 'multi',
-    label: 'Multi Branch',
+    label: 'Growth Plan',
     maxBranches: 10,
     maxUsers: 50,
-    pricePerMonth: 7999,
+    pricePerMonth: 2599,
     description: 'Ideal for businesses with multiple locations.',
     features: [
       'Up to 10 Branches',

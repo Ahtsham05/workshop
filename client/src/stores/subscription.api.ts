@@ -71,6 +71,35 @@ export interface UploadScreenshotResponse {
   publicId: string;
 }
 
+export interface TrialStatus {
+  trialExpired: boolean;
+  daysRemaining: number;
+  subscription: any;
+}
+
+export interface AdminOrganizationUser {
+  id: string;
+  name: string;
+  email: string;
+  systemRole: 'system_admin' | 'superAdmin' | 'branchAdmin' | 'staff';
+  isActive: boolean;
+  isEmailVerified: boolean;
+  role?: { id: string; name: string } | null;
+  branches: Array<{ id: string; name: string }>;
+  createdAt: string;
+}
+
+export interface AdminOrganizationBranch {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  isDefault: boolean;
+  manager?: { id: string; name: string; email: string } | null;
+  location?: { city?: string; country?: string };
+  createdAt: string;
+}
+
 export const subscriptionApi = createApi({
   reducerPath: 'subscriptionApi',
   baseQuery,
@@ -80,6 +109,10 @@ export const subscriptionApi = createApi({
 
     getBankDetails: builder.query<BankDetailsResponse, void>({
       query: () => '/payments/bank-details',
+    }),
+
+    getTrialStatus: builder.query<TrialStatus, void>({
+      query: () => '/payments/trial/status',
     }),
 
     submitPayment: builder.mutation<Payment, SubmitPaymentRequest>({
@@ -150,7 +183,14 @@ export const subscriptionApi = createApi({
     }),
 
     adminGetOrganization: builder.query<
-      { organization: any; totalUsers: number; payments: Payment[] },
+      {
+        organization: any;
+        totalUsers: number;
+        totalBranches: number;
+        payments: Payment[];
+        organizationUsers: AdminOrganizationUser[];
+        organizationBranches: AdminOrganizationBranch[];
+      },
       string
     >({
       query: (orgId) => `/admin/organizations/${orgId}`,
@@ -167,6 +207,7 @@ export const subscriptionApi = createApi({
 
 export const {
   useGetBankDetailsQuery,
+  useGetTrialStatusQuery,
   useSubmitPaymentMutation,
   useGetMyPaymentsQuery,
   useGetPaymentQuery,

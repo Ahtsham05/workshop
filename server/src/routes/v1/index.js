@@ -20,6 +20,7 @@ const unitsRoute = require('./units.route');
 const organizationRoute = require('./organization.route');
 const branchRoute = require('./branch.route');
 const membershipRoute = require('./membership.route');
+const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
 const employeeRoute = require('./employee.route');
@@ -150,6 +151,44 @@ const devRoutes = [
     route: docsRoute,
   },
 ];
+
+// Apply trial guard and enforcement to protected routes (all except auth and payments)
+const protectedPaths = [
+  '/users',
+  '/roles',
+  '/products',
+  '/categories',
+  '/customers',
+  '/suppliers',
+  '/purchases',
+  '/invoices',
+  '/expenses',
+  '/customer-ledger',
+  '/supplier-ledger',
+  '/dashboard',
+  '/reports',
+  '/company',
+  '/units',
+  '/organizations',
+  '/branches',
+  '/memberships',
+  '/employees',
+  '/departments',
+  '/attendance',
+  '/leaves',
+  '/payroll',
+  '/admin',
+];
+
+// Apply trial guard + enforcement to protected routes
+router.use((req, res, next) => {
+  if (protectedPaths.some(path => req.path.startsWith(path))) {
+    return trialGuard(req, res, () => {
+      enforceTrialStatus(req, res, next);
+    });
+  }
+  next();
+});
 
 defaultRoutes.forEach((route) => {
   router.use(route.path, route.route);

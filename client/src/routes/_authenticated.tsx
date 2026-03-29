@@ -4,6 +4,7 @@ import { SidebarProvider } from '@/components/ui/sidebar'
 import { useAuth } from '@/context/auth-context'
 import { AuthLoadingScreen } from '@/components/auth-loading-screen'
 import { PermissionWrapper } from '@/context/permission-wrapper'
+import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
 
 // Authentication guard component for the _authenticated layout
 function AuthenticatedLayout() {
@@ -15,6 +16,7 @@ function AuthenticatedLayout() {
   }
 
   return (
+    <TrialExpirationBoundary>
     <PermissionWrapper>
       <SidebarProvider>
         <AppSidebar />
@@ -23,6 +25,7 @@ function AuthenticatedLayout() {
         </main>
       </SidebarProvider>
     </PermissionWrapper>
+    </TrialExpirationBoundary>
   )
 }
 

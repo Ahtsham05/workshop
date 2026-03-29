@@ -64,8 +64,8 @@ import {
 
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
-  single: 'Single Shop',
-  multi: 'Multi Branch',
+  single: 'Starter Plan',
+  multi: 'Growth Plan',
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -116,6 +116,8 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   const { data, isLoading } = useAdminGetOrganizationQuery(orgId)
   const org = data?.organization
   const payments = data?.payments ?? []
+  const organizationUsers = data?.organizationUsers ?? []
+  const organizationBranches = data?.organizationBranches ?? []
 
   if (isLoading) {
     return (
@@ -160,6 +162,11 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
                 <span>Owner: <span className='text-foreground font-medium'>{org.owner.name}</span></span>
               </div>
             )}
+            {org.owner?.phone && (
+              <div className='flex items-center gap-2 text-muted-foreground'>
+                <Phone className='h-3.5 w-3.5' /> Owner Phone: {org.owner.phone}
+              </div>
+            )}
             {org.email && (
               <div className='flex items-center gap-2 text-muted-foreground'>
                 <Mail className='h-3.5 w-3.5' /> {org.email}
@@ -181,10 +188,23 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
             {(org.city || org.country) && (
               <p className='text-muted-foreground'>{[org.city, org.country].filter(Boolean).join(', ')}</p>
             )}
+            {org.address && (
+              <p className='text-muted-foreground'>Address: {org.address}</p>
+            )}
+            {org.taxNumber && (
+              <p className='text-muted-foreground'>Tax #: {org.taxNumber}</p>
+            )}
+            {org.description && (
+              <p className='text-muted-foreground'>Description: {org.description}</p>
+            )}
             <Separator />
             <div className='flex items-center gap-2 text-muted-foreground'>
               <Users className='h-3.5 w-3.5' />
               <span>Total users: <span className='text-foreground font-medium'>{data?.totalUsers ?? 0}</span></span>
+            </div>
+            <div className='flex items-center gap-2 text-muted-foreground'>
+              <Building2 className='h-3.5 w-3.5' />
+              <span>Total branches: <span className='text-foreground font-medium'>{data?.totalBranches ?? 0}</span></span>
             </div>
             <div className='flex items-center gap-2 text-muted-foreground'>
               <Calendar className='h-3.5 w-3.5' />
@@ -234,6 +254,106 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
           </CardContent>
         </Card>
       </div>
+
+      {/* Organization branches */}
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base flex items-center gap-2'>
+            <Building2 className='h-4 w-4' /> Organization Branches
+          </CardTitle>
+          <CardDescription>{organizationBranches.length} branch(es) in this organization</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {organizationBranches.length === 0 ? (
+            <p className='text-sm text-muted-foreground py-4 text-center'>No branches found in this organization.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Manager</TableHead>
+                  <TableHead>Type</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {organizationBranches.map((branch: any) => (
+                  <TableRow key={branch.id}>
+                    <TableCell className='font-medium'>{branch.name}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>{branch.phone || branch.email || '—'}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>
+                      {[branch.location?.city, branch.location?.country].filter(Boolean).join(', ') || '—'}
+                    </TableCell>
+                    <TableCell>{branch.manager?.name ?? '—'}</TableCell>
+                    <TableCell>
+                      {branch.isDefault ? (
+                        <Badge variant='secondary'>Main Branch</Badge>
+                      ) : (
+                        <Badge variant='outline'>Branch</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Organization users and branch memberships */}
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base flex items-center gap-2'>
+            <Users className='h-4 w-4' /> Organization Users
+          </CardTitle>
+          <CardDescription>{organizationUsers.length} user(s) in this organization and its branches</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {organizationUsers.length === 0 ? (
+            <p className='text-sm text-muted-foreground py-4 text-center'>No users found in this organization.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>System Role</TableHead>
+                  <TableHead>App Role</TableHead>
+                  <TableHead>Branches</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {organizationUsers.map((user: any) => (
+                  <TableRow key={user.id}>
+                    <TableCell className='font-medium'>{user.name}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant='outline' className='capitalize'>{user.systemRole}</Badge>
+                    </TableCell>
+                    <TableCell>{user.role?.name ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className='flex flex-wrap gap-1'>
+                        {user.branches?.length > 0 ? user.branches.map((branch: any) => (
+                          <Badge key={branch.id} variant='secondary'>{branch.name}</Badge>
+                        )) : <span className='text-muted-foreground'>—</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {user.isActive ? (
+                        <Badge className='bg-green-100 text-green-700 border-green-200'>Active</Badge>
+                      ) : (
+                        <Badge className='bg-gray-100 text-gray-700 border-gray-200'>Inactive</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Payment history */}
       <Card>

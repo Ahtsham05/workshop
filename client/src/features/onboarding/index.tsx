@@ -110,6 +110,22 @@ export default function OnboardingPage() {
     }
   }
 
+  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    // Step 1 submit should only move to next step, never call setup API
+    if (step === 1) {
+      const valid = await form.trigger(['name', 'businessType'])
+      if (valid) {
+        setStep(2)
+      }
+      return
+    }
+
+    // Step 2 submit performs final onboarding submit
+    await form.handleSubmit(onSubmit)(event)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
@@ -155,7 +171,7 @@ export default function OnboardingPage() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={handleFormSubmit} className="space-y-4">
                 {step === 1 && (
                   <>
                     <FormField
@@ -317,12 +333,8 @@ export default function OnboardingPage() {
                   )}
                   {step === 1 ? (
                     <Button
-                      type="button"
+                      type="submit"
                       className="ml-auto"
-                      onClick={async () => {
-                        const valid = await form.trigger(['name', 'businessType'])
-                        if (valid) setStep(2)
-                      }}
                     >
                       Next <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>

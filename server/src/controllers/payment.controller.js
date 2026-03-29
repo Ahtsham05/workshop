@@ -100,6 +100,25 @@ const getSubscriptionUsage = catchAsync(async (req, res) => {
   res.send(data);
 });
 
+/**
+ * GET /v1/payments/trial/status
+ * Return trial/subscription status: is trial expired and days remaining
+ */
+const getTrialStatus = catchAsync(async (req, res) => {
+  const organizationId = req.user.organizationId;
+  
+  // Attach trial status from middleware
+  const trialExpired = req.trialExpired || false;
+  const daysRemaining = req.daysRemaining || 0;
+  const subscription = req.subscription || null;
+
+  res.send({
+    trialExpired,
+    daysRemaining,
+    subscription,
+  });
+});
+
 module.exports = {
   uploadScreenshot,
   submitPayment,
@@ -107,4 +126,5 @@ module.exports = {
   getPayment,
   getBankDetails,
   getSubscriptionUsage,
+  getTrialStatus,
 };
