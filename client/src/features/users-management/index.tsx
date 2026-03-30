@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useGetUsersQuery, useDeleteUserMutation, User } from '@/stores/users.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, User as UserIcon, Shield } from 'lucide-react';
+import { Plus, Edit, Trash2, User as UserIcon, Shield, Lock, ArrowUpRight } from 'lucide-react';
 import { UserDialog } from './user-dialog.tsx';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
@@ -19,6 +20,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { usePlanLimits } from '@/hooks/use-plan-limits';
 
 export default function UsersManagementPage() {
   const { t } = useLanguage();
@@ -30,6 +38,17 @@ export default function UsersManagementPage() {
 
   const { data, isLoading, refetch } = useGetUsersQuery({ page, limit: 10 });
   const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation();
+
+  const {
+    usersUsed,
+    maxUsers,
+    userLimitReached,
+    planLabel,
+    isLoading: limitsLoading,
+    refetch: refetchPlanLimits,
+  } = usePlanLimits();
+
+  const maxUsersDisplay = maxUsers === Infinity ? '∞' : maxUsers;
 
   const handleCreateUser = () => {
     setSelectedUser(null);
@@ -52,7 +71,7 @@ export default function UsersManagementPage() {
     try {
       await deleteUser(userToDelete.id).unwrap();
       toast.success(t('user_deleted_successfully') || 'User deleted successfully');
-      refetch();
+      await Promise.all([refetch(), refetchPlanLimits()]);
     } catch (error: any) {
       toast.error(error?.data?.message || t('failed_to_delete_user') || 'Failed to delete user');
     } finally {
@@ -63,6 +82,25 @@ export default function UsersManagementPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
+      {/* Plan limit banner */}
+      {userLimitReached && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <Lock className="h-4 w-4 shrink-0" />
+            <span>
+              You have reached the user limit for your <strong>{planLabel}</strong> ({usersUsed}/{maxUsersDisplay} users).
+              Upgrade to add more team members.
+            </span>
+          </div>
+          <Link to="/subscription/pricing">
+            <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-900/50">
+              <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
+              Upgrade Plan
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('users_management') || 'Users Management'}</h1>
@@ -70,12 +108,40 @@ export default function UsersManagementPage() {
             {t('users_management_description') || 'Manage users and assign roles'}
           </p>
         </div>
-        <Can permission="createUsers">
-          <Button onClick={handleCreateUser}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t('create_user') || 'Create User'}
-          </Button>
-        </Can>
+        <div className="flex items-center gap-3">
+          {/* Usage indicator */}
+          {!limitsLoading && (
+            <div className="text-sm text-muted-foreground tabular-nums">
+              <span className={userLimitReached ? 'text-amber-600 font-semibold' : ''}>
+                {usersUsed}
+              </span>
+              <span> / {maxUsersDisplay} users</span>
+            </div>
+          )}
+          <Can permission="createUsers">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button onClick={handleCreateUser} disabled={userLimitReached}>
+                      {userLimitReached ? (
+                        <Lock className="w-4 h-4 mr-2" />
+                      ) : (
+                        <Plus className="w-4 h-4 mr-2" />
+                      )}
+                      {t('create_user') || 'Create User'}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {userLimitReached && (
+                  <TooltipContent>
+                    <p>User limit reached. Upgrade your plan to add more users.</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </Can>
+        </div>
       </div>
 
       <Card>
@@ -182,7 +248,9 @@ export default function UsersManagementPage() {
         open={userDialogOpen}
         onOpenChange={setUserDialogOpen}
         user={selectedUser}
-        onSuccess={refetch}
+        onSuccess={async () => {
+          await Promise.all([refetch(), refetchPlanLimits()]);
+        }}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

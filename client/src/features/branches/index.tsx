@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation, Branch, CreateBranchRequest } from '@/stores/branch.api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Edit, Trash2, MapPin } from 'lucide-react'
+import { Plus, Edit, Trash2, MapPin, Lock, ArrowUpRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Dialog,
@@ -26,6 +27,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { usePlanLimits } from '@/hooks/use-plan-limits'
 
 export default function BranchesPage() {
   const [page] = useState(1)
@@ -44,6 +52,14 @@ export default function BranchesPage() {
   const [createBranch, { isLoading: isCreating }] = useCreateBranchMutation()
   const [updateBranch, { isLoading: isUpdating }] = useUpdateBranchMutation()
   const [deleteBranch, { isLoading: isDeleting }] = useDeleteBranchMutation()
+
+  const {
+    branchesUsed,
+    maxBranches,
+    branchLimitReached,
+    planLabel,
+    isLoading: limitsLoading,
+  } = usePlanLimits()
 
   const handleCreate = () => {
     setSelectedBranch(null)
@@ -103,17 +119,66 @@ export default function BranchesPage() {
 
   const branches = data?.results || []
 
+  const maxBranchesDisplay = maxBranches === Infinity ? '∞' : maxBranches
+
   return (
     <div className="p-6 space-y-6">
+      {/* Plan limit banner */}
+      {branchLimitReached && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <Lock className="h-4 w-4 shrink-0" />
+            <span>
+              You have reached the branch limit for your <strong>{planLabel}</strong> ({branchesUsed}/{maxBranchesDisplay} branches).
+              Upgrade to add more locations.
+            </span>
+          </div>
+          <Link to="/subscription/pricing">
+            <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-900/50">
+              <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
+              Upgrade Plan
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Branch Management</h1>
           <p className="text-muted-foreground">Manage your company branches and locations</p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Branch
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Usage indicator */}
+          {!limitsLoading && (
+            <div className="text-sm text-muted-foreground tabular-nums">
+              <span className={branchLimitReached ? 'text-amber-600 font-semibold' : ''}>
+                {branchesUsed}
+              </span>
+              <span> / {maxBranchesDisplay} branches</span>
+            </div>
+          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button onClick={handleCreate} disabled={branchLimitReached}>
+                    {branchLimitReached ? (
+                      <Lock className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    Add Branch
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {branchLimitReached && (
+                <TooltipContent>
+                  <p>Branch limit reached. Upgrade your plan to add more branches.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
 
       <Card>

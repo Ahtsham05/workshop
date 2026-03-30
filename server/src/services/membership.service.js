@@ -1,6 +1,23 @@
 const httpStatus = require('http-status');
-const { Membership, User, Branch } = require('../models');
+const { Membership, User, Branch, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+
+const ensureUserLimitNotExceeded = async (organizationId) => {
+  const org = await Organization.findById(organizationId).select('subscription');
+  const maxUsers = org?.subscription?.limits?.maxUsers;
+
+  if (maxUsers == null) {
+    return;
+  }
+
+  const currentUsers = await User.countDocuments({ organizationId, isActive: true });
+  if (currentUsers >= maxUsers) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      `User limit reached. Your plan allows ${maxUsers} user(s). Please upgrade your subscription.`
+    );
+  }
+};
 
 /**
  * Add a member to a branch (invite/create staff)
@@ -126,6 +143,9 @@ const createAndInviteStaff = async (organizationId, branchId, userData, assigned
     }
     return { user: existingUser, membership };
   }
+
+  // New user creation from Staff flow must respect subscription user limits.
+  await ensureUserLimitNotExceeded(organizationId);
 
   // Auto-assign role from Role collection based on systemRole
   let roleDoc = null;

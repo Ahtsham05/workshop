@@ -1,15 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { User, useCreateUserMutation, useUpdateUserMutation } from '@/stores/users.api';
 import { useGetRolesQuery } from '@/stores/roles.api';
+import { useGetMyBranchesQuery } from '@/stores/branch.api';
+import { useAddMemberMutation } from '@/stores/membership.api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
 
@@ -48,9 +51,15 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
   const { t } = useLanguage();
   const isEdit = !!user;
 
+  // Optional branch assignment state (only relevant on create)
+  const [assignBranchId, setAssignBranchId] = useState('');
+  const [assignSystemRole, setAssignSystemRole] = useState<'branchAdmin' | 'staff'>('staff');
+
   const { data: rolesData } = useGetRolesQuery({ page: 1, limit: 100 });
+  const { data: branches } = useGetMyBranchesQuery();
   const [createUser, { isLoading: isCreating }] = useCreateUserMutation();
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
+  const [addMember] = useAddMemberMutation();
 
   const {
     register,
@@ -87,6 +96,8 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
         role: '',
         isActive: true,
       });
+      setAssignBranchId('');
+      setAssignSystemRole('staff');
     }
   }, [user, reset]);
 
@@ -112,8 +123,20 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
           role: data.role,
           isActive: data.isActive,
         };
-        await createUser(createData).unwrap();
-        toast.success(t('user_created_successfully') || 'User created successfully');
+        const newUser = await createUser(createData).unwrap();
+
+        // If a branch was selected, also assign the user to that branch
+        if (assignBranchId) {
+          try {
+            await addMember({ userId: newUser.id, branchId: assignBranchId, role: assignSystemRole }).unwrap();
+            toast.success('User created and assigned to branch successfully');
+          } catch {
+            toast.success('User created successfully');
+            toast.error('Could not assign to branch — please do so from Staff Management');
+          }
+        } else {
+          toast.success(t('user_created_successfully') || 'User created successfully');
+        }
       }
       onSuccess();
       onOpenChange(false);
@@ -136,7 +159,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
           <DialogDescription>
             {isEdit
               ? t('edit_user_description') || 'Update user information and assign a role'
-              : t('create_user_description') || 'Add a new user to the system and assign a role'}
+              : t('create_user_description') || 'Add a new user and optionally assign them to a branch'}
           </DialogDescription>
         </DialogHeader>
 
@@ -176,7 +199,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="role">{t('role') || 'Role'}</Label>
+            <Label htmlFor="role">{t('role') || 'Business Role'}</Label>
             <Select value={roleValue} onValueChange={(value) => setValue('role', value)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={t('select_role') || 'Select a role'} />
@@ -191,6 +214,56 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
             </Select>
             {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
           </div>
+
+          {/* Branch assignment — only shown when creating a new user */}
+          {!isEdit && (
+            <div className="rounded-lg border p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Assign to Branch</Label>
+                <Badge variant="outline" className="text-xs font-normal">Optional</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Assigning a branch makes this user visible in Staff Management immediately.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Branch</Label>
+                  <Select
+                    value={assignBranchId}
+                    onValueChange={setAssignBranchId}
+                  >
+                    <SelectTrigger className="w-full h-8 text-sm">
+                      <SelectValue placeholder="No branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No branch (skip)</SelectItem>
+                      {branches?.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Staff Role</Label>
+                  <Select
+                    value={assignSystemRole}
+                    onValueChange={(v) => setAssignSystemRole(v as 'branchAdmin' | 'staff')}
+                    disabled={!assignBranchId}
+                  >
+                    <SelectTrigger className="w-full h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="branchAdmin">Branch Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <Label htmlFor="isActive">{t('active') || 'Active'}</Label>
