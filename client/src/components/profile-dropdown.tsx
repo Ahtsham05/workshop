@@ -17,7 +17,8 @@ import { logout } from '@/stores/auth.slice'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
-import { Building2 } from 'lucide-react'
+import { Building2, Download } from 'lucide-react'
+import { usePWAInstall } from '@/hooks/use-pwa-install'
 
 export function ProfileDropdown() {
   const user = useSelector((state: any) => state.auth.data?.user)
@@ -26,6 +27,7 @@ export function ProfileDropdown() {
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
   const { t } = useLanguage()
+  const { isInstallable, install } = usePWAInstall()
   
   const logoutHandler = async () => {
     const refreshToken = localStorage.getItem('refreshToken')
@@ -37,6 +39,15 @@ export function ProfileDropdown() {
         replace: true 
       })
     })
+  }
+
+  const handleInstallApp = async () => {
+    try {
+      await install()
+      toast.success('App installed! You can now access it from your home screen.')
+    } catch (error) {
+      toast.error('Installation failed. Try again or use "Add to home screen".')
+    }
   }
   return (
     <DropdownMenu modal={false}>
@@ -104,6 +115,15 @@ export function ProfileDropdown() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem>{t('new_team')}</DropdownMenuItem>
+          {isInstallable && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleInstallApp}>
+                <Download className='mr-2 h-4 w-4' />
+                <span>Install App</span>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logoutHandler}>

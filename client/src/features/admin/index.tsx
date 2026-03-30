@@ -19,6 +19,7 @@ import {
   Globe,
   ArrowLeft,
   Shield,
+  Trash2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +60,9 @@ import {
   useAdminRejectPaymentMutation,
   useAdminGetAllOrganizationsQuery,
   useAdminGetOrganizationQuery,
+  useAdminGetAllUsersQuery,
+  useAdminDeleteUserMutation,
+  useAdminDeleteOrganizationMutation,
   type Payment,
 } from '@/stores/subscription.api'
 
@@ -100,15 +104,27 @@ function getUserName(p: Payment): string {
   return String(p.userId)
 }
 
-function safeFormat(date: string | undefined | null): string {
+function safeFormatWithTime(date: string | undefined | null): string {
   if (!date) return '—'
   try {
     const d = new Date(date)
     if (isNaN(d.getTime())) return '—'
-    return format(d, 'MMM dd, yyyy')
+    return format(d, 'MMM dd, yyyy • hh:mm a')
   } catch {
     return '—'
   }
+}
+
+function resolvePaymentDate(payment: Payment): string {
+  if (payment.createdAt) return payment.createdAt
+  if (payment.approvedAt) return payment.approvedAt
+  if (payment.id && payment.id.length >= 8) {
+    const seconds = parseInt(payment.id.substring(0, 8), 16)
+    if (!Number.isNaN(seconds)) {
+      return new Date(seconds * 1000).toISOString()
+    }
+  }
+  return ''
 }
 
 // ─── Org Detail Panel ────────────────────────────────────────────────────────
@@ -118,6 +134,10 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   const payments = data?.payments ?? []
   const organizationUsers = data?.organizationUsers ?? []
   const organizationBranches = data?.organizationBranches ?? []
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteConfirmName, setDeleteConfirmName] = useState('')
+  const [deleteOrganization, { isLoading: isDeleting }] = useAdminDeleteOrganizationMutation()
 
   if (isLoading) {
     return (
@@ -135,17 +155,43 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
 
   const sub = org.subscription
 
+  const handleDeleteOrganization = async () => {
+    if (deleteConfirmName !== org.name) {
+      toast.error('Organization name does not match. Please type the correct name.')
+      return
+    }
+    try {
+      await deleteOrganization(orgId).unwrap()
+      toast.success(`Organization "${org.name}" has been permanently deleted.`)
+      setDeleteDialogOpen(false)
+      setDeleteConfirmName('')
+      onBack()
+    } catch (err: any) {
+      toast.error(err?.data?.message ?? 'Failed to delete organization')
+    }
+  }
+
   return (
     <div className='space-y-6'>
-      {/* Back button + header */}
-      <div className='flex items-center gap-3'>
-        <Button variant='ghost' size='sm' onClick={onBack}>
-          <ArrowLeft className='h-4 w-4 mr-1' /> Back
-        </Button>
-        <div>
-          <h2 className='text-xl font-bold'>{org.name}</h2>
-          <p className='text-sm text-muted-foreground capitalize'>{org.businessType}</p>
+      {/* Back button + header + delete button */}
+      <div className='flex items-center justify-between gap-3'>
+        <div className='flex items-center gap-3'>
+          <Button variant='ghost' size='sm' onClick={onBack}>
+            <ArrowLeft className='h-4 w-4 mr-1' /> Back
+          </Button>
+          <div>
+            <h2 className='text-xl font-bold'>{org.name}</h2>
+            <p className='text-sm text-muted-foreground capitalize'>{org.businessType}</p>
+          </div>
         </div>
+        <Button
+          size='sm'
+          variant='outline'
+          className='text-red-600 border-red-300 hover:bg-red-50'
+          onClick={() => setDeleteDialogOpen(true)}
+        >
+          <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete Organization
+        </Button>
       </div>
 
       {/* Org info + subscription cards */}
@@ -208,7 +254,7 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
             </div>
             <div className='flex items-center gap-2 text-muted-foreground'>
               <Calendar className='h-3.5 w-3.5' />
-              <span>Joined: <span className='text-foreground'>{safeFormat(org.createdAt)}</span></span>
+              <span>Joined: <span className='text-foreground'>{safeFormatWithTime(org.createdAt)}</span></span>
             </div>
           </CardContent>
         </Card>
@@ -383,7 +429,7 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
                 {payments.map((p: Payment) => (
                   <TableRow key={p.id}>
                     <TableCell className='text-xs text-muted-foreground'>
-                      {safeFormat(p.createdAt)}
+                      {safeFormatWithTime(resolvePaymentDate(p))}
                     </TableCell>
                     <TableCell>
                       <Badge variant='outline'>{PLAN_LABELS[p.planType] ?? p.planType}</Badge>
@@ -406,6 +452,66 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
           )}
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2 text-red-600'>
+              <AlertTriangle className='h-5 w-5' /> Delete Organization
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. All data associated with this organization will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            {/* Warning box */}
+            <div className='flex gap-3 p-3 bg-red-50 border border-red-200 rounded-lg'>
+              <AlertTriangle className='h-4 w-4 text-red-600 shrink-0 mt-0.5' />
+              <div className='text-xs text-red-700'>
+                <p className='font-semibold mb-1'>All data will be deleted:</p>
+                <ul className='list-disc list-inside space-y-0.5'>
+                  <li>Organization profile and settings</li>
+                  <li>{organizationBranches.length} branch(es)</li>
+                  <li>{organizationUsers.length} user(s) and all memberships</li>
+                  <li>Products, invoices, purchases, customers, suppliers</li>
+                  <li>HR records (employees, attendance, payroll, leaves)</li>
+                  <li>All financial ledgers and transactions</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Confirmation input */}
+            <div className='space-y-2'>
+              <Label className='text-sm'>
+                To confirm, type the organization name: <span className='font-semibold'>{org.name}</span>
+              </Label>
+              <input
+                type='text'
+                placeholder={org.name}
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                className='w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500'
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant='outline' onClick={() => { setDeleteDialogOpen(false); setDeleteConfirmName('') }}>
+              Cancel
+            </Button>
+            <Button
+              variant='destructive'
+              onClick={handleDeleteOrganization}
+              disabled={isDeleting || deleteConfirmName !== org.name}
+            >
+              {isDeleting ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Trash2 className='mr-2 h-4 w-4' />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -458,7 +564,7 @@ function OrganizationsTab({ onSelectOrg }: { onSelectOrg: (id: string) => void }
                   </TableCell>
                   <TableCell className='text-sm'>{org.subscription?.isTrial ? 'Yes' : 'No'}</TableCell>
                   <TableCell className='text-xs text-muted-foreground'>
-                    {org.createdAt ? safeFormat(org.createdAt) : '—'}
+                    {org.createdAt ? safeFormatWithTime(org.createdAt) : '—'}
                   </TableCell>
                   <TableCell className='text-right'>
                     <Button size='sm' variant='ghost' onClick={() => onSelectOrg(org.id)}>
@@ -476,8 +582,143 @@ function OrganizationsTab({ onSelectOrg }: { onSelectOrg: (id: string) => void }
   )
 }
 
+function UsersTab() {
+  const { data, isLoading } = useAdminGetAllUsersQuery({ limit: 100 })
+  const [deleteUser, { isLoading: isDeletingUser }] = useAdminDeleteUserMutation()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null)
+  const users = data?.results ?? []
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return
+    try {
+      await deleteUser(selectedUser.id).unwrap()
+      toast.success(`User "${selectedUser.name}" deleted successfully.`)
+      setDeleteDialogOpen(false)
+      setSelectedUser(null)
+    } catch (err: any) {
+      toast.error(err?.data?.message ?? 'Failed to delete user')
+    }
+  }
+
+  const openDeleteDialog = (user: { id: string; name: string }) => {
+    setSelectedUser(user)
+    setDeleteDialogOpen(true)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className='flex items-center gap-2'>
+          <Users className='h-4 w-4' /> All Users (System Admin)
+        </CardTitle>
+        <CardDescription>{data?.totalResults ?? 0} total user(s) across all organizations</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className='space-y-2'>{[1, 2, 3].map((i) => <Skeleton key={i} className='h-14' />)}</div>
+        ) : users.length === 0 ? (
+          <p className='text-sm text-muted-foreground text-center py-8'>No users found.</p>
+        ) : (
+          <div className='overflow-x-auto'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Organization</TableHead>
+                  <TableHead>Branch(es)</TableHead>
+                  <TableHead>System Role</TableHead>
+                  <TableHead>App Role</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className='text-right'>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user: any) => (
+                  <TableRow key={user.id}>
+                    <TableCell className='font-medium'>{user.name}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>{user.email}</TableCell>
+                    <TableCell>{user.organizationName ?? '—'}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>{user.branchDisplay ?? '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant='outline' className='capitalize'>{user.systemRole ?? '—'}</Badge>
+                    </TableCell>
+                    <TableCell>{user.roleName ?? '—'}</TableCell>
+                    <TableCell className='text-xs text-muted-foreground'>
+                      {safeFormatWithTime(user.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      {user.isActive ? (
+                        <Badge className='bg-green-100 text-green-700 border-green-200'>Active</Badge>
+                      ) : (
+                        <Badge className='bg-gray-100 text-gray-700 border-gray-200'>Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='text-red-600 border-red-300 hover:bg-red-50'
+                        disabled={isDeletingUser || user.systemRole === 'system_admin'}
+                        onClick={() => openDeleteDialog({ id: user.id, name: user.name })}
+                      >
+                        <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2 text-red-600'>
+              <AlertTriangle className='h-5 w-5' /> Delete User
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. The selected user account and related memberships will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700'>
+            <p className='font-medium'>User to delete</p>
+            <p className='mt-1'>{selectedUser?.name ?? '—'}</p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setDeleteDialogOpen(false)
+                setSelectedUser(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant='destructive'
+              onClick={handleDeleteUser}
+              disabled={isDeletingUser || !selectedUser}
+            >
+              {isDeletingUser ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Trash2 className='mr-2 h-4 w-4' />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 export default function AdminPaymentsPage() {
+  const [activeTab, setActiveTab] = useState<'payments' | 'organizations' | 'users'>('payments')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
@@ -528,6 +769,22 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  const handleStatCardClick = (type: 'organizations' | 'users' | 'pending' | 'approved') => {
+    if (type === 'organizations') {
+      setSelectedOrgId(null)
+      setActiveTab('organizations')
+      return
+    }
+
+    if (type === 'users') {
+      setActiveTab('users')
+      return
+    }
+
+    setActiveTab('payments')
+    setStatusFilter(type === 'pending' ? 'pending' : 'approved')
+  }
+
   return (
     <div className='p-6 space-y-6'>
       {/* Header */}
@@ -539,12 +796,16 @@ export default function AdminPaymentsPage() {
       {/* Stats */}
       <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
         {[
-          { title: 'Total Organizations', value: stats?.totalOrgs, icon: Building2, color: 'text-blue-600' },
-          { title: 'Total Users', value: stats?.totalUsers, icon: Users, color: 'text-green-600' },
-          { title: 'Pending Payments', value: stats?.pendingPayments, icon: Clock, color: 'text-yellow-600' },
-          { title: 'Approved Payments', value: stats?.approvedPayments, icon: TrendingUp, color: 'text-purple-600' },
-        ].map(({ title, value, color }) => (
-          <Card key={title}>
+          { title: 'Total Organizations', value: stats?.totalOrgs, icon: Building2, color: 'text-blue-600', action: 'organizations' as const },
+          { title: 'Total Users', value: stats?.totalUsers, icon: Users, color: 'text-green-600', action: 'users' as const },
+          { title: 'Pending Payments', value: stats?.pendingPayments, icon: Clock, color: 'text-yellow-600', action: 'pending' as const },
+          { title: 'Approved Payments', value: stats?.approvedPayments, icon: TrendingUp, color: 'text-purple-600', action: 'approved' as const },
+        ].map(({ title, value, color, action }) => (
+          <Card
+            key={title}
+            className='cursor-pointer transition-colors hover:bg-muted/30'
+            onClick={() => handleStatCardClick(action)}
+          >
             <CardHeader className='pb-2'>
               <CardDescription className='text-xs'>{title}</CardDescription>
             </CardHeader>
@@ -560,13 +821,16 @@ export default function AdminPaymentsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue='payments'>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'payments' | 'organizations' | 'users')}>
         <TabsList>
           <TabsTrigger value='payments' className='flex items-center gap-1'>
             <CreditCard className='h-3.5 w-3.5' /> Payment Requests
           </TabsTrigger>
           <TabsTrigger value='organizations' className='flex items-center gap-1'>
             <Building2 className='h-3.5 w-3.5' /> Organizations
+          </TabsTrigger>
+          <TabsTrigger value='users' className='flex items-center gap-1'>
+            <Users className='h-3.5 w-3.5' /> Users
           </TabsTrigger>
         </TabsList>
 
@@ -641,7 +905,7 @@ export default function AdminPaymentsPage() {
                           <TableCell>{payment.months}</TableCell>
                           <TableCell className='font-semibold'>PKR {payment.amount.toLocaleString()}</TableCell>
                           <TableCell className='text-xs text-muted-foreground'>
-                            {safeFormat(payment.createdAt)}
+                            {safeFormatWithTime(resolvePaymentDate(payment))}
                           </TableCell>
                           <TableCell><StatusBadge status={payment.status} /></TableCell>
                           <TableCell>
@@ -690,6 +954,10 @@ export default function AdminPaymentsPage() {
           ) : (
             <OrganizationsTab onSelectOrg={setSelectedOrgId} />
           )}
+        </TabsContent>
+
+        <TabsContent value='users' className='mt-4'>
+          <UsersTab />
         </TabsContent>
       </Tabs>
 

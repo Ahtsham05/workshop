@@ -13,6 +13,13 @@ const getAllPayments = catchAsync(async (req, res) => {
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   if (!options.sortBy) options.sortBy = 'createdAt:desc';
   const result = await paymentService.getAllPayments(filter, options);
+  result.results = result.results.map((payment) => {
+    const paymentJson = typeof payment.toJSON === 'function' ? payment.toJSON() : payment;
+    if (!paymentJson.createdAt && paymentJson.id && paymentJson.id.length >= 8) {
+      paymentJson.createdAt = new Date(parseInt(paymentJson.id.substring(0, 8), 16) * 1000).toISOString();
+    }
+    return paymentJson;
+  });
   res.send(result);
 });
 
@@ -125,6 +132,15 @@ const getOrganization = catchAsync(async (req, res) => {
 });
 
 /**
+ * DELETE /v1/admin/organizations/:orgId
+ * Delete an organization and all related data (system_admin only)
+ */
+const deleteOrganization = catchAsync(async (req, res) => {
+  const result = await organizationService.deleteOrganization(req.params.orgId);
+  res.send(result);
+});
+
+/**
  * GET /v1/admin/dashboard
  * High-level platform statistics.
  */
@@ -151,6 +167,103 @@ const getDashboard = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * GET /v1/admin/users
+ * List all users across organizations with org + branch details.
+ */
+const getAllUsers = catchAsync(async (req, res) => {
+  const { User, Membership, Branch, Organization } = require('../models');
+
+  const options = pick(req.query, ['sortBy', 'limit', 'page']);
+  if (!options.sortBy) options.sortBy = 'createdAt:desc';
+
+  const userResult = await User.paginate({}, {
+    ...options,
+    populate: ['role', { path: 'organizationId', select: 'name' }],
+  });
+
+  const userIds = userResult.results.map((u) => u._id);
+  const memberships = await Membership.find({ userId: { $in: userIds }, isActive: true })
+    .populate('branchId', 'name')
+    .lean();
+
+  const branchIds = memberships
+    .map((m) => m.branchId?._id)
+    .filter(Boolean);
+
+  const branches = await Branch.find({ _id: { $in: branchIds } }).select('name organizationId').lean();
+  const orgIdsFromBranches = branches.map((b) => b.organizationId).filter(Boolean);
+  const organizations = await Organization.find({ _id: { $in: orgIdsFromBranches } }).select('name').lean();
+
+  const orgNameById = organizations.reduce((acc, org) => {
+    acc[String(org._id)] = org.name;
+    return acc;
+  }, {});
+
+  const branchOrgById = branches.reduce((acc, branch) => {
+    acc[String(branch._id)] = String(branch.organizationId || '');
+    return acc;
+  }, {});
+
+  const membershipsByUserId = memberships.reduce((acc, membership) => {
+    const key = String(membership.userId);
+    if (!acc[key]) acc[key] = [];
+    const branchId = membership.branchId?._id ? String(membership.branchId._id) : '';
+    const orgId = branchOrgById[branchId] || '';
+    acc[key].push({
+      branchName: membership.branchId?.name || '—',
+      organizationName: orgNameById[orgId] || '—',
+    });
+    return acc;
+  }, {});
+
+  const mappedUsers = userResult.results.map((userDoc) => {
+    const user = typeof userDoc.toJSON === 'function' ? userDoc.toJSON() : userDoc;
+    const membershipsForUser = membershipsByUserId[String(user.id || user._id)] || [];
+    const primaryOrgName = typeof user.organizationId === 'object'
+      ? user.organizationId?.name
+      : (user.organizationId ? orgNameById[String(user.organizationId)] : '—');
+
+    return {
+      ...user,
+      organizationName: primaryOrgName || membershipsForUser[0]?.organizationName || '—',
+      branches: membershipsForUser.map((m) => m.branchName),
+      branchDisplay: membershipsForUser.length ? membershipsForUser.map((m) => m.branchName).join(', ') : '—',
+      roleName: user.role?.name || '—',
+    };
+  });
+
+  res.send({
+    ...userResult,
+    results: mappedUsers,
+  });
+});
+
+/**
+ * DELETE /v1/admin/users/:userId
+ * Delete a user (system_admin only).
+ */
+const deleteUser = catchAsync(async (req, res) => {
+  const { User, Membership } = require('../models');
+  const { userId } = req.params;
+
+  if (String(req.user._id) === String(userId)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'You cannot delete your own account');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  await Promise.all([
+    Membership.deleteMany({ userId }),
+    User.findByIdAndDelete(userId),
+  ]);
+
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   getAllPayments,
   getPayment,
@@ -158,5 +271,8 @@ module.exports = {
   rejectPayment,
   getAllOrganizations,
   getOrganization,
+  deleteOrganization,
+  getAllUsers,
+  deleteUser,
   getDashboard,
 };

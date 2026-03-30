@@ -59,7 +59,10 @@ const paymentSchema = mongoose.Schema(
       trim: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    keepTimestampsInJSON: true,
+  }
 );
 
 paymentSchema.plugin(toJSON);

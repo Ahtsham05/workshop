@@ -1,0 +1,94 @@
+{
+  "name": "Logix Plus Solutions",
+  "short_name": "Logix Plus",
+  "description": "Comprehensive business management system for inventory, billing, HR, and accounting",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/images/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/images/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [
+    {
+      "src": "/images/favicon.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/favicon.png",
+      "sizes": "1080x1440",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open the main dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Invoices",
+      "short_name": "Invoices",
+      "description": "View and manage invoices",
+      "url": "/invoices",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Products",
+      "short_name": "Products",
+      "description": "Manage products and inventory",
+      "url": "/products",
+      "icons": [{ "src": "/images/favicon.png", "sizes": "96x96" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            "image/*",
+            "application/pdf",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -61,12 +61,31 @@
       rel="stylesheet"
     />
 
-    <meta name="theme-color" content="#fff" />
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Logix Plus" />
   </head>
 
   <body class="group/body">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {
+            // Service worker registration failed, app will still work
+          });
+        });
+      }
+    </script>
     <script type="text/javascript">
     (function (l) {
       if (l.search[1] === "/") {

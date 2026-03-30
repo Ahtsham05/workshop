@@ -100,10 +100,22 @@ export interface AdminOrganizationBranch {
   createdAt: string;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  systemRole: string;
+  isActive: boolean;
+  organizationName: string;
+  branchDisplay: string;
+  roleName: string;
+  createdAt?: string;
+}
+
 export const subscriptionApi = createApi({
   reducerPath: 'subscriptionApi',
   baseQuery,
-  tagTypes: ['Payment', 'AdminPayment'],
+  tagTypes: ['Payment', 'AdminPayment', 'AdminOrganization', 'AdminUser'],
   endpoints: (builder) => ({
     // -- User-facing endpoints --
 
@@ -180,6 +192,7 @@ export const subscriptionApi = createApi({
         url: '/admin/organizations',
         params,
       }),
+      providesTags: ['AdminOrganization'],
     }),
 
     adminGetOrganization: builder.query<
@@ -194,6 +207,7 @@ export const subscriptionApi = createApi({
       string
     >({
       query: (orgId) => `/admin/organizations/${orgId}`,
+      providesTags: (_result, _err, orgId) => [{ type: 'AdminOrganization', id: orgId }],
     }),
 
     adminGetDashboard: builder.query<
@@ -201,6 +215,36 @@ export const subscriptionApi = createApi({
       void
     >({
       query: () => '/admin/dashboard',
+    }),
+
+    adminGetAllUsers: builder.query<
+      { results: AdminUser[]; page: number; limit: number; totalPages: number; totalResults: number },
+      { page?: number; limit?: number }
+    >({
+      query: (params = {}) => ({
+        url: '/admin/users',
+        params,
+      }),
+      providesTags: ['AdminUser'],
+    }),
+
+    adminDeleteUser: builder.mutation<void, string>({
+      query: (userId) => ({
+        url: `/admin/users/${userId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['AdminUser', 'AdminOrganization', 'AdminPayment'],
+    }),
+
+    adminDeleteOrganization: builder.mutation<
+      { success: boolean; message: string; deletedOrganization: any },
+      string
+    >({
+      query: (orgId) => ({
+        url: `/admin/organizations/${orgId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['AdminPayment', 'AdminOrganization'],
     }),
   }),
 });
@@ -218,4 +262,7 @@ export const {
   useAdminGetAllOrganizationsQuery,
   useAdminGetOrganizationQuery,
   useAdminGetDashboardQuery,
+  useAdminGetAllUsersQuery,
+  useAdminDeleteUserMutation,
+  useAdminDeleteOrganizationMutation,
 } = subscriptionApi;

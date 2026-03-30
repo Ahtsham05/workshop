@@ -73,6 +73,7 @@ const organizationSchema = mongoose.Schema(
   },
   {
     timestamps: true,
+    keepTimestampsInJSON: true,
   }
 );
 

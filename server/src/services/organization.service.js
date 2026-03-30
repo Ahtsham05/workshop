@@ -1,5 +1,33 @@
 const httpStatus = require('http-status');
-const { Organization, Branch, Membership, User, Role } = require('../models');
+const {
+  Organization,
+  Branch,
+  Membership,
+  User,
+  Role,
+  Product,
+  Invoice,
+  Customer,
+  Expense,
+  Attendance,
+  Payroll,
+  Leave,
+  Purchase,
+  Department,
+  Category,
+  CustomerLedger,
+  SupplierLedger,
+  Payment,
+  Supplier,
+  Employee,
+  PerformanceReview,
+  Shift,
+  Designation,
+  Voucher,
+  GeneralLedger,
+  Company,
+  Token,
+} = require('../models');
 const ApiError = require('../utils/ApiError');
 const PLANS = require('../config/plans');
 
@@ -114,12 +142,78 @@ const updateOrganization = async (orgId, updateBody) => {
   return org;
 };
 
+/**
+ * Delete organization and all related data
+ * Cascade deletes: users, branches, memberships, products, invoices, customers, etc.
+ * @param {ObjectId} orgId
+ * @returns {Promise<Organization>}
+ */
+const deleteOrganization = async (orgId) => {
+  const org = await Organization.findById(orgId);
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+
+  // Delete all data related to this organization - cascade delete
+  const deletionResults = await Promise.all([
+    // Core business models
+    Product.deleteMany({ organizationId: orgId }),
+    Invoice.deleteMany({ organizationId: orgId }),
+    Customer.deleteMany({ organizationId: orgId }),
+    Supplier.deleteMany({ organizationId: orgId }),
+    Expense.deleteMany({ organizationId: orgId }),
+    Purchase.deleteMany({ organizationId: orgId }),
+    Payment.deleteMany({ organizationId: orgId }),
+    Category.deleteMany({ organizationId: orgId }),
+
+    // Ledger models
+    CustomerLedger.deleteMany({ organizationId: orgId }),
+    SupplierLedger.deleteMany({ organizationId: orgId }),
+    GeneralLedger.deleteMany({ organizationId: orgId }),
+    Voucher.deleteMany({ organizationId: orgId }),
+
+    // HR models
+    Employee.deleteMany({ organizationId: orgId }),
+    Department.deleteMany({ organizationId: orgId }),
+    Attendance.deleteMany({ organizationId: orgId }),
+    Leave.deleteMany({ organizationId: orgId }),
+    Payroll.deleteMany({ organizationId: orgId }),
+    PerformanceReview.deleteMany({ organizationId: orgId }),
+    Shift.deleteMany({ organizationId: orgId }),
+    Designation.deleteMany({ organizationId: orgId }),
+
+    // Organization structure models
+    Membership.deleteMany({ organizationId: orgId }),
+    Branch.deleteMany({ organizationId: orgId }),
+  ]);
+
+  // Update users: remove organizationId reference, clear systemRole if they only belonged to this org
+  const users = await User.find({ organizationId: orgId });
+  for (const user of users) {
+    await User.findByIdAndUpdate(user._id, {
+      organizationId: null,
+      systemRole: null,
+      onboardingComplete: false,
+    });
+  }
+
+  // Delete the organization itself
+  const deletedOrg = await Organization.findByIdAndDelete(orgId);
+
+  return {
+    success: true,
+    message: `Organization "${org.name}" and all associated data have been permanently deleted`,
+    deletedOrganization: deletedOrg,
+  };
+};
+
 module.exports = {
   setupOrganization,
   getOrganizationById,
   getOrganizationByUserId,
   getOrganizationForUser,
   updateOrganization,
+  deleteOrganization,
   getAllOrganizations,
 };
 

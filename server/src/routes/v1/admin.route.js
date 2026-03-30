@@ -19,6 +19,15 @@ router.get('/organizations', adminController.getAllOrganizations);
 // GET /v1/admin/organizations/:orgId — single org with billing detail
 router.get('/organizations/:orgId', adminController.getOrganization);
 
+// DELETE /v1/admin/organizations/:orgId — delete organization and all data
+router.delete('/organizations/:orgId', adminController.deleteOrganization);
+
+// GET /v1/admin/users — list all users across organizations
+router.get('/users', adminController.getAllUsers);
+
+// DELETE /v1/admin/users/:userId — delete user as system admin
+router.delete('/users/:userId', adminController.deleteUser);
+
 // GET /v1/admin/payments — all payment requests (filterable by status)
 router.get('/payments', validate(paymentValidation.getPayments), adminController.getAllPayments);
 
