@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import PWARegister from "@/components/PWARegister";
+import PWAInstallButton from "@/components/PWAInstallButton";
 
 export const metadata: Metadata = {
   title: {
@@ -29,6 +31,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -66,8 +69,13 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [{ url: "/favicon.png", type: "image/png" }],
-    apple: [{ url: "/favicon.png" }],
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [{ url: "/favicon-180.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicon.ico"],
   },
 };
 
@@ -94,7 +102,7 @@ export default function RootLayout({
               "@type": "Organization",
               name: "Logix Plus Solutions",
               url: "https://logixplussolutions.com",
-              logo: "https://logixplussolutions.com/logo.png",
+              logo: "https://logixplussolutions.com/favicon-512.png",
               description:
                 "Logix Plus Solutions delivers cutting-edge business management software including ERP, inventory, HR, invoicing, and accounting tools.",
               address: {
@@ -113,9 +121,15 @@ export default function RootLayout({
             }),
           }}
         />
+        <meta name="theme-color" content="#0f172a" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Logix Plus" />
       </head>
       <body className="antialiased">
+        <PWARegister />
         {children}
+        <PWAInstallButton />
         <WhatsAppButton />
       </body>
     </html>
