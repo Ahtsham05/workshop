@@ -4,15 +4,6 @@ const Joi = require('joi');
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-function normalizeMongoUrl(value) {
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  // Vercel env values are occasionally pasted with wrapping quotes or spaces.
-  return value.trim().replace(/^['\"]|['\"]$/g, '');
-}
-
 const envVarsSchema = Joi.object()
   .keys({
     NODE_ENV: Joi.string().valid('production', 'development', 'test').required(),
@@ -44,18 +35,11 @@ if (error) {
   throw new Error(`Config validation error: ${error.message}`);
 }
 
-const normalizedMongoUrl = normalizeMongoUrl(envVars.MONGODB_URL);
-if (!/^mongodb(\+srv)?:\/\//i.test(normalizedMongoUrl || '')) {
-  throw new Error(
-    'Config validation error: MONGODB_URL must start with mongodb:// or mongodb+srv://'
-  );
-}
-
 module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
   mongoose: {
-    url: normalizedMongoUrl + (envVars.NODE_ENV === 'test' ? '-test' : ''),
+    url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
     options: {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
