@@ -86,8 +86,8 @@ self.addEventListener('push', (event) => {
   const data = event.data.json();
   const options = {
     body: data.body || 'Logix Plus Solutions notification',
-    icon: '/images/favicon.png',
-    badge: '/images/favicon.png',
+    icon: '/images/favicon-192.png',
+    badge: '/images/favicon-192.png',
     tag: data.tag || 'logix-notification',
     requireInteraction: false,
   };
