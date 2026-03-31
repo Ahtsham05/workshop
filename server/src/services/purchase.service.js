@@ -2,6 +2,35 @@ const httpStatus = require('http-status');
 const { Purchase, Product, SupplierLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
+const cashBookService = require('./cashBook.service');
+
+const syncDirectPurchaseCashEntry = async (purchase) => {
+  const hasSupplier = !!purchase.supplier;
+  if (hasSupplier) {
+    await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
+    return null;
+  }
+
+  const paidAmount = Number(purchase.paidAmount || 0);
+  if (paidAmount <= 0) {
+    await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
+    return null;
+  }
+
+  return cashBookService.upsertReferenceEntry({
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    type: 'expense',
+    source: 'purchase',
+    amount: paidAmount,
+    paymentMethod: purchase.paymentType || 'cash',
+    referenceId: purchase._id,
+    referenceModel: 'Purchase',
+    description: `Direct purchase payment for Invoice #${purchase.invoiceNumber}`,
+    date: purchase.purchaseDate || purchase.createdAt || new Date(),
+    createdBy: purchase.createdBy,
+  });
+};
 
 /**
  * Create a purchase record
@@ -32,6 +61,7 @@ const createPurchase = async (purchaseBody) => {
 
   // Save the purchase with balance calculated
   await purchase.save();
+  await syncDirectPurchaseCashEntry(purchase);
 
   // Create supplier ledger entry if supplier is provided
   if (purchase.supplier) {
@@ -90,6 +120,8 @@ const createPurchase = async (purchaseBody) => {
       // Don't fail the purchase creation if ledger entry fails
     }
   }
+
+  await syncDirectPurchaseCashEntry(purchase);
 
   return purchase;
 };
@@ -332,6 +364,8 @@ const deletePurchaseById = async (purchaseId) => {
       // Don't fail the purchase deletion if ledger deletion fails
     }
   }
+
+  await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
 
   // Remove the purchase after adjusting stock quantities
   await purchase.deleteOne();

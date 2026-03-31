@@ -2,897 +2,450 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense } = require('../models');
-const { applyBranchFilter } = require('../utils/branchFilter');
 
 /**
- * Get Sales Report
- * @route GET /v1/reports/sales
+ * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
  */
-const getSalesReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate, groupBy = 'day' } = req.query;
-
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
-
-  // Group format based on groupBy parameter
-  let groupFormat;
-  switch (groupBy) {
-    case 'day':
-      groupFormat = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
-      break;
-    case 'week':
-      groupFormat = { $isoWeek: '$createdAt' };
-      break;
-    case 'month':
-      groupFormat = { $dateToString: { format: '%Y-%m', date: '$createdAt' } };
-      break;
-    case 'year':
-      groupFormat = { $year: '$createdAt' };
-      break;
-    default:
-      groupFormat = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
+const buildScope = (req) => {
+  const scope = {};
+  const orgId = req.organizationId || (req.user && req.user.organizationId);
+  const branchId = req.branchId;
+  if (orgId) {
+    scope.organizationId = mongoose.Types.ObjectId.isValid(orgId)
+      ? new mongoose.Types.ObjectId(String(orgId))
+      : orgId;
   }
+  if (branchId) {
+    scope.branchId = mongoose.Types.ObjectId.isValid(branchId)
+      ? new mongoose.Types.ObjectId(String(branchId))
+      : branchId;
+  }
+  return scope;
+};
 
-  const salesData = await Invoice.aggregate([
-    {
-      $match: {
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: groupFormat,
-        totalSales: { $sum: '$total' },
-        totalProfit: { $sum: '$totalProfit' },
-        totalCost: { $sum: '$totalCost' },
-        invoiceCount: { $sum: 1 },
-        avgSale: { $avg: '$total' }
-      }
-    },
-    {
-      $sort: { _id: 1 }
-    }
-  ]);
-
-  // Get summary statistics
-  const summary = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: '$total' },
-        totalProfit: { $sum: '$totalProfit' },
-        totalCost: { $sum: '$totalCost' },
-        totalInvoices: { $sum: 1 },
-        avgInvoiceValue: { $avg: '$total' },
-        maxInvoiceValue: { $max: '$total' },
-        minInvoiceValue: { $min: '$total' }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: salesData,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+const parseRange = (query) => ({
+  start: query.startDate ? new Date(query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  end: query.endDate ? new Date(query.endDate) : new Date(),
 });
 
-/**
- * Get Purchase Report
- * @route GET /v1/reports/purchases
- */
+/* ── Sales ─────────────────────────────────────────────────────────────────── */
+const getSalesReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { groupBy = 'day' } = req.query;
+
+  const groupFormats = {
+    week:  { $dateToString: { format: '%Y-W%V', date: '$invoiceDate' } },
+    month: { $dateToString: { format: '%Y-%m',  date: '$invoiceDate' } },
+    year:  { $dateToString: { format: '%Y',     date: '$invoiceDate' } },
+  };
+  const groupFormat = groupFormats[groupBy] || { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate' } };
+
+  const baseMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
+
+  const [salesData, summary] = await Promise.all([
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: groupFormat, totalSales: { $sum: '$total' }, totalProfit: { $sum: { $ifNull: ['$totalProfit', 0] } }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, invoiceCount: { $sum: 1 }, avgSale: { $avg: '$total' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, totalRevenue: { $sum: '$total' }, totalProfit: { $sum: { $ifNull: ['$totalProfit', 0] } }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, totalInvoices: { $sum: 1 }, avgInvoiceValue: { $avg: '$total' }, maxInvoiceValue: { $max: '$total' }, minInvoiceValue: { $min: '$total' } } },
+    ]),
+  ]);
+
+  res.status(httpStatus.OK).send({ data: salesData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+});
+
+/* ── Purchases ─────────────────────────────────────────────────────────────── */
 const getPurchaseReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate, supplierId } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { supplierId } = req.query;
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const baseMatch = { ...scope, purchaseDate: { $gte: start, $lte: end } };
+  if (supplierId && mongoose.Types.ObjectId.isValid(supplierId)) {
+    baseMatch.supplier = new mongoose.Types.ObjectId(supplierId);
+  }
 
-  const matchQuery = {
-    ...bf,
-    createdAt: { $gte: start, $lte: end }
+  // effectivePaid: Cash purchases are always fully paid at time of purchase
+  const effectivePaid = {
+    $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', { $ifNull: ['$paidAmount', 0] }],
+  };
+  const effectiveBalance = {
+    $cond: [{ $eq: ['$paymentType', 'Cash'] }, 0, { $ifNull: ['$balance', { $subtract: ['$totalAmount', { $ifNull: ['$paidAmount', 0] }] }] }],
   };
 
-  if (supplierId) {
-    matchQuery.supplier = supplierId;
-  }
-
-  const purchaseData = await Purchase.aggregate([
-    { $match: matchQuery },
-    {
-      $lookup: {
-        from: 'suppliers',
-        localField: 'supplier',
-        foreignField: '_id',
-        as: 'supplierDetails'
-      }
-    },
-    { $unwind: '$supplierDetails' },
-    {
-      $group: {
-        _id: {
-          date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          supplier: '$supplierDetails.name'
+  const [purchaseData, summary, paymentBreakdown] = await Promise.all([
+    Purchase.aggregate([
+      { $match: baseMatch },
+      { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: 'supplierDetails' } },
+      { $unwind: { path: '$supplierDetails', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$purchaseDate' } }, supplier: { $ifNull: ['$supplierDetails.name', 'Unknown'] } },
+          totalAmount: { $sum: '$totalAmount' },
+          paidAmount: { $sum: effectivePaid },
+          balance: { $sum: effectiveBalance },
+          cashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
+          creditBalance: { $sum: { $cond: [{ $ne: ['$paymentType', 'Cash'] }, effectiveBalance, 0] } },
+          purchaseCount: { $sum: 1 },
+          paymentTypes: { $addToSet: '$paymentType' },
         },
-        totalAmount: { $sum: '$totalAmount' },
-        paidAmount: { $sum: '$paidAmount' },
-        balance: { $sum: '$balance' },
-        purchaseCount: { $sum: 1 }
-      }
-    },
-    {
-      $sort: { '_id.date': 1 }
-    }
+      },
+      { $sort: { '_id.date': -1 } },
+    ]),
+    Purchase.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          totalPurchases: { $sum: '$totalAmount' },
+          totalPaid: { $sum: effectivePaid },
+          totalBalance: { $sum: effectiveBalance },
+          totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
+          totalCreditBalance: { $sum: { $cond: [{ $ne: ['$paymentType', 'Cash'] }, effectiveBalance, 0] } },
+          purchaseCount: { $sum: 1 },
+          avgPurchaseValue: { $avg: '$totalAmount' },
+        },
+      },
+    ]),
+    Purchase.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: '$paymentType',
+          totalAmount: { $sum: '$totalAmount' },
+          paidAmount: { $sum: effectivePaid },
+          balance: { $sum: effectiveBalance },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { totalAmount: -1 } },
+    ]),
   ]);
 
-  const summary = await Purchase.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: null,
-        totalPurchases: { $sum: '$totalAmount' },
-        totalPaid: { $sum: '$paidAmount' },
-        totalBalance: { $sum: '$balance' },
-        purchaseCount: { $sum: 1 },
-        avgPurchaseValue: { $avg: '$totalAmount' }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: purchaseData,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: purchaseData, summary: summary[0] || {}, paymentBreakdown, period: { startDate: start, endDate: end } });
 });
 
-/**
- * Get Product Report
- * @route GET /v1/reports/products
- */
+/* ── Products ──────────────────────────────────────────────────────────────── */
 const getProductReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate, categoryId } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const invoiceMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
 
-  // Get product sales data
-  const productSales = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    { $unwind: '$items' },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'items.productId',
-        foreignField: '_id',
-        as: 'product'
-      }
-    },
-    { $unwind: '$product' },
-    ...(categoryId ? [{ $match: { 'product.categories._id': mongoose.Types.ObjectId(categoryId) } }] : []),
-    {
-      $group: {
+  const [productSales, stockSummary] = await Promise.all([
+    Invoice.aggregate([
+      { $match: invoiceMatch },
+      { $unwind: '$items' },
+      { $lookup: { from: 'products', localField: 'items.productId', foreignField: '_id', as: 'product' } },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+      { $group: {
         _id: '$items.productId',
-        productName: { $first: '$product.name' },
-        category: { 
-          $first: { 
-            $cond: [
-              { $and: [
-                { $isArray: '$product.categories' },
-                { $gt: [{ $size: '$product.categories' }, 0] }
-              ]},
-              { $arrayElemAt: ['$product.categories.name', 0] },
-              { $ifNull: ['$product.category', 'N/A'] }
-            ]
-          }
-        },
+        productName: { $first: { $ifNull: ['$product.name', '$items.name'] } },
+        category: { $first: '$product.category' },
         totalQuantitySold: { $sum: '$items.quantity' },
-        totalRevenue: { $sum: '$items.subtotal' },
-        totalProfit: { $sum: '$items.profit' },
-        avgSellingPrice: { $avg: '$items.price' },
+        totalRevenue: { $sum: { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] } },
+        totalProfit: { $sum: { $ifNull: ['$items.profit', 0] } },
+        avgSellingPrice: { $avg: { $ifNull: ['$items.price', '$items.unitPrice'] } },
         currentStock: { $first: '$product.stockQuantity' },
-        minStockLevel: { $first: '$product.minStockLevel' }
-      }
-    },
-    {
-      $sort: { totalRevenue: -1 }
-    }
-  ]);
-
-  // Get stock summary
-  const stockSummary = await Product.aggregate([
-    {
-      $match: { ...bf }
-    },
-    {
-      $group: {
+        minStockLevel: { $first: '$product.minStockLevel' },
+        unit: { $first: '$product.unit' },
+      } },
+      { $sort: { totalRevenue: -1 } },
+    ]),
+    Product.aggregate([
+      { $match: { ...scope } },
+      { $group: {
         _id: null,
         totalProducts: { $sum: 1 },
-        totalStockValue: { $sum: { $multiply: ['$stockQuantity', '$purchasePrice'] } },
-        lowStockProducts: {
-          $sum: {
-            $cond: [{ $lte: ['$stockQuantity', 10] }, 1, 0]
-          }
-        },
-        outOfStockProducts: {
-          $sum: {
-            $cond: [{ $eq: ['$stockQuantity', 0] }, 1, 0]
-          }
-        }
-      }
-    }
+        totalStockValue: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } },
+        lowStockProducts: { $sum: { $cond: [{ $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', 10] }] }, 1, 0] } },
+        outOfStockProducts: { $sum: { $cond: [{ $eq: ['$stockQuantity', 0] }, 1, 0] } },
+      } },
+    ]),
   ]);
 
-  res.status(httpStatus.OK).send({
-    data: productSales,
-    stockSummary: stockSummary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: productSales, stockSummary: stockSummary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
-/**
- * Get Single Product Detail Report
- * @route GET /v1/reports/products/:productId
- */
+/* ── Product Detail ─────────────────────────────────────────────────────────── */
 const getProductDetailReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
+  const scope = buildScope(req);
   const { productId } = req.params;
-  const { startDate, endDate } = req.query;
+  const { start, end } = parseRange(req.query);
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
-
-  // Get product basic info
   const product = await Product.findById(productId);
-  if (!product) {
-    return res.status(httpStatus.NOT_FOUND).send({ message: 'Product not found' });
-  }
+  if (!product) return res.status(httpStatus.NOT_FOUND).send({ message: 'Product not found' });
 
-  // Get sales to customers (invoices)
-  const salesData = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    { $unwind: '$items' },
-    {
-      $match: {
-        'items.productId': mongoose.Types.ObjectId.isValid(productId) 
-          ? new mongoose.Types.ObjectId(productId) 
-          : productId
-      }
-    },
-    {
-      $addFields: {
-        // Convert customerId string to ObjectId if it's a valid ObjectId string
-        customerIdConverted: {
-          $cond: {
-            if: {
-              $and: [
-                { $ne: ['$customerId', 'walk-in'] },
-                { $ne: ['$customerId', null] },
-                { $eq: [{ $type: '$customerId' }, 'string'] },
-                { $regexMatch: { input: '$customerId', regex: '^[0-9a-fA-F]{24}$' } }
-              ]
-            },
-            then: { $toObjectId: '$customerId' },
-            else: {
-              $cond: {
-                if: { $eq: [{ $type: '$customerId' }, 'objectId'] },
-                then: '$customerId',
-                else: null
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      $lookup: {
+  const productObjId = new mongoose.Types.ObjectId(productId);
+  const invoiceMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
+  const purchaseMatch = { ...scope, purchaseDate: { $gte: start, $lte: end } };
+
+  const [salesData, purchaseData] = await Promise.all([
+    Invoice.aggregate([
+      { $match: invoiceMatch },
+      { $unwind: '$items' },
+      { $match: { 'items.productId': productObjId } },
+      { $lookup: {
         from: 'customers',
-        localField: 'customerIdConverted',
-        foreignField: '_id',
-        as: 'customerInfo'
-      }
-    },
-    {
-      $addFields: {
-        customerData: { $arrayElemAt: ['$customerInfo', 0] }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
+        let: { cid: '$customerId' },
+        pipeline: [{ $match: { $expr: { $eq: ['$_id', { $cond: [{ $eq: [{ $type: '$$cid' }, 'objectId'] }, '$$cid', { $cond: [{ $regexMatch: { input: { $ifNull: ['$$cid', ''] }, regex: '^[0-9a-fA-F]{24}$' } }, { $toObjectId: '$$cid' }, null] }] }] } } }],
+        as: 'customerInfo',
+      } },
+      { $project: {
         invoiceNumber: 1,
-        date: '$createdAt',
-        customerName: {
-          $switch: {
-            branches: [
-              {
-                case: { $eq: ['$customerId', 'walk-in'] },
-                then: { $ifNull: ['$walkInCustomerName', 'Walk-in Customer'] }
-              },
-              {
-                case: { $ne: ['$customerData.name', null] },
-                then: '$customerData.name'
-              },
-              {
-                case: { $ne: ['$customerName', null] },
-                then: '$customerName'
-              }
-            ],
-            default: 'Walk-in Customer'
-          }
-        },
-        customerPhone: '$customerData.phone',
+        date: '$invoiceDate',
+        customerName: { $ifNull: [{ $arrayElemAt: ['$customerInfo.name', 0] }, '$walkInCustomerName', 'Walk-in Customer'] },
+        customerPhone: { $arrayElemAt: ['$customerInfo.phone', 0] },
         quantity: '$items.quantity',
-        price: '$items.unitPrice',
-        subtotal: '$items.subtotal',
-        profit: '$items.profit',
-        type: { $literal: 'sale' }
-      }
-    },
-    {
-      $sort: { date: -1 }
-    }
-  ]);
-
-  // Get purchases from suppliers
-  const purchaseData = await Purchase.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end }
-      }
-    },
-    { $unwind: '$items' },
-    {
-      $match: {
-        'items.product': mongoose.Types.ObjectId.isValid(productId) 
-          ? new mongoose.Types.ObjectId(productId) 
-          : productId
-      }
-    },
-    {
-      $lookup: {
-        from: 'suppliers',
-        let: { supplierId: '$supplier' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $eq: ['$_id', '$$supplierId']
-              }
-            }
-          }
-        ],
-        as: 'supplierInfo'
-      }
-    },
-    {
-      $project: {
-        _id: 1,
+        price: { $ifNull: ['$items.price', '$items.unitPrice'] },
+        subtotal: { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] },
+        profit: { $ifNull: ['$items.profit', 0] },
+      } },
+      { $sort: { date: -1 } },
+    ]),
+    Purchase.aggregate([
+      { $match: purchaseMatch },
+      { $unwind: '$items' },
+      { $match: { 'items.product': productObjId } },
+      { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: 'supplierInfo' } },
+      { $project: {
         purchaseNumber: { $ifNull: ['$invoiceNumber', 'N/A'] },
-        date: '$createdAt',
+        date: '$purchaseDate',
         supplierName: { $arrayElemAt: ['$supplierInfo.name', 0] },
         supplierPhone: { $arrayElemAt: ['$supplierInfo.phone', 0] },
         quantity: '$items.quantity',
-        price: '$items.priceAtPurchase',
-        subtotal: '$items.total',
-        type: { $literal: 'purchase' }
-      }
-    },
-    {
-      $sort: { date: -1 }
-    }
+        price: { $ifNull: ['$items.priceAtPurchase', '$items.price'] },
+        subtotal: { $ifNull: ['$items.total', { $multiply: ['$items.quantity', { $ifNull: ['$items.priceAtPurchase', 0] }] }] },
+      } },
+      { $sort: { date: -1 } },
+    ]),
   ]);
 
-  // Calculate summary
   const summary = {
-    totalSold: salesData.reduce((sum, item) => sum + item.quantity, 0),
-    totalPurchased: purchaseData.reduce((sum, item) => sum + item.quantity, 0),
-    totalRevenue: salesData.reduce((sum, item) => sum + item.subtotal, 0),
-    totalCost: purchaseData.reduce((sum, item) => sum + item.subtotal, 0),
-    totalProfit: salesData.reduce((sum, item) => sum + item.profit, 0),
-    uniqueCustomers: new Set(salesData.map(item => item.customerName)).size,
-    uniqueSuppliers: new Set(purchaseData.map(item => item.supplierName)).size,
+    totalSold: salesData.reduce((s, i) => s + (i.quantity || 0), 0),
+    totalPurchased: purchaseData.reduce((s, i) => s + (i.quantity || 0), 0),
+    totalRevenue: salesData.reduce((s, i) => s + (i.subtotal || 0), 0),
+    totalCost: purchaseData.reduce((s, i) => s + (i.subtotal || 0), 0),
+    totalProfit: salesData.reduce((s, i) => s + (i.profit || 0), 0),
+    uniqueCustomers: new Set(salesData.map((i) => i.customerName)).size,
+    uniqueSuppliers: new Set(purchaseData.map((i) => i.supplierName)).size,
   };
 
   res.status(httpStatus.OK).send({
-    product: {
-      _id: product._id,
-      name: product.name,
-      barcode: product.barcode,
-      currentStock: product.stockQuantity,
-      purchasePrice: product.purchasePrice,
-      sellingPrice: product.sellingPrice,
-      minStockLevel: product.minStockLevel
-    },
-    summary,
-    sales: salesData,
-    purchases: purchaseData,
-    period: { startDate: start, endDate: end }
+    product: { _id: product._id, name: product.name, barcode: product.barcode, currentStock: product.stockQuantity, purchasePrice: product.purchasePrice, sellingPrice: product.sellingPrice, minStockLevel: product.minStockLevel },
+    summary, sales: salesData, purchases: purchaseData,
+    period: { startDate: start, endDate: end },
   });
 });
 
-/**
- * Get Customer Report
- * @route GET /v1/reports/customers
- */
+/* ── Customers ─────────────────────────────────────────────────────────────── */
 const getCustomerReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate, top = 20 } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const top = parseInt(req.query.top) || 20;
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const baseMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
 
-  const customerData = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' },
-        customerId: { $exists: true, $ne: 'walk-in' }
-      }
-    },
-    {
-      $lookup: {
+  const [customerData, summary] = await Promise.all([
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $lookup: {
         from: 'customers',
-        localField: 'customerId',
-        foreignField: '_id',
-        as: 'customer'
-      }
-    },
-    { $unwind: '$customer' },
-    {
-      $group: {
+        let: { cid: '$customerId' },
+        pipeline: [{ $match: { $expr: { $eq: ['$_id', { $cond: [{ $eq: [{ $type: '$$cid' }, 'objectId'] }, '$$cid', { $cond: [{ $regexMatch: { input: { $ifNull: ['$$cid', ''] }, regex: '^[0-9a-fA-F]{24}$' } }, { $toObjectId: '$$cid' }, null] }] }] } } }],
+        as: 'customer',
+      } },
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      { $group: {
         _id: '$customerId',
-        customerName: { $first: '$customer.name' },
+        customerName: { $first: { $ifNull: ['$customer.name', '$walkInCustomerName', 'Walk-in Customer'] } },
         phone: { $first: '$customer.phone' },
         email: { $first: '$customer.email' },
         totalPurchases: { $sum: 1 },
         totalSpent: { $sum: '$total' },
-        totalProfit: { $sum: '$totalProfit' },
+        totalProfit: { $sum: { $ifNull: ['$totalProfit', 0] } },
         avgPurchaseValue: { $avg: '$total' },
-        lastPurchase: { $max: '$createdAt' },
-        firstPurchase: { $min: '$createdAt' }
-      }
-    },
-    {
-      $sort: { totalSpent: -1 }
-    },
-    {
-      $limit: parseInt(top)
-    }
+        lastPurchase: { $max: '$invoiceDate' },
+        firstPurchase: { $min: '$invoiceDate' },
+      } },
+      { $sort: { totalSpent: -1 } },
+      { $limit: top },
+    ]),
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, uniqueCustomers: { $addToSet: '$customerId' }, totalTransactions: { $sum: 1 }, totalRevenue: { $sum: '$total' } } },
+      { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
+    ]),
   ]);
 
-  const summary = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        uniqueCustomers: { $addToSet: '$customerId' },
-        totalTransactions: { $sum: 1 },
-        totalRevenue: { $sum: '$total' }
-      }
-    },
-    {
-      $project: {
-        uniqueCustomers: { $size: '$uniqueCustomers' },
-        totalTransactions: 1,
-        totalRevenue: 1,
-        avgTransactionValue: { $divide: ['$totalRevenue', '$totalTransactions'] }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: customerData,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: customerData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
-/**
- * Get Supplier Report
- * @route GET /v1/reports/suppliers
- */
+/* ── Suppliers ─────────────────────────────────────────────────────────────── */
 const getSupplierReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const baseMatch = { ...scope, purchaseDate: { $gte: start, $lte: end } };
 
-  const supplierData = await Purchase.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end }
-      }
-    },
-    {
-      $lookup: {
-        from: 'suppliers',
-        localField: 'supplier',
-        foreignField: '_id',
-        as: 'supplierDetails'
-      }
-    },
-    { $unwind: '$supplierDetails' },
-    {
-      $group: {
+  const supEffPaid = { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', { $ifNull: ['$paidAmount', 0] }] };
+  const supEffBal  = { $cond: [{ $eq: ['$paymentType', 'Cash'] }, 0, { $ifNull: ['$balance', { $subtract: ['$totalAmount', { $ifNull: ['$paidAmount', 0] }] }] }] };
+
+  const [supplierData, summary] = await Promise.all([
+    Purchase.aggregate([
+      { $match: baseMatch },
+      { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: 'supplierDetails' } },
+      { $unwind: { path: '$supplierDetails', preserveNullAndEmptyArrays: true } },
+      { $group: {
         _id: '$supplier',
-        supplierName: { $first: '$supplierDetails.name' },
+        supplierName: { $first: { $ifNull: ['$supplierDetails.name', 'Unknown'] } },
         phone: { $first: '$supplierDetails.phone' },
         email: { $first: '$supplierDetails.email' },
         totalPurchases: { $sum: 1 },
         totalAmount: { $sum: '$totalAmount' },
-        totalPaid: { $sum: '$paidAmount' },
-        totalBalance: { $sum: '$balance' },
-        avgPurchaseValue: { $avg: '$totalAmount' },
-        lastPurchase: { $max: '$createdAt' }
-      }
-    },
-    {
-      $sort: { totalAmount: -1 }
-    }
+        totalPaid: { $sum: supEffPaid },
+        totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
+        totalBalance: { $sum: supEffBal },
+        lastPurchase: { $max: '$purchaseDate' },
+      } },
+      { $sort: { totalAmount: -1 } },
+    ]),
+    Purchase.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' }, totalPaid: { $sum: supEffPaid }, totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } }, totalBalance: { $sum: supEffBal }, purchaseCount: { $sum: 1 } } },
+    ]),
   ]);
 
-  const summary = await Purchase.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalPurchases: { $sum: '$totalAmount' },
-        totalPaid: { $sum: '$paidAmount' },
-        totalBalance: { $sum: '$balance' },
-        purchaseCount: { $sum: 1 }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: supplierData,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: supplierData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
-/**
- * Get Expense Report
- * @route GET /v1/reports/expenses
- */
+/* ── Expenses ──────────────────────────────────────────────────────────────── */
 const getExpenseReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate, category } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { category } = req.query;
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  if (category) baseMatch.category = category;
 
-  const matchQuery = {
-    ...bf,
-    date: { $gte: start, $lte: end }
-  };
-
-  if (category) {
-    matchQuery.category = category;
-  }
-
-  const expenseData = await Expense.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: {
-          date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-          category: '$category'
-        },
-        totalAmount: { $sum: '$amount' },
-        expenseCount: { $sum: 1 }
-      }
-    },
-    {
-      $sort: { '_id.date': 1 }
-    }
+  const [expenseData, categoryBreakdown, summary] = await Promise.all([
+    Expense.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, category: '$category' }, totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 } } },
+      { $sort: { '_id.date': -1 } },
+    ]),
+    Expense.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' } } },
+      { $sort: { totalAmount: -1 } },
+    ]),
+    Expense.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, totalExpenses: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgExpense: { $avg: '$amount' }, maxExpense: { $max: '$amount' }, minExpense: { $min: '$amount' } } },
+    ]),
   ]);
 
-  const categoryBreakdown = await Expense.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: '$category',
-        totalAmount: { $sum: '$amount' },
-        count: { $sum: 1 },
-        avgAmount: { $avg: '$amount' }
-      }
-    },
-    {
-      $sort: { totalAmount: -1 }
-    }
-  ]);
-
-  const summary = await Expense.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: null,
-        totalExpenses: { $sum: '$amount' },
-        expenseCount: { $sum: 1 },
-        avgExpense: { $avg: '$amount' },
-        maxExpense: { $max: '$amount' },
-        minExpense: { $min: '$amount' }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: expenseData,
-    categoryBreakdown,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: expenseData, categoryBreakdown, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
-/**
- * Get Profit & Loss Report
- * @route GET /v1/reports/profit-loss
- */
+/* ── Profit & Loss ─────────────────────────────────────────────────────────── */
 const getProfitLossReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
-
-  // Calculate revenue from sales
-  const revenueData = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: '$total' },
-        totalCost: { $sum: '$totalCost' },
-        grossProfit: { $sum: '$totalProfit' }
-      }
-    }
+  const [revenueData, expenseData] = await Promise.all([
+    Invoice.aggregate([
+      { $match: { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } } },
+      { $group: { _id: null, totalRevenue: { $sum: '$total' }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, grossProfit: { $sum: { $ifNull: ['$totalProfit', 0] } } } },
+    ]),
+    Expense.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
+    ]),
   ]);
 
-  // Calculate expenses
-  const expenseData = await Expense.aggregate([
-    {
-      $match: {
-        ...bf,
-        date: { $gte: start, $lte: end }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalExpenses: { $sum: '$amount' }
-      }
-    }
-  ]);
-
-  const revenue = revenueData[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
-  const expenses = expenseData[0] || { totalExpenses: 0 };
-
-  const netProfit = revenue.grossProfit - expenses.totalExpenses;
-  const profitMargin = revenue.totalRevenue > 0 ? (netProfit / revenue.totalRevenue) * 100 : 0;
+  const rev = revenueData[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
+  const exp = expenseData[0] || { totalExpenses: 0 };
+  const grossProfit = rev.grossProfit || (rev.totalRevenue - rev.totalCost);
+  const netProfit = grossProfit - exp.totalExpenses;
 
   res.status(httpStatus.OK).send({
-    revenue: {
-      totalRevenue: revenue.totalRevenue,
-      costOfGoodsSold: revenue.totalCost,
-      grossProfit: revenue.grossProfit,
-      grossProfitMargin: revenue.totalRevenue > 0 ? (revenue.grossProfit / revenue.totalRevenue) * 100 : 0
-    },
-    expenses: {
-      totalExpenses: expenses.totalExpenses
-    },
-    netProfit: {
-      amount: netProfit,
-      margin: profitMargin
-    },
-    period: { startDate: start, endDate: end }
+    revenue: { totalRevenue: rev.totalRevenue, costOfGoodsSold: rev.totalCost, grossProfit, grossProfitMargin: rev.totalRevenue > 0 ? (grossProfit / rev.totalRevenue) * 100 : 0 },
+    expenses: { totalExpenses: exp.totalExpenses },
+    netProfit: { amount: netProfit, margin: rev.totalRevenue > 0 ? (netProfit / rev.totalRevenue) * 100 : 0 },
+    period: { startDate: start, endDate: end },
   });
 });
 
-/**
- * Get Inventory Report
- * @route GET /v1/reports/inventory
- */
+/* ── Inventory ─────────────────────────────────────────────────────────────── */
 const getInventoryReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
+  const scope = buildScope(req);
   const { status } = req.query;
 
-  let matchQuery = { ...bf };
-  
+  let baseMatch = { ...scope };
   if (status === 'low') {
-    matchQuery = { ...bf, $expr: { $lte: ['$stockQuantity', 10] } };
+    baseMatch.$expr = { $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', { $ifNull: ['$minStockLevel', 10] }] }] };
   } else if (status === 'out') {
-    matchQuery = { ...bf, stockQuantity: 0 };
+    baseMatch.stockQuantity = 0;
   }
 
-  const inventoryData = await Product.aggregate([
-    { $match: matchQuery },
-    {
-      $lookup: {
-        from: 'categories',
-        localField: 'category',
-        foreignField: '_id',
-        as: 'categoryDetails'
-      }
-    },
-    {
-      $unwind: {
-        path: '$categoryDetails',
-        preserveNullAndEmptyArrays: true
-      }
-    },
-    {
-      $project: {
-        name: 1,
-        barcode: 1,
-        category: '$categoryDetails.name',
-        stockQuantity: 1,
-        minStockLevel: 1,
-        purchasePrice: 1,
-        sellingPrice: 1,
-        stockValue: { $multiply: ['$stockQuantity', '$purchasePrice'] },
-        potentialRevenue: { $multiply: ['$stockQuantity', '$sellingPrice'] },
-        status: {
-          $cond: [
-            { $eq: ['$stockQuantity', 0] },
-            'Out of Stock',
-            {
-              $cond: [
-                { $lte: ['$stockQuantity', 10] },
-                'Low Stock',
-                'In Stock'
-              ]
-            }
-          ]
-        }
-      }
-    },
-    {
-      $sort: { stockQuantity: 1 }
-    }
-  ]);
-
-  const summary = await Product.aggregate([
-    {
-      $match: { ...bf }
-    },
-    {
-      $group: {
+  const [inventoryData, summary] = await Promise.all([
+    Product.aggregate([
+      { $match: baseMatch },
+      { $project: {
+        name: 1, barcode: 1, unit: 1,
+        category: { $ifNull: ['$category', 'N/A'] },
+        stockQuantity: 1, cost: 1, price: 1,
+        stockValue: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] },
+        potentialRevenue: { $multiply: ['$stockQuantity', { $ifNull: ['$price', 0] }] },
+        status: { $cond: [{ $eq: ['$stockQuantity', 0] }, 'Out of Stock', { $cond: [{ $lte: ['$stockQuantity', 10] }, 'Low Stock', 'In Stock'] }] },
+      } },
+      { $sort: { stockQuantity: 1 } },
+    ]),
+    Product.aggregate([
+      { $match: { ...scope } },
+      { $group: {
         _id: null,
         totalProducts: { $sum: 1 },
         totalStockQuantity: { $sum: '$stockQuantity' },
-        totalStockValue: { $sum: { $multiply: ['$stockQuantity', '$purchasePrice'] } },
-        totalPotentialRevenue: { $sum: { $multiply: ['$stockQuantity', '$sellingPrice'] } },
-        lowStockCount: {
-          $sum: {
-            $cond: [{ $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', 10] }] }, 1, 0]
-          }
-        },
-        outOfStockCount: {
-          $sum: {
-            $cond: [{ $eq: ['$stockQuantity', 0] }, 1, 0]
-          }
-        }
-      }
-    }
+        totalStockValue: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } },
+        lowStockCount: { $sum: { $cond: [{ $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', 10] }] }, 1, 0] } },
+        outOfStockCount: { $sum: { $cond: [{ $eq: ['$stockQuantity', 0] }, 1, 0] } },
+      } },
+    ]),
   ]);
 
-  res.status(httpStatus.OK).send({
-    data: inventoryData,
-    summary: summary[0] || {}
-  });
+  res.status(httpStatus.OK).send({ data: inventoryData, summary: summary[0] || {} });
 });
 
-/**
- * Get Tax Report
- * @route GET /v1/reports/tax
- */
+/* ── Tax ────────────────────────────────────────────────────────────────────── */
 const getTaxReport = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
-  const { startDate, endDate } = req.query;
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
 
-  const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const end = endDate ? new Date(endDate) : new Date();
+  const baseMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
 
-  const taxData = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-        totalSales: { $sum: '$total' },
-        totalTax: { $sum: '$taxAmount' },
-        invoiceCount: { $sum: 1 }
-      }
-    },
-    {
-      $sort: { _id: 1 }
-    }
+  const [taxData, summary] = await Promise.all([
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$invoiceDate' } }, totalSales: { $sum: '$total' }, totalTax: { $sum: { $ifNull: ['$taxAmount', 0] } }, invoiceCount: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    Invoice.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, totalTaxCollected: { $sum: { $ifNull: ['$taxAmount', 0] } }, totalSales: { $sum: '$total' }, invoiceCount: { $sum: 1 } } },
+    ]),
   ]);
 
-  const summary = await Invoice.aggregate([
-    {
-      $match: {
-        ...bf,
-        createdAt: { $gte: start, $lte: end },
-        status: { $ne: 'cancelled' }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalTaxCollected: { $sum: '$taxAmount' },
-        totalSales: { $sum: '$total' },
-        avgTaxRate: { $avg: { $divide: ['$taxAmount', '$total'] } }
-      }
-    }
-  ]);
-
-  res.status(httpStatus.OK).send({
-    data: taxData,
-    summary: summary[0] || {},
-    period: { startDate: start, endDate: end }
-  });
+  res.status(httpStatus.OK).send({ data: taxData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
 module.exports = {
-  getSalesReport,
-  getPurchaseReport,
-  getProductReport,
-  getProductDetailReport,
-  getCustomerReport,
-  getSupplierReport,
-  getExpenseReport,
-  getProfitLossReport,
-  getInventoryReport,
-  getTaxReport,
+  getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
+  getCustomerReport, getSupplierReport, getExpenseReport,
+  getProfitLossReport, getInventoryReport, getTaxReport,
 };

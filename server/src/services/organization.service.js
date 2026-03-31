@@ -30,6 +30,7 @@ const {
 } = require('../models');
 const ApiError = require('../utils/ApiError');
 const PLANS = require('../config/plans');
+const { normalizeBusinessType } = require('../config/businessTypes');
 
 /**
  * Setup organization during user onboarding
@@ -49,6 +50,7 @@ const setupOrganization = async (userId, orgData) => {
 
   const organization = await Organization.create({
     ...orgData,
+    businessType: normalizeBusinessType(orgData.businessType),
     owner: userId,
     subscription: {
       planType: 'trial',
@@ -89,6 +91,7 @@ const setupOrganization = async (userId, orgData) => {
   const adminRole = await Role.findOne({ name: 'Admin' });
   await User.findByIdAndUpdate(userId, {
     organizationId: organization._id,
+    businessType: organization.businessType,
     systemRole: 'superAdmin',
     onboardingComplete: true,
     ...(adminRole && { role: adminRole._id }),
@@ -137,8 +140,18 @@ const updateOrganization = async (orgId, updateBody) => {
   if (!org) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
   }
-  Object.assign(org, updateBody);
+  const normalizedUpdateBody = {
+    ...updateBody,
+    ...(updateBody.businessType && { businessType: normalizeBusinessType(updateBody.businessType) }),
+  };
+
+  Object.assign(org, normalizedUpdateBody);
   await org.save();
+
+  if (normalizedUpdateBody.businessType) {
+    await User.updateMany({ organizationId: org._id }, { businessType: org.businessType });
+  }
+
   return org;
 };
 
@@ -192,6 +205,7 @@ const deleteOrganization = async (orgId) => {
   for (const user of users) {
     await User.findByIdAndUpdate(user._id, {
       organizationId: null,
+      businessType: 'other',
       systemRole: null,
       onboardingComplete: false,
     });

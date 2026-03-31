@@ -19,6 +19,12 @@ module.exports.organizationService = require('./organization.service.js');
 module.exports.branchService = require('./branch.service.js');
 module.exports.membershipService = require('./membership.service.js');
 module.exports.paymentService = require('./payment.service.js');
+module.exports.cashBookService = require('./cashBook.service.js');
+module.exports.walletService = require('./wallet.service.js');
+module.exports.loadPurchaseService = require('./loadPurchase.service.js');
+module.exports.loadTransactionService = require('./loadTransaction.service.js');
+module.exports.repairJobService = require('./repairJob.service.js');
+module.exports.mobileDashboardService = require('./mobileDashboard.service.js');
 
 // HR Services
 module.exports.employeeService = require('./employee.service.js');

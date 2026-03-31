@@ -13,27 +13,55 @@ import { sidebarData } from './data/sidebar-data'
 import { usePermissions } from '@/context/permission-context'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
+import { normalizeBusinessType } from '@/lib/business-types'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
+  const userBusinessType = normalizeBusinessType(user?.businessType)
+
+  const canAccessItem = (item: any) => {
+    if (item.businessTypes && item.businessTypes.length > 0) {
+      if (!item.businessTypes.includes(userBusinessType)) {
+        return false
+      }
+    }
+
+    if (item.systemRole) {
+      if (!user?.systemRole) return false
+      const allowed = item.systemRole as string[]
+      return allowed.includes(user.systemRole)
+    }
+
+    if (!item.permission) {
+      return true
+    }
+
+    return hasPermission(item.permission as any)
+  }
 
   // Filter nav groups and items based on permissions
   const filteredNavGroups = sidebarData.navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        // System-role gated items
-        if ((item as any).systemRole) {
-          if (!user?.systemRole) return false
-          const allowed = (item as any).systemRole as string[]
-          return allowed.includes(user.systemRole)
-        }
-        // If item has no permission requirement, show it
-        if (!item.permission) return true
-        // Otherwise check if user has the required permission
-        return hasPermission(item.permission as any)
-      }),
+      items: group.items
+        .map((item: any) => {
+          if (!item.items) {
+            return item
+          }
+
+          return {
+            ...item,
+            items: item.items.filter((nestedItem: any) => canAccessItem(nestedItem)),
+          }
+        })
+        .filter((item: any) => {
+          if (item.items) {
+            return item.items.length > 0 && canAccessItem(item)
+          }
+
+          return canAccessItem(item)
+        }),
     }))
     .filter((group) => group.items.length > 0)
 

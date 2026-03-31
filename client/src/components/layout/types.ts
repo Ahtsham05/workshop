@@ -18,6 +18,7 @@ interface BaseNavItem {
   icon?: React.ElementType
   permission?: string
   systemRole?: string[]
+  businessTypes?: string[]
 }
 
 type NavLink = BaseNavItem & {

@@ -25,7 +25,7 @@ import {
   IconChartBar,
   IconCrown,
 } from '@tabler/icons-react'
-import { Command } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -176,6 +176,35 @@ export const sidebarData: SidebarData = {
           url: '/staff',
           icon: IconUsersGroup,
           systemRole: ['superAdmin', 'branchAdmin', 'system_admin'],
+        },
+      ],
+    },
+    {
+      title: 'Mobile Shop',
+      items: [
+        {
+          title: 'Wallet',
+          url: '/mobile-shop/wallet',
+          icon: WalletCards,
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'Load Management',
+          url: '/mobile-shop/load',
+          icon: Smartphone,
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'Repair',
+          url: '/mobile-shop/repair',
+          icon: Wrench,
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'Cash Book',
+          url: '/mobile-shop/cash-book',
+          icon: NotebookText,
+          businessTypes: ['mobile_shop'],
         },
       ],
     },

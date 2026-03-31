@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Expense } = require('../models');
 const ApiError = require('../utils/ApiError');
+const cashBookService = require('./cashBook.service');
 
 /**
  * Create an expense
@@ -8,7 +10,22 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Expense>}
  */
 const createExpense = async (expenseBody) => {
-  return Expense.create(expenseBody);
+  const expense = await Expense.create(expenseBody);
+  await cashBookService.upsertReferenceEntry({
+    organizationId: expense.organizationId,
+    branchId: expense.branchId,
+    type: 'expense',
+    source: 'expense',
+    amount: expense.amount,
+    paymentMethod: expense.paymentMethod,
+    referenceId: expense._id,
+    referenceModel: 'Expense',
+    description: expense.description,
+    date: expense.date,
+    createdBy: expense.createdBy,
+  });
+
+  return expense;
 };
 
 /**
@@ -75,6 +92,21 @@ const updateExpenseById = async (expenseId, updateBody) => {
   }
   Object.assign(expense, updateBody);
   await expense.save();
+
+  await cashBookService.upsertReferenceEntry({
+    organizationId: expense.organizationId,
+    branchId: expense.branchId,
+    type: 'expense',
+    source: 'expense',
+    amount: expense.amount,
+    paymentMethod: expense.paymentMethod,
+    referenceId: expense._id,
+    referenceModel: 'Expense',
+    description: expense.description,
+    date: expense.date,
+    createdBy: expense.createdBy,
+  });
+
   return expense;
 };
 
@@ -88,6 +120,7 @@ const deleteExpenseById = async (expenseId) => {
   if (!expense) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
   }
+  await cashBookService.deleteEntriesByReference(expense._id, 'Expense');
   await expense.deleteOne();
   return expense;
 };
@@ -99,13 +132,17 @@ const deleteExpenseById = async (expenseId) => {
  */
 const getExpenseSummary = async (filter = {}) => {
   const matchStage = {};
-  
-  // Add organization and branch filters
+
+  // Add organization and branch filters (cast to ObjectId for aggregate pipeline)
   if (filter.organizationId) {
-    matchStage.organizationId = filter.organizationId;
+    matchStage.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
+      ? new mongoose.Types.ObjectId(String(filter.organizationId))
+      : filter.organizationId;
   }
   if (filter.branchId) {
-    matchStage.branchId = filter.branchId;
+    matchStage.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
+      ? new mongoose.Types.ObjectId(String(filter.branchId))
+      : filter.branchId;
   }
   
   if (filter.startDate || filter.endDate) {
@@ -136,13 +173,17 @@ const getExpenseSummary = async (filter = {}) => {
  */
 const getExpenseTrends = async (filter = {}) => {
   const matchStage = {};
-  
-  // Add organization and branch filters
+
+  // Add organization and branch filters (cast to ObjectId for aggregate pipeline)
   if (filter.organizationId) {
-    matchStage.organizationId = filter.organizationId;
+    matchStage.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
+      ? new mongoose.Types.ObjectId(String(filter.organizationId))
+      : filter.organizationId;
   }
   if (filter.branchId) {
-    matchStage.branchId = filter.branchId;
+    matchStage.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
+      ? new mongoose.Types.ObjectId(String(filter.branchId))
+      : filter.branchId;
   }
   
   if (filter.startDate || filter.endDate) {

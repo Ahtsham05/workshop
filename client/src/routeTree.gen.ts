@@ -54,6 +54,10 @@ import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_aut
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenticated/mobile-shop/wallet'
+import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
+import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
+import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
@@ -346,6 +350,34 @@ const AuthenticatedSettingsAccountRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedMobileShopWalletRoute =
+  AuthenticatedMobileShopWalletImport.update({
+    id: '/mobile-shop/wallet',
+    path: '/mobile-shop/wallet',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopRepairRoute =
+  AuthenticatedMobileShopRepairImport.update({
+    id: '/mobile-shop/repair',
+    path: '/mobile-shop/repair',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopLoadRoute =
+  AuthenticatedMobileShopLoadImport.update({
+    id: '/mobile-shop/load',
+    path: '/mobile-shop/load',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopCashBookRoute =
+  AuthenticatedMobileShopCashBookImport.update({
+    id: '/mobile-shop/cash-book',
+    path: '/mobile-shop/cash-book',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedProductsBulkEditIndexRoute =
   AuthenticatedProductsBulkEditIndexImport.update({
     id: '/products/bulk-edit/',
@@ -539,6 +571,34 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/cash-book': {
+      id: '/_authenticated/mobile-shop/cash-book'
+      path: '/mobile-shop/cash-book'
+      fullPath: '/mobile-shop/cash-book'
+      preLoaderRoute: typeof AuthenticatedMobileShopCashBookImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/load': {
+      id: '/_authenticated/mobile-shop/load'
+      path: '/mobile-shop/load'
+      fullPath: '/mobile-shop/load'
+      preLoaderRoute: typeof AuthenticatedMobileShopLoadImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/repair': {
+      id: '/_authenticated/mobile-shop/repair'
+      path: '/mobile-shop/repair'
+      fullPath: '/mobile-shop/repair'
+      preLoaderRoute: typeof AuthenticatedMobileShopRepairImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/wallet': {
+      id: '/_authenticated/mobile-shop/wallet'
+      path: '/mobile-shop/wallet'
+      fullPath: '/mobile-shop/wallet'
+      preLoaderRoute: typeof AuthenticatedMobileShopWalletImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings/account': {
@@ -841,6 +901,10 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedMobileShopCashBookRoute: typeof AuthenticatedMobileShopCashBookRoute
+  AuthenticatedMobileShopLoadRoute: typeof AuthenticatedMobileShopLoadRoute
+  AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
+  AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
@@ -879,6 +943,10 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedMobileShopCashBookRoute: AuthenticatedMobileShopCashBookRoute,
+  AuthenticatedMobileShopLoadRoute: AuthenticatedMobileShopLoadRoute,
+  AuthenticatedMobileShopRepairRoute: AuthenticatedMobileShopRepairRoute,
+  AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
@@ -936,6 +1004,10 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
+  '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -990,6 +1062,10 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
+  '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -1047,6 +1123,10 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/_authenticated/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
+  '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -1105,6 +1185,10 @@ export interface FileRouteTypes {
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/mobile-shop/cash-book'
+    | '/mobile-shop/load'
+    | '/mobile-shop/repair'
+    | '/mobile-shop/wallet'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -1158,6 +1242,10 @@ export interface FileRouteTypes {
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/mobile-shop/cash-book'
+    | '/mobile-shop/load'
+    | '/mobile-shop/repair'
+    | '/mobile-shop/wallet'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -1213,6 +1301,10 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
+    | '/_authenticated/mobile-shop/cash-book'
+    | '/_authenticated/mobile-shop/load'
+    | '/_authenticated/mobile-shop/repair'
+    | '/_authenticated/mobile-shop/wallet'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -1314,6 +1406,10 @@ export const routeTree = rootRoute
         "/_authenticated/reports",
         "/_authenticated/voice-demo",
         "/_authenticated/",
+        "/_authenticated/mobile-shop/cash-book",
+        "/_authenticated/mobile-shop/load",
+        "/_authenticated/mobile-shop/repair",
+        "/_authenticated/mobile-shop/wallet",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
         "/_authenticated/accounting/",
@@ -1404,6 +1500,22 @@ export const routeTree = rootRoute
     },
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/cash-book": {
+      "filePath": "_authenticated/mobile-shop/cash-book.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/load": {
+      "filePath": "_authenticated/mobile-shop/load.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/repair": {
+      "filePath": "_authenticated/mobile-shop/repair.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/wallet": {
+      "filePath": "_authenticated/mobile-shop/wallet.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/settings/account": {

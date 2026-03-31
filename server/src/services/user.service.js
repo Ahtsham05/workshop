@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { User, Role, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { normalizeBusinessType } = require('../config/businessTypes');
 
 /**
  * Create a user — auto-assigns the Admin role if no role is specified
@@ -8,18 +9,20 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<User>}
  */
 const createUser = async (userBody) => {
-  if (await User.isEmailTaken(userBody.email)) {
+  const newUserBody = { ...userBody };
+
+  if (await User.isEmailTaken(newUserBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
 
   // Enforce subscription user limit when adding a user to an organization
-  if (userBody.organizationId) {
-    const org = await Organization.findById(userBody.organizationId).select('subscription');
+  if (newUserBody.organizationId) {
+    const org = await Organization.findById(newUserBody.organizationId).select('subscription businessType');
     if (org && org.subscription && org.subscription.limits) {
       const maxUsers = org.subscription.limits.maxUsers;
       if (maxUsers != null) {
         const currentCount = await User.countDocuments({
-          organizationId: userBody.organizationId,
+          organizationId: newUserBody.organizationId,
           isActive: true,
         });
         if (currentCount >= maxUsers) {
@@ -29,17 +32,21 @@ const createUser = async (userBody) => {
           );
         }
       }
+
+      if (!newUserBody.businessType && org.businessType) {
+        newUserBody.businessType = normalizeBusinessType(org.businessType);
+      }
     }
   }
 
   // Auto-assign Admin role when no role is provided
-  if (!userBody.role) {
+  if (!newUserBody.role) {
     const adminRole = await Role.findOne({ name: 'Admin' });
     if (adminRole) {
-      userBody.role = adminRole._id;
+      newUserBody.role = adminRole._id;
     }
   }
-  return User.create(userBody);
+  return User.create(newUserBody);
 };
 
 /**
@@ -82,13 +89,21 @@ const getUserByEmail = async (email) => {
  */
 const updateUserById = async (userId, updateBody) => {
   const user = await getUserById(userId);
+  const normalizedUpdateBody = { ...updateBody };
+
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
-  if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
+  if (normalizedUpdateBody.email && (await User.isEmailTaken(normalizedUpdateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
-  Object.assign(user, updateBody);
+  if (normalizedUpdateBody.organizationId && !normalizedUpdateBody.businessType) {
+    const org = await Organization.findById(normalizedUpdateBody.organizationId).select('businessType');
+    if (org && org.businessType) {
+      normalizedUpdateBody.businessType = normalizeBusinessType(org.businessType);
+    }
+  }
+  Object.assign(user, normalizedUpdateBody);
   await user.save();
   return user;
 };

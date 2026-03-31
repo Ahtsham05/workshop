@@ -2,6 +2,8 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
+const { mobileDashboardService } = require('../services');
+const { normalizeBusinessType } = require('../config/businessTypes');
 
 /**
  * Get dashboard statistics
@@ -87,6 +89,23 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const totalCustomers = await Customer.countDocuments({ ...bf });
   const totalProducts = await Product.countDocuments({ ...bf });
 
+  let mobileSummary = {
+    totalLoadSold: 0,
+    totalRepairIncome: 0,
+    totalProfit: totalRevenue,
+    cashInHand: 0,
+    jazzcashBalance: 0,
+    easypaisaBalance: 0,
+    walletBalance: 0,
+  };
+
+  if (normalizeBusinessType(req.user.businessType) === 'mobile_shop') {
+    mobileSummary = await mobileDashboardService.getMobileDashboardSummary({
+      organizationId: req.organizationId || req.user.organizationId,
+      branchId: req.branchId,
+    });
+  }
+
   res.status(httpStatus.OK).send({
     totalRevenue,
     totalRevenueChange,
@@ -101,6 +120,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
     todayRevenueChange,
     totalCustomers,
     totalProducts,
+    ...mobileSummary,
   });
 });
 
@@ -328,7 +348,7 @@ const getLowStockProducts = catchAsync(async (req, res) => {
     image: product.image,
     stockQuantity: product.stockQuantity,
     minStockLevel: 10,
-    category: product.category?.name || 'Uncategorized'
+    category: product.category && product.category.name ? product.category.name : 'Uncategorized'
   }));
 
   res.status(httpStatus.OK).send(lowStockProducts);

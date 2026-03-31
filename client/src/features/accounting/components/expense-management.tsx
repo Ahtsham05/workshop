@@ -7,7 +7,11 @@ import { useLanguage } from '@/context/language-context';
 
 type ViewMode = 'list' | 'create' | 'edit';
 
-export function ExpenseManagement() {
+interface ExpenseManagementProps {
+  onExpenseChange?: () => void;
+}
+
+export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
   const { t } = useLanguage();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
@@ -27,6 +31,8 @@ export function ExpenseManagement() {
     setViewMode('list');
     setSelectedExpense(null);
     setRefreshTrigger(prev => prev + 1);
+    // Notify parent component about expense change to refresh dashboard
+    onExpenseChange?.();
   };
 
   const handleCancel = () => {
@@ -36,6 +42,8 @@ export function ExpenseManagement() {
 
   const handleDelete = () => {
     setRefreshTrigger(prev => prev + 1);
+    // Notify parent component about expense change to refresh dashboard
+    onExpenseChange?.();
   };
 
   if (viewMode === 'create' || viewMode === 'edit') {

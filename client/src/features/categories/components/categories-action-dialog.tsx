@@ -24,7 +24,7 @@ import { useCategories } from '../context/categories-context'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { createCategory, updateCategory } from '@/stores/category.slice'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
 
@@ -39,7 +39,7 @@ const categoryFormSchema = z.object({
 type CategoryFormValues = z.infer<typeof categoryFormSchema>
 
 interface CategoriesActionDialogProps {
-  setFetch: (fetch: boolean) => void
+  setFetch: Dispatch<SetStateAction<boolean>>
 }
 
 export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps) {
@@ -93,7 +93,7 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
 
       contextDispatch({ type: 'SET_OPEN', payload: false })
       contextDispatch({ type: 'SET_CATEGORY', payload: null })
-      setFetch(true)
+      setFetch((previous) => !previous)
     } catch (error) {
       toast.error(state.currentCategory ? t('category_update_failed') : t('category_creation_failed'))
     } finally {

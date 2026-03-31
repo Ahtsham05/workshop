@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useGetSupplierReportQuery } from '@/stores/reports.api'
@@ -31,6 +32,7 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
             [t('phone')]: supplier.phone || 'N/A',
             [t('purchases')]: supplier.totalPurchases,
             [t('total_amount')]: supplier.totalAmount,
+            [t('cash_paid')]: supplier.totalCashPaid,
             [t('paid')]: supplier.totalPaid,
             [t('balance')]: supplier.totalBalance,
           }))
@@ -54,6 +56,35 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
 
   return (
     <div className='space-y-6'>
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+        <Card>
+          <CardHeader><CardTitle className='text-sm'>{t('total_purchases')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPurchases || 0)}</div>
+            <p className='text-xs text-muted-foreground mt-1'>{data?.summary?.purchaseCount || 0} {t('invoices')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className='text-sm'>{t('cash_paid')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-green-600'>{formatCurrency(data?.summary?.totalCashPaid || 0)}</div>
+            <p className='text-xs text-muted-foreground mt-1'>{t('cash_purchases_fully_paid')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className='text-sm'>{t('total_paid')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPaid || 0)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className='text-sm'>{t('balance_due')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-red-600'>{formatCurrency(data?.summary?.totalBalance || 0)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>{t('supplier_analysis')}</CardTitle>
@@ -66,6 +97,7 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
                 <TableHead>{t('phone')}</TableHead>
                 <TableHead className='text-right'>{t('purchases')}</TableHead>
                 <TableHead className='text-right'>{t('total_amount')}</TableHead>
+                <TableHead className='text-right'>{t('cash_paid')}</TableHead>
                 <TableHead className='text-right'>{t('paid')}</TableHead>
                 <TableHead className='text-right'>{t('balance')}</TableHead>
               </TableRow>
@@ -77,8 +109,14 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
                   <TableCell>{supplier.phone || 'N/A'}</TableCell>
                   <TableCell className='text-right'>{supplier.totalPurchases}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(supplier.totalAmount)}</TableCell>
+                  <TableCell className='text-right text-green-600'>{formatCurrency(supplier.totalCashPaid || 0)}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(supplier.totalPaid)}</TableCell>
-                  <TableCell className='text-right text-red-600'>{formatCurrency(supplier.totalBalance)}</TableCell>
+                  <TableCell className='text-right'>
+                    {supplier.totalBalance > 0
+                      ? <Badge variant='destructive'>{formatCurrency(supplier.totalBalance)}</Badge>
+                      : <Badge variant='default'>{formatCurrency(0)}</Badge>
+                    }
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

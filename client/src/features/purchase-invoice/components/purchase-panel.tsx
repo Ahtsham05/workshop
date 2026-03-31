@@ -512,7 +512,12 @@ export default function PurchasePanel({
                 onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit') => {
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
-                    const nextPaid = value === 'Cash' ? currentTotal : (prev.paidAmount || 0)
+                    const switchingCashToCredit = prev.paymentType === 'Cash' && value === 'Credit'
+                    const nextPaid = value === 'Cash'
+                      ? currentTotal
+                      : switchingCashToCredit
+                        ? 0
+                        : (prev.paidAmount || 0)
                     return {
                       ...prev,
                       paymentType: value,

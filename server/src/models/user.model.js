@@ -3,6 +3,7 @@ const validator = require('validator');
 const bcrypt = require('bcryptjs');
 const { toJSON, paginate } = require('./plugins');
 const { roles } = require('../config/roles');
+const { BUSINESS_TYPES, normalizeBusinessType } = require('../config/businessTypes');
 
 const userSchema = mongoose.Schema(
   {
@@ -44,6 +45,12 @@ const userSchema = mongoose.Schema(
       type: mongoose.SchemaTypes.ObjectId,
       ref: 'Organization',
       default: null,
+    },
+    businessType: {
+      type: String,
+      enum: BUSINESS_TYPES,
+      default: 'other',
+      set: normalizeBusinessType,
     },
     systemRole: {
       type: String,

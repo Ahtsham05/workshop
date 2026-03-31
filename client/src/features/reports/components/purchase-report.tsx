@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useGetPurchaseReportQuery } from '@/stores/reports.api'
@@ -31,6 +32,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             [t('supplier')]: row._id.supplier,
             [t('count')]: row.purchaseCount,
             [t('amount')]: row.totalAmount,
+            [t('cash_paid')]: row.cashPaid,
             [t('paid')]: row.paidAmount,
             [t('balance')]: row.balance,
           }))
@@ -54,13 +56,23 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
 
   return (
     <div className='space-y-6'>
-      <div className='grid gap-4 md:grid-cols-3'>
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
         <Card>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_purchases')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPurchases || 0)}</div>
+            <p className='text-xs text-muted-foreground mt-1'>{data?.summary?.purchaseCount || 0} {t('invoices')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-sm'>{t('cash_paid')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-green-600'>{formatCurrency(data?.summary?.totalCashPaid || 0)}</div>
+            <p className='text-xs text-muted-foreground mt-1'>{t('cash_purchases_fully_paid')}</p>
           </CardContent>
         </Card>
         <Card>
@@ -81,6 +93,32 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
         </Card>
       </div>
 
+      {/* Payment Type Breakdown */}
+      {data?.paymentBreakdown && data.paymentBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('payment_type_breakdown')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='grid gap-3 md:grid-cols-2 lg:grid-cols-4'>
+              {data.paymentBreakdown.map((item: { _id: string; count: number; totalAmount: number; paidAmount: number; balance: number }) => (
+                <div key={item._id} className='rounded-lg border p-3 space-y-1'>
+                  <div className='flex items-center justify-between'>
+                    <Badge variant={item._id === 'Cash' ? 'default' : item._id === 'Credit' ? 'destructive' : 'secondary'}>
+                      {item._id}
+                    </Badge>
+                    <span className='text-xs text-muted-foreground'>{item.count} {t('invoices')}</span>
+                  </div>
+                  <div className='text-sm font-semibold'>{formatCurrency(item.totalAmount)}</div>
+                  <div className='text-xs text-green-600'>{t('paid')}: {formatCurrency(item.paidAmount)}</div>
+                  {item.balance > 0 && <div className='text-xs text-red-600'>{t('balance')}: {formatCurrency(item.balance)}</div>}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>{t('purchase_details')}</CardTitle>
@@ -93,6 +131,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                 <TableHead>{t('supplier')}</TableHead>
                 <TableHead className='text-right'>{t('count')}</TableHead>
                 <TableHead className='text-right'>{t('amount')}</TableHead>
+                <TableHead className='text-right'>{t('cash_paid')}</TableHead>
                 <TableHead className='text-right'>{t('paid')}</TableHead>
                 <TableHead className='text-right'>{t('balance')}</TableHead>
               </TableRow>
@@ -104,6 +143,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                   <TableCell>{row._id.supplier}</TableCell>
                   <TableCell className='text-right'>{row.purchaseCount}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(row.totalAmount)}</TableCell>
+                  <TableCell className='text-right text-green-600'>{formatCurrency(row.cashPaid || 0)}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(row.paidAmount)}</TableCell>
                   <TableCell className='text-right text-red-600'>{formatCurrency(row.balance)}</TableCell>
                 </TableRow>

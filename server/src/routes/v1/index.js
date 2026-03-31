@@ -20,6 +20,13 @@ const unitsRoute = require('./units.route');
 const organizationRoute = require('./organization.route');
 const branchRoute = require('./branch.route');
 const membershipRoute = require('./membership.route');
+const walletRoute = require('./wallet.route');
+const loadPurchaseRoute = require('./loadPurchase.route');
+const loadTransactionRoute = require('./loadTransaction.route');
+const repairJobRoute = require('./repairJob.route');
+const cashBookRoute = require('./cashBook.route');
+const mobileDashboardRoute = require('./mobileDashboard.route');
+const mobileReportsRoute = require('./mobileReports.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -112,6 +119,34 @@ const defaultRoutes = [
     path: '/memberships',
     route: membershipRoute
   },
+  {
+    path: '/wallets',
+    route: walletRoute,
+  },
+  {
+    path: '/load-purchases',
+    route: loadPurchaseRoute,
+  },
+  {
+    path: '/load-transactions',
+    route: loadTransactionRoute,
+  },
+  {
+    path: '/repairs',
+    route: repairJobRoute,
+  },
+  {
+    path: '/cash-book',
+    route: cashBookRoute,
+  },
+  {
+    path: '/mobile-dashboard',
+    route: mobileDashboardRoute,
+  },
+  {
+    path: '/mobile-reports',
+    route: mobileReportsRoute,
+  },
   // HR Routes
   {
     path: '/employees',
@@ -172,6 +207,13 @@ const protectedPaths = [
   '/organizations',
   '/branches',
   '/memberships',
+  '/wallets',
+  '/load-purchases',
+  '/load-transactions',
+  '/repairs',
+  '/cash-book',
+  '/mobile-dashboard',
+  '/mobile-reports',
   '/employees',
   '/departments',
   '/attendance',

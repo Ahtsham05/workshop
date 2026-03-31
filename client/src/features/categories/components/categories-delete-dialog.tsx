@@ -13,11 +13,11 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { deleteCategory } from '@/stores/category.slice'
 import { toast } from 'sonner'
-import { useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import { useLanguage } from '@/context/language-context'
 
 interface CategoriesDeleteDialogProps {
-  setFetch: (fetch: boolean) => void
+  setFetch: Dispatch<SetStateAction<boolean>>
 }
 
 export function CategoriesDeleteDialog({ setFetch }: CategoriesDeleteDialogProps) {
@@ -35,7 +35,7 @@ export function CategoriesDeleteDialog({ setFetch }: CategoriesDeleteDialogProps
       toast.success(t('category_deleted_successfully'))
       contextDispatch({ type: 'SET_DELETE_OPEN', payload: false })
       contextDispatch({ type: 'SET_CATEGORY', payload: null })
-      setFetch(true)
+      setFetch((previous) => !previous)
     } catch (error) {
       toast.error(t('category_deletion_failed'))
     } finally {

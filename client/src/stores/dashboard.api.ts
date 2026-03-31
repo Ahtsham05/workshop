@@ -49,6 +49,13 @@ export interface DashboardStats {
   todayRevenueChange: number
   totalCustomers: number
   totalProducts: number
+  totalLoadSold: number
+  totalRepairIncome: number
+  totalProfit: number
+  cashInHand: number
+  jazzcashBalance: number
+  easypaisaBalance: number
+  walletBalance: number
 }
 
 export interface RevenueData {

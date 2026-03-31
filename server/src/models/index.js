@@ -17,6 +17,11 @@ module.exports.Organization = require('./organization.model');
 module.exports.Branch = require('./branch.model');
 module.exports.Membership = require('./membership.model');
 module.exports.Payment = require('./payment.model');
+module.exports.Wallet = require('./wallet.model');
+module.exports.LoadPurchase = require('./loadPurchase.model');
+module.exports.LoadTransaction = require('./loadTransaction.model');
+module.exports.RepairJob = require('./repairJob.model');
+module.exports.CashBookEntry = require('./cashBookEntry.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

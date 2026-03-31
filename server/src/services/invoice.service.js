@@ -2,6 +2,37 @@ const httpStatus = require('http-status');
 const { Invoice, Product, Customer, CustomerLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
+const cashBookService = require('./cashBook.service');
+
+const syncWalkInInvoiceCashEntry = async (invoice) => {
+  const isWalkIn = !invoice.customerId || invoice.customerId === 'walk-in';
+  if (!isWalkIn) {
+    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+    return null;
+  }
+
+  const paidAmount = Number(invoice.paidAmount || 0);
+  if (paidAmount <= 0) {
+    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+    return null;
+  }
+
+  const paymentMethod = invoice.type === 'cash' ? 'cash' : 'bank';
+
+  return cashBookService.upsertReferenceEntry({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    type: 'income',
+    source: 'sale',
+    amount: paidAmount,
+    paymentMethod,
+    referenceId: invoice._id,
+    referenceModel: 'Invoice',
+    description: `Walk-in sale payment for Invoice #${invoice.invoiceNumber}`,
+    date: invoice.invoiceDate || invoice.createdAt || new Date(),
+    createdBy: invoice.createdBy,
+  });
+};
 
 /**
  * Create an invoice
@@ -90,6 +121,7 @@ const createInvoice = async (invoiceBody, userId) => {
 
   await invoice.save();
   console.log('Invoice saved with ID:', invoice._id);
+  await syncWalkInInvoiceCashEntry(invoice);
 
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
@@ -401,6 +433,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   
   await invoice.save();
   console.log('Invoice updated successfully');
+  await syncWalkInInvoiceCashEntry(invoice);
   
   // Update customer ledger entries if amounts or customer changed
   const newCustomerId = invoice.customerId;
@@ -535,6 +568,8 @@ const deleteInvoiceById = async (invoiceId) => {
     }
   }
 
+  await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+
   await invoice.deleteOne();
   return invoice;
 };
@@ -582,6 +617,7 @@ const processPayment = async (invoiceId, paymentData, userId) => {
   invoice.markAsPaid(amount, method, reference);
   invoice.updatedBy = userId;
   await invoice.save();
+  await syncWalkInInvoiceCashEntry(invoice);
   
   return invoice;
 };

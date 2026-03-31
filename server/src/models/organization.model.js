@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
+const { BUSINESS_TYPES, normalizeBusinessType } = require('../config/businessTypes');
 
 const organizationSchema = mongoose.Schema(
   {
@@ -10,8 +11,9 @@ const organizationSchema = mongoose.Schema(
     },
     businessType: {
       type: String,
-      enum: ['retail', 'wholesale', 'manufacturing', 'services', 'restaurant', 'pharmacy', 'education', 'healthcare', 'other'],
+      enum: BUSINESS_TYPES,
       default: 'retail',
+      set: normalizeBusinessType,
     },
     email: {
       type: String,

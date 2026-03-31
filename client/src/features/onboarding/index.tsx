@@ -27,18 +27,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react'
-
-const BUSINESS_TYPES = [
-  { value: 'retail', label: 'Retail' },
-  { value: 'wholesale', label: 'Wholesale' },
-  { value: 'manufacturing', label: 'Manufacturing' },
-  { value: 'services', label: 'Services' },
-  { value: 'restaurant', label: 'Restaurant / Food & Beverage' },
-  { value: 'pharmacy', label: 'Pharmacy / Medical' },
-  { value: 'education', label: 'Education' },
-  { value: 'healthcare', label: 'Healthcare' },
-  { value: 'other', label: 'Other' },
-]
+import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
 
 const formSchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -89,6 +78,7 @@ export default function OnboardingPage() {
         onboardingComplete: true,
         systemRole: 'superAdmin',
         organizationId: result.organization.id,
+        businessType: result.organization.businessType,
       }
       localStorage.setItem('user', JSON.stringify(updatedUser))
 
@@ -200,7 +190,7 @@ export default function OnboardingPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {BUSINESS_TYPES.map((bt) => (
+                              {BUSINESS_TYPE_OPTIONS.map((bt) => (
                                 <SelectItem key={bt.value} value={bt.value}>
                                   {bt.label}
                                 </SelectItem>

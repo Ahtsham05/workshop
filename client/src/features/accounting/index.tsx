@@ -18,6 +18,7 @@ export default function AccountingPage() {
   const searchParams = useSearch({ strict: false }) as any;
   const [initialCustomer, setInitialCustomer] = useState<any>(null);
   const [initialSupplier, setInitialSupplier] = useState<any>(null);
+  const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0);
 
   // Determine active tab from search params or default to dashboard
   const activeTab = searchParams?.tab === 'customer-ledger' && searchParams?.customerId 
@@ -88,12 +89,12 @@ export default function AccountingPage() {
 
         {/* Dashboard Tab */}
         <TabsContent value="dashboard">
-          <AccountsDashboard />
+          <AccountsDashboard refreshTrigger={expenseRefreshTrigger} />
         </TabsContent>
 
         {/* Expenses Tab */}
         <TabsContent value="expenses">
-          <ExpenseManagement />
+          <ExpenseManagement onExpenseChange={() => setExpenseRefreshTrigger(prev => prev + 1)} />
         </TabsContent>
 
         {/* Customer Ledger Tab */}

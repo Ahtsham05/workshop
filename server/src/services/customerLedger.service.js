@@ -1,6 +1,42 @@
 const httpStatus = require('http-status');
 const { CustomerLedger, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
+const cashBookService = require('./cashBook.service');
+
+const syncCashBookFromCustomerLedger = async (entry) => {
+  if (!entry) {
+    return null;
+  }
+
+  const transactionType = String(entry.transactionType || '').toLowerCase();
+
+  if (transactionType !== 'payment_received' && transactionType !== 'payment_made') {
+    await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+    return null;
+  }
+
+  const isPaymentReceived = transactionType === 'payment_received';
+  const amount = Number(isPaymentReceived ? entry.credit : entry.debit) || 0;
+
+  if (amount <= 0) {
+    await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+    return null;
+  }
+
+  return cashBookService.upsertReferenceEntry({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    type: isPaymentReceived ? 'income' : 'expense',
+    source: 'sale',
+    amount,
+    paymentMethod: entry.paymentMethod || 'cash',
+    referenceId: entry._id,
+    referenceModel: 'CustomerLedger',
+    description: entry.description || 'Customer payment entry',
+    date: entry.transactionDate,
+    createdBy: entry.createdBy,
+  });
+};
 
 /**
  * Recalculate balances for all entries after a specific transaction date
@@ -53,8 +89,10 @@ const createLedgerEntry = async (ledgerBody) => {
   // Recalculate all balances from this transaction date onwards
   await recalculateBalances(ledgerBody.customer, ledgerBody.transactionDate);
 
-  // Fetch and return the updated entry
-  return CustomerLedger.findById(entry._id);
+  // Fetch, sync cashbook and return the updated entry
+  const updatedEntry = await CustomerLedger.findById(entry._id);
+  await syncCashBookFromCustomerLedger(updatedEntry);
+  return updatedEntry;
 };
 
 /**
@@ -160,6 +198,7 @@ const updateLedgerEntry = async (id, updateBody) => {
 
   Object.assign(entry, updateBody);
   await entry.save();
+  await syncCashBookFromCustomerLedger(entry);
   return entry;
 };
 
@@ -176,6 +215,7 @@ const deleteLedgerEntry = async (id) => {
 
   const customerId = entry.customer;
   const transactionDate = entry.transactionDate;
+  await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
 
   await entry.deleteOne();
 

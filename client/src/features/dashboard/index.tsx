@@ -15,10 +15,16 @@ import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { isMobileShopBusiness } from '@/lib/business-types'
+import { Smartphone, WalletCards, Wrench } from 'lucide-react'
 
 export default function Dashboard() {
   const { t } = useLanguage()
   const { data: stats, isLoading, refetch } = useGetDashboardStatsQuery()
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const showMobileCards = isMobileShopBusiness(user?.businessType)
   
   return (
     <>
@@ -49,6 +55,43 @@ export default function Dashboard() {
         <div className='mb-6'>
           <QuickActions />
         </div>
+
+        {showMobileCards && (
+          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
+            <StatCard
+              title={t('Cash in Hand')}
+              value={stats?.cashInHand || 0}
+              icon={<DollarSign className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Available cash after expenses')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Wallet Balance')}
+              value={stats?.walletBalance || 0}
+              icon={<WalletCards className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Total balance across all wallets')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Load Sold')}
+              value={stats?.totalLoadSold || 0}
+              icon={<Smartphone className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Mobile load transactions')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Repair Income')}
+              value={stats?.totalRepairIncome || 0}
+              icon={<Wrench className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Repair charges collected')}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
 
         {/* Statistics Cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6'>

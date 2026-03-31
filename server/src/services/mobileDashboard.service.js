@@ -1,0 +1,147 @@
+const { Expense, Invoice, LoadPurchase, LoadTransaction, RepairJob, Wallet } = require('../models');
+
+const buildMatch = ({ organizationId, branchId, startDate, endDate }) => {
+  const match = { organizationId };
+
+  if (branchId) {
+    match.branchId = branchId;
+  }
+
+  if (startDate || endDate) {
+    match.date = {};
+    if (startDate) {
+      match.date.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      match.date.$lte = new Date(endDate);
+    }
+  }
+
+  return match;
+};
+
+const buildInvoiceMatch = ({ organizationId, branchId, startDate, endDate }) => {
+  const match = {
+    organizationId,
+    status: { $ne: 'cancelled' },
+  };
+
+  if (branchId) {
+    match.branchId = branchId;
+  }
+
+  if (startDate || endDate) {
+    match.invoiceDate = {};
+    if (startDate) {
+      match.invoiceDate.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      match.invoiceDate.$lte = new Date(endDate);
+    }
+  }
+
+  return match;
+};
+
+const calculateSalesCash = (invoices) => {
+  return invoices.reduce((sum, invoice) => {
+    if (invoice.splitPayment && invoice.splitPayment.length > 0) {
+      return (
+        sum +
+        invoice.splitPayment.reduce((nestedSum, payment) => {
+          return payment.method === 'cash' ? nestedSum + Number(payment.amount || 0) : nestedSum;
+        }, 0)
+      );
+    }
+
+    if (invoice.type === 'cash') {
+      return sum + Number(invoice.paidAmount || invoice.total || 0);
+    }
+
+    return sum;
+  }, 0);
+};
+
+const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, endDate }) => {
+  const invoiceMatch = buildInvoiceMatch({ organizationId, branchId, startDate, endDate });
+  const match = buildMatch({ organizationId, branchId, startDate, endDate });
+
+  const [invoices, loadTransactions, loadPurchases, repairJobs, expenses, wallets] = await Promise.all([
+    Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
+    LoadTransaction.find(match).select('amount profit paymentMethod walletType'),
+    LoadPurchase.find(match).select('amount paymentMethod walletType'),
+    RepairJob.find(match).select('charges paymentMethod'),
+    Expense.find({
+      organizationId,
+      ...(branchId ? { branchId } : {}),
+      ...(startDate || endDate
+        ? {
+            date: {
+              ...(startDate ? { $gte: new Date(startDate) } : {}),
+              ...(endDate ? { $lte: new Date(endDate) } : {}),
+            },
+          }
+        : {}),
+    }).select('amount paymentMethod'),
+    Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance'),
+  ]);
+
+  const totalSales = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const salesProfit = invoices.reduce((sum, invoice) => sum + Number(invoice.totalProfit || 0), 0);
+  const salesCash = calculateSalesCash(invoices);
+
+  const totalLoadSold = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const loadCash = loadTransactions.reduce((sum, transaction) => {
+    return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
+  }, 0);
+  const loadProfit = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.profit || 0), 0);
+
+  const totalRepairIncome = repairJobs.reduce((sum, job) => sum + Number(job.charges || 0), 0);
+  const repairCash = repairJobs.reduce((sum, job) => {
+    return job.paymentMethod === 'cash' ? sum + Number(job.charges || 0) : sum;
+  }, 0);
+
+  const expensesCash = expenses.reduce((sum, expense) => {
+    return String(expense.paymentMethod || '').toLowerCase() === 'cash' ? sum + Number(expense.amount || 0) : sum;
+  }, 0);
+
+  const loadPurchasesCash = loadPurchases.reduce((sum, purchase) => {
+    return purchase.paymentMethod === 'cash' ? sum + Number(purchase.amount || 0) : sum;
+  }, 0);
+
+  const walletBalances = wallets.reduce(
+    (accumulator, wallet) => {
+      const normalizedType = String(wallet.type || '').trim().toLowerCase();
+      const balance = Number(wallet.balance || 0);
+
+      if (normalizedType === 'jazzcash') {
+        accumulator.jazzcash += balance;
+      }
+
+      if (normalizedType === 'easypaisa') {
+        accumulator.easypaisa += balance;
+      }
+
+      accumulator.total += balance;
+      return accumulator;
+    },
+    { jazzcash: 0, easypaisa: 0, total: 0 }
+  );
+
+  const cashInHand = salesCash + loadCash + repairCash - expensesCash - loadPurchasesCash;
+
+  return {
+    totalSales,
+    totalLoadSold,
+    totalRepairIncome,
+    totalProfit: salesProfit + loadProfit + totalRepairIncome,
+    cashInHand,
+    jazzcashBalance: walletBalances.jazzcash,
+    easypaisaBalance: walletBalances.easypaisa,
+    walletBalance: walletBalances.total,
+  };
+};
+
+module.exports = {
+  getMobileDashboardSummary,
+};

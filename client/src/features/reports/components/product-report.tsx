@@ -57,8 +57,46 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     const formatCurrency = (value: number) => 
       new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
 
+    const totalSoldRevenue = data?.data?.reduce((s, p) => s + (p.totalRevenue || 0), 0) ?? 0
+    const totalSoldProfit = data?.data?.reduce((s, p) => s + (p.totalProfit || 0), 0) ?? 0
+    const totalSoldCost = totalSoldRevenue - totalSoldProfit
+
     return (
       <div className='space-y-6'>
+        {/* Sales Summary */}
+        <div className='grid gap-4 md:grid-cols-3'>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-sm'>{t('total_sold_value')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{formatCurrency(totalSoldRevenue)}</div>
+              <p className='text-xs text-muted-foreground mt-1'>{t('total_revenue_from_sales')}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-sm'>{t('total_cost_of_goods_sold')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold text-orange-600'>{formatCurrency(totalSoldCost)}</div>
+              <p className='text-xs text-muted-foreground mt-1'>{t('cost_of_sold_items')}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className='text-sm'>{t('total_profit')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSoldProfit)}</div>
+              <p className='text-xs text-muted-foreground mt-1'>
+                {totalSoldRevenue > 0 ? `${((totalSoldProfit / totalSoldRevenue) * 100).toFixed(1)}% ${t('margin')}` : '—'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Inventory Summary */}
         <div className='grid gap-4 md:grid-cols-4'>
           <Card>
             <CardHeader>
@@ -74,6 +112,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{formatCurrency(data?.stockSummary?.totalStockValue || 0)}</div>
+              <p className='text-xs text-muted-foreground mt-1'>{t('current_inventory_value')}</p>
             </CardContent>
           </Card>
           <Card>

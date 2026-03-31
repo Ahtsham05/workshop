@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { 
   // DollarSign, 
   TrendingUp, 
@@ -9,7 +10,9 @@ import {
   Receipt,
   Wallet,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import Axios from '@/utils/Axios';
@@ -27,7 +30,19 @@ interface DashboardStats {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
-export function AccountsDashboard() {
+const toMonthKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+const monthLabel = (key: string) => {
+  const [year, month] = key.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+};
+
+interface AccountsDashboardProps {
+  refreshTrigger?: number;
+}
+
+export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps) {
   const { t } = useLanguage();
   const [stats, setStats] = useState<DashboardStats>({
     totalExpenses: 0,
@@ -39,18 +54,43 @@ export function AccountsDashboard() {
   });
   const [loading, setLoading] = useState(true);
 
+  // Default to previous month so users who just entered last-month data see it immediately.
+  // If today is after the 5th, show current month.
+  const defaultMonth = () => {
+    const now = new Date();
+    if (now.getDate() <= 5) {
+      // First 5 days of month — likely looking at previous month data
+      return toMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    }
+    return toMonthKey(now);
+  };
+
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
+
+  const shiftMonth = (delta: number) => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const d = new Date(year, month - 1 + delta, 1);
+    setSelectedMonth(toMonthKey(d));
+  };
+
+  // Compute UTC-safe date range from a local month key
+  const getMonthRange = (key: string) => {
+    const [year, month] = key.split('-').map(Number);
+    const start = new Date(year, month - 1, 1);            // local midnight, first day
+    const end = new Date(year, month, 0, 23, 59, 59, 999); // local 23:59:59, last day
+    return { start, end };
+  };
+
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger, selectedMonth]);
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // Get current month date range
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      const { start: startOfMonth, end: endOfMonth } = getMonthRange(selectedMonth);
 
       // Fetch expense summary
       const expenseSummaryResponse = await Axios({
@@ -61,11 +101,12 @@ export function AccountsDashboard() {
         },
       });
 
-      // Fetch expense trends
+      // Fetch expense trends (last 6 months ending at end of selected month)
+      const trendStart = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() - 5, 1);
       const expenseTrendsResponse = await Axios({
         ...summery.fetchExpenseTrends,
         params: {
-          startDate: new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString(),
+          startDate: trendStart.toISOString(),
           endDate: endOfMonth.toISOString(),
         },
       });
@@ -114,6 +155,7 @@ export function AccountsDashboard() {
     }
   };
 
+  const isCurrentMonth = selectedMonth === toMonthKey(new Date());
   const netCashFlow = stats.totalReceivables - stats.totalPayables - stats.monthlyExpenses;
 
   if (loading) {
@@ -129,6 +171,17 @@ export function AccountsDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Month selector */}
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="min-w-[160px] text-center font-medium">{monthLabel(selectedMonth)}</span>
+        <Button variant="outline" size="icon" onClick={() => shiftMonth(1)} disabled={isCurrentMonth}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Monthly Expenses */}
@@ -141,7 +194,7 @@ export function AccountsDashboard() {
             <div className="text-2xl font-bold">Rs {stats.monthlyExpenses.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <TrendingUp className="h-3 w-3 text-red-500" />
-              {t('Current month')}
+              {monthLabel(selectedMonth)}
             </p>
           </CardContent>
         </Card>

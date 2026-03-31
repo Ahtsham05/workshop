@@ -1,0 +1,99 @@
+const httpStatus = require('http-status');
+const { Wallet } = require('../models');
+const ApiError = require('../utils/ApiError');
+
+const getWalletFilter = ({ organizationId, branchId, type }) => ({
+  organizationId,
+  branchId,
+  type,
+});
+
+const ensureWallet = async ({ organizationId, branchId, type, userId }) => {
+  let wallet = await Wallet.findOne(getWalletFilter({ organizationId, branchId, type }));
+
+  if (!wallet) {
+    wallet = await Wallet.create({
+      organizationId,
+      branchId,
+      type,
+      balance: 0,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+  }
+
+  return wallet;
+};
+
+const createOrUpdateWallet = async ({ organizationId, branchId, type, balance = 0, id, userId }) => {
+  let wallet;
+
+  if (id) {
+    // Update existing wallet by ID
+    wallet = await Wallet.findOne({ _id: id, organizationId, branchId });
+    if (!wallet) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
+    }
+    wallet.type = type;
+    wallet.balance = balance;
+    wallet.updatedBy = userId;
+  } else {
+    // Create new wallet - check if a wallet with this type already exists
+    wallet = await Wallet.findOne({ organizationId, branchId, type });
+    if (wallet) {
+      // Update existing wallet if type matches
+      wallet.balance = balance;
+      wallet.updatedBy = userId;
+    } else {
+      // Create new wallet
+      wallet = new Wallet({
+        organizationId,
+        branchId,
+        type,
+        balance,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+    }
+  }
+
+  await wallet.save();
+  return wallet;
+};
+
+const adjustWalletBalance = async ({ organizationId, branchId, type, amount, operation, userId }) => {
+  const wallet = await ensureWallet({ organizationId, branchId, type, userId });
+  const numericAmount = Number(amount || 0);
+  const nextBalance = operation === 'deduct' ? wallet.balance - numericAmount : wallet.balance + numericAmount;
+
+  if (nextBalance < 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `${type} wallet balance is insufficient`);
+  }
+
+  wallet.balance = nextBalance;
+  wallet.updatedBy = userId;
+  await wallet.save();
+
+  return wallet;
+};
+
+const queryWallets = async (filter, options = {}) => {
+  return Wallet.paginate(filter, {
+    ...options,
+    sortBy: options.sortBy || 'createdAt:desc',
+    limit: options.limit || 10,
+    page: options.page || 1,
+  });
+};
+
+const getWalletById = async (walletId) => {
+  return Wallet.findById(walletId);
+};
+
+module.exports = {
+  ensureWallet,
+  createOrUpdateWallet,
+  adjustWalletBalance,
+  queryWallets,
+  getWalletById,
+};
