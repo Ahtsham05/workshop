@@ -61,6 +61,9 @@ export interface PurchaseReportData {
   paidAmount: number
   balance: number
   purchaseCount: number
+  cashPaid: number
+  creditBalance: number
+  paymentTypes: string[]
 }
 
 export interface ProductReportData {
@@ -97,6 +100,7 @@ export interface SupplierReportData {
   totalPurchases: number
   totalAmount: number
   totalPaid: number
+  totalCashPaid: number
   totalBalance: number
   avgPurchaseValue: number
   lastPurchase: string
@@ -175,6 +179,7 @@ export const reportsApi = createApi({
     getPurchaseReport: builder.query<{
       data: PurchaseReportData[]
       summary: any
+      paymentBreakdown: { _id: string; count: number; totalAmount: number; paidAmount: number; balance: number }[]
       period: { startDate: string; endDate: string }
     }, { startDate?: string; endDate?: string; supplierId?: string }>({
       query: (params) => {
