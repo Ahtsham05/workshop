@@ -15,7 +15,7 @@ const paymentSchema = mongoose.Schema(
     },
     planType: {
       type: String,
-      enum: ['single', 'multi'],
+      enum: ['single', 'multi', 'starter', 'growth', 'business', 'enterprise'],
       required: true,
     },
     months: {

@@ -24,9 +24,13 @@ const MONTH_OPTIONS = [
   { value: 12, label: '12 Months (save 15%)' },
 ]
 
+type PlanTypeKey = 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise'
+
 interface PaymentSearch {
-  planType?: 'single' | 'multi'
+  planType?: PlanTypeKey
 }
+
+const PLAN_ORDER: PlanTypeKey[] = ['starter', 'growth', 'business']
 
 export default function PaymentFormPage() {
   const search = useSearch({ from: '/_authenticated/subscription/payment' }) as PaymentSearch
@@ -36,7 +40,7 @@ export default function PaymentFormPage() {
     const { data: trialStatus } = useGetTrialStatusQuery()
   const [submitPayment, { isLoading: isSubmitting }] = useSubmitPaymentMutation()
 
-  const [planType, setPlanType] = useState<'single' | 'multi'>(search.planType ?? 'single')
+  const [planType, setPlanType] = useState<PlanTypeKey>(search.planType ?? 'starter')
   const [months, setMonths] = useState(1)
   const [transactionId, setTransactionId] = useState('')
   const [_, setScreenshotFile] = useState<File | null>(null)
@@ -242,22 +246,22 @@ export default function PaymentFormPage() {
               {/* Plan selection */}
               <div className='space-y-2'>
                 <Label htmlFor='planType'>Select Plan *</Label>
-                <Select
+<Select
                   value={planType}
-                  onValueChange={(v) => setPlanType(v as 'single' | 'multi')}
+                  onValueChange={(v) => setPlanType(v as PlanTypeKey)}
                 >
                   <SelectTrigger id='planType'>
                     <SelectValue placeholder='Choose a plan' />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='single'>
-                      Starter Plan — PKR{' '}
-                      {bankData?.plans?.single?.pricePerMonth?.toLocaleString() ?? '—'}/mo
-                    </SelectItem>
-                    <SelectItem value='multi'>
-                      Growth Plan — PKR{' '}
-                      {bankData?.plans?.multi?.pricePerMonth?.toLocaleString() ?? '—'}/mo
-                    </SelectItem>
+                    {PLAN_ORDER
+                      .map((key) => bankData?.plans?.[key])
+                      .filter(Boolean)
+                      .map((plan) => (
+                        <SelectItem key={plan!.planType} value={plan!.planType}>
+                          {plan!.label} — PKR {plan!.pricePerMonth?.toLocaleString() ?? '—'}/mo
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -23,6 +23,10 @@ const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
   single: 'Starter Plan',
   multi: 'Growth Plan',
+  starter: 'Starter Plan',
+  growth: 'Growth Plan',
+  business: 'Business Plan',
+  enterprise: 'Enterprise Plan',
 }
 
 function StatusBadge({ status }: { status: string }) {

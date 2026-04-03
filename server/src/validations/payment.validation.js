@@ -2,7 +2,7 @@ const Joi = require('joi');
 
 const submitPayment = {
   body: Joi.object().keys({
-    planType: Joi.string().valid('single', 'multi').required(),
+    planType: Joi.string().valid('single', 'multi', 'starter', 'growth', 'business', 'enterprise').required(),
     months: Joi.number().integer().min(1).max(24).required(),
     transactionId: Joi.string().trim().optional().allow(''),
     screenshotUrl: Joi.string().uri().optional().allow(''),
@@ -28,7 +28,7 @@ const rejectPayment = {
 const getPayments = {
   query: Joi.object().keys({
     status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
-    planType: Joi.string().valid('single', 'multi').optional(),
+    planType: Joi.string().valid('single', 'multi', 'starter', 'growth', 'business', 'enterprise').optional(),
     organizationId: Joi.string().optional(),
     sortBy: Joi.string().optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
