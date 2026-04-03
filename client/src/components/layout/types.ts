@@ -19,6 +19,8 @@ interface BaseNavItem {
   permission?: string
   systemRole?: string[]
   businessTypes?: string[]
+  /** Feature key that must be unlocked on the user's plan. Used with useFeatureAccess(). */
+  requiredFeature?: string
 }
 
 type NavLink = BaseNavItem & {

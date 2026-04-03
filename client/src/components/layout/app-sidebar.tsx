@@ -14,17 +14,24 @@ import { usePermissions } from '@/context/permission-context'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { normalizeBusinessType } from '@/lib/business-types'
+import { useFeatureAccess } from '@/hooks/use-feature-access'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const userBusinessType = normalizeBusinessType(user?.businessType)
+  const { canAccess } = useFeatureAccess()
 
   const canAccessItem = (item: any) => {
     if (item.businessTypes && item.businessTypes.length > 0) {
       if (!item.businessTypes.includes(userBusinessType)) {
         return false
       }
+    }
+
+    // Feature-gating: hide items that the plan doesn't unlock
+    if (item.requiredFeature && !canAccess(item.requiredFeature)) {
+      return false
     }
 
     if (item.systemRole) {

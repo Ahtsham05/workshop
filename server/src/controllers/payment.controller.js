@@ -4,7 +4,7 @@ const ApiError = require('../utils/ApiError');
 const pick = require('../utils/pick');
 const { paymentService } = require('../services');
 const { uploadToCloudinary } = require('../middlewares/upload');
-const PLANS = require('../config/plans');
+const { PLANS } = require('../config/plans');
 const BANK_DETAILS = require('../config/bankDetails');
 
 /**

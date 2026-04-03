@@ -29,7 +29,7 @@ const {
   Token,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
-const PLANS = require('../config/plans');
+const { PLANS } = require('../config/plans');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
 /**

@@ -5,7 +5,7 @@ export interface Payment {
   id: string;
   organizationId: string | { id: string; name: string; email?: string };
   userId: string | { id: string; name: string; email: string };
-  planType: 'single' | 'multi';
+  planType: 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise';
   months: number;
   amount: number;
   paymentMethod: 'bank_transfer';
@@ -26,9 +26,11 @@ export interface PlanConfig {
   maxBranches: number;
   maxUsers: number;
   price?: number;
-  pricePerMonth?: number;
+  pricePerMonth?: number | null;
+  priceLabel?: string;
   description: string;
   features: string[];
+  badge?: string | null;
 }
 
 export interface BankDetails {
@@ -55,7 +57,7 @@ export interface PaymentsResponse {
 }
 
 export interface SubmitPaymentRequest {
-  planType: 'single' | 'multi';
+  planType: 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise';
   months: number;
   transactionId?: string;
   screenshotUrl?: string;

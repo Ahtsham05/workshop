@@ -9,6 +9,9 @@ import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useFeatureAccess } from '@/hooks/use-feature-access'
+import { LockedFeatureCard } from '@/components/locked-feature-card'
+import { getPlanLabel } from '@/lib/feature-access'
 import { SalesReport } from './components/sales-report'
 import { PurchaseReport } from './components/purchase-report'
 import { ProductReport } from './components/product-report'
@@ -27,6 +30,7 @@ import { RoiReport } from './components/roi-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
+  const { canAccess, planType } = useFeatureAccess()
   const now = new Date()
   const [startDate, setStartDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0))
   const [endDate, setEndDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
@@ -180,15 +184,25 @@ export default function ReportsPage() {
             <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('customers')}</TabsTrigger>
             <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
             <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
-            <TabsTrigger value='profit-loss' className='text-xs sm:text-sm px-2 sm:px-3'>{t('profit_loss')}</TabsTrigger>
             <TabsTrigger value='inventory' className='text-xs sm:text-sm px-2 sm:px-3'>{t('inventory')}</TabsTrigger>
             <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
             <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
             <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
-            <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
-            <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
-            <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
-            <TabsTrigger value='roi' className='text-xs sm:text-sm px-2 sm:px-3'>ROI</TabsTrigger>
+            {canAccess('load') && (
+              <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
+            )}
+            {canAccess('repair') && (
+              <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
+            )}
+            {canAccess('bill_payment') && (
+              <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
+            )}
+            {canAccess('profit_loss') && (
+              <TabsTrigger value='profit-loss' className='text-xs sm:text-sm px-2 sm:px-3'>{t('profit_loss')}</TabsTrigger>
+            )}
+            {canAccess('roi') && (
+              <TabsTrigger value='roi' className='text-xs sm:text-sm px-2 sm:px-3'>ROI</TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -217,7 +231,9 @@ export default function ReportsPage() {
         </TabsContent>
 
         <TabsContent value='profit-loss' className='mt-6'>
-          <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          {canAccess('profit_loss')
+            ? <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            : <LockedFeatureCard featureName='Profit & Loss Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         <TabsContent value='inventory' className='mt-6'>
@@ -237,19 +253,27 @@ export default function ReportsPage() {
         </TabsContent>
 
         <TabsContent value='load' className='mt-6'>
-          <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          {canAccess('load')
+            ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         <TabsContent value='repair' className='mt-6'>
-          <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          {canAccess('repair')
+            ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            : <LockedFeatureCard featureName='Repair Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         <TabsContent value='bill-payments' className='mt-6'>
-          <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          {canAccess('bill_payment')
+            ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         <TabsContent value='roi' className='mt-6'>
-          <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          {canAccess('roi')
+            ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            : <LockedFeatureCard featureName='ROI Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
       </Tabs>
     </div>

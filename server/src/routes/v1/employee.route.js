@@ -2,11 +2,12 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
+const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
 const { employeeValidation } = require('../../validations');
 const { employeeController } = require('../../controllers');
 
 const router = express.Router();
-router.use(auth(), branchScope(true));
+router.use(auth(), branchScope(true), checkFeatureAccess('hr_management'));
 
 router
   .route('/')

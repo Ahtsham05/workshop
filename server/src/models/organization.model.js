@@ -58,7 +58,7 @@ const organizationSchema = mongoose.Schema(
       required: true,
     },
     subscription: {
-      planType: { type: String, enum: ['trial', 'single', 'multi'], default: 'trial' },
+      planType: { type: String, enum: ['trial', 'single', 'multi', 'starter', 'growth', 'business', 'enterprise'], default: 'trial' },
       status: { type: String, enum: ['active', 'expired', 'pending'], default: 'pending' },
       startDate: { type: Date },
       endDate: { type: Date },

@@ -7,7 +7,7 @@ export interface SubscriptionLimits {
 }
 
 export interface Subscription {
-  planType: 'trial' | 'single' | 'multi';
+  planType: 'trial' | 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise';
   status: 'active' | 'expired' | 'pending';
   startDate?: string;
   endDate?: string;

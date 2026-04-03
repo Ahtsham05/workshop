@@ -1,6 +1,7 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const branchScope = require('../../middlewares/branchScope');
+const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
 const reportsController = require('../../controllers/reports.controller');
 const mobileReportsController = require('../../controllers/mobileReports.controller');
 
@@ -41,7 +42,7 @@ router
 
 router
   .route('/profit-loss-full')
-  .get(auth('viewReports'), reportsController.getProfitLossFullReport);
+  .get(auth('viewReports'), checkFeatureAccess('profit_loss'), reportsController.getProfitLossFullReport);
 
 router
   .route('/inventory')
@@ -61,23 +62,23 @@ router
 
 router
   .route('/load')
-  .get(auth('viewReports'), reportsController.getLoadReport);
+  .get(auth('viewReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
 
 router
   .route('/load/wallet-balance-statement')
-  .get(auth('viewReports'), mobileReportsController.getWalletBalanceStatement);
+  .get(auth('viewReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
 
 router
   .route('/repair')
-  .get(auth('viewReports'), reportsController.getRepairReport);
+  .get(auth('viewReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
 
 router
   .route('/roi')
-  .get(auth('viewReports'), reportsController.getRoiReport);
+  .get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
 
 router
   .route('/roi/monthly')
-  .get(auth('viewReports'), reportsController.getMonthlyRoi);
+  .get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
 
 module.exports = router;
 

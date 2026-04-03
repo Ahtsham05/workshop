@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const { Payment, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
-const PLANS = require('../config/plans');
+const { PLANS } = require('../config/plans');
 
 /**
  * Create a payment submission (bank transfer proof)
