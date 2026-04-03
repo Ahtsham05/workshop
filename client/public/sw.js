@@ -1,10 +1,12 @@
 /* Service Worker for Logix Plus Solutions PWA */
 
-const CACHE_NAME = 'logix-plus-v1';
-const RUNTIME_CACHE = 'logix-plus-runtime';
+// Bump this version string every deployment to bust stale caches.
+// Format: logix-plus-vYYYY-MM-DD or any unique string per deploy.
+const CACHE_NAME = 'logix-plus-v2026-04-03';
+const RUNTIME_CACHE = 'logix-plus-runtime-v2026-04-03';
+// NOTE: intentionally NOT caching index.html here.
+// index.html must always be fetched fresh so it references the latest JS/CSS chunk hashes.
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
   '/manifest.json',
 ];
 
@@ -41,6 +43,15 @@ self.addEventListener('fetch', (event) => {
 
   // Skip cross-origin requests
   if (url.origin !== location.origin) {
+    return;
+  }
+
+  // HTML navigation requests (index.html, /) — ALWAYS network first, no cache
+  // This ensures new deployments' JS/CSS chunk filenames are always used.
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/index.html'))
+    );
     return;
   }
 
