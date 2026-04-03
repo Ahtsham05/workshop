@@ -40,6 +40,10 @@ router
   .get(auth('viewReports'), reportsController.getProfitLossReport);
 
 router
+  .route('/profit-loss-full')
+  .get(auth('viewReports'), reportsController.getProfitLossFullReport);
+
+router
   .route('/inventory')
   .get(auth('viewReports'), reportsController.getInventoryReport);
 
@@ -66,6 +70,14 @@ router
 router
   .route('/repair')
   .get(auth('viewReports'), reportsController.getRepairReport);
+
+router
+  .route('/roi')
+  .get(auth('viewReports'), reportsController.getRoiReport);
+
+router
+  .route('/roi/monthly')
+  .get(auth('viewReports'), reportsController.getMonthlyRoi);
 
 module.exports = router;
 

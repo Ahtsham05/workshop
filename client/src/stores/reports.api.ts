@@ -322,10 +322,80 @@ export interface RepairReport {
   period: { startDate: string; endDate: string }
 }
 
+// ── Full Profit & Loss Report ────────────────────────────────────────────────
+export interface ProfitLossFullReport {
+  revenue: {
+    totalRevenue: number
+    salesReturns: number
+    salesReturnsCount: number
+    netRevenue: number
+    costOfGoodsSold: number
+    grossProfit: number
+    grossProfitMargin: number
+  }
+  additionalProfits: {
+    loadProfit: number
+    repairProfit: number
+    billProfit: number
+  }
+  adjustments: {
+    purchaseReturns: number
+    purchaseReturnsCount: number
+  }
+  expenses: number
+  netProfit: number
+  netProfitMargin: number
+  roi: number
+  investment: number
+  inventoryValue: number
+  walletBalance: number
+  period: { from: string; to: string }
+}
+
+// ── ROI Report ───────────────────────────────────────────────────────────────
+export interface RoiBreakdown {
+  investment: {
+    inventoryValue: number
+    walletBalance: number
+    expenses: number
+    purchaseReturnsRecovery: number
+  }
+  profit: {
+    salesProfit: number
+    loadProfit: number
+    repairProfit: number
+    billPaymentProfit: number
+    expenseDeduction: number
+    salesReturnsImpact: number
+  }
+}
+
+export interface RoiReport {
+  investment: number
+  inventoryValue: number
+  walletBalance: number
+  profit: number
+  roi: number
+  breakdown: RoiBreakdown
+  period: { from: string; to: string }
+}
+
+export interface MonthlyRoiPoint {
+  month: string
+  investment: number
+  profit: number
+  roi: number
+}
+
+export interface MonthlyRoiReport {
+  monthly: MonthlyRoiPoint[]
+  period: { from: string; to: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'RoiReport', 'MonthlyRoi'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -436,6 +506,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['ProfitLoss'],
     }),
+    getProfitLossFullReport: builder.query<ProfitLossFullReport, { from?: string; to?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.from) searchParams.set('from', params.from)
+        if (params.to) searchParams.set('to', params.to)
+        return `/profit-loss-full?${searchParams.toString()}`
+      },
+      providesTags: ['ProfitLossFull'],
+    }),
     getInventoryReport: builder.query<{
       data: InventoryReportData[]
       summary: any
@@ -512,6 +591,24 @@ export const reportsApi = createApi({
       },
       providesTags: ['RepairReport'],
     }),
+    getRoiReport: builder.query<RoiReport, { from?: string; to?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.from) searchParams.set('from', params.from)
+        if (params.to) searchParams.set('to', params.to)
+        return `/roi?${searchParams.toString()}`
+      },
+      providesTags: ['RoiReport'],
+    }),
+    getMonthlyRoi: builder.query<MonthlyRoiReport, { from?: string; to?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.from) searchParams.set('from', params.from)
+        if (params.to) searchParams.set('to', params.to)
+        return `/roi/monthly?${searchParams.toString()}`
+      },
+      providesTags: ['MonthlyRoi'],
+    }),
   }),
 })
 
@@ -524,6 +621,7 @@ export const {
   useGetSupplierReportQuery,
   useGetExpenseReportQuery,
   useGetProfitLossReportQuery,
+  useGetProfitLossFullReportQuery,
   useGetInventoryReportQuery,
   useGetTaxReportQuery,
   useGetSalesReturnsReportQuery,
@@ -531,4 +629,6 @@ export const {
   useGetLoadReportQuery,
   useGetWalletBalanceStatementQuery,
   useGetRepairReportQuery,
+  useGetRoiReportQuery,
+  useGetMonthlyRoiQuery,
 } = reportsApi

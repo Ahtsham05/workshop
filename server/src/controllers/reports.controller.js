@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal, BillPayment } = require('../models');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -468,12 +468,381 @@ const getTaxReport = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send({ data: taxData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
+/* ── ROI ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Parse the from/to query params used by the ROI endpoints.
+ * Defaults to last 12 months when not provided.
+ */
+const parseRoiRange = (query) => {
+  const to = query.to ? new Date(query.to) : new Date();
+  const from = query.from
+    ? new Date(query.from)
+    : new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
+  return { from, to };
+};
+
+/**
+ * Aggregate a single sum from a collection within the date range.
+ * @param {mongoose.Model} Model
+ * @param {object} scope  - org/branch filter
+ * @param {object} dateFilter - e.g. { invoiceDate: { $gte, $lte } }
+ * @param {object} extraMatch - additional match conditions
+ * @param {string} field  - the dollar-prefixed field to sum
+ */
+const aggregateSum = async (Model, match, field) => {
+  const result = await Model.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: field } } },
+  ]);
+  return result[0]?.total || 0;
+};
+
+const getRoiReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { from, to } = parseRoiRange(req.query);
+
+  // ── Investment aggregations ──────────────────────────────────────────────
+  const [
+    totalExpenses,
+    currentInventoryValue,
+    currentWalletBalance,
+  ] = await Promise.all([
+    aggregateSum(Expense, { ...scope, date: { $gte: from, $lte: to } }, '$amount'),
+    // Real-time inventory value: current stock quantity × cost (already reflects all purchases/sales/returns)
+    (async () => {
+      const result = await Product.aggregate([
+        { $match: { ...scope } },
+        { $group: { _id: null, total: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } } } },
+      ]);
+      return result[0]?.total || 0;
+    })(),
+    // Current digital wallet balances (JazzCash, EasyPaisa, etc.)
+    (async () => {
+      const result = await Wallet.aggregate([
+        { $match: { ...scope, isActive: true } },
+        { $group: { _id: null, total: { $sum: '$balance' } } },
+      ]);
+      return result[0]?.total || 0;
+    })(),
+  ]);
+
+  // ── Profit aggregations ──────────────────────────────────────────────────
+  const [
+    salesProfit,
+    loadProfit,
+    repairProfit,
+    billPaymentProfit,
+    salesReturnsImpact,
+    purchaseReturnsRecovery,
+  ] = await Promise.all([
+    // Sales profit = sum of invoice-level totalProfit field
+    aggregateSum(
+      Invoice,
+      { ...scope, invoiceDate: { $gte: from, $lte: to }, status: { $ne: 'cancelled' } },
+      { $ifNull: ['$totalProfit', 0] }
+    ),
+    // Load profit = commission + extra charges earned on transactions
+    aggregateSum(LoadTransaction, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$profit', 0] }),
+    // Repair profit = charges collected minus parts cost
+    (async () => {
+      const result = await RepairJob.aggregate([
+        { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $in: ['completed', 'delivered'] } } },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } } } },
+      ]);
+      return result[0]?.total || 0;
+    })(),
+    // Bill payment profit = service charge earned
+    aggregateSum(BillPayment, { ...scope, createdAt: { $gte: from, $lte: to } }, { $ifNull: ['$serviceCharge', 0] }),
+    // Sales returns reduce profit (customers returned goods)
+    aggregateSum(
+      SalesReturn,
+      { ...scope, date: { $gte: from, $lte: to }, status: { $ne: 'rejected' } },
+      '$totalAmount'
+    ),
+    // Purchase returns recover some investment cost
+    aggregateSum(
+      PurchaseReturn,
+      { ...scope, createdAt: { $gte: from, $lte: to } },
+      '$totalAmount'
+    ),
+  ]);
+
+  // investment = real-time inventory value + current wallet balances + period expenses
+  const investment = currentInventoryValue + currentWalletBalance + totalExpenses;
+  const grossProfit = salesProfit + loadProfit + repairProfit + billPaymentProfit;
+  const profit = grossProfit - totalExpenses - salesReturnsImpact;
+  const roi = investment > 0 ? parseFloat(((profit / investment) * 100).toFixed(2)) : 0;
+
+  res.status(httpStatus.OK).send({
+    investment: parseFloat(investment.toFixed(2)),
+    inventoryValue: parseFloat(currentInventoryValue.toFixed(2)),
+    walletBalance: parseFloat(currentWalletBalance.toFixed(2)),
+    profit: parseFloat(profit.toFixed(2)),
+    roi,
+    breakdown: {
+      investment: {
+        inventoryValue: parseFloat(currentInventoryValue.toFixed(2)),
+        walletBalance: parseFloat(currentWalletBalance.toFixed(2)),
+        expenses: parseFloat(totalExpenses.toFixed(2)),
+        purchaseReturnsRecovery: parseFloat(purchaseReturnsRecovery.toFixed(2)),
+      },
+      profit: {
+        salesProfit: parseFloat(salesProfit.toFixed(2)),
+        loadProfit: parseFloat(loadProfit.toFixed(2)),
+        repairProfit: parseFloat(repairProfit.toFixed(2)),
+        billPaymentProfit: parseFloat(billPaymentProfit.toFixed(2)),
+        expenseDeduction: parseFloat(totalExpenses.toFixed(2)),
+        salesReturnsImpact: parseFloat(salesReturnsImpact.toFixed(2)),
+      },
+    },
+    period: { from, to },
+  });
+});
+
+const getMonthlyRoi = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { from, to } = parseRoiRange(req.query);
+
+  const monthFormat = { $dateToString: { format: '%Y-%m', date: '$$date' } };
+
+  // Helper: group-by-month aggregate
+  const monthlySum = async (Model, dateField, valueExpr, extraMatch = {}) => {
+    const results = await Model.aggregate([
+      { $match: { ...scope, [dateField]: { $gte: from, $lte: to }, ...extraMatch } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: `$${dateField}` } },
+          total: { $sum: valueExpr },
+        },
+      },
+    ]);
+    return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+  };
+
+  const [
+    purchasesByMonth,
+    loadPurchasesByMonth,
+    expensesByMonth,
+    salesProfitByMonth,
+    loadProfitByMonth,
+    salesReturnsByMonth,
+    repairProfitByMonth,
+    billPaymentProfitByMonth,
+    purchaseReturnsByMonth,
+  ] = await Promise.all([
+    monthlySum(Purchase, 'purchaseDate', '$totalAmount'),
+    monthlySum(LoadPurchase, 'date', '$amount'),
+    monthlySum(Expense, 'date', '$amount'),
+    monthlySum(Invoice, 'invoiceDate', { $ifNull: ['$totalProfit', 0] }, { status: { $ne: 'cancelled' } }),
+    monthlySum(LoadTransaction, 'date', { $ifNull: ['$profit', 0] }),
+    monthlySum(SalesReturn, 'date', '$totalAmount', { status: { $ne: 'rejected' } }),
+    (async () => {
+      const results = await RepairJob.aggregate([
+        { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $in: ['completed', 'delivered'] } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$date' } },
+            total: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } },
+          },
+        },
+      ]);
+      return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+    })(),
+    (async () => {
+      const results = await BillPayment.aggregate([
+        { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+            total: { $sum: { $ifNull: ['$serviceCharge', 0] } },
+          },
+        },
+      ]);
+      return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+    })(),
+    (async () => {
+      const results = await PurchaseReturn.aggregate([
+        { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+            total: { $sum: '$totalAmount' },
+          },
+        },
+      ]);
+      return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+    })(),
+  ]);
+
+  // Build sorted list of all months present in the range
+  const allMonths = new Set([
+    ...Object.keys(purchasesByMonth),
+    ...Object.keys(loadPurchasesByMonth),
+    ...Object.keys(expensesByMonth),
+    ...Object.keys(salesProfitByMonth),
+    ...Object.keys(loadProfitByMonth),
+    ...Object.keys(salesReturnsByMonth),
+    ...Object.keys(repairProfitByMonth),
+    ...Object.keys(billPaymentProfitByMonth),
+    ...Object.keys(purchaseReturnsByMonth),
+  ]);
+
+  const monthly = Array.from(allMonths).sort().map((month) => {
+    const inv = (purchasesByMonth[month] || 0)
+      + (loadPurchasesByMonth[month] || 0)
+      + (expensesByMonth[month] || 0)
+      - (purchaseReturnsByMonth[month] || 0);
+    const gross = (salesProfitByMonth[month] || 0)
+      + (loadProfitByMonth[month] || 0)
+      + (repairProfitByMonth[month] || 0)
+      + (billPaymentProfitByMonth[month] || 0);
+    const pft = gross - (expensesByMonth[month] || 0) - (salesReturnsByMonth[month] || 0);
+    const roi = inv > 0 ? parseFloat(((pft / inv) * 100).toFixed(2)) : 0;
+    return { month, investment: parseFloat(inv.toFixed(2)), profit: parseFloat(pft.toFixed(2)), roi };
+  });
+
+  res.status(httpStatus.OK).send({ monthly, period: { from, to } });
+});
+
+/* ── Full Profit & Loss (all modules) ───────────────────────────────────────── */
+const getProfitLossFullReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { from, to } = parseRoiRange(req.query);
+
+  const [
+    invoiceAgg,
+    salesReturnsAgg,
+    purchaseReturnsAgg,
+    loadProfitAgg,
+    repairAgg,
+    billPaymentAgg,
+    expenseAgg,
+    purchaseAgg,
+    stockAgg,
+    walletAgg,
+  ] = await Promise.all([
+    // Revenue + COGS from invoices
+    Invoice.aggregate([
+      { $match: { ...scope, invoiceDate: { $gte: from, $lte: to }, status: { $ne: 'cancelled' } } },
+      { $group: { _id: null, totalRevenue: { $sum: '$total' }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, salesProfit: { $sum: { $ifNull: ['$totalProfit', 0] } } } },
+    ]),
+    // Sales returns impact
+    SalesReturn.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $ne: 'rejected' } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+    // Purchase returns recovery
+    PurchaseReturn.aggregate([
+      { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+    // Load transaction profit
+    LoadTransaction.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$profit', 0] } } } },
+    ]),
+    // Repair profit = charges - cost
+    RepairJob.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $in: ['completed', 'delivered'] } } },
+      { $group: { _id: null, charges: { $sum: '$charges' }, cost: { $sum: { $ifNull: ['$cost', 0] } } } },
+    ]),
+    // Bill payment profit = service charge
+    BillPayment.aggregate([
+      { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$serviceCharge', 0] } } } },
+    ]),
+    // Expenses
+    Expense.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    // Total Purchases (informational only — not in investment formula)
+    Purchase.aggregate([
+      { $match: { ...scope, purchaseDate: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    ]),
+    // Real-time inventory value: current stock × cost
+    Product.aggregate([
+      { $match: { ...scope } },
+      { $group: { _id: null, total: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } } } },
+    ]),
+    // Current digital wallet balances (JazzCash, EasyPaisa, etc.)
+    Wallet.aggregate([
+      { $match: { ...scope, isActive: true } },
+      { $group: { _id: null, total: { $sum: '$balance' } } },
+    ]),
+  ]);
+
+  const inv     = invoiceAgg[0]        || { totalRevenue: 0, totalCost: 0, salesProfit: 0 };
+  const sr      = salesReturnsAgg[0]   || { total: 0, count: 0 };
+  const pr      = purchaseReturnsAgg[0]|| { total: 0, count: 0 };
+  const ld      = loadProfitAgg[0]     || { total: 0 };
+  const rep     = repairAgg[0]         || { charges: 0, cost: 0 };
+  const bill    = billPaymentAgg[0]    || { total: 0 };
+  const exp     = expenseAgg[0]        || { total: 0 };
+  const pur     = purchaseAgg[0]       || { total: 0 };
+  const currentInventoryValue = stockAgg[0]?.total  || 0;
+  const currentWalletBalance  = walletAgg[0]?.total || 0;
+
+  const totalRevenue      = inv.totalRevenue;
+  const salesReturns      = sr.total;
+  const netRevenue        = totalRevenue - salesReturns;
+  const costOfGoodsSold   = inv.totalCost;
+  const grossProfit       = netRevenue - costOfGoodsSold;
+
+  const loadProfit        = ld.total;
+  const repairProfit      = rep.charges - rep.cost;
+  const billProfit        = bill.total;
+  const purchaseReturns   = pr.total;
+  const expenses          = exp.total;
+
+  const netProfit = grossProfit + loadProfit + repairProfit + billProfit - expenses;
+
+  // investment = real-time inventory value + current wallet balances + period expenses
+  const investment = currentInventoryValue + currentWalletBalance + expenses;
+  const roi        = investment > 0 ? parseFloat(((netProfit / investment) * 100).toFixed(2)) : 0;
+
+  const grossProfitMargin = netRevenue > 0 ? parseFloat(((grossProfit / netRevenue) * 100).toFixed(2)) : 0;
+  const netProfitMargin   = netRevenue > 0 ? parseFloat(((netProfit  / netRevenue) * 100).toFixed(2)) : 0;
+
+  res.status(httpStatus.OK).send({
+    revenue: {
+      totalRevenue:       parseFloat(totalRevenue.toFixed(2)),
+      salesReturns:       parseFloat(salesReturns.toFixed(2)),
+      salesReturnsCount:  sr.count,
+      netRevenue:         parseFloat(netRevenue.toFixed(2)),
+      costOfGoodsSold:    parseFloat(costOfGoodsSold.toFixed(2)),
+      grossProfit:        parseFloat(grossProfit.toFixed(2)),
+      grossProfitMargin,
+    },
+    additionalProfits: {
+      loadProfit:         parseFloat(loadProfit.toFixed(2)),
+      repairProfit:       parseFloat(repairProfit.toFixed(2)),
+      billProfit:         parseFloat(billProfit.toFixed(2)),
+    },
+    adjustments: {
+      purchaseReturns:       parseFloat(purchaseReturns.toFixed(2)),
+      purchaseReturnsCount:  pr.count,
+    },
+    expenses:   parseFloat(expenses.toFixed(2)),
+    netProfit:  parseFloat(netProfit.toFixed(2)),
+    netProfitMargin,
+    roi,
+    investment:     parseFloat(investment.toFixed(2)),
+    inventoryValue: parseFloat(currentInventoryValue.toFixed(2)),
+    walletBalance:  parseFloat(currentWalletBalance.toFixed(2)),
+    period: { from, to },
+  });
+});
+
 module.exports = {
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
-  getProfitLossReport, getInventoryReport, getTaxReport,
+  getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
   getLoadReport, getRepairReport,
+  getRoiReport, getMonthlyRoi,
 };
 
 /* ── Sales Returns Report ───────────────────────────────────────────────────── */

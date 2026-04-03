@@ -23,6 +23,7 @@ import { PurchaseReturnsReport } from './components/purchase-returns-report'
 import { LoadReport } from './components/load-report'
 import { RepairReport } from './components/repair-report'
 import { BillPaymentReport } from './components/bill-payment-report'
+import { RoiReport } from './components/roi-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -187,6 +188,7 @@ export default function ReportsPage() {
             <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
             <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
+            <TabsTrigger value='roi' className='text-xs sm:text-sm px-2 sm:px-3'>ROI</TabsTrigger>
           </TabsList>
         </div>
 
@@ -244,6 +246,10 @@ export default function ReportsPage() {
 
         <TabsContent value='bill-payments' className='mt-6'>
           <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='roi' className='mt-6'>
+          <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
         </TabsContent>
       </Tabs>
     </div>
