@@ -22,7 +22,7 @@ const cashBookEntrySchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['sale', 'load', 'repair', 'purchase', 'expense', 'other'],
+      enum: ['sale', 'load', 'repair', 'purchase', 'expense', 'other', 'sales_return', 'purchase_return', 'bill_payment'],
       required: true,
     },
     amount: {
@@ -32,7 +32,7 @@ const cashBookEntrySchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'jazzcash', 'easypaisa', 'bank', 'card', 'cheque'],
+      enum: ['cash', 'jazzcash', 'easypaisa', 'bank', 'card', 'cheque', 'wallet'],
       default: 'cash',
     },
     referenceId: {

@@ -23,8 +23,15 @@ module.exports.cashBookService = require('./cashBook.service.js');
 module.exports.walletService = require('./wallet.service.js');
 module.exports.loadPurchaseService = require('./loadPurchase.service.js');
 module.exports.loadTransactionService = require('./loadTransaction.service.js');
+module.exports.cashWithdrawalService = require('./cashWithdrawal.service.js');
 module.exports.repairJobService = require('./repairJob.service.js');
 module.exports.mobileDashboardService = require('./mobileDashboard.service.js');
+module.exports.salesReturnService = require('./salesReturn.service.js');
+module.exports.purchaseReturnService = require('./purchaseReturn.service.js');
+
+// Utility Bill Services
+module.exports.utilityCompanyService = require('./utilityCompany.service.js');
+module.exports.billPaymentService = require('./billPayment.service.js');
 
 // HR Services
 module.exports.employeeService = require('./employee.service.js');

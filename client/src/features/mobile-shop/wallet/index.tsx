@@ -41,6 +41,9 @@ export default function WalletPage() {
   const [upsertWallet, { isLoading: isSaving }] = useUpsertWalletMutation()
   const [walletName, setWalletName] = useState('')
   const [balance, setBalance] = useState('0')
+  const [commissionRate, setCommissionRate] = useState('0')
+  const [withdrawalCommissionRate, setWithdrawalCommissionRate] = useState('0')
+  const [depositCommissionRate, setDepositCommissionRate] = useState('0')
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const wallets = data?.results ?? []
@@ -57,11 +60,17 @@ export default function WalletPage() {
       await upsertWallet({ 
         type: walletName, 
         balance: Number(balance),
+        commissionRate: Number(commissionRate),
+        withdrawalCommissionRate: Number(withdrawalCommissionRate),
+        depositCommissionRate: Number(depositCommissionRate),
         ...(editingId && { id: editingId })
       }).unwrap()
       toast.success(editingId ? 'Wallet updated' : 'Wallet created')
       setWalletName('')
       setBalance('0')
+      setCommissionRate('0')
+      setWithdrawalCommissionRate('0')
+      setDepositCommissionRate('0')
       setEditingId(null)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save wallet')
@@ -72,12 +81,18 @@ export default function WalletPage() {
     setEditingId(wallet.id)
     setWalletName(wallet.type)
     setBalance(String(wallet.balance))
+    setCommissionRate(String(wallet.commissionRate ?? 0))
+    setWithdrawalCommissionRate(String(wallet.withdrawalCommissionRate ?? 0))
+    setDepositCommissionRate(String(wallet.depositCommissionRate ?? 0))
   }
 
   const handleCancel = () => {
     setEditingId(null)
     setWalletName('')
     setBalance('0')
+    setCommissionRate('0')
+    setWithdrawalCommissionRate('0')
+    setDepositCommissionRate('0')
   }
 
   return (
@@ -113,6 +128,51 @@ export default function WalletPage() {
                   value={balance}
                   onChange={(event) => setBalance(event.target.value)}
                 />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='commission-rate'>Load Sale Commission (%) - Optional</Label>
+                <Input
+                  id='commission-rate'
+                  min='0'
+                  max='100'
+                  step='0.01'
+                  type='number'
+                  placeholder='e.g., 2.4'
+                  value={commissionRate}
+                  onChange={(event) => setCommissionRate(event.target.value)}
+                />
+                <p className='text-xs text-muted-foreground'>Auto-filled when selling load</p>
+              </div>
+              <div className='border rounded-lg p-3 space-y-3 bg-muted/30'>
+                <p className='text-sm font-medium text-muted-foreground'>Cash Withdrawal / Deposit Rates</p>
+                <div className='space-y-2'>
+                  <Label htmlFor='withdrawal-rate'>Withdrawal Commission (%) — Customer withdraws cash</Label>
+                  <Input
+                    id='withdrawal-rate'
+                    min='0'
+                    max='100'
+                    step='0.01'
+                    type='number'
+                    placeholder='e.g., 2'
+                    value={withdrawalCommissionRate}
+                    onChange={(event) => setWithdrawalCommissionRate(event.target.value)}
+                  />
+                  <p className='text-xs text-muted-foreground'>Customer sends digital → you give cash. Wallet INCREASES.</p>
+                </div>
+                <div className='space-y-2'>
+                  <Label htmlFor='deposit-rate'>Deposit Commission (%) — Customer deposits / sends via wallet</Label>
+                  <Input
+                    id='deposit-rate'
+                    min='0'
+                    max='100'
+                    step='0.01'
+                    type='number'
+                    placeholder='e.g., 1'
+                    value={depositCommissionRate}
+                    onChange={(event) => setDepositCommissionRate(event.target.value)}
+                  />
+                  <p className='text-xs text-muted-foreground'>Customer gives cash → you send digital. Wallet DECREASES.</p>
+                </div>
               </div>
               <div className='flex gap-2'>
                 <Button className='flex-1' disabled={isSaving} type='submit'>
@@ -152,6 +212,9 @@ export default function WalletPage() {
                   <TableRow>
                     <TableHead>Wallet Name</TableHead>
                     <TableHead>Balance</TableHead>
+                    <TableHead>Load Sale %</TableHead>
+                    <TableHead>Withdrawal %</TableHead>
+                    <TableHead>Deposit %</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -161,6 +224,9 @@ export default function WalletPage() {
                     <TableRow key={wallet.id}>
                       <TableCell className='font-medium'>{wallet.type}</TableCell>
                       <TableCell className='text-green-600 font-semibold'>Rs {formatWalletBalance(wallet.balance)}</TableCell>
+                      <TableCell className='text-blue-600'>{Number(wallet.commissionRate ?? 0).toFixed(2)}%</TableCell>
+                      <TableCell className='text-orange-600 font-medium'>{Number(wallet.withdrawalCommissionRate ?? 0).toFixed(2)}%</TableCell>
+                      <TableCell className='text-purple-600 font-medium'>{Number(wallet.depositCommissionRate ?? 0).toFixed(2)}%</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{formatWalletDate(wallet.updatedAt)}</TableCell>
                       <TableCell className='flex gap-1'>
                         <Button

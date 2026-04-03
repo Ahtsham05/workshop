@@ -2,6 +2,7 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const branchScope = require('../../middlewares/branchScope');
 const reportsController = require('../../controllers/reports.controller');
+const mobileReportsController = require('../../controllers/mobileReports.controller');
 
 const router = express.Router();
 router.use(auth(), branchScope());
@@ -45,6 +46,26 @@ router
 router
   .route('/tax')
   .get(auth('viewReports'), reportsController.getTaxReport);
+
+router
+  .route('/sales-returns')
+  .get(auth('viewReports'), reportsController.getSalesReturnsReport);
+
+router
+  .route('/purchase-returns')
+  .get(auth('viewReports'), reportsController.getPurchaseReturnsReport);
+
+router
+  .route('/load')
+  .get(auth('viewReports'), reportsController.getLoadReport);
+
+router
+  .route('/load/wallet-balance-statement')
+  .get(auth('viewReports'), mobileReportsController.getWalletBalanceStatement);
+
+router
+  .route('/repair')
+  .get(auth('viewReports'), reportsController.getRepairReport);
 
 module.exports = router;
 

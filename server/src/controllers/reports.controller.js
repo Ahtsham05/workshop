@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal } = require('../models');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -357,7 +357,7 @@ const getProfitLossReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { start, end } = parseRange(req.query);
 
-  const [revenueData, expenseData] = await Promise.all([
+  const [revenueData, expenseData, salesReturnsData, purchaseReturnsData] = await Promise.all([
     Invoice.aggregate([
       { $match: { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } } },
       { $group: { _id: null, totalRevenue: { $sum: '$total' }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, grossProfit: { $sum: { $ifNull: ['$totalProfit', 0] } } } },
@@ -366,17 +366,41 @@ const getProfitLossReport = catchAsync(async (req, res) => {
       { $match: { ...scope, date: { $gte: start, $lte: end } } },
       { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
     ]),
+    SalesReturn.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } } },
+      { $group: { _id: null, totalSalesReturns: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+    PurchaseReturn.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } } },
+      { $group: { _id: null, totalPurchaseReturns: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
   ]);
 
   const rev = revenueData[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
   const exp = expenseData[0] || { totalExpenses: 0 };
-  const grossProfit = rev.grossProfit || (rev.totalRevenue - rev.totalCost);
+  const sr = salesReturnsData[0] || { totalSalesReturns: 0, count: 0 };
+  const pr = purchaseReturnsData[0] || { totalPurchaseReturns: 0, count: 0 };
+
+  const netRevenue = rev.totalRevenue - sr.totalSalesReturns;
+  const grossProfit = (rev.grossProfit || (rev.totalRevenue - rev.totalCost)) - sr.totalSalesReturns;
   const netProfit = grossProfit - exp.totalExpenses;
 
   res.status(httpStatus.OK).send({
-    revenue: { totalRevenue: rev.totalRevenue, costOfGoodsSold: rev.totalCost, grossProfit, grossProfitMargin: rev.totalRevenue > 0 ? (grossProfit / rev.totalRevenue) * 100 : 0 },
+    revenue: {
+      totalRevenue: rev.totalRevenue,
+      salesReturns: sr.totalSalesReturns,
+      salesReturnsCount: sr.count,
+      netRevenue,
+      costOfGoodsSold: rev.totalCost,
+      grossProfit,
+      grossProfitMargin: netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0,
+    },
+    purchases: {
+      purchaseReturns: pr.totalPurchaseReturns,
+      purchaseReturnsCount: pr.count,
+    },
     expenses: { totalExpenses: exp.totalExpenses },
-    netProfit: { amount: netProfit, margin: rev.totalRevenue > 0 ? (netProfit / rev.totalRevenue) * 100 : 0 },
+    netProfit: { amount: netProfit, margin: netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0 },
     period: { startDate: start, endDate: end },
   });
 });
@@ -448,4 +472,247 @@ module.exports = {
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getInventoryReport, getTaxReport,
+  getSalesReturnsReport, getPurchaseReturnsReport,
+  getLoadReport, getRepairReport,
 };
+
+/* ── Sales Returns Report ───────────────────────────────────────────────────── */
+async function getSalesReturnsReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { customerId, productId } = req.query;
+
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } };
+  if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+    baseMatch.customerId = new mongoose.Types.ObjectId(customerId);
+  }
+
+  const [datewise, summary, productwise] = await Promise.all([
+    // Date-wise totals
+    SalesReturn.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalAmount: { $sum: '$totalAmount' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+
+    // Overall summary
+    SalesReturn.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          totalReturnsAmount: { $sum: '$totalAmount' },
+          totalReturns: { $sum: 1 },
+          totalItemsReturned: { $sum: { $sum: '$items.quantity' } },
+        },
+      },
+    ]),
+
+    // Product-wise breakdown
+    SalesReturn.aggregate([
+      { $match: baseMatch },
+      { $unwind: '$items' },
+      ...(productId && mongoose.Types.ObjectId.isValid(productId)
+        ? [{ $match: { 'items.productId': new mongoose.Types.ObjectId(productId) } }]
+        : []),
+      {
+        $group: {
+          _id: '$items.productId',
+          productName: { $first: '$items.name' },
+          totalQty: { $sum: '$items.quantity' },
+          totalValue: { $sum: '$items.total' },
+          returnCount: { $sum: 1 },
+        },
+      },
+      { $sort: { totalValue: -1 } },
+      { $limit: 50 },
+    ]),
+  ]);
+
+  res.status(httpStatus.OK).send({
+    summary: summary[0] || { totalReturnsAmount: 0, totalReturns: 0, totalItemsReturned: 0 },
+    datewise,
+    productwise,
+    period: { startDate: start, endDate: end },
+  });
+}
+
+/* ── Purchase Returns Report ────────────────────────────────────────────────── */
+async function getPurchaseReturnsReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { supplierId, productId } = req.query;
+
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } };
+  if (supplierId && mongoose.Types.ObjectId.isValid(supplierId)) {
+    baseMatch.supplierId = new mongoose.Types.ObjectId(supplierId);
+  }
+
+  const [datewise, summary, productwise] = await Promise.all([
+    // Date-wise totals
+    PurchaseReturn.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalAmount: { $sum: '$totalAmount' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+
+    // Overall summary
+    PurchaseReturn.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          totalReturnsAmount: { $sum: '$totalAmount' },
+          totalReturns: { $sum: 1 },
+          totalItemsReturned: { $sum: { $sum: '$items.quantity' } },
+        },
+      },
+    ]),
+
+    // Product-wise breakdown
+    PurchaseReturn.aggregate([
+      { $match: baseMatch },
+      { $unwind: '$items' },
+      ...(productId && mongoose.Types.ObjectId.isValid(productId)
+        ? [{ $match: { 'items.productId': new mongoose.Types.ObjectId(productId) } }]
+        : []),
+      {
+        $group: {
+          _id: '$items.productId',
+          productName: { $first: '$items.name' },
+          totalQty: { $sum: '$items.quantity' },
+          totalValue: { $sum: '$items.total' },
+          returnCount: { $sum: 1 },
+        },
+      },
+      { $sort: { totalValue: -1 } },
+      { $limit: 50 },
+    ]),
+  ]);
+
+  res.status(httpStatus.OK).send({
+    summary: summary[0] || { totalReturnsAmount: 0, totalReturns: 0, totalItemsReturned: 0 },
+    datewise,
+    productwise,
+    period: { startDate: start, endDate: end },
+  });
+}
+
+/* ── Load Management Report ─────────────────────────────────────────────────── */
+async function getLoadReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { walletType } = req.query;
+
+  const txMatch = { ...scope, date: { $gte: start, $lte: end } };
+  const purchaseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  const withdrawalMatch = { ...scope, date: { $gte: start, $lte: end } };
+  if (walletType) { txMatch.walletType = walletType; purchaseMatch.walletType = walletType; withdrawalMatch.walletType = walletType; }
+
+  const [summary, byWallet, datewise, purchases, wallets, withdrawalSummary, withdrawalDatewise] = await Promise.all([
+    LoadTransaction.aggregate([
+      { $match: txMatch },
+      { $group: { _id: null, totalTransactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' }, totalExtraCharges: { $sum: { $ifNull: ['$extraCharge', 0] } } } },
+    ]),
+    LoadTransaction.aggregate([
+      { $match: txMatch },
+      { $group: { _id: '$walletType', transactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' } } },
+      { $sort: { totalSold: -1 } },
+    ]),
+    LoadTransaction.aggregate([
+      { $match: txMatch },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, transactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    LoadPurchase.aggregate([
+      { $match: purchaseMatch },
+      { $group: { _id: '$walletType', totalPurchased: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $sort: { totalPurchased: -1 } },
+    ]),
+    Wallet.find(scope).lean(),
+    CashWithdrawal.aggregate([
+      { $match: withdrawalMatch },
+      { $group: {
+        _id: null,
+        totalCount: { $sum: 1 },
+        totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, 1, 0] } },
+        totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, 1, 0] } },
+        totalWithdrawalAmount: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
+        totalDepositAmount: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
+        totalProfit: { $sum: '$profit' },
+      } },
+    ]),
+    CashWithdrawal.aggregate([
+      { $match: withdrawalMatch },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+        count: { $sum: 1 },
+        totalWithdrawalAmount: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
+        totalDepositAmount: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
+        totalProfit: { $sum: '$profit' },
+      } },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
+
+  const totalPurchased = purchases.reduce((s, p) => s + p.totalPurchased, 0);
+  const sm = summary[0] || { totalTransactions: 0, totalSold: 0, totalProfit: 0, totalExtraCharges: 0 };
+  const ws = withdrawalSummary[0] || { totalCount: 0, totalWithdrawals: 0, totalDeposits: 0, totalWithdrawalAmount: 0, totalDepositAmount: 0, totalProfit: 0 };
+  res.status(httpStatus.OK).send({
+    summary: { ...sm, totalPurchased, netBalance: totalPurchased - sm.totalSold },
+    byWallet, datewise, purchases, wallets,
+    withdrawalSummary: ws,
+    withdrawalDatewise,
+    period: { startDate: start, endDate: end },
+  });
+}
+
+/* ── Repair Report ──────────────────────────────────────────────────────────── */
+async function getRepairReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { status } = req.query;
+
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  if (status) baseMatch.status = status;
+
+  const [summary, byStatus, datewise, byTechnician, recentJobs] = await Promise.all([
+    RepairJob.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: null, totalJobs: { $sum: 1 }, totalRevenue: { $sum: '$charges' }, totalCost: { $sum: { $ifNull: ['$cost', 0] } }, totalProfit: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } }, totalAdvance: { $sum: { $ifNull: ['$advanceAmount', 0] } }, completedJobs: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } }, deliveredJobs: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } }, pendingJobs: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } } } },
+    ]),
+    RepairJob.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end } } },
+      { $group: { _id: '$status', count: { $sum: 1 }, revenue: { $sum: '$charges' }, cost: { $sum: { $ifNull: ['$cost', 0] } } } },
+    ]),
+    RepairJob.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, jobs: { $sum: 1 }, revenue: { $sum: '$charges' }, cost: { $sum: { $ifNull: ['$cost', 0] } }, profit: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } } } },
+      { $sort: { _id: 1 } },
+    ]),
+    RepairJob.aggregate([
+      { $match: { ...baseMatch, technician: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$technician', jobs: { $sum: 1 }, revenue: { $sum: '$charges' }, cost: { $sum: { $ifNull: ['$cost', 0] } }, profit: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } } } },
+      { $sort: { profit: -1 } },
+    ]),
+    RepairJob.find(baseMatch).sort({ date: -1 }).limit(20).lean(),
+  ]);
+
+  res.status(httpStatus.OK).send({
+    summary: summary[0] || { totalJobs: 0, totalRevenue: 0, totalCost: 0, totalProfit: 0, totalAdvance: 0, completedJobs: 0, deliveredJobs: 0, pendingJobs: 0 },
+    byStatus, datewise, byTechnician, recentJobs,
+    period: { startDate: start, endDate: end },
+  });
+}

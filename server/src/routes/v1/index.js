@@ -23,10 +23,15 @@ const membershipRoute = require('./membership.route');
 const walletRoute = require('./wallet.route');
 const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
+const cashWithdrawalRoute = require('./cashWithdrawal.route');
 const repairJobRoute = require('./repairJob.route');
 const cashBookRoute = require('./cashBook.route');
 const mobileDashboardRoute = require('./mobileDashboard.route');
 const mobileReportsRoute = require('./mobileReports.route');
+const salesReturnRoute = require('./salesReturn.route');
+const purchaseReturnRoute = require('./purchaseReturn.route');
+const utilityCompanyRoute = require('./utilityCompany.route');
+const billPaymentRoute = require('./billPayment.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -132,6 +137,10 @@ const defaultRoutes = [
     route: loadTransactionRoute,
   },
   {
+    path: '/cash-withdrawals',
+    route: cashWithdrawalRoute,
+  },
+  {
     path: '/repairs',
     route: repairJobRoute,
   },
@@ -146,6 +155,23 @@ const defaultRoutes = [
   {
     path: '/mobile-reports',
     route: mobileReportsRoute,
+  },
+  {
+    path: '/sales-returns',
+    route: salesReturnRoute,
+  },
+  {
+    path: '/purchase-returns',
+    route: purchaseReturnRoute,
+  },
+  // Utility Bill Routes
+  {
+    path: '/utility-companies',
+    route: utilityCompanyRoute,
+  },
+  {
+    path: '/bill-payments',
+    route: billPaymentRoute,
   },
   // HR Routes
   {
@@ -214,6 +240,10 @@ const protectedPaths = [
   '/cash-book',
   '/mobile-dashboard',
   '/mobile-reports',
+  '/sales-returns',
+  '/purchase-returns',
+  '/utility-companies',
+  '/bill-payments',
   '/employees',
   '/departments',
   '/attendance',

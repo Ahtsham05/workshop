@@ -68,6 +68,20 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             <span className='text-lg font-medium'>{t('total_revenue')}</span>
             <span className='text-2xl font-bold'>{formatCurrency(data?.revenue?.totalRevenue || 0)}</span>
           </div>
+          {(data?.revenue?.salesReturns ?? 0) > 0 && (
+            <div className='flex justify-between items-center'>
+              <span className='text-muted-foreground flex items-center gap-1'>
+                <span className='text-red-500'>↩</span> {t('Sales Returns')} ({data?.revenue?.salesReturnsCount ?? 0})
+              </span>
+              <span className='text-lg text-red-600'>- {formatCurrency(data?.revenue?.salesReturns || 0)}</span>
+            </div>
+          )}
+          {(data?.revenue?.salesReturns ?? 0) > 0 && (
+            <div className='flex justify-between items-center border-t pt-2'>
+              <span className='text-muted-foreground font-medium'>{t('Net Revenue')}</span>
+              <span className='text-lg font-semibold'>{formatCurrency(data?.revenue?.netRevenue || 0)}</span>
+            </div>
+          )}
           <div className='flex justify-between items-center'>
             <span className='text-muted-foreground'>{t('cost_of_goods_sold')}</span>
             <span className='text-lg'>- {formatCurrency(data?.revenue?.costOfGoodsSold || 0)}</span>
@@ -90,13 +104,21 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
         <CardHeader>
           <CardTitle>{t('expenses_section')}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className='space-y-3'>
           <div className='flex justify-between items-center'>
             <span className='text-lg font-medium'>{t('total_expenses')}</span>
             <span className='text-2xl font-bold text-red-600'>
               {formatCurrency(data?.expenses?.totalExpenses || 0)}
             </span>
           </div>
+          {(data?.purchases?.purchaseReturns ?? 0) > 0 && (
+            <div className='flex justify-between items-center border-t pt-2'>
+              <span className='text-muted-foreground flex items-center gap-1'>
+                <span className='text-blue-500'>↩</span> {t('Purchase Returns')} ({data?.purchases?.purchaseReturnsCount ?? 0})
+              </span>
+              <span className='text-lg text-blue-600'>+ {formatCurrency(data?.purchases?.purchaseReturns || 0)}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

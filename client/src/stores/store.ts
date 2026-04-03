@@ -20,6 +20,7 @@ import { membershipApi } from './membership.api';
 import { subscriptionApi } from './subscription.api';
 import { userPreferencesApi } from './user-preferences.api';
 import { mobileShopApi } from './mobile-shop.api';
+import { returnsApi } from './returns.api';
 
 export const store = configureStore({
   reducer: {
@@ -44,6 +45,7 @@ export const store = configureStore({
     [subscriptionApi.reducerPath]: subscriptionApi.reducer,
     [userPreferencesApi.reducerPath]: userPreferencesApi.reducer,
     [mobileShopApi.reducerPath]: mobileShopApi.reducer,
+    [returnsApi.reducerPath]: returnsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -62,6 +64,7 @@ export const store = configureStore({
       subscriptionApi.middleware,
       userPreferencesApi.middleware,
       mobileShopApi.middleware,
+      returnsApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

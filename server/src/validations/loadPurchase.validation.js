@@ -6,6 +6,8 @@ const createLoadPurchase = {
     amount: Joi.number().min(0.01).required(),
     supplierName: Joi.string().trim().allow(''),
     paymentMethod: Joi.string().valid('cash', 'bank').default('cash'),
+    commissionRate: Joi.number().min(0).max(100).default(0),
+    extraCharge: Joi.number().min(0).default(0),
     notes: Joi.string().allow(''),
     date: Joi.date().default(() => new Date()),
   }),

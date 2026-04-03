@@ -13,7 +13,7 @@ import {
   IconUsers,
   IconCategory,
   IconShield,
-  // IconRefresh,
+  IconRefresh,
   IconCalendar,
   IconCalendarEvent,
   IconCash,
@@ -25,7 +25,7 @@ import {
   IconChartBar,
   IconCrown,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -91,11 +91,18 @@ export const sidebarData: SidebarData = {
           icon: IconPackages,
           permission: 'viewInvoices',
         },
-        // {
-        //   title: 'Returns',
-        //   url: '/returns',
-        //   icon: IconRefresh,
-        // },
+        {
+          title: 'Sales Returns',
+          url: '/sales-returns',
+          icon: IconRefresh,
+          permission: 'viewInvoices',
+        },
+        {
+          title: 'Purchase Returns',
+          url: '/purchase-returns',
+          icon: IconRefresh,
+          permission: 'viewPurchases',
+        },
         {
           title: 'Accounts',
           url: '/accounting',
@@ -198,6 +205,12 @@ export const sidebarData: SidebarData = {
           title: 'Repair',
           url: '/mobile-shop/repair',
           icon: Wrench,
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'Bill Payments',
+          url: '/mobile-shop/bill-payments',
+          icon: Receipt,
           businessTypes: ['mobile_shop'],
         },
         {

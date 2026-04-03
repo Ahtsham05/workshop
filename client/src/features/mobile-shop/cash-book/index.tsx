@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { SimplePagination } from '@/components/ui/simple-pagination'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { useGetCashBookEntriesQuery, useGetCashBookSummaryQuery } from '@/stores/mobile-shop.api'
@@ -27,6 +28,8 @@ export default function CashBookPage() {
   const today = useMemo(() => formatDateInput(new Date()), [])
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
+  const [cashBookPage, setCashBookPage] = useState(1)
+  const [cashBookLimit, setCashBookLimit] = useState(10)
 
   const queryParams = useMemo(() => {
     if (!startDate || !endDate) {
@@ -40,8 +43,10 @@ export default function CashBookPage() {
     return {
       startDate: start.toISOString(),
       endDate: end.toISOString(),
+      page: cashBookPage,
+      limit: cashBookLimit,
     }
-  }, [startDate, endDate])
+  }, [startDate, endDate, cashBookPage, cashBookLimit])
 
   const { data: summary } = useGetCashBookSummaryQuery(queryParams)
   const { data: entries } = useGetCashBookEntriesQuery(queryParams)
@@ -50,6 +55,7 @@ export default function CashBookPage() {
     const value = formatDateInput(new Date())
     setStartDate(value)
     setEndDate(value)
+    setCashBookPage(1)
   }
 
   const setYesterdayFilter = () => {
@@ -58,6 +64,7 @@ export default function CashBookPage() {
     const value = formatDateInput(date)
     setStartDate(value)
     setEndDate(value)
+    setCashBookPage(1)
   }
 
   const setLast7DaysFilter = () => {
@@ -66,11 +73,13 @@ export default function CashBookPage() {
     start.setDate(end.getDate() - 6)
     setStartDate(formatDateInput(start))
     setEndDate(formatDateInput(end))
+    setCashBookPage(1)
   }
 
   const clearDateFilter = () => {
     setStartDate('')
     setEndDate('')
+    setCashBookPage(1)
   }
 
   return (
@@ -157,10 +166,10 @@ export default function CashBookPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(entries?.results ?? []).map((entry) => (
+              {(entries?.results ?? []).filter((e) => e.paymentMethod !== 'wallet').map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell>{new Date(entry.date).toLocaleString()}</TableCell>
-                  <TableCell className='capitalize'>{entry.source}</TableCell>
+                  <TableCell>{entry.source ? entry.source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-'}</TableCell>
                   <TableCell className='capitalize'>{entry.paymentMethod}</TableCell>
                   <TableCell className='text-red-600'>
                     {entry.type === 'expense' ? `Rs ${entry.amount.toLocaleString()}` : '-'}
@@ -173,6 +182,15 @@ export default function CashBookPage() {
               ))}
             </TableBody>
           </Table>
+          <SimplePagination
+            currentPage={cashBookPage}
+            totalPages={entries?.totalPages ?? 1}
+            totalResults={entries?.totalResults}
+            limit={cashBookLimit}
+            onPageChange={setCashBookPage}
+            onLimitChange={(l) => { setCashBookLimit(l); setCashBookPage(1) }}
+            className='mt-3'
+          />
         </CardContent>
       </Card>
     </MobilePageShell>

@@ -1,9 +1,28 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
+
+/**
+ * Build an aggregate $match scope with properly cast ObjectIds.
+ * applyBranchFilter works for Mongoose .find() (auto-casts) but NOT for
+ * aggregate pipelines which hit the raw MongoDB driver.
+ */
+const buildAggregateScope = (req) => {
+  const scope = {};
+  const orgId = req.organizationId || (req.user && req.user.organizationId);
+  const branchId = req.branchId;
+  if (orgId && mongoose.Types.ObjectId.isValid(orgId)) {
+    scope.organizationId = new mongoose.Types.ObjectId(String(orgId));
+  }
+  if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+    scope.branchId = new mongoose.Types.ObjectId(String(branchId));
+  }
+  return scope;
+};
 
 /**
  * Get dashboard statistics
@@ -89,14 +108,26 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const totalCustomers = await Customer.countDocuments({ ...bf });
   const totalProducts = await Product.countDocuments({ ...bf });
 
+  // Total purchases (current month) – use aggScope so ObjectId fields cast correctly in pipeline
+  const aggScopeEarly = buildAggregateScope(req);
+  const purchasesAgg = await Purchase.aggregate([
+    { $match: { ...aggScopeEarly, purchaseDate: { $gte: lastMonth } } },
+    { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
+  ]);
+  const totalPurchases = purchasesAgg[0]?.totalPurchases || 0;
+
   let mobileSummary = {
     totalLoadSold: 0,
     totalRepairIncome: 0,
+    totalBillCollection: 0,
+    billPaymentProfit: 0,
     totalProfit: totalRevenue,
     cashInHand: 0,
     jazzcashBalance: 0,
     easypaisaBalance: 0,
     walletBalance: 0,
+    billsDueToday: 0,
+    billsOverdue: 0,
   };
 
   if (normalizeBusinessType(req.user.businessType) === 'mobile_shop') {
@@ -105,6 +136,51 @@ const getDashboardStats = catchAsync(async (req, res) => {
       branchId: req.branchId,
     });
   }
+
+  // Return metrics – use buildAggregateScope so ObjectId fields cast correctly
+  const aggScope = buildAggregateScope(req);
+  const [salesReturnsAgg, purchaseReturnsAgg] = await Promise.all([
+    SalesReturn.aggregate([
+      {
+        $match: {
+          ...aggScope,
+          status: { $ne: 'rejected' },
+          date: { $gte: lastMonth },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSalesReturns: { $sum: '$totalAmount' },
+          salesReturnCount: { $sum: 1 },
+        },
+      },
+    ]),
+    PurchaseReturn.aggregate([
+      {
+        $match: {
+          ...aggScope,
+          status: { $ne: 'rejected' },
+          date: { $gte: lastMonth },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPurchaseReturns: { $sum: '$totalAmount' },
+          purchaseReturnCount: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const totalSalesReturns = salesReturnsAgg[0]?.totalSalesReturns || 0;
+  const salesReturnCount = salesReturnsAgg[0]?.salesReturnCount || 0;
+  const totalPurchaseReturns = purchaseReturnsAgg[0]?.totalPurchaseReturns || 0;
+  const purchaseReturnCount = purchaseReturnsAgg[0]?.purchaseReturnCount || 0;
+
+  const netSales = totalRevenue - totalSalesReturns;
+  const netPurchase = totalPurchases - totalPurchaseReturns;
 
   res.status(httpStatus.OK).send({
     totalRevenue,
@@ -120,6 +196,13 @@ const getDashboardStats = catchAsync(async (req, res) => {
     todayRevenueChange,
     totalCustomers,
     totalProducts,
+    totalPurchases,
+    totalSalesReturns,
+    salesReturnCount,
+    totalPurchaseReturns,
+    purchaseReturnCount,
+    netSales,
+    netPurchase,
     ...mobileSummary,
   });
 });

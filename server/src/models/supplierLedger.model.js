@@ -21,7 +21,7 @@ const supplierLedgerSchema = new mongoose.Schema({
   },
   transactionType: {
     type: String,
-    enum: ['purchase', 'payment_made', 'payment_received', 'refund', 'adjustment', 'opening_balance'],
+    enum: ['purchase', 'payment_made', 'payment_received', 'refund', 'adjustment', 'opening_balance', 'purchase_return'],
     required: true,
   },
   transactionDate: {

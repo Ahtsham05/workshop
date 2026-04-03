@@ -35,7 +35,9 @@ import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authentica
 import { Route as AuthenticatedSubscriptionIndexImport } from './routes/_authenticated/subscription/index'
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authenticated/sales-returns/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
+import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
@@ -58,6 +60,7 @@ import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenti
 import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
 import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
 import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
+import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
@@ -221,11 +224,25 @@ const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
   } as any,
 )
 
+const AuthenticatedSalesReturnsIndexRoute =
+  AuthenticatedSalesReturnsIndexImport.update({
+    id: '/sales-returns/',
+    path: '/sales-returns/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedRolesIndexRoute = AuthenticatedRolesIndexImport.update({
   id: '/roles/',
   path: '/roles/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedPurchaseReturnsIndexRoute =
+  AuthenticatedPurchaseReturnsIndexImport.update({
+    id: '/purchase-returns/',
+    path: '/purchase-returns/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedPurchaseInvoiceIndexRoute =
   AuthenticatedPurchaseInvoiceIndexImport.update({
@@ -375,6 +392,13 @@ const AuthenticatedMobileShopCashBookRoute =
   AuthenticatedMobileShopCashBookImport.update({
     id: '/mobile-shop/cash-book',
     path: '/mobile-shop/cash-book',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopBillPaymentsRoute =
+  AuthenticatedMobileShopBillPaymentsImport.update({
+    id: '/mobile-shop/bill-payments',
+    path: '/mobile-shop/bill-payments',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -573,6 +597,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/mobile-shop/bill-payments': {
+      id: '/_authenticated/mobile-shop/bill-payments'
+      path: '/mobile-shop/bill-payments'
+      fullPath: '/mobile-shop/bill-payments'
+      preLoaderRoute: typeof AuthenticatedMobileShopBillPaymentsImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/mobile-shop/cash-book': {
       id: '/_authenticated/mobile-shop/cash-book'
       path: '/mobile-shop/cash-book'
@@ -727,11 +758,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPurchaseInvoiceIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/purchase-returns/': {
+      id: '/_authenticated/purchase-returns/'
+      path: '/purchase-returns'
+      fullPath: '/purchase-returns'
+      preLoaderRoute: typeof AuthenticatedPurchaseReturnsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/roles/': {
       id: '/_authenticated/roles/'
       path: '/roles'
       fullPath: '/roles'
       preLoaderRoute: typeof AuthenticatedRolesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/sales-returns/': {
+      id: '/_authenticated/sales-returns/'
+      path: '/sales-returns'
+      fullPath: '/sales-returns'
+      preLoaderRoute: typeof AuthenticatedSalesReturnsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings/': {
@@ -901,6 +946,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedMobileShopBillPaymentsRoute: typeof AuthenticatedMobileShopBillPaymentsRoute
   AuthenticatedMobileShopCashBookRoute: typeof AuthenticatedMobileShopCashBookRoute
   AuthenticatedMobileShopLoadRoute: typeof AuthenticatedMobileShopLoadRoute
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
@@ -919,7 +965,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
+  AuthenticatedPurchaseReturnsIndexRoute: typeof AuthenticatedPurchaseReturnsIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
+  AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedSubscriptionIndexRoute: typeof AuthenticatedSubscriptionIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
@@ -943,6 +991,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedMobileShopBillPaymentsRoute:
+    AuthenticatedMobileShopBillPaymentsRoute,
   AuthenticatedMobileShopCashBookRoute: AuthenticatedMobileShopCashBookRoute,
   AuthenticatedMobileShopLoadRoute: AuthenticatedMobileShopLoadRoute,
   AuthenticatedMobileShopRepairRoute: AuthenticatedMobileShopRepairRoute,
@@ -962,7 +1012,10 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
+  AuthenticatedPurchaseReturnsIndexRoute:
+    AuthenticatedPurchaseReturnsIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
+  AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedSubscriptionIndexRoute: AuthenticatedSubscriptionIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
@@ -1004,6 +1057,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -1026,7 +1080,9 @@ export interface FileRoutesByFullPath {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
+  '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
@@ -1062,6 +1118,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
+  '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -1084,7 +1141,9 @@ export interface FileRoutesByTo {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
+  '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
@@ -1123,6 +1182,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/_authenticated/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -1145,7 +1205,9 @@ export interface FileRoutesById {
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
+  '/_authenticated/sales-returns/': typeof AuthenticatedSalesReturnsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
   '/_authenticated/subscription/': typeof AuthenticatedSubscriptionIndexRoute
@@ -1185,6 +1247,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
@@ -1207,7 +1270,9 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/purchase-returns'
     | '/roles'
+    | '/sales-returns'
     | '/settings/'
     | '/staff'
     | '/subscription'
@@ -1242,6 +1307,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/voice-demo'
     | '/'
+    | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
@@ -1264,7 +1330,9 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/purchase-returns'
     | '/roles'
+    | '/sales-returns'
     | '/settings'
     | '/staff'
     | '/subscription'
@@ -1301,6 +1369,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
+    | '/_authenticated/mobile-shop/bill-payments'
     | '/_authenticated/mobile-shop/cash-book'
     | '/_authenticated/mobile-shop/load'
     | '/_authenticated/mobile-shop/repair'
@@ -1323,7 +1392,9 @@ export interface FileRouteTypes {
     | '/_authenticated/invoice/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
+    | '/_authenticated/purchase-returns/'
     | '/_authenticated/roles/'
+    | '/_authenticated/sales-returns/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
     | '/_authenticated/subscription/'
@@ -1406,6 +1477,7 @@ export const routeTree = rootRoute
         "/_authenticated/reports",
         "/_authenticated/voice-demo",
         "/_authenticated/",
+        "/_authenticated/mobile-shop/bill-payments",
         "/_authenticated/mobile-shop/cash-book",
         "/_authenticated/mobile-shop/load",
         "/_authenticated/mobile-shop/repair",
@@ -1424,7 +1496,9 @@ export const routeTree = rootRoute
         "/_authenticated/invoice/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
+        "/_authenticated/purchase-returns/",
         "/_authenticated/roles/",
+        "/_authenticated/sales-returns/",
         "/_authenticated/staff/",
         "/_authenticated/subscription/",
         "/_authenticated/suppliers/",
@@ -1500,6 +1574,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/bill-payments": {
+      "filePath": "_authenticated/mobile-shop/bill-payments.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/mobile-shop/cash-book": {
@@ -1590,8 +1668,16 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/purchase-invoice/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/purchase-returns/": {
+      "filePath": "_authenticated/purchase-returns/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/roles/": {
       "filePath": "_authenticated/roles/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/sales-returns/": {
+      "filePath": "_authenticated/sales-returns/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/settings/": {

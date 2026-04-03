@@ -5,7 +5,9 @@ const walletService = require('./wallet.service');
 const cashBookService = require('./cashBook.service');
 
 const createLoadPurchase = async (purchaseBody) => {
-  const purchase = await LoadPurchase.create(purchaseBody);
+  const commissionProfit = (Number(purchaseBody.amount || 0) * Number(purchaseBody.commissionRate || 0)) / 100;
+  const profit = commissionProfit + Number(purchaseBody.extraCharge || 0);
+  const purchase = await LoadPurchase.create({ ...purchaseBody, profit });
   const supplierLabel = purchase.supplierName || 'unknown supplier';
 
   await walletService.adjustWalletBalance({

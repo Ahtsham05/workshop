@@ -1,4 +1,4 @@
-const { Expense, Invoice, LoadPurchase, LoadTransaction, RepairJob, Wallet } = require('../models');
+const { Expense, Invoice, LoadPurchase, LoadTransaction, RepairJob, Wallet, BillPayment } = require('../models');
 
 const buildMatch = ({ organizationId, branchId, startDate, endDate }) => {
   const match = { organizationId };
@@ -66,7 +66,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const invoiceMatch = buildInvoiceMatch({ organizationId, branchId, startDate, endDate });
   const match = buildMatch({ organizationId, branchId, startDate, endDate });
 
-  const [invoices, loadTransactions, loadPurchases, repairJobs, expenses, wallets] = await Promise.all([
+  const [invoices, loadTransactions, loadPurchases, repairJobs, expenses, wallets, billPayments] = await Promise.all([
     Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
     LoadTransaction.find(match).select('amount profit paymentMethod walletType'),
     LoadPurchase.find(match).select('amount paymentMethod walletType'),
@@ -84,6 +84,19 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
         : {}),
     }).select('amount paymentMethod'),
     Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance'),
+    BillPayment.find({
+      organizationId,
+      ...(branchId ? { branchId } : {}),
+      status: 'paid',
+      ...(startDate || endDate
+        ? {
+            paymentDate: {
+              ...(startDate ? { $gte: new Date(startDate) } : {}),
+              ...(endDate ? { $lte: new Date(endDate) } : {}),
+            },
+          }
+        : {}),
+    }).select('totalReceived serviceCharge paymentMethod'),
   ]);
 
   const totalSales = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
@@ -100,6 +113,30 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const repairCash = repairJobs.reduce((sum, job) => {
     return job.paymentMethod === 'cash' ? sum + Number(job.charges || 0) : sum;
   }, 0);
+
+  const totalBillCollection = billPayments.reduce((sum, b) => sum + Number(b.totalReceived || 0), 0);
+  const billPaymentProfit = billPayments.reduce((sum, b) => sum + Number(b.serviceCharge || 0), 0);
+  const billPaymentCash = billPayments.reduce((sum, b) => {
+    return b.paymentMethod === 'cash' ? sum + Number(b.totalReceived || 0) : sum;
+  }, 0);
+
+  // Count due-today and overdue
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  const [billsDueToday, billsOverdue] = await Promise.all([
+    BillPayment.countDocuments({
+      organizationId,
+      ...(branchId ? { branchId } : {}),
+      status: 'pending',
+      dueDate: { $gte: startOfDay, $lte: endOfDay },
+    }),
+    BillPayment.countDocuments({
+      organizationId,
+      ...(branchId ? { branchId } : {}),
+      status: 'overdue',
+    }),
+  ]);
 
   const expensesCash = expenses.reduce((sum, expense) => {
     return String(expense.paymentMethod || '').toLowerCase() === 'cash' ? sum + Number(expense.amount || 0) : sum;
@@ -128,17 +165,21 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     { jazzcash: 0, easypaisa: 0, total: 0 }
   );
 
-  const cashInHand = salesCash + loadCash + repairCash - expensesCash - loadPurchasesCash;
+  const cashInHand = salesCash + loadCash + repairCash + billPaymentCash - expensesCash - loadPurchasesCash;
 
   return {
     totalSales,
     totalLoadSold,
     totalRepairIncome,
-    totalProfit: salesProfit + loadProfit + totalRepairIncome,
+    totalBillCollection,
+    billPaymentProfit,
+    totalProfit: salesProfit + loadProfit + totalRepairIncome + billPaymentProfit,
     cashInHand,
     jazzcashBalance: walletBalances.jazzcash,
     easypaisaBalance: walletBalances.easypaisa,
     walletBalance: walletBalances.total,
+    billsDueToday,
+    billsOverdue,
   };
 };
 

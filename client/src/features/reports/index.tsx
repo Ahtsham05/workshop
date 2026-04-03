@@ -18,6 +18,11 @@ import { ExpenseReport } from './components/expense-report'
 import { ProfitLossReport } from './components/profit-loss-report'
 import { InventoryReport } from './components/inventory-report'
 import { TaxReport } from './components/tax-report'
+import { SalesReturnsReport } from './components/sales-returns-report'
+import { PurchaseReturnsReport } from './components/purchase-returns-report'
+import { LoadReport } from './components/load-report'
+import { RepairReport } from './components/repair-report'
+import { BillPaymentReport } from './components/bill-payment-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -166,17 +171,24 @@ export default function ReportsPage() {
 
       {/* Reports Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className='grid grid-cols-4 lg:grid-cols-9 gap-1 w-full'>
-          <TabsTrigger value='sales'>{t('sales')}</TabsTrigger>
-          <TabsTrigger value='purchases'>{t('purchases')}</TabsTrigger>
-          <TabsTrigger value='products'>{t('products')}</TabsTrigger>
-          <TabsTrigger value='customers'>{t('customers')}</TabsTrigger>
-          <TabsTrigger value='suppliers'>{t('suppliers')}</TabsTrigger>
-          <TabsTrigger value='expenses'>{t('expenses')}</TabsTrigger>
-          <TabsTrigger value='profit-loss'>{t('profit_loss')}</TabsTrigger>
-          <TabsTrigger value='inventory'>{t('inventory')}</TabsTrigger>
-          <TabsTrigger value='tax'>{t('tax')}</TabsTrigger>
-        </TabsList>
+        <div className='overflow-x-auto pb-1'>
+          <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full sm:min-w-0'>
+            <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
+            <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
+            <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
+            <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('customers')}</TabsTrigger>
+            <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
+            <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
+            <TabsTrigger value='profit-loss' className='text-xs sm:text-sm px-2 sm:px-3'>{t('profit_loss')}</TabsTrigger>
+            <TabsTrigger value='inventory' className='text-xs sm:text-sm px-2 sm:px-3'>{t('inventory')}</TabsTrigger>
+            <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
+            <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
+            <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
+            <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
+            <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
+            <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value='sales' className='mt-6'>
           <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
@@ -212,6 +224,26 @@ export default function ReportsPage() {
 
         <TabsContent value='tax' className='mt-6'>
           <TaxReport ref={activeTab === 'tax' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='sales-returns' className='mt-6'>
+          <SalesReturnsReport ref={activeTab === 'sales-returns' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='purchase-returns' className='mt-6'>
+          <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='load' className='mt-6'>
+          <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='repair' className='mt-6'>
+          <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+        </TabsContent>
+
+        <TabsContent value='bill-payments' className='mt-6'>
+          <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
         </TabsContent>
       </Tabs>
     </div>

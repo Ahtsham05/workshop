@@ -118,9 +118,16 @@ export interface ExpenseReportData {
 export interface ProfitLossReport {
   revenue: {
     totalRevenue: number
+    salesReturns: number
+    salesReturnsCount: number
+    netRevenue: number
     costOfGoodsSold: number
     grossProfit: number
     grossProfitMargin: number
+  }
+  purchases: {
+    purchaseReturns: number
+    purchaseReturnsCount: number
   }
   expenses: {
     totalExpenses: number
@@ -157,10 +164,168 @@ export interface TaxReportData {
   invoiceCount: number
 }
 
+export interface ReturnReportItem {
+  _id: string
+  productName: string
+  totalQty: number
+  totalValue: number
+  returnCount: number
+}
+
+export interface ReturnReportDatewise {
+  _id: string
+  totalAmount: number
+  count: number
+}
+
+export interface ReturnReportSummary {
+  totalReturnsAmount: number
+  totalReturns: number
+  totalItemsReturned: number
+}
+
+export interface ReturnsReport {
+  summary: ReturnReportSummary
+  datewise: ReturnReportDatewise[]
+  productwise: ReturnReportItem[]
+  period: { startDate: string; endDate: string }
+}
+
+// ── Load Report ──────────────────────────────────────────────────────────────
+export interface LoadReportSummary {
+  totalTransactions: number
+  totalSold: number
+  totalProfit: number
+  totalExtraCharges: number
+  totalPurchased: number
+  netBalance: number
+}
+export interface LoadByWallet {
+  _id: string
+  transactions: number
+  totalSold: number
+  totalProfit: number
+}
+export interface LoadDatewise {
+  _id: string
+  transactions: number
+  totalSold: number
+  totalProfit: number
+}
+export interface LoadPurchaseByWallet {
+  _id: string
+  totalPurchased: number
+  count: number
+}
+export interface WalletBalance {
+  _id: string
+  type: string
+  balance: number
+}
+export interface WithdrawalSummary {
+  totalCount: number
+  totalWithdrawals: number
+  totalDeposits: number
+  totalWithdrawalAmount: number
+  totalDepositAmount: number
+  totalProfit: number
+}
+export interface WithdrawalDatewise {
+  _id: string
+  count: number
+  totalWithdrawalAmount: number
+  totalDepositAmount: number
+  totalProfit: number
+}
+export interface LoadReport {
+  summary: LoadReportSummary
+  byWallet: LoadByWallet[]
+  datewise: LoadDatewise[]
+  purchases: LoadPurchaseByWallet[]
+  wallets: WalletBalance[]
+  withdrawalSummary: WithdrawalSummary
+  withdrawalDatewise: WithdrawalDatewise[]
+  period: { startDate: string; endDate: string }
+}
+
+// ── Wallet Balance Statement ─────────────────────────────────────────────────
+export interface WalletBalanceRow {
+  date: string
+  hasSales: boolean
+  totalSold: number
+  totalWithdrawals: number
+  totalDeposits: number
+  totalProfit: number
+  transactions: number
+  openingBalance: number
+  closingBalance: number
+}
+
+export interface WalletBalanceStatement {
+  walletType: string
+  walletBalance: number
+  periodOpeningBalance: number
+  periodClosingBalance: number
+  rows: WalletBalanceRow[]
+  period: { startDate: string; endDate: string }
+}
+
+// ── Repair Report ────────────────────────────────────────────────────────────
+export interface RepairReportSummary {
+  totalJobs: number
+  totalRevenue: number
+  totalCost: number
+  totalProfit: number
+  totalAdvance: number
+  completedJobs: number
+  deliveredJobs: number
+  pendingJobs: number
+}
+export interface RepairByStatus {
+  _id: string
+  count: number
+  revenue: number
+  cost: number
+}
+export interface RepairDatewise {
+  _id: string
+  jobs: number
+  revenue: number
+  cost: number
+  profit: number
+}
+export interface RepairByTechnician {
+  _id: string
+  jobs: number
+  revenue: number
+  cost: number
+  profit: number
+}
+export interface RepairJob {
+  _id: string
+  customerName: string
+  phone?: string
+  deviceModel: string
+  issue: string
+  status: string
+  charges: number
+  cost: number
+  technician?: string
+  date: string
+}
+export interface RepairReport {
+  summary: RepairReportSummary
+  byStatus: RepairByStatus[]
+  datewise: RepairDatewise[]
+  byTechnician: RepairByTechnician[]
+  recentJobs: RepairJob[]
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'Inventory', 'Tax'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -295,6 +460,58 @@ export const reportsApi = createApi({
       },
       providesTags: ['Tax'],
     }),
+    getSalesReturnsReport: builder.query<ReturnsReport, { startDate?: string; endDate?: string; customerId?: string; productId?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.customerId) searchParams.set('customerId', params.customerId)
+        if (params.productId) searchParams.set('productId', params.productId)
+        return `/sales-returns?${searchParams.toString()}`
+      },
+      providesTags: ['SalesReturnsReport'],
+    }),
+    getPurchaseReturnsReport: builder.query<ReturnsReport, { startDate?: string; endDate?: string; supplierId?: string; productId?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.supplierId) searchParams.set('supplierId', params.supplierId)
+        if (params.productId) searchParams.set('productId', params.productId)
+        return `/purchase-returns?${searchParams.toString()}`
+      },
+      providesTags: ['PurchaseReturnsReport'],
+    }),
+    getLoadReport: builder.query<LoadReport, { startDate?: string; endDate?: string; walletType?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.walletType) searchParams.set('walletType', params.walletType)
+        return `/load?${searchParams.toString()}`
+      },
+      providesTags: ['LoadReport'],
+    }),
+    getWalletBalanceStatement: builder.query<WalletBalanceStatement, { walletType: string; startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        searchParams.set('walletType', params.walletType)
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/load/wallet-balance-statement?${searchParams.toString()}`
+      },
+      providesTags: ['WalletBalanceStatement'],
+    }),
+    getRepairReport: builder.query<RepairReport, { startDate?: string; endDate?: string; status?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.status) searchParams.set('status', params.status)
+        return `/repair?${searchParams.toString()}`
+      },
+      providesTags: ['RepairReport'],
+    }),
   }),
 })
 
@@ -309,4 +526,9 @@ export const {
   useGetProfitLossReportQuery,
   useGetInventoryReportQuery,
   useGetTaxReportQuery,
+  useGetSalesReturnsReportQuery,
+  useGetPurchaseReturnsReportQuery,
+  useGetLoadReportQuery,
+  useGetWalletBalanceStatementQuery,
+  useGetRepairReportQuery,
 } = reportsApi

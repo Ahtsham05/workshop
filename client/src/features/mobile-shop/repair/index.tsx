@@ -30,6 +30,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Printer, Trash2, CheckCircle, PackageCheck, Eye } from 'lucide-react'
+import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
   useCreateRepairJobMutation,
@@ -113,6 +114,8 @@ const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 export default function RepairPage() {
   const [form, setForm] = useState<RepairFormState>(makeInitialForm)
   const [activeTab, setActiveTab] = useState('all')
+  const [repairPage, setRepairPage] = useState(1)
+  const [repairLimit, setRepairLimit] = useState(10)
   const [printRepair, setPrintRepair] = useState<RepairJobRecord | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<RepairJobRecord | null>(null)
   const [completeDialog, setCompleteDialog] = useState<CompleteDialogState>({
@@ -132,10 +135,19 @@ export default function RepairPage() {
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
-  const { data } = useGetRepairJobsQuery()
+  const { data } = useGetRepairJobsQuery({
+    page: repairPage,
+    limit: repairLimit,
+    ...(activeTab !== 'all' ? { status: activeTab } : {}),
+  })
   const [createRepairJob, { isLoading: isSaving }] = useCreateRepairJobMutation()
   const [updateRepairJob, { isLoading: isUpdating }] = useUpdateRepairJobMutation()
   const [deleteRepairJob] = useDeleteRepairJobMutation()
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    setRepairPage(1)
+  }
 
   const setField = <K extends keyof RepairFormState>(key: K, value: RepairFormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -282,18 +294,16 @@ export default function RepairPage() {
     openRepairPrintWindow(html)
   }
 
-  // ── Filter ──
+  // ── Filter (server-side via status param; results are already filtered) ──
   const allRepairs = data?.results ?? []
-  const filtered =
-    activeTab === 'all'
-      ? allRepairs.filter((r) => r.status !== 'delivered')
-      : allRepairs.filter((r) => r.status === activeTab)
+  // For the "all" tab the server returns all statuses, we display as-is
+  const filtered = allRepairs
 
   const tabCounts = {
-    all: allRepairs.filter((r) => r.status !== 'delivered').length,
-    in_progress: allRepairs.filter((r) => r.status === 'in_progress').length,
-    completed: allRepairs.filter((r) => r.status === 'completed').length,
-    delivered: allRepairs.filter((r) => r.status === 'delivered').length,
+    all: activeTab === 'all' ? (data?.totalResults ?? 0) : '…',
+    in_progress: activeTab === 'in_progress' ? (data?.totalResults ?? 0) : '…',
+    completed: activeTab === 'completed' ? (data?.totalResults ?? 0) : '…',
+    delivered: activeTab === 'delivered' ? (data?.totalResults ?? 0) : '…',
   }
 
   return (
@@ -457,7 +467,7 @@ export default function RepairPage() {
             <CardTitle>Repair Queue</CardTitle>
           </CardHeader>
           <CardContent className='flex-1 overflow-auto'>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className='mb-4'>
+            <Tabs value={activeTab} onValueChange={handleTabChange} className='mb-4'>
               <TabsList className='flex-wrap h-auto gap-1'>
                 <TabsTrigger value='all'>All ({tabCounts.all})</TabsTrigger>
                 <TabsTrigger value='in_progress'>In Progress ({tabCounts.in_progress})</TabsTrigger>
@@ -565,6 +575,15 @@ export default function RepairPage() {
                 })}
               </TableBody>
             </Table>
+            <SimplePagination
+              currentPage={repairPage}
+              totalPages={data?.totalPages ?? 1}
+              totalResults={data?.totalResults}
+              limit={repairLimit}
+              onPageChange={setRepairPage}
+              onLimitChange={(l) => { setRepairLimit(l); setRepairPage(1) }}
+              className='mt-3'
+            />
           </CardContent>
         </Card>
       </div>

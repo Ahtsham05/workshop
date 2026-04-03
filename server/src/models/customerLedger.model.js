@@ -10,6 +10,7 @@ const transactionTypes = {
   REFUND: 'refund',
   ADJUSTMENT: 'adjustment',
   OPENING_BALANCE: 'opening_balance',
+  SALES_RETURN: 'sales_return',
 };
 
 const customerLedgerSchema = new mongoose.Schema({

@@ -18,7 +18,7 @@ import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package 
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness } from '@/lib/business-types'
-import { Smartphone, WalletCards, Wrench } from 'lucide-react'
+import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle } from 'lucide-react'
 
 export default function Dashboard() {
   const { t } = useLanguage()
@@ -93,6 +93,41 @@ export default function Dashboard() {
           </div>
         )}
 
+        {showMobileCards && (
+          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
+            <StatCard
+              title={t('Bill Collection')}
+              value={stats?.totalBillCollection || 0}
+              icon={<Receipt className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Total utility bills collected')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Bill Payment Profit')}
+              value={stats?.billPaymentProfit || 0}
+              icon={<DollarSign className='h-4 w-4 text-green-500' />}
+              valuePrefix='Rs '
+              description={t('Service charges earned')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Bills Due Today')}
+              value={stats?.billsDueToday || 0}
+              icon={<Clock className='h-4 w-4 text-yellow-500' />}
+              description={t('Pending bills due today')}
+              isLoading={isLoading}
+            />
+            <StatCard
+              title={t('Overdue Bills')}
+              value={stats?.billsOverdue || 0}
+              icon={<AlertCircle className='h-4 w-4 text-destructive' />}
+              description={t('Bills past due date')}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+
         {/* Statistics Cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6'>
           <StatCard
@@ -133,6 +168,46 @@ export default function Dashboard() {
             icon={<FileText className='h-4 w-4' />}
             valuePrefix='Rs'
             description={`${t('Total')}: Rs${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {/* Returns Summary */}
+        <div className='grid gap-4 sm:grid-cols-2 mb-6'>
+          <StatCard
+            title={t('Sales Returns')}
+            value={stats?.totalSalesReturns || 0}
+            icon={<RefreshCcw className='h-4 w-4 text-red-500' />}
+            valuePrefix='Rs '
+            description={t('Total amount refunded to customers')}
+            isLoading={isLoading}
+          />
+          <StatCard
+            title={t('Purchase Returns')}
+            value={stats?.totalPurchaseReturns || 0}
+            icon={<RefreshCcw className='h-4 w-4 text-blue-500' />}
+            valuePrefix='Rs '
+            description={t('Total amount recovered from suppliers')}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {/* Net figures after returns */}
+        <div className='grid gap-4 sm:grid-cols-2 mb-6'>
+          <StatCard
+            title={t('Net Sales')}
+            value={stats?.netSales || 0}
+            icon={<ShoppingCart className='h-4 w-4 text-green-600' />}
+            valuePrefix='Rs '
+            description={t('Revenue after sales returns')}
+            isLoading={isLoading}
+          />
+          <StatCard
+            title={t('Net Purchases')}
+            value={stats?.netPurchase || 0}
+            icon={<Package className='h-4 w-4 text-orange-500' />}
+            valuePrefix='Rs '
+            description={t('Total purchases minus returns')}
             isLoading={isLoading}
           />
         </div>

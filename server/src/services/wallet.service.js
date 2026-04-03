@@ -25,32 +25,37 @@ const ensureWallet = async ({ organizationId, branchId, type, userId }) => {
   return wallet;
 };
 
-const createOrUpdateWallet = async ({ organizationId, branchId, type, balance = 0, id, userId }) => {
+const createOrUpdateWallet = async ({ organizationId, branchId, type, balance = 0, commissionRate = 0, withdrawalCommissionRate = 0, depositCommissionRate = 0, id, userId }) => {
   let wallet;
 
   if (id) {
-    // Update existing wallet by ID
     wallet = await Wallet.findOne({ _id: id, organizationId, branchId });
     if (!wallet) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
     }
     wallet.type = type;
     wallet.balance = balance;
+    wallet.commissionRate = commissionRate;
+    wallet.withdrawalCommissionRate = withdrawalCommissionRate;
+    wallet.depositCommissionRate = depositCommissionRate;
     wallet.updatedBy = userId;
   } else {
-    // Create new wallet - check if a wallet with this type already exists
     wallet = await Wallet.findOne({ organizationId, branchId, type });
     if (wallet) {
-      // Update existing wallet if type matches
       wallet.balance = balance;
+      wallet.commissionRate = commissionRate;
+      wallet.withdrawalCommissionRate = withdrawalCommissionRate;
+      wallet.depositCommissionRate = depositCommissionRate;
       wallet.updatedBy = userId;
     } else {
-      // Create new wallet
       wallet = new Wallet({
         organizationId,
         branchId,
         type,
         balance,
+        commissionRate,
+        withdrawalCommissionRate,
+        depositCommissionRate,
         createdBy: userId,
         updatedBy: userId,
       });

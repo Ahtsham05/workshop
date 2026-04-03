@@ -103,6 +103,9 @@ const getSummary = async (filter = {}) => {
     }
   }
 
+  // Exclude wallet entries — they are internal transfers that cancel out
+  match.paymentMethod = { $ne: 'wallet' };
+
   const [summary] = await CashBookEntry.aggregate([
     { $match: match },
     {

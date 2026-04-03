@@ -20,8 +20,15 @@ module.exports.Payment = require('./payment.model');
 module.exports.Wallet = require('./wallet.model');
 module.exports.LoadPurchase = require('./loadPurchase.model');
 module.exports.LoadTransaction = require('./loadTransaction.model');
+module.exports.CashWithdrawal = require('./cashWithdrawal.model');
 module.exports.RepairJob = require('./repairJob.model');
 module.exports.CashBookEntry = require('./cashBookEntry.model');
+module.exports.SalesReturn = require('./salesReturn.model');
+module.exports.PurchaseReturn = require('./purchaseReturn.model');
+
+// Utility Bill Models
+module.exports.UtilityCompany = require('./utilityCompany.model');
+module.exports.BillPayment = require('./billPayment.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

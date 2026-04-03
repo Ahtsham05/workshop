@@ -56,6 +56,14 @@ export interface DashboardStats {
   jazzcashBalance: number
   easypaisaBalance: number
   walletBalance: number
+  totalSalesReturns: number
+  totalPurchaseReturns: number
+  netSales: number
+  netPurchase: number
+  totalBillCollection: number
+  billPaymentProfit: number
+  billsDueToday: number
+  billsOverdue: number
 }
 
 export interface RevenueData {

@@ -266,6 +266,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     const labels: Record<string, string> = {
       sale: t('Sale'),
       payment_received: t('Payment Received'),
+      sales_return: t('Sales Return'),
       credit_note: t('Credit Note'),
       debit_note: t('Debit Note'),
       adjustment: t('Adjustment'),
@@ -278,6 +279,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     const variants: Record<string, any> = {
       sale: 'default',
       payment_received: 'default',
+      sales_return: 'destructive',
       credit_note: 'secondary',
       debit_note: 'secondary',
       adjustment: 'outline',

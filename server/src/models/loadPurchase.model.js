@@ -35,6 +35,22 @@ const loadPurchaseSchema = new mongoose.Schema(
       enum: ['cash', 'bank'],
       default: 'cash',
     },
+    commissionRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    extraCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    profit: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     notes: {
       type: String,
       trim: true,

@@ -10,6 +10,7 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
 router.get('/sales', mobileReportsController.getSalesReport);
 router.get('/load', mobileReportsController.getLoadReport);
+router.get('/load/wallet-balance-statement', mobileReportsController.getWalletBalanceStatement);
 router.get('/profit', mobileReportsController.getProfitReport);
 router.get('/expenses', mobileReportsController.getExpenseReport);
 
