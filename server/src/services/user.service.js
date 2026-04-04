@@ -18,6 +18,15 @@ const createUser = async (userBody) => {
   // Enforce subscription user limit when adding a user to an organization
   if (newUserBody.organizationId) {
     const org = await Organization.findById(newUserBody.organizationId).select('subscription businessType');
+
+    // Always inherit businessType from the organization
+    if (!newUserBody.businessType && org && org.businessType) {
+      newUserBody.businessType = normalizeBusinessType(org.businessType);
+    }
+
+    // Users added to an existing org skip onboarding
+    newUserBody.onboardingComplete = true;
+
     if (org && org.subscription && org.subscription.limits) {
       const maxUsers = org.subscription.limits.maxUsers;
       if (maxUsers != null) {
@@ -31,10 +40,6 @@ const createUser = async (userBody) => {
             `User limit reached. Your plan allows ${maxUsers} user(s). Please upgrade your subscription.`
           );
         }
-      }
-
-      if (!newUserBody.businessType && org.businessType) {
-        newUserBody.businessType = normalizeBusinessType(org.businessType);
       }
     }
   }

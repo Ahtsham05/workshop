@@ -52,7 +52,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
   const isEdit = !!user;
 
   // Optional branch assignment state (only relevant on create)
-  const [assignBranchId, setAssignBranchId] = useState('');
+  const [assignBranchId, setAssignBranchId] = useState('none');
   const [assignSystemRole, setAssignSystemRole] = useState<'branchAdmin' | 'staff'>('staff');
 
   const { data: rolesData } = useGetRolesQuery({ page: 1, limit: 100 });
@@ -96,7 +96,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
         role: '',
         isActive: true,
       });
-      setAssignBranchId('');
+      setAssignBranchId('none');
       setAssignSystemRole('staff');
     }
   }, [user, reset]);
@@ -126,7 +126,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
         const newUser = await createUser(createData).unwrap();
 
         // If a branch was selected, also assign the user to that branch
-        if (assignBranchId) {
+        if (assignBranchId && assignBranchId !== 'none') {
           try {
             await addMember({ userId: newUser.id, branchId: assignBranchId, role: assignSystemRole }).unwrap();
             toast.success('User created and assigned to branch successfully');
@@ -236,7 +236,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
                       <SelectValue placeholder="No branch" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No branch (skip)</SelectItem>
+                      <SelectItem value="none">No branch (skip)</SelectItem>
                       {branches?.map((branch) => (
                         <SelectItem key={branch.id} value={branch.id}>
                           {branch.name}
@@ -250,7 +250,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
                   <Select
                     value={assignSystemRole}
                     onValueChange={(v) => setAssignSystemRole(v as 'branchAdmin' | 'staff')}
-                    disabled={!assignBranchId}
+                    disabled={!assignBranchId || assignBranchId === 'none'}
                   >
                     <SelectTrigger className="w-full h-8 text-sm">
                       <SelectValue />

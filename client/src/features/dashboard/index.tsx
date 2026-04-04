@@ -14,7 +14,7 @@ import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
-import { useGetSubscriptionUsageQuery } from '@/stores/organization.api'
+import { useGetSubscriptionUsageQuery, useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -26,9 +26,12 @@ export default function Dashboard() {
   const { t } = useLanguage()
   const { data: stats, isLoading, refetch } = useGetDashboardStatsQuery()
   const { data: usageData } = useGetSubscriptionUsageQuery()
+  const { data: orgData } = useGetMyOrganizationQuery()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const planType = usageData?.subscription?.planType
-  const showMobileCards = isMobileShopBusiness(user?.businessType) && isFeatureAllowed(planType, 'load')
+  // Use organization's businessType as the source of truth; fall back to user's businessType
+  const businessType = orgData?.businessType ?? user?.businessType
+  const showMobileCards = isMobileShopBusiness(businessType) && isFeatureAllowed(planType, 'load')
   
   return (
     <>

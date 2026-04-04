@@ -22,6 +22,8 @@ const MONTH_OPTIONS = [
   { value: 3, label: '3 Months (save 5%)' },
   { value: 6, label: '6 Months (save 10%)' },
   { value: 12, label: '12 Months (save 15%)' },
+  { value: 24, label: '24 Months (save 20%)' },
+  { value: 48, label: '48 Months (save 25%)' },
 ]
 
 type PlanTypeKey = 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise'

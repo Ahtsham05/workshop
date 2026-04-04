@@ -28,6 +28,9 @@ router.get('/users', adminController.getAllUsers);
 // DELETE /v1/admin/users/:userId — delete user as system admin
 router.delete('/users/:userId', adminController.deleteUser);
 
+// PATCH /v1/admin/users/:userId/password — change user password (system_admin only)
+router.patch('/users/:userId/password', adminController.changeUserPassword);
+
 // GET /v1/admin/payments — all payment requests (filterable by status)
 router.get('/payments', validate(paymentValidation.getPayments), adminController.getAllPayments);
 

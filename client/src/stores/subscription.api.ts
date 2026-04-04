@@ -248,6 +248,14 @@ export const subscriptionApi = createApi({
       }),
       invalidatesTags: ['AdminPayment', 'AdminOrganization'],
     }),
+
+    adminChangeUserPassword: builder.mutation<{ message: string }, { userId: string; newPassword: string }>({
+      query: ({ userId, newPassword }) => ({
+        url: `/admin/users/${userId}/password`,
+        method: 'PATCH',
+        body: { newPassword },
+      }),
+    }),
   }),
 });
 
@@ -267,4 +275,5 @@ export const {
   useAdminGetAllUsersQuery,
   useAdminDeleteUserMutation,
   useAdminDeleteOrganizationMutation,
+  useAdminChangeUserPasswordMutation,
 } = subscriptionApi;

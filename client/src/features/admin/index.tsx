@@ -20,6 +20,8 @@ import {
   ArrowLeft,
   Shield,
   Trash2,
+  KeyRound,
+  EyeOff,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
@@ -52,7 +54,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   useAdminGetAllPaymentsQuery,
   useAdminGetDashboardQuery,
@@ -63,6 +72,7 @@ import {
   useAdminGetAllUsersQuery,
   useAdminDeleteUserMutation,
   useAdminDeleteOrganizationMutation,
+  useAdminChangeUserPasswordMutation,
   type Payment,
 } from '@/stores/subscription.api'
 
@@ -585,8 +595,15 @@ function OrganizationsTab({ onSelectOrg }: { onSelectOrg: (id: string) => void }
 function UsersTab() {
   const { data, isLoading } = useAdminGetAllUsersQuery({ limit: 100 })
   const [deleteUser, { isLoading: isDeletingUser }] = useAdminDeleteUserMutation()
+  const [changePassword, { isLoading: isChangingPassword }] = useAdminChangeUserPasswordMutation()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [passwordUser, setPasswordUser] = useState<{ id: string; name: string } | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const users = data?.results ?? []
 
   const handleDeleteUser = async () => {
@@ -604,6 +621,39 @@ function UsersTab() {
   const openDeleteDialog = (user: { id: string; name: string }) => {
     setSelectedUser(user)
     setDeleteDialogOpen(true)
+  }
+
+  const openPasswordDialog = (user: { id: string; name: string }) => {
+    setPasswordUser(user)
+    setNewPassword('')
+    setConfirmPassword('')
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
+    setPasswordDialogOpen(true)
+  }
+
+  const handleChangePassword = async () => {
+    if (!passwordUser) return
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      toast.error('Password must contain at least one letter and one number')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+    try {
+      await changePassword({ userId: passwordUser.id, newPassword }).unwrap()
+      toast.success(`Password updated for "${passwordUser.name}"`)
+      setPasswordDialogOpen(false)
+      setPasswordUser(null)
+    } catch (err: any) {
+      toast.error(err?.data?.message ?? 'Failed to change password')
+    }
   }
 
   return (
@@ -657,15 +707,33 @@ function UsersTab() {
                       )}
                     </TableCell>
                     <TableCell className='text-right'>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        className='text-red-600 border-red-300 hover:bg-red-50'
-                        disabled={isDeletingUser || user.systemRole === 'system_admin'}
-                        onClick={() => openDeleteDialog({ id: user.id, name: user.name })}
-                      >
-                        <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete
-                      </Button>
+                      <div className='flex items-center justify-end gap-2'>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                className='text-blue-600 border-blue-300 hover:bg-blue-50'
+                                disabled={user.systemRole === 'system_admin'}
+                                onClick={() => openPasswordDialog({ id: user.id, name: user.name })}
+                              >
+                                <KeyRound className='h-3.5 w-3.5 mr-1' /> Password
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Change user password</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='text-red-600 border-red-300 hover:bg-red-50'
+                          disabled={isDeletingUser || user.systemRole === 'system_admin'}
+                          onClick={() => openDeleteDialog({ id: user.id, name: user.name })}
+                        >
+                          <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -674,6 +742,88 @@ function UsersTab() {
           </div>
         )}
       </CardContent>
+
+      {/* ── Change Password Dialog ── */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2'>
+              <KeyRound className='h-5 w-5' /> Change Password
+            </DialogTitle>
+            <DialogDescription>
+              Set a new password for <span className='font-semibold'>{passwordUser?.name}</span>.
+              Passwords are stored encrypted and cannot be viewed.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='newPassword'>New Password</Label>
+              <div className='relative'>
+                <Input
+                  id='newPassword'
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder='Min 8 chars, letters + numbers'
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className='pr-10'
+                />
+                <button
+                  type='button'
+                  className='absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  onClick={() => setShowNewPassword((v) => !v)}
+                >
+                  {showNewPassword ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+                </button>
+              </div>
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='confirmPassword'>Confirm Password</Label>
+              <div className='relative'>
+                <Input
+                  id='confirmPassword'
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder='Re-enter new password'
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className='pr-10'
+                />
+                <button
+                  type='button'
+                  className='absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                >
+                  {showConfirmPassword ? <EyeOff className='h-4 w-4' /> : <Eye className='h-4 w-4' />}
+                </button>
+              </div>
+            </div>
+
+            {newPassword && confirmPassword && newPassword !== confirmPassword && (
+              <p className='text-xs text-red-600'>Passwords do not match</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setPasswordDialogOpen(false)
+                setPasswordUser(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={isChangingPassword || !newPassword || !confirmPassword}
+            >
+              {isChangingPassword ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <KeyRound className='mr-2 h-4 w-4' />}
+              Update Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className='max-w-md'>

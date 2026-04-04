@@ -15,11 +15,14 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
-  const userBusinessType = normalizeBusinessType(user?.businessType)
+  const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  // Use organization businessType as the source of truth, fall back to user's own field
+  const userBusinessType = normalizeBusinessType(org?.businessType || user?.businessType)
   const { canAccess } = useFeatureAccess()
 
   const canAccessItem = (item: any) => {

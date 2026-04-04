@@ -264,6 +264,33 @@ const deleteUser = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+/**
+ * PATCH /v1/admin/users/:userId/password
+ * Change a user's password (system_admin only).
+ */
+const changeUserPassword = catchAsync(async (req, res) => {
+  const { User } = require('../models');
+  const { userId } = req.params;
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 8) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Password must be at least 8 characters');
+  }
+  if (!newPassword.match(/\d/) || !newPassword.match(/[a-zA-Z]/)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Password must contain at least one letter and one number');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  res.status(httpStatus.OK).send({ message: 'Password updated successfully' });
+});
+
 module.exports = {
   getAllPayments,
   getPayment,
@@ -274,5 +301,6 @@ module.exports = {
   deleteOrganization,
   getAllUsers,
   deleteUser,
+  changeUserPassword,
   getDashboard,
 };

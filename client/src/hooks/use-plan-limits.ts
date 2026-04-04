@@ -26,7 +26,11 @@ export interface PlanLimits {
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
   single: 'Starter Plan',
+  starter: 'Starter Plan',
   multi: 'Growth Plan',
+  growth: 'Growth Plan',
+  business: 'Business Plan',
+  enterprise: 'Enterprise Plan',
 }
 
 export function usePlanLimits(): PlanLimits {
