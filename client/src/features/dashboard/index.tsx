@@ -14,17 +14,21 @@ import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
+import { useGetSubscriptionUsageQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness } from '@/lib/business-types'
+import { isFeatureAllowed } from '@/lib/feature-access'
 import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle } from 'lucide-react'
 
 export default function Dashboard() {
   const { t } = useLanguage()
   const { data: stats, isLoading, refetch } = useGetDashboardStatsQuery()
+  const { data: usageData } = useGetSubscriptionUsageQuery()
   const user = useSelector((state: RootState) => state.auth.data?.user)
-  const showMobileCards = isMobileShopBusiness(user?.businessType)
+  const planType = usageData?.subscription?.planType
+  const showMobileCards = isMobileShopBusiness(user?.businessType) && isFeatureAllowed(planType, 'load')
   
   return (
     <>
