@@ -127,10 +127,26 @@ InvoiceSchema.plugin(paginate);
 // Generate invoice number before saving
 InvoiceSchema.pre('save', async function(next) {
     if (this.isNew && !this.invoiceNumber) {
-        const count = await mongoose.models.Invoice.countDocuments();
         const year = new Date().getFullYear();
         const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        this.invoiceNumber = `INV-${year}${month}-${String(count + 1).padStart(6, '0')}`;
+        const prefix = `INV-${year}${month}-`;
+
+        // Find the highest existing invoice number for this month to avoid race conditions
+        const lastInvoice = await mongoose.models.Invoice
+            .findOne({ invoiceNumber: { $regex: `^${prefix}` } })
+            .sort({ invoiceNumber: -1 })
+            .select('invoiceNumber')
+            .lean();
+
+        let nextNum = 1;
+        if (lastInvoice && lastInvoice.invoiceNumber) {
+            const lastNum = parseInt(lastInvoice.invoiceNumber.replace(prefix, ''), 10);
+            if (!isNaN(lastNum)) {
+                nextNum = lastNum + 1;
+            }
+        }
+
+        this.invoiceNumber = `${prefix}${String(nextNum).padStart(6, '0')}`;
     }
     next();
 });

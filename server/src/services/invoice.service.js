@@ -119,7 +119,22 @@ const createInvoice = async (invoiceBody, userId) => {
     invoice.finalize();
   }
 
-  await invoice.save();
+  // Save with retry for duplicate invoice number race condition (E11000)
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      await invoice.save();
+      break;
+    } catch (err) {
+      if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber && attempt < MAX_RETRIES - 1) {
+        // Duplicate invoice number - regenerate and retry
+        invoice.invoiceNumber = undefined;
+        invoice.isNew = true;
+      } else {
+        throw err;
+      }
+    }
+  }
   console.log('Invoice saved with ID:', invoice._id);
   await syncWalkInInvoiceCashEntry(invoice);
 
