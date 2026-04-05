@@ -31,6 +31,8 @@ export interface PrintInvoiceData {
   companyPhone?: string
   companyEmail?: string
   companyTaxNumber?: string
+  companyLogo?: string
+  isTrial?: boolean
   language?: InvoiceLanguage
   isUrduOnly?: boolean
   userPreferredLanguage?: InvoiceLanguage
@@ -343,7 +345,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 </head>
 <body>
   <div class="receipt-header">
-    <img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />
+    ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
     <div class="business-name">${urduTexts.business_name}</div>
     <div class="business-info">${urduTexts.business_address}</div>
     <div class="business-info">${urduTexts.business_phone} | ${urduTexts.business_email}</div>
@@ -913,6 +915,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 <body>
   <div class="invoice-header">
     <div class="company-info">
+      ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
       <div class="company-name">${urduTexts.business_name}</div>
       <div class="company-details">
         ${urduTexts.business_address}<br>

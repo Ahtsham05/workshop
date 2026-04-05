@@ -58,6 +58,10 @@ import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4Prin
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 interface ConvertedItem {
   id: string
@@ -79,6 +83,10 @@ interface PendingInvoiceConverterProps {
 
 export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceConverterProps) {
   const { t } = useLanguage()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false)
@@ -379,7 +387,13 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         deliveryCharge: 0,
         serviceCharge: 0,
         previousBalance: customerBalance,
-        newBalance: customerBalance + invoiceData.total
+        newBalance: customerBalance + invoiceData.total,
+        companyName: branchData?.name,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
       }
 
       if (printType === 'a4') {
@@ -818,7 +832,10 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     dueDate: billGroup.dueDate,
                                     notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
                                     deliveryCharge: 0,
-                                    serviceCharge: 0
+                                    serviceCharge: 0,
+                                    companyName: branchData?.name,
+                                    companyLogo: orgData?.logo?.url,
+                                    isTrial: orgData?.subscription?.isTrial,
                                   }
                                   const htmlContent = generateInvoiceHTML(printData)
                                   openPrintWindow(htmlContent)
@@ -852,7 +869,10 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     dueDate: billGroup.dueDate,
                                     notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
                                     deliveryCharge: 0,
-                                    serviceCharge: 0
+                                    serviceCharge: 0,
+                                    companyName: branchData?.name,
+                                    companyLogo: orgData?.logo?.url,
+                                    isTrial: orgData?.subscription?.isTrial,
                                   }
                                   const htmlContent = generateA4InvoiceHTML(printData)
                                   openA4PrintWindow(htmlContent)

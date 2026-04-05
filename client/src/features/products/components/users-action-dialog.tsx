@@ -93,9 +93,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
   const dispatch = useDispatch<AppDispatch>()
   const { categories } = useSelector((state: RootState) => state.category)
   
-  // Fetch categories when dialog opens
+  // Refetch categories when dialog opens (in case new ones were added)
   useEffect(() => {
-    if (open && categories.length === 0) {
+    if (open) {
       dispatch(fetchCategories({ page: 1, limit: 100 }))
     }
   }, [open, dispatch, categories.length])

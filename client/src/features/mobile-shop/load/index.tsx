@@ -223,7 +223,6 @@ export default function LoadManagementPage() {
         paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
         commissionRate: Number(purchaseForm.commissionRate),
         extraCharge: Number(purchaseForm.extraCharge),
-        profit: 0,
         date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Load purchase recorded!')

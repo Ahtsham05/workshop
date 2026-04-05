@@ -44,6 +44,7 @@ import {
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow, PrintInvoiceData } from '../utils/print-utils'
@@ -117,7 +118,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
   const { data: customersData } = useGetAllCustomersQuery(undefined)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -257,6 +260,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
         companyTaxNumber: undefined,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
         language: invoice.language,
         isUrduOnly: invoice.isUrduOnly,
         userPreferredLanguage: preferredLanguage,

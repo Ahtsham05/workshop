@@ -14,6 +14,7 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState, useCallback } from 'react'
 import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
+import { fetchCategories } from '@/stores/category.slice'
 import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
@@ -42,6 +43,11 @@ export default function Products() {
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
   const columns = useProductColumns() // Get columns with translations
+
+  // Fetch categories once when products page loads
+  useEffect(() => {
+    dispatch(fetchCategories({ page: 1, limit: 100 }))
+  }, [dispatch])
 
   // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
   useEffect(() => {

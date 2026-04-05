@@ -24,6 +24,7 @@ import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useUpdateLanguageMutation } from '@/stores/user-preferences.api'
 import { setPreferredLanguage } from '@/stores/auth.slice'
 import { resolveInvoiceLanguage, type InvoiceLanguage } from '../utils/language'
@@ -106,8 +107,10 @@ export function InvoicePanel({
   
   // Fetch active branch data for invoice printing
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const user = useSelector((state: RootState) => state.auth.data?.user)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const resolvedInvoiceLanguage = resolveInvoiceLanguage({
     language: invoice.language,
     isUrduOnly: invoice.isUrduOnly,
@@ -148,6 +151,8 @@ export function InvoicePanel({
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
         companyTaxNumber: undefined,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
         language: invoiceData.language,
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
@@ -167,7 +172,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, branchData, customerBalance, preferredLanguage])
+  }, [t, invoice.customerName, branchData, customerBalance, preferredLanguage, orgData])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
@@ -204,6 +209,8 @@ export function InvoicePanel({
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
         companyTaxNumber: undefined,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
         language: invoiceData.language,
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
@@ -223,7 +230,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, branchData, preferredLanguage])
+  }, [t, invoice.customerName, branchData, preferredLanguage, orgData])
 
   const handleInvoiceLanguageChange = useCallback(async (language: InvoiceLanguage) => {
     const previousPreferredLanguage = preferredLanguage as InvoiceLanguage
