@@ -32,6 +32,8 @@ export interface LoadPurchaseRecord {
   date: string
 }
 
+export type CreateLoadPurchaseInput = Omit<LoadPurchaseRecord, 'id' | 'profit'>
+
 export interface LoadTransactionRecord {
   id: string
   type: 'normal' | 'package'
@@ -271,7 +273,7 @@ export const mobileShopApi = createApi({
       },
       providesTags: ['LoadPurchases'],
     }),
-    createLoadPurchase: builder.mutation<LoadPurchaseRecord, Omit<LoadPurchaseRecord, 'id'>>({
+    createLoadPurchase: builder.mutation<LoadPurchaseRecord, CreateLoadPurchaseInput>({
       query: (body) => ({
         url: '/load-purchases',
         method: 'POST',
