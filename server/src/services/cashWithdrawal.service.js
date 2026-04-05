@@ -1,4 +1,6 @@
 const { CashWithdrawal } = require('../models');
+const ApiError = require('../utils/ApiError');
+const httpStatus = require('http-status');
 const walletService = require('./wallet.service');
 const cashBookService = require('./cashBook.service');
 
@@ -130,8 +132,118 @@ const queryCashWithdrawals = async (filter, options) => {
   });
 };
 
+const getCashWithdrawalById = async (withdrawalId) => {
+  const withdrawal = await CashWithdrawal.findById(withdrawalId);
+  if (!withdrawal) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Cash withdrawal not found');
+  }
+  return withdrawal;
+};
+
+const updateCashWithdrawal = async (withdrawalId, updateBody) => {
+  const withdrawal = await getCashWithdrawalById(withdrawalId);
+  const oldIsWithdrawal = withdrawal.transactionType === 'withdrawal';
+
+  // Reverse old wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    type: withdrawal.walletType,
+    amount: withdrawal.amount,
+    operation: oldIsWithdrawal ? 'deduct' : 'add',
+    userId: withdrawal.createdBy,
+  });
+
+  await cashBookService.deleteEntriesByReference(withdrawal._id, 'CashWithdrawal');
+
+  Object.assign(withdrawal, updateBody);
+  withdrawal.profit = calculateWithdrawalProfit(withdrawal);
+  await withdrawal.save();
+
+  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
+
+  // Apply new wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    type: withdrawal.walletType,
+    amount: withdrawal.amount,
+    operation: isWithdrawal ? 'add' : 'deduct',
+    userId: withdrawal.createdBy,
+  });
+
+  const customerLabel = withdrawal.customerName
+    ? `${withdrawal.customerName}${withdrawal.customerNumber ? ` (${withdrawal.customerNumber})` : ''}`
+    : withdrawal.customerNumber || 'customer';
+
+  if (isWithdrawal) {
+    await cashBookService.createEntry({
+      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+      type: 'income', source: 'other', amount: withdrawal.amount, paymentMethod: 'wallet',
+      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+      description: `Withdrawal: digital received from ${customerLabel} via ${withdrawal.walletType}`,
+      date: withdrawal.date, createdBy: withdrawal.createdBy,
+    });
+    await cashBookService.createEntry({
+      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+      type: 'expense', source: 'other', amount: withdrawal.amount, paymentMethod: 'cash',
+      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+      description: `Withdrawal: cash paid to ${customerLabel}`,
+      date: withdrawal.date, createdBy: withdrawal.createdBy,
+    });
+  } else {
+    await cashBookService.createEntry({
+      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+      type: 'expense', source: 'other', amount: withdrawal.amount, paymentMethod: 'wallet',
+      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+      description: `Deposit: digital sent to ${customerLabel} via ${withdrawal.walletType}`,
+      date: withdrawal.date, createdBy: withdrawal.createdBy,
+    });
+    await cashBookService.createEntry({
+      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+      type: 'income', source: 'other', amount: withdrawal.amount, paymentMethod: 'cash',
+      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+      description: `Deposit: cash received from ${customerLabel}`,
+      date: withdrawal.date, createdBy: withdrawal.createdBy,
+    });
+  }
+
+  if (withdrawal.profit > 0) {
+    await cashBookService.createEntry({
+      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+      type: 'income', source: 'other', amount: withdrawal.profit, paymentMethod: 'cash',
+      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+      description: `${isWithdrawal ? 'Withdrawal' : 'Deposit'} commission from ${customerLabel}`,
+      date: withdrawal.date, createdBy: withdrawal.createdBy,
+    });
+  }
+
+  return withdrawal;
+};
+
+const deleteCashWithdrawal = async (withdrawalId) => {
+  const withdrawal = await getCashWithdrawalById(withdrawalId);
+  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
+
+  // Reverse wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    type: withdrawal.walletType,
+    amount: withdrawal.amount,
+    operation: isWithdrawal ? 'deduct' : 'add',
+    userId: withdrawal.createdBy,
+  });
+
+  await cashBookService.deleteEntriesByReference(withdrawal._id, 'CashWithdrawal');
+  await withdrawal.deleteOne();
+  return withdrawal;
+};
+
 module.exports = {
   calculateWithdrawalProfit,
   createCashWithdrawal,
   queryCashWithdrawals,
+  updateCashWithdrawal,
+  deleteCashWithdrawal,
 };

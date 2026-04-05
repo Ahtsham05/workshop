@@ -15,4 +15,9 @@ router
   .post(validate(loadPurchaseValidation.createLoadPurchase), loadPurchaseController.createLoadPurchase)
   .get(validate(loadPurchaseValidation.getLoadPurchases), loadPurchaseController.getLoadPurchases);
 
+router
+  .route('/:purchaseId')
+  .patch(validate(loadPurchaseValidation.updateLoadPurchase), loadPurchaseController.updateLoadPurchase)
+  .delete(validate(loadPurchaseValidation.deleteLoadPurchase), loadPurchaseController.deleteLoadPurchase);
+
 module.exports = router;

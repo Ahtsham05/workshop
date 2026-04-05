@@ -16,4 +16,9 @@ router
   .post(validate(loadTransactionValidation.createLoadTransaction), loadTransactionController.createLoadTransaction)
   .get(validate(loadTransactionValidation.getLoadTransactions), loadTransactionController.getLoadTransactions);
 
+router
+  .route('/:transactionId')
+  .patch(validate(loadTransactionValidation.updateLoadTransaction), loadTransactionController.updateLoadTransaction)
+  .delete(validate(loadTransactionValidation.deleteLoadTransaction), loadTransactionController.deleteLoadTransaction);
+
 module.exports = router;

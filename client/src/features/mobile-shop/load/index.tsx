@@ -2,6 +2,16 @@ import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,7 +40,14 @@ import {
   useGetLoadPurchasesQuery,
   useCreateCashWithdrawalMutation,
   useGetCashWithdrawalsQuery,
+  useUpdateLoadPurchaseMutation,
+  useDeleteLoadPurchaseMutation,
+  useUpdateLoadTransactionMutation,
+  useDeleteLoadTransactionMutation,
+  useUpdateCashWithdrawalMutation,
+  useDeleteCashWithdrawalMutation,
 } from '@/stores/mobile-shop.api'
+import { Pencil, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 type PurchaseFormState = {
@@ -117,6 +134,20 @@ export default function LoadManagementPage() {
   const [createLoadPurchase, { isLoading: isSavingPurchase }] = useCreateLoadPurchaseMutation()
   const [createLoadTransaction, { isLoading: isSavingSale }] = useCreateLoadTransactionMutation()
   const [createCashWithdrawal, { isLoading: isSavingWithdrawal }] = useCreateCashWithdrawalMutation()
+  const [updateLoadPurchase] = useUpdateLoadPurchaseMutation()
+  const [deleteLoadPurchase] = useDeleteLoadPurchaseMutation()
+  const [updateLoadTransaction] = useUpdateLoadTransactionMutation()
+  const [deleteLoadTransaction] = useDeleteLoadTransactionMutation()
+  const [updateCashWithdrawal] = useUpdateCashWithdrawalMutation()
+  const [deleteCashWithdrawal] = useDeleteCashWithdrawalMutation()
+
+  // Edit state
+  const [editingPurchase, setEditingPurchase] = useState<any>(null)
+  const [editingTransaction, setEditingTransaction] = useState<any>(null)
+  const [editingWithdrawal, setEditingWithdrawal] = useState<any>(null)
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal'; id: string } | null>(null)
 
   const { data: walletsData } = useGetWalletsQuery()
   const { data: purchasesData } = useGetLoadPurchasesQuery({ page: purchasePage, limit: purchaseLimit })
@@ -282,6 +313,157 @@ export default function LoadManagementPage() {
     }
   }
 
+  // ─── Edit / Delete Handlers ───
+  const handleEditPurchase = (p: any) => {
+    setPurchaseForm({
+      walletId: wallets.find(w => w.type === p.walletType)?.id || '',
+      walletType: p.walletType,
+      amount: String(p.amount),
+      supplierName: p.supplierName || '',
+      paymentMethod: p.paymentMethod || 'cash',
+      commissionRate: String(p.commissionRate || 0),
+      extraCharge: String(p.extraCharge || 0),
+      date: format(new Date(p.date), 'yyyy-MM-dd'),
+    })
+    setEditingPurchase(p)
+  }
+
+  const handleUpdatePurchase = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingPurchase) return
+    try {
+      await updateLoadPurchase({
+        id: editingPurchase.id,
+        body: {
+          walletType: purchaseForm.walletType,
+          amount: Number(purchaseForm.amount),
+          supplierName: purchaseForm.supplierName.trim() || undefined,
+          paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
+          commissionRate: Number(purchaseForm.commissionRate),
+          extraCharge: Number(purchaseForm.extraCharge),
+          date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
+        },
+      }).unwrap()
+      toast.success('Purchase updated!')
+      setPurchaseForm(initialPurchaseForm)
+      setEditingPurchase(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to update purchase')
+    }
+  }
+
+  const handleDeletePurchase = (id: string) => {
+    setDeleteConfirm({ type: 'purchase', id })
+  }
+
+  const handleEditTransaction = (t: any) => {
+    setSaleForm({
+      walletId: wallets.find(w => w.type === t.walletType)?.id || t.walletId || '',
+      walletType: t.walletType,
+      amount: String(t.amount),
+      commissionRate: String(t.commissionRate || 0),
+      extraCharge: String(t.extraCharge || 0),
+      mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
+      date: format(new Date(t.date), 'yyyy-MM-dd'),
+    })
+    setEditingTransaction(t)
+  }
+
+  const handleUpdateTransaction = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingTransaction) return
+    try {
+      await updateLoadTransaction({
+        id: editingTransaction.id,
+        body: {
+          walletType: saleForm.walletType,
+          walletId: saleForm.walletId,
+          amount: Number(saleForm.amount),
+          commissionRate: Number(saleForm.commissionRate),
+          extraCharge: Number(saleForm.extraCharge),
+          mobileNumber: saleForm.mobileNumber || 'N/A',
+          date: saleForm.date ? new Date(saleForm.date).toISOString() : new Date().toISOString(),
+        },
+      }).unwrap()
+      toast.success('Transaction updated!')
+      setSaleForm(initialSaleForm)
+      setEditingTransaction(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to update transaction')
+    }
+  }
+
+  const handleDeleteTransaction = (id: string) => {
+    setDeleteConfirm({ type: 'transaction', id })
+  }
+
+  const handleEditWithdrawal = (w: any) => {
+    setWithdrawalForm({
+      walletId: wallets.find(wl => wl.type === w.walletType)?.id || w.walletId || '',
+      walletType: w.walletType,
+      amount: String(w.amount),
+      transactionType: w.transactionType || 'withdrawal',
+      customerName: w.customerName || '',
+      customerNumber: w.customerNumber || '',
+      commissionRate: String(w.commissionRate || 0),
+      extraCharge: String(w.extraCharge || 0),
+      notes: w.notes || '',
+      date: format(new Date(w.date), 'yyyy-MM-dd'),
+    })
+    setEditingWithdrawal(w)
+  }
+
+  const handleUpdateWithdrawal = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingWithdrawal) return
+    try {
+      await updateCashWithdrawal({
+        id: editingWithdrawal.id,
+        body: {
+          walletId: withdrawalForm.walletId,
+          walletType: withdrawalForm.walletType,
+          amount: Number(withdrawalForm.amount),
+          transactionType: withdrawalForm.transactionType,
+          customerName: withdrawalForm.customerName.trim() || undefined,
+          customerNumber: withdrawalForm.customerNumber.trim() || undefined,
+          commissionRate: Number(withdrawalForm.commissionRate),
+          extraCharge: Number(withdrawalForm.extraCharge),
+          notes: withdrawalForm.notes.trim() || undefined,
+          date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
+        },
+      }).unwrap()
+      toast.success('Withdrawal updated!')
+      setWithdrawalForm(initialWithdrawalForm)
+      setEditingWithdrawal(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to update withdrawal')
+    }
+  }
+
+  const handleDeleteWithdrawal = (id: string) => {
+    setDeleteConfirm({ type: 'withdrawal', id })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+    try {
+      if (deleteConfirm.type === 'purchase') {
+        await deleteLoadPurchase(deleteConfirm.id).unwrap()
+        toast.success('Purchase deleted!')
+      } else if (deleteConfirm.type === 'transaction') {
+        await deleteLoadTransaction(deleteConfirm.id).unwrap()
+        toast.success('Transaction deleted!')
+      } else {
+        await deleteCashWithdrawal(deleteConfirm.id).unwrap()
+        toast.success('Withdrawal deleted!')
+      }
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to delete record')
+    } finally {
+      setDeleteConfirm(null)
+    }
+  }
+
   return (
     <MobilePageShell
       title='Load Management'
@@ -299,10 +481,10 @@ export default function LoadManagementPage() {
           <div className='grid gap-6'>
             <Card className='border-2 border-blue-200'>
               <CardHeader>
-                <CardTitle className='text-blue-700'>📥 Purchase Load</CardTitle>
+                <CardTitle className='text-blue-700'>📥 {editingPurchase ? 'Edit' : 'Purchase'} Load</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={handlePurchaseSubmit}>
+                <form className='space-y-6' onSubmit={editingPurchase ? handleUpdatePurchase : handlePurchaseSubmit}>
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-wallet'>Select Wallet *</Label>
@@ -374,9 +556,16 @@ export default function LoadManagementPage() {
                     <Input id='purchase-date' type='date' value={purchaseForm.date} onChange={(e) => handlePurchaseChange('date', e.target.value)} />
                   </div>
 
-                  <Button size='lg' type='submit' disabled={isSavingPurchase || !purchaseForm.walletId} className='w-full md:w-auto bg-blue-600 hover:bg-blue-700'>
-                    {isSavingPurchase ? 'Processing...' : '✓ Save Load Purchase'}
-                  </Button>
+                  <div className='flex gap-2'>
+                    <Button size='lg' type='submit' disabled={isSavingPurchase || !purchaseForm.walletId} className='w-full md:w-auto bg-blue-600 hover:bg-blue-700'>
+                      {isSavingPurchase ? 'Processing...' : editingPurchase ? '✓ Update Purchase' : '✓ Save Load Purchase'}
+                    </Button>
+                    {editingPurchase && (
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingPurchase(null); setPurchaseForm(initialPurchaseForm) }}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -398,6 +587,7 @@ export default function LoadManagementPage() {
                         <TableHead>Commission %</TableHead>
                         <TableHead className='text-green-600'>Savings</TableHead>
                         <TableHead>Method</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -410,6 +600,12 @@ export default function LoadManagementPage() {
                           <TableCell>{Number(p.commissionRate || 0).toFixed(2)}%</TableCell>
                           <TableCell className='text-green-600 font-semibold'>Rs {Number(p.profit || 0).toFixed(2)}</TableCell>
                           <TableCell className='text-sm capitalize'>{p.paymentMethod}</TableCell>
+                          <TableCell>
+                            <div className='flex gap-1'>
+                              <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditPurchase(p)}><Pencil className='h-4 w-4' /></Button>
+                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeletePurchase(p.id)}><Trash2 className='h-4 w-4' /></Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -435,10 +631,10 @@ export default function LoadManagementPage() {
           <div className='grid gap-6'>
             <Card className='border-2 border-green-200'>
               <CardHeader>
-                <CardTitle className='text-green-700'>📤 Sell Mobile Load</CardTitle>
+                <CardTitle className='text-green-700'>📤 {editingTransaction ? 'Edit' : 'Sell'} Mobile Load</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={handleSaleSubmit}>
+                <form className='space-y-6' onSubmit={editingTransaction ? handleUpdateTransaction : handleSaleSubmit}>
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-wallet'>Select Wallet *</Label>
@@ -511,9 +707,16 @@ export default function LoadManagementPage() {
                     </CardContent>
                   </Card>
 
-                  <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
-                    {isSavingSale ? 'Processing...' : '✓ Confirm & Save Load Sale'}
-                  </Button>
+                  <div className='flex gap-2'>
+                    <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
+                      {isSavingSale ? 'Processing...' : editingTransaction ? '✓ Update Load Sale' : '✓ Confirm & Save Load Sale'}
+                    </Button>
+                    {editingTransaction && (
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingTransaction(null); setSaleForm(initialSaleForm) }}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -533,6 +736,7 @@ export default function LoadManagementPage() {
                         <TableHead>Amount</TableHead>
                         <TableHead>Phone</TableHead>
                         <TableHead className='text-green-600 font-bold'>Profit</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -543,6 +747,12 @@ export default function LoadManagementPage() {
                           <TableCell>Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-sm'>{t.mobileNumber === 'N/A' ? '-' : t.mobileNumber}</TableCell>
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <div className='flex gap-1'>
+                              <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
+                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteTransaction(t.id)}><Trash2 className='h-4 w-4' /></Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -568,13 +778,13 @@ export default function LoadManagementPage() {
           <div className='grid gap-6'>
             <Card className='border-2 border-orange-200'>
               <CardHeader>
-                <CardTitle className='text-orange-700'>💸 Cash Withdrawal / Transfer</CardTitle>
+                <CardTitle className='text-orange-700'>💸 {editingWithdrawal ? 'Edit' : 'Cash'} Withdrawal / Transfer</CardTitle>
                 <p className='text-sm text-muted-foreground mt-1'>
                   Select type: <strong>Withdrawal</strong> = customer gets cash (wallet ↑, you earn 2%) | <strong>Deposit</strong> = customer sends via wallet (wallet ↓, you earn 1%)
                 </p>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={handleWithdrawalSubmit}>
+                <form className='space-y-6' onSubmit={editingWithdrawal ? handleUpdateWithdrawal : handleWithdrawalSubmit}>
 
                   {/* Transaction Type Toggle */}
                   <div className='grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg'>
@@ -691,9 +901,16 @@ export default function LoadManagementPage() {
                     </CardContent>
                   </Card>
 
-                  <Button size='lg' type='submit' disabled={isSavingWithdrawal || !withdrawalForm.walletId || !withdrawalForm.amount} className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'>
-                    {isSavingWithdrawal ? 'Processing...' : '✓ Confirm Cash Withdrawal'}
-                  </Button>
+                  <div className='flex gap-2'>
+                    <Button size='lg' type='submit' disabled={isSavingWithdrawal || !withdrawalForm.walletId || !withdrawalForm.amount} className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'>
+                      {isSavingWithdrawal ? 'Processing...' : editingWithdrawal ? '✓ Update Withdrawal' : '✓ Confirm Cash Withdrawal'}
+                    </Button>
+                    {editingWithdrawal && (
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingWithdrawal(null); setWithdrawalForm(initialWithdrawalForm) }}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -716,6 +933,7 @@ export default function LoadManagementPage() {
                         <TableHead>Amount</TableHead>
                         <TableHead>Commission %</TableHead>
                         <TableHead className='text-orange-600 font-bold'>Profit</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -735,6 +953,12 @@ export default function LoadManagementPage() {
                           </TableCell>
                           <TableCell>{Number(w.commissionRate || 0).toFixed(2)}%</TableCell>
                           <TableCell className='text-orange-600 font-bold'>Rs {Number(w.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <div className='flex gap-1'>
+                              <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditWithdrawal(w)}><Pencil className='h-4 w-4' /></Button>
+                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteWithdrawal(w.id)}><Trash2 className='h-4 w-4' /></Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -755,6 +979,23 @@ export default function LoadManagementPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this {deleteConfirm?.type === 'purchase' ? 'purchase' : deleteConfirm?.type === 'transaction' ? 'sale' : 'withdrawal'} record. Wallet balance and cash book entries will be reversed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className='bg-red-600 hover:bg-red-700'>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MobilePageShell>
   )
 }

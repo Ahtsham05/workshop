@@ -1,5 +1,7 @@
 const Joi = require('joi');
 
+const { objectId } = require('./custom.validation');
+
 const createCashWithdrawal = {
   body: Joi.object().keys({
     walletId: Joi.string().required(),
@@ -27,7 +29,33 @@ const getCashWithdrawals = {
   }),
 };
 
+const updateCashWithdrawal = {
+  params: Joi.object().keys({
+    withdrawalId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    walletId: Joi.string(),
+    walletType: Joi.string().trim(),
+    amount: Joi.number().min(0.01),
+    transactionType: Joi.string().valid('withdrawal', 'deposit'),
+    customerName: Joi.string().trim().allow(''),
+    customerNumber: Joi.string().trim().allow(''),
+    commissionRate: Joi.number().min(0).max(100),
+    extraCharge: Joi.number().min(0),
+    notes: Joi.string().allow(''),
+    date: Joi.date(),
+  }).min(1),
+};
+
+const deleteCashWithdrawal = {
+  params: Joi.object().keys({
+    withdrawalId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   createCashWithdrawal,
   getCashWithdrawals,
+  updateCashWithdrawal,
+  deleteCashWithdrawal,
 };

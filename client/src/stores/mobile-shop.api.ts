@@ -281,6 +281,21 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    updateLoadPurchase: builder.mutation<LoadPurchaseRecord, { id: string; body: Partial<CreateLoadPurchaseInput> }>({
+      query: ({ id, body }) => ({
+        url: `/load-purchases/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteLoadPurchase: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/load-purchases/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
     getLoadTransactions: builder.query<PaginatedResult<LoadTransactionRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -297,6 +312,21 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    updateLoadTransaction: builder.mutation<LoadTransactionRecord, { id: string; body: Partial<CreateLoadTransactionInput> }>({
+      query: ({ id, body }) => ({
+        url: `/load-transactions/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteLoadTransaction: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/load-transactions/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
     getCashWithdrawals: builder.query<PaginatedResult<CashWithdrawalRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -310,6 +340,21 @@ export const mobileShopApi = createApi({
         url: '/cash-withdrawals',
         method: 'POST',
         body,
+      }),
+      invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    updateCashWithdrawal: builder.mutation<CashWithdrawalRecord, { id: string; body: Partial<CreateCashWithdrawalInput> }>({
+      query: ({ id, body }) => ({
+        url: `/cash-withdrawals/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteCashWithdrawal: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/cash-withdrawals/${id}`,
+        method: 'DELETE',
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
@@ -472,10 +517,16 @@ export const {
   useUpsertWalletMutation,
   useGetLoadPurchasesQuery,
   useCreateLoadPurchaseMutation,
+  useUpdateLoadPurchaseMutation,
+  useDeleteLoadPurchaseMutation,
   useGetLoadTransactionsQuery,
   useCreateLoadTransactionMutation,
+  useUpdateLoadTransactionMutation,
+  useDeleteLoadTransactionMutation,
   useGetCashWithdrawalsQuery,
   useCreateCashWithdrawalMutation,
+  useUpdateCashWithdrawalMutation,
+  useDeleteCashWithdrawalMutation,
   useGetRepairJobsQuery,
   useCreateRepairJobMutation,
   useUpdateRepairJobMutation,

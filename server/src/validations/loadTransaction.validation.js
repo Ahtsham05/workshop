@@ -1,5 +1,7 @@
 const Joi = require('joi');
 
+const { objectId } = require('./custom.validation');
+
 const createLoadTransaction = {
   body: Joi.object().keys({
     walletType: Joi.string().trim().required(),
@@ -30,7 +32,34 @@ const getLoadTransactions = {
   }),
 };
 
+const updateLoadTransaction = {
+  params: Joi.object().keys({
+    transactionId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    walletType: Joi.string().trim(),
+    walletId: Joi.string(),
+    mobileNumber: Joi.string().allow('', 'N/A'),
+    amount: Joi.number().min(0.01),
+    commissionRate: Joi.number().min(0).max(100),
+    extraCharge: Joi.number().min(0),
+    paymentMethod: Joi.string().valid('cash', 'wallet'),
+    notes: Joi.string().allow(''),
+    date: Joi.date(),
+    type: Joi.string().valid('normal', 'package'),
+    network: Joi.string(),
+  }).min(1),
+};
+
+const deleteLoadTransaction = {
+  params: Joi.object().keys({
+    transactionId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   createLoadTransaction,
   getLoadTransactions,
+  updateLoadTransaction,
+  deleteLoadTransaction,
 };

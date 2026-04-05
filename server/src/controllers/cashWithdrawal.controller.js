@@ -20,7 +20,19 @@ const getCashWithdrawals = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const updateCashWithdrawal = catchAsync(async (req, res) => {
+  const withdrawal = await cashWithdrawalService.updateCashWithdrawal(req.params.withdrawalId, req.body);
+  res.send(withdrawal);
+});
+
+const deleteCashWithdrawal = catchAsync(async (req, res) => {
+  await cashWithdrawalService.deleteCashWithdrawal(req.params.withdrawalId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   createCashWithdrawal,
   getCashWithdrawals,
+  updateCashWithdrawal,
+  deleteCashWithdrawal,
 };

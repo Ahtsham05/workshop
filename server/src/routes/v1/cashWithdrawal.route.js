@@ -15,4 +15,9 @@ router
   .post(validate(cashWithdrawalValidation.createCashWithdrawal), cashWithdrawalController.createCashWithdrawal)
   .get(validate(cashWithdrawalValidation.getCashWithdrawals), cashWithdrawalController.getCashWithdrawals);
 
+router
+  .route('/:withdrawalId')
+  .patch(validate(cashWithdrawalValidation.updateCashWithdrawal), cashWithdrawalController.updateCashWithdrawal)
+  .delete(validate(cashWithdrawalValidation.deleteCashWithdrawal), cashWithdrawalController.deleteCashWithdrawal);
+
 module.exports = router;

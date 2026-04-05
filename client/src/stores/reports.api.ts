@@ -337,6 +337,8 @@ export interface ProfitLossFullReport {
     loadProfit: number
     repairProfit: number
     billProfit: number
+    withdrawalProfit: number
+    depositProfit: number
   }
   adjustments: {
     purchaseReturns: number
@@ -365,6 +367,8 @@ export interface RoiBreakdown {
     loadProfit: number
     repairProfit: number
     billPaymentProfit: number
+    withdrawalProfit: number
+    depositProfit: number
     expenseDeduction: number
     salesReturnsImpact: number
   }

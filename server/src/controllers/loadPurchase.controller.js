@@ -20,7 +20,19 @@ const getLoadPurchases = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const updateLoadPurchase = catchAsync(async (req, res) => {
+  const purchase = await loadPurchaseService.updateLoadPurchase(req.params.purchaseId, req.body);
+  res.send(purchase);
+});
+
+const deleteLoadPurchase = catchAsync(async (req, res) => {
+  await loadPurchaseService.deleteLoadPurchase(req.params.purchaseId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   createLoadPurchase,
   getLoadPurchases,
+  updateLoadPurchase,
+  deleteLoadPurchase,
 };

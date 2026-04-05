@@ -67,8 +67,80 @@ const getLoadPurchaseById = async (loadPurchaseId) => {
   return purchase;
 };
 
+const updateLoadPurchase = async (purchaseId, updateBody) => {
+  const purchase = await getLoadPurchaseById(purchaseId);
+
+  // Reverse old wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    type: purchase.walletType,
+    amount: purchase.amount,
+    operation: 'deduct',
+    userId: purchase.createdBy,
+  });
+
+  // Delete old cash book entries
+  await cashBookService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
+
+  // Update fields
+  Object.assign(purchase, updateBody);
+  const commissionProfit = (Number(purchase.amount || 0) * Number(purchase.commissionRate || 0)) / 100;
+  purchase.profit = commissionProfit + Number(purchase.extraCharge || 0);
+  await purchase.save();
+
+  // Apply new wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    type: purchase.walletType,
+    amount: purchase.amount,
+    operation: 'add',
+    userId: purchase.createdBy,
+  });
+
+  const supplierLabel = purchase.supplierName || 'unknown supplier';
+  await cashBookService.createEntry({
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    type: 'expense',
+    source: 'load',
+    amount: purchase.amount,
+    paymentMethod: purchase.paymentMethod,
+    referenceId: purchase._id,
+    referenceModel: 'LoadPurchase',
+    description: `Load purchase from ${supplierLabel}`,
+    date: purchase.date,
+    createdBy: purchase.createdBy,
+  });
+
+  return purchase;
+};
+
+const deleteLoadPurchase = async (purchaseId) => {
+  const purchase = await getLoadPurchaseById(purchaseId);
+
+  // Reverse wallet adjustment
+  await walletService.adjustWalletBalance({
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    type: purchase.walletType,
+    amount: purchase.amount,
+    operation: 'deduct',
+    userId: purchase.createdBy,
+  });
+
+  // Delete cash book entries
+  await cashBookService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
+
+  await purchase.deleteOne();
+  return purchase;
+};
+
 module.exports = {
   createLoadPurchase,
   queryLoadPurchases,
   getLoadPurchaseById,
+  updateLoadPurchase,
+  deleteLoadPurchase,
 };

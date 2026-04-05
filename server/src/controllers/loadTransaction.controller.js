@@ -20,7 +20,19 @@ const getLoadTransactions = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const updateLoadTransaction = catchAsync(async (req, res) => {
+  const transaction = await loadTransactionService.updateLoadTransaction(req.params.transactionId, req.body);
+  res.send(transaction);
+});
+
+const deleteLoadTransaction = catchAsync(async (req, res) => {
+  await loadTransactionService.deleteLoadTransaction(req.params.transactionId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   createLoadTransaction,
   getLoadTransactions,
+  updateLoadTransaction,
+  deleteLoadTransaction,
 };

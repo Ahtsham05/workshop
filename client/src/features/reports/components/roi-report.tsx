@@ -96,6 +96,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             { Metric: 'Load Profit', Value: roiData.breakdown.profit.loadProfit },
             { Metric: 'Repair Profit', Value: roiData.breakdown.profit.repairProfit },
             { Metric: 'Bill Payment Profit', Value: roiData.breakdown.profit.billPaymentProfit },
+            { Metric: 'Withdrawal Profit', Value: roiData.breakdown.profit.withdrawalProfit },
+            { Metric: 'Deposit Profit', Value: roiData.breakdown.profit.depositProfit },
             { Metric: 'Expense Deduction', Value: -roiData.breakdown.profit.expenseDeduction },
             { Metric: 'Sales Returns Impact', Value: -roiData.breakdown.profit.salesReturnsImpact },
           ]
@@ -281,6 +283,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                 { label: 'Load Profit', value: b?.profit.loadProfit ?? 0, color: 'text-emerald-600' },
                 { label: 'Repair Profit', value: b?.profit.repairProfit ?? 0, color: 'text-teal-600' },
                 { label: 'Bill Payment Profit', value: b?.profit.billPaymentProfit ?? 0, color: 'text-cyan-600' },
+                { label: 'Withdrawal Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600' },
+                { label: 'Deposit Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600' },
                 { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500' },
                 { label: 'Sales Returns Impact', value: -(b?.profit.salesReturnsImpact ?? 0), color: 'text-rose-500' },
               ].map(({ label, value, color }) => (
