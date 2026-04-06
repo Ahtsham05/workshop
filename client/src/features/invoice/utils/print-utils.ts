@@ -135,7 +135,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       body { 
         margin: 0; 
         padding: 0; 
-        font-size: 11px;
+        font-size: 13px;
       }
       .no-print {
         display: none !important;
@@ -144,8 +144,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     
     body {
       font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.3;
+      font-size: 13px;
+      line-height: 1.4;
       margin: 0;
       padding: 8px;
       width: 300px;
@@ -177,7 +177,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     .business-info {
-      font-size: 9px;
+      font-size: 10px;
       margin-bottom: 1px;
     }
     
@@ -191,7 +191,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       display: flex;
       justify-content: space-between;
       margin-bottom: 2px;
-      font-size: 11px;
+      font-size: 12px;
     }
     
     .info-label {
@@ -207,7 +207,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       padding-bottom: 3px;
       margin-bottom: 5px;
       font-weight: bold;
-      font-size: 10px;
+      font-size: 12px;
     }
     
     .item-row {
@@ -218,12 +218,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     
     .item-name {
       font-weight: bold;
-      font-size: 11px;
+      font-size: 13px;
       margin-bottom: 1px;
     }
     
     .item-details {
-      font-size: 9px;
+      font-size: 12px;
       color: #555;
       display: flex;
       justify-content: space-between;
@@ -239,12 +239,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       display: flex;
       justify-content: space-between;
       margin-bottom: 2px;
-      font-size: 11px;
+      font-size: 13px;
     }
     
     .total-final {
       font-weight: bold;
-      font-size: 13px;
+      font-size: 16px;
       border-top: 1px solid #000;
       padding-top: 3px;
       margin-top: 3px;
@@ -359,7 +359,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.date}:</span>
-      <span>${new Date().toLocaleDateString(locale)}</span>
+      <span>${new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale)}</span>
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.type}:</span>
@@ -427,19 +427,19 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   ${type !== 'pending' ? `
     <div class="payment-section">
-      <div class="total-row" style="font-size: 11px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px;">
+      <div class="total-row" style="font-size: 13px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px;">
         <span>${urduTexts.current_invoice}:</span>
         <span>${formatCurrency(total)}</span>
       </div>
       ${(hasPrevious && customerId !== 'walk-in') ? `
-      <div class="total-row" style="font-size: 10px; color: #666; margin-bottom: 3px;">
+      <div class="total-row" style="font-size: 12px; color: #666; margin-bottom: 3px;">
         <span>${urduTexts.previous_balance}:</span>
         <span style="color: ${previousBalance > 0 ? '#d32f2f' : previousBalance < 0 ? '#2e7d32' : '#666'}">
           ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </span>
       </div>
       ` : ''}
-      <div class="total-row" style="font-size: 11px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #d32f2f;">
+      <div class="total-row" style="font-size: 14px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #d32f2f;">
         <span>${urduTexts.net_balance}:</span>
         <span>${formatCurrency(totalWithPrev)}</span>
       </div>

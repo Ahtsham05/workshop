@@ -59,7 +59,22 @@ export function useSupplierColumns() {
   const whatsappColumn: ColumnDef<Supplier> = {
     accessorKey: 'whatsapp',
     header: ({ column }) => <DataTableColumnHeader column={column} title={t('whatsapp')} />,
-    cell: ({ row }) => <div>{row.getValue('whatsapp')}</div>,
+    cell: ({ row }) => {
+      const whatsapp = row.getValue('whatsapp') as string
+      if (!whatsapp) return <div>-</div>
+      const number = whatsapp.replace(/\D/g, '')
+      return (
+        <a
+          href={`https://wa.me/${number}`}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='text-green-600 hover:underline'
+          onClick={(e) => e.stopPropagation()}
+        >
+          {whatsapp}
+        </a>
+      )
+    },
   };
 
   const addressColumn: ColumnDef<Supplier> = {

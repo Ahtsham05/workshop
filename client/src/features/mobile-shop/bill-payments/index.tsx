@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -348,10 +352,27 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
 function PrintReceiptButton({ billId }: { billId: string }) {
   const [trigger, setTrigger] = useState(false)
   const { data: receipt, isLoading } = useGetBillPaymentReceiptQuery(billId, { skip: !trigger })
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+
+  const receiptOptions = {
+    branchDetails: {
+      name: branchData?.name,
+      address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+      phone: branchData?.phone,
+      email: branchData?.email,
+    },
+    userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+    isTrial: orgData?.subscription?.isTrial,
+    logo: orgData?.logo?.url,
+  }
 
   const handleClick = () => {
     if (receipt) {
-      openBillReceiptPrintWindow(receipt)
+      openBillReceiptPrintWindow(receipt, receiptOptions)
     } else {
       setTrigger(true)
     }
@@ -360,7 +381,7 @@ function PrintReceiptButton({ billId }: { billId: string }) {
   useEffect(() => {
     if (receipt && trigger) {
       setTrigger(false)
-      openBillReceiptPrintWindow(receipt)
+      openBillReceiptPrintWindow(receipt, receiptOptions)
     }
   }, [receipt, trigger])
 

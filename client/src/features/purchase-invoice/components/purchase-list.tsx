@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt, Printer } from 'lucide-react'
 import { useGetPurchasesQuery } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -33,7 +34,10 @@ interface PurchaseListProps {
 export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
   const { t } = useLanguage()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
@@ -75,12 +79,14 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
             .join(', '),
           phone: branchData?.phone,
           email: branchData?.email,
+          logo: orgData?.logo?.url,
+          isTrial: orgData?.subscription?.isTrial,
         }
 
         const html =
           printType === 'receipt'
-            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails)
-            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails)
+            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage)
+            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage)
 
         const printWindow = window.open('', '_blank')
         if (printWindow) {
@@ -93,7 +99,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
         toast.error(t('Failed to print purchase'))
       }
     },
-    [branchData, t]
+    [branchData, t, preferredLanguage, orgData]
   )
 
   const handleDelete = (purchase: any) => {

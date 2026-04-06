@@ -25,6 +25,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -70,8 +71,11 @@ export default function PurchasePanel({
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const user = useSelector((state: RootState) => state.auth.data?.user)
   const suppliers: Supplier[] = suppliersData?.results || []
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   // Filter suppliers by search query
   const filteredSuppliers = suppliers.filter(supplier => {
@@ -155,11 +159,13 @@ export default function PurchasePanel({
               .join(', '),
             phone: branchData?.phone,
             email: branchData?.email,
+            logo: orgData?.logo?.url,
+            isTrial: orgData?.subscription?.isTrial,
           }
           const html =
             printType === 'receipt'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails)
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails)
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage)
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage)
 
           const printWindow = window.open('', '_blank')
           if (printWindow) {
@@ -173,7 +179,7 @@ export default function PurchasePanel({
         toast.error(t('Failed to print'))
       }
     },
-    [branchData, purchase.supplier, t]
+    [branchData, purchase.supplier, t, preferredLanguage, orgData]
   )
 
   // Handle product selection for manual entries

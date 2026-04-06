@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { useLanguage } from '@/context/language-context';
+import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
 
 interface PaymentReceiptProps {
   customer: {
@@ -23,8 +23,11 @@ interface PaymentReceiptProps {
     address?: string;
     phone?: string;
     email?: string;
+    logo?: string;
   };
   receiptNumber?: string;
+  userPreferredLanguage?: InvoiceLanguage;
+  isTrial?: boolean;
 }
 
 export function PaymentReceipt({
@@ -33,15 +36,18 @@ export function PaymentReceipt({
   balance,
   company,
   receiptNumber,
+  userPreferredLanguage,
+  isTrial,
 }: PaymentReceiptProps) {
-  const { t, language } = useLanguage();
+  const language = resolveInvoiceLanguage({ userPreferredLanguage });
+  const labels = paymentReceiptLabels[language];
   const isUrdu = language === 'ur';
+  const dir = isUrdu ? 'rtl' : 'ltr';
+  const startAlign = isUrdu ? 'right' : 'left';
+  const locale = isUrdu ? 'ur-PK' : 'en-PK';
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
-    }).format(Math.abs(amount));
+    return `Rs ${Math.abs(amount).toFixed(2)}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -52,18 +58,28 @@ export function PaymentReceipt({
     }
   };
 
+  const formatTime = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
   const printReceipt = () => {
     const printData = {
       customer,
       payment,
       balance,
       company: company || {
-        name: 'Logix Plus solutions',
+        name: 'Logix Plus Solutions',
         address: '',
         phone: '',
-        email: ''
+        email: '',
+        logo: '',
       },
-      receiptNumber: receiptNumber || `RCP-${Date.now()}`
+      receiptNumber: receiptNumber || `RCP-${Date.now()}`,
+      isTrial: isTrial ?? false,
     };
 
     const htmlContent = generateReceiptHTML(printData);
@@ -72,43 +88,19 @@ export function PaymentReceipt({
       printWindow.document.write(htmlContent);
       printWindow.document.close();
       printWindow.focus();
-      
-      // Auto print after load
       printWindow.onload = () => {
         printWindow.print();
       };
     }
   };
 
-  const generateReceiptHTML = (data: any) => {
-    const urduTexts = {
-      payment_receipt: 'ادائیگی کی رسید',
-      receipt_no: 'رسید نمبر',
-      received_from: 'وصول کنندہ',
-      phone: 'فون',
-      address: 'پتہ',
-      payment_date: 'ادائیگی کی تاریخ',
-      payment_method: 'ادائیگی کا طریقہ',
-      reference: 'حوالہ',
-      description: 'تفصیل',
-      previous_balance: 'پچھلا بیلنس',
-      payment_received: 'وصول شدہ رقم',
-      remaining_balance: 'باقی رقم',
-      receivable: 'وصولی',
-      payable: 'ادائیگی',
-      settled: 'طے شدہ',
-      received_by: 'وصول کنندہ',
-      customer_signature: 'کسٹمر کے دستخط',
-      thank_you: 'آپ کا شکریہ',
-      computer_generated: 'یہ کمپیوٹر سے تیار کردہ رسید ہے'
-    };
-
+  const generateReceiptHTML = (data: typeof printReceipt extends () => void ? any : any) => {
     return `
 <!DOCTYPE html>
-<html dir="rtl" lang="ur">
+<html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
-  <title>${urduTexts.payment_receipt}</title>
+  <title>${labels.payment_receipt} ${data.receiptNumber}</title>
   <style>
     @media print {
       @page { 
@@ -118,7 +110,7 @@ export function PaymentReceipt({
       body { 
         margin: 0; 
         padding: 0; 
-        font-size: 11px;
+        font-size: 13px;
       }
       .no-print {
         display: none !important;
@@ -127,14 +119,15 @@ export function PaymentReceipt({
     
     body {
       font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.3;
+      font-size: 13px;
+      line-height: 1.4;
       margin: 0;
       padding: 8px;
       width: 300px;
       background: white;
       color: #000;
-      direction: rtl;
+      direction: ${dir};
+      text-align: ${startAlign};
     }
     
     .receipt-header {
@@ -159,7 +152,7 @@ export function PaymentReceipt({
     }
     
     .business-info {
-      font-size: 9px;
+      font-size: 10px;
       margin-bottom: 1px;
     }
     
@@ -180,15 +173,11 @@ export function PaymentReceipt({
       display: flex;
       justify-content: space-between;
       margin-bottom: 3px;
-      font-size: 11px;
+      font-size: 12px;
     }
     
     .info-label {
       font-weight: bold;
-    }
-    
-    .info-value {
-      text-align: left;
     }
     
     .description-section {
@@ -211,7 +200,7 @@ export function PaymentReceipt({
       justify-content: space-between;
       padding: 8px 0;
       border-bottom: 1px solid #333;
-      font-size: 11px;
+      font-size: 13px;
     }
     
     .amount-row:last-child {
@@ -219,7 +208,7 @@ export function PaymentReceipt({
     }
     
     .amount-row.total {
-      font-size: 13px;
+      font-size: 16px;
       font-weight: bold;
       border-top: 2px solid #000;
       margin-top: 6px;
@@ -227,7 +216,7 @@ export function PaymentReceipt({
     }
     
     .amount-paid {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: bold;
     }
     
@@ -288,11 +277,6 @@ export function PaymentReceipt({
       color: white;
     }
     
-    .highlight {
-      background: #ffffcc;
-      padding: 1px 2px;
-    }
-    
     @media screen {
       body {
         max-width: 350px;
@@ -307,7 +291,7 @@ export function PaymentReceipt({
 </head>
 <body>
   <div class="receipt-header">
-    <img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />
+    ${data.company.logo ? `<img src="${data.company.logo}" alt="" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
     <div class="business-name">${data.company.name}</div>
     ${data.company.address ? `<div class="business-info">${data.company.address}</div>` : ''}
     ${data.company.phone || data.company.email ? `
@@ -317,92 +301,97 @@ export function PaymentReceipt({
         ${data.company.email ? `${data.company.email}` : ''}
       </div>
     ` : ''}
-    <div class="receipt-title">${urduTexts.payment_receipt}</div>
-    ${data.receiptNumber ? `<div class="business-info">${urduTexts.receipt_no}: <span class="highlight">${data.receiptNumber}</span></div>` : ''}
+    <div class="receipt-title">${labels.payment_receipt}</div>
+    ${data.receiptNumber ? `<div class="business-info">${labels.receipt_no}: ${data.receiptNumber}</div>` : ''}
   </div>
   
   <div class="receipt-info">
     <div class="info-row">
-      <span class="info-label">${urduTexts.received_from}:</span>
-      <span class="info-value">${data.customer.name}</span>
+      <span class="info-label">${labels.received_from}:</span>
+      <span>${data.customer.name}</span>
     </div>
     ${data.customer.phone ? `
     <div class="info-row">
-      <span class="info-label">${urduTexts.phone}:</span>
-      <span class="info-value">${data.customer.phone}</span>
+      <span class="info-label">${labels.phone}:</span>
+      <span>${data.customer.phone}</span>
     </div>
     ` : ''}
     ${data.customer.address ? `
     <div class="info-row">
-      <span class="info-label">${urduTexts.address}:</span>
-      <span class="info-value">${data.customer.address}</span>
+      <span class="info-label">${labels.address}:</span>
+      <span>${data.customer.address}</span>
     </div>
     ` : ''}
     <div class="info-row">
-      <span class="info-label">${urduTexts.payment_date}:</span>
-      <span class="info-value">${formatDate(data.payment.date)}</span>
+      <span class="info-label">${labels.payment_date}:</span>
+      <span>${formatDate(data.payment.date)}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">${labels.payment_time}:</span>
+      <span>${formatTime(data.payment.date)}</span>
     </div>
     ${data.payment.paymentMethod ? `
     <div class="info-row">
-      <span class="info-label">${urduTexts.payment_method}:</span>
-      <span class="info-value">${data.payment.paymentMethod}</span>
+      <span class="info-label">${labels.payment_method}:</span>
+      <span>${data.payment.paymentMethod}</span>
     </div>
     ` : ''}
     ${data.payment.reference ? `
     <div class="info-row">
-      <span class="info-label">${urduTexts.reference}:</span>
-      <span class="info-value">${data.payment.reference}</span>
+      <span class="info-label">${labels.reference}:</span>
+      <span>${data.payment.reference}</span>
     </div>
     ` : ''}
   </div>
   
   ${data.payment.description ? `
   <div class="description-section">
-    <div class="info-label">${urduTexts.description}:</div>
-    <div style="margin-top: 3px; font-size: 10px;">${data.payment.description}</div>
+    <div class="info-label">${labels.description}:</div>
+    <div style="margin-top: 3px; font-size: 11px;">${data.payment.description}</div>
   </div>
   ` : ''}
   
   <div class="payment-details">
     <div class="amount-row">
-      <span>${urduTexts.previous_balance}:</span>
+      <span>${labels.previous_balance}:</span>
       <span>${formatCurrency(data.balance.previousBalance)}</span>
     </div>
     <div class="amount-row">
-      <span>${urduTexts.payment_received}:</span>
+      <span>${labels.payment_received}:</span>
       <span class="amount-paid">${formatCurrency(data.payment.amount)}</span>
     </div>
     <div class="amount-row total">
-      <span>${urduTexts.remaining_balance}:</span>
+      <span>${labels.remaining_balance}:</span>
       <span style="color: ${data.balance.currentBalance > 0 ? '#dc2626' : data.balance.currentBalance < 0 ? '#16a34a' : '#000'}">
         ${formatCurrency(data.balance.currentBalance)}
-        ${data.balance.currentBalance > 0 ? ` (${urduTexts.receivable})` : ''}
-        ${data.balance.currentBalance < 0 ? ` (${urduTexts.payable})` : ''}
-        ${data.balance.currentBalance === 0 ? ` (${urduTexts.settled})` : ''}
+        ${data.balance.currentBalance > 0 ? ` (${labels.receivable})` : ''}
+        ${data.balance.currentBalance < 0 ? ` (${labels.payable})` : ''}
+        ${data.balance.currentBalance === 0 ? ` (${labels.settled})` : ''}
       </span>
     </div>
   </div>
   
   <div class="signature-section">
     <div>
-      <div class="signature-line">${urduTexts.received_by}</div>
+      <div class="signature-line">${labels.received_by}</div>
     </div>
     <div>
-      <div class="signature-line">${urduTexts.customer_signature}</div>
+      <div class="signature-line">${labels.customer_signature}</div>
     </div>
   </div>
   
   <div class="footer">
-    <div class="footer-line"><strong>${urduTexts.thank_you}</strong></div>
-    <div class="footer-line">${urduTexts.computer_generated}</div>
+    <div class="footer-line"><strong>${labels.thank_you}</strong></div>
+    <div class="footer-line">${labels.computer_generated}</div>
+    <div class="footer-line" style="margin-top: 4px; font-style: italic;">${labels.powered_by}</div>
   </div>
   
   <div class="no-print">
     <button onclick="window.print()" class="print-btn print-btn-primary">
-      🖨️ ${t('Print Receipt')}
+      🖨️ ${labels.print_receipt}
     </button>
     <button onclick="window.close()" class="print-btn print-btn-secondary">
-      ✕ ${t('Close')}
+      ✕ ${labels.close}
     </button>
   </div>
 </body>
@@ -411,74 +400,19 @@ export function PaymentReceipt({
   };
 
   return (
-    <div className="payment-receipt-container" dir={isUrdu ? 'rtl' : 'ltr'}>
+    <div className="payment-receipt-container" dir={dir}>
       <style>
         {`
-        @media print {
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          
-          html, body {
-            width: 210mm;
-            height: 297mm;
-            margin: 0;
-            padding: 0;
-            background: white;
-          }
-          
-          .payment-receipt-container {
-            width: 100%;
-            height: 100%;
-            background: white;
-            display: block;
-          }
-          
-          .receipt-content {
-            width: 100%;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 15mm 20mm !important;
-            border: none !important;
-            box-shadow: none !important;
-            page-break-after: avoid;
-            background: white;
-          }
-          
-          .no-print {
-            display: none !important;
-          }
-          
-          .receipt-header,
-          .receipt-info,
-          .payment-details,
-          .receipt-footer {
-            page-break-inside: avoid;
-          }
-          
-          @page {
-            size: A4;
-            margin: 0;
-          }
-        }
-        
-        @media screen {
-          .receipt-content {
-            max-width: 800px;
-            margin: 0px auto;
-            padding: 40px;
-            background: white;
-            border: 2px solid #000;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-          }
-        }
-        
         .receipt-content {
-          font-family: ${isUrdu ? "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Pak Nastaleeq', Arial, sans-serif" : 'Arial, sans-serif'};
+          font-family: ${isUrdu ? "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', Arial, sans-serif" : "'Inter', 'Manrope', Arial, sans-serif"};
           color: #000;
           background: white;
           font-size: ${isUrdu ? '16px' : '14px'};
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 40px;
+          border: 2px solid #000;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
         .receipt-header {
@@ -489,7 +423,7 @@ export function PaymentReceipt({
         }
         
         .company-name {
-          font-size: ${isUrdu ? '32px' : '28px'};
+          font-size: ${isUrdu ? '28px' : '24px'};
           font-weight: bold;
           margin-bottom: 10px;
           text-transform: uppercase;
@@ -498,9 +432,9 @@ export function PaymentReceipt({
         }
         
         .receipt-title {
-          font-size: ${isUrdu ? '26px' : '22px'};
+          font-size: ${isUrdu ? '24px' : '20px'};
           font-weight: bold;
-          margin: 20px 0;
+          margin: 15px 0;
           text-decoration: underline;
           color: #000;
           line-height: ${isUrdu ? '1.8' : '1.2'};
@@ -511,16 +445,6 @@ export function PaymentReceipt({
           color: #333;
           margin-top: 10px;
           line-height: ${isUrdu ? '1.8' : '1.2'};
-        }
-        
-        @media print {
-          .company-name {
-            font-size: ${isUrdu ? '28px' : '24px'};
-          }
-          
-          .receipt-title {
-            font-size: ${isUrdu ? '24px' : '20px'};
-          }
         }
         
         .receipt-info {
@@ -551,6 +475,7 @@ export function PaymentReceipt({
           margin-bottom: 10px;
           line-height: ${isUrdu ? '1.8' : '1.4'};
         }
+        
         .payment-details {
           background: #f5f5f5;
           border: 2px solid #000;
@@ -587,18 +512,6 @@ export function PaymentReceipt({
           color: #000;
         }
         
-        @media print {
-          .payment-details {
-            background: #f9f9f9;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          
-          .amount-paid {
-            color: #000;
-          }
-        } padding-top: 15px;
-        }
         .signature-section {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -622,23 +535,13 @@ export function PaymentReceipt({
           text-align: center;
           line-height: ${isUrdu ? '1.8' : '1.4'};
         }
-        
-        @media print {
-          .signature-section {
-            margin-top: 40px;
-          }
-          
-          .notes {
-            color: #000;
-          }
-        }
         `}
       </style>
 
       <div className="receipt-content">
         <div className="receipt-header">
           <div className="company-name">
-            {company?.name || 'Logix Plus solutions'}
+            {company?.name || 'Logix Plus Solutions'}
           </div>
           {company?.address && (
             <div style={{ fontSize: '14px', marginBottom: '5px', color: '#000' }}>
@@ -652,44 +555,44 @@ export function PaymentReceipt({
               {company?.email && `Email: ${company.email}`}
             </div>
           )}
-          <div className="receipt-title">{t('Payment Receipt')}</div>
+          <div className="receipt-title">{labels.payment_receipt}</div>
           {receiptNumber && (
             <div className="receipt-number">
-              {t('Receipt No')}: {receiptNumber}
+              {labels.receipt_no}: {receiptNumber}
             </div>
           )}
         </div>
 
         <div className="receipt-info">
           <div className="info-section">
-            <div className="info-label">{t('Received From')}:</div>
+            <div className="info-label">{labels.received_from}:</div>
             <div className="info-value">{customer.name}</div>
             {customer.phone && (
               <>
-                <div className="info-label">{t('Phone')}:</div>
+                <div className="info-label">{labels.phone}:</div>
                 <div className="info-value">{customer.phone}</div>
               </>
             )}
             {customer.address && (
               <>
-                <div className="info-label">{t('Address')}:</div>
+                <div className="info-label">{labels.address}:</div>
                 <div className="info-value">{customer.address}</div>
               </>
             )}
-               {payment.reference && (
+            {payment.reference && (
               <>
-                <div className="info-label">{t('Reference')}:</div>
+                <div className="info-label">{labels.reference}:</div>
                 <div className="info-value">{payment.reference}</div>
               </>
             )}
           </div>
 
           <div className="info-section">
-            <div className="info-label">{t('Payment Date')}:</div>
+            <div className="info-label">{labels.payment_date}:</div>
             <div className="info-value">{formatDate(payment.date)}</div>
             {payment.paymentMethod && (
               <>
-                <div className="info-label">{t('Payment Method')}:</div>
+                <div className="info-label">{labels.payment_method}:</div>
                 <div className="info-value">{payment.paymentMethod}</div>
               </>
             )}
@@ -698,7 +601,7 @@ export function PaymentReceipt({
 
         {payment.description && (
           <div style={{ marginBottom: '20px' }}>
-            <div className="info-label">{t('Description')}:</div>
+            <div className="info-label">{labels.description}:</div>
             <div style={{ padding: '10px', background: '#f9f9f9', borderRadius: '4px', border: '1px solid #ddd', color: '#000' }}>
               {payment.description}
             </div>
@@ -707,20 +610,20 @@ export function PaymentReceipt({
 
         <div className="payment-details">
           <div className="amount-row">
-            <span>{t('Previous Balance')}:</span>
+            <span>{labels.previous_balance}:</span>
             <span>{formatCurrency(balance.previousBalance)}</span>
           </div>
           <div className="amount-row">
-            <span>{t('Payment Received')}:</span>
+            <span>{labels.payment_received}:</span>
             <span className="amount-paid">{formatCurrency(payment.amount)}</span>
           </div>
           <div className="amount-row total">
-            <span>{t('Remaining Balance')}:</span>
-            <span style={{ color: balance.currentBalance > 0 ? '#dc2626' : '#16a34a' }}>
+            <span>{labels.remaining_balance}:</span>
+            <span style={{ color: balance.currentBalance > 0 ? '#dc2626' : balance.currentBalance < 0 ? '#16a34a' : '#000' }}>
               {formatCurrency(balance.currentBalance)}
-              {balance.currentBalance > 0 && ` (${t('Receivable')})`}
-              {balance.currentBalance < 0 && ` (${t('Payable')})`}
-              {balance.currentBalance === 0 && ` (${t('Settled')})`}
+              {balance.currentBalance > 0 && ` (${labels.receivable})`}
+              {balance.currentBalance < 0 && ` (${labels.payable})`}
+              {balance.currentBalance === 0 && ` (${labels.settled})`}
             </span>
           </div>
         </div>
@@ -728,17 +631,17 @@ export function PaymentReceipt({
         <div className="receipt-footer">
           <div className="signature-section">
             <div>
-              <div className="signature-line">{t('Received By')}</div>
+              <div className="signature-line">{labels.received_by}</div>
             </div>
             <div>
-              <div className="signature-line">{t('Customer Signature')}</div>
+              <div className="signature-line">{labels.customer_signature}</div>
             </div>
           </div>
 
           <div className="notes">
-            {t('This is a computer generated receipt')}
+            {labels.computer_generated}
             <br />
-            {t('Thank you for your payment')}
+            {labels.thank_you}
           </div>
         </div>
       </div>
@@ -756,7 +659,7 @@ export function PaymentReceipt({
             cursor: 'pointer',
           }}
         >
-          {t('Print Receipt')}
+          {labels.print_receipt}
         </button>
       </div>
     </div>

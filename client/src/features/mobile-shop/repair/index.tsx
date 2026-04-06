@@ -40,6 +40,7 @@ import {
   type RepairJobRecord,
 } from '@/stores/mobile-shop.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { type RootState } from '@/stores/store'
 import { generateRepairReceiptHTML, openRepairPrintWindow } from './repair-print-utils'
 
@@ -133,7 +134,10 @@ export default function RepairPage() {
     paymentMethod: 'cash',
   })
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   const { data } = useGetRepairJobsQuery({
     page: repairPage,
@@ -290,6 +294,9 @@ export default function RepairPage() {
         .join(', ') || undefined,
       companyPhone: branchData?.phone,
       companyEmail: branchData?.email,
+      companyLogo: orgData?.logo?.url,
+      isTrial: orgData?.subscription?.isTrial,
+      userPreferredLanguage: preferredLanguage as 'en' | 'ur',
     })
     openRepairPrintWindow(html)
   }

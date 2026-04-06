@@ -7,6 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/context/language-context';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/stores/store';
+import { useGetBranchQuery } from '@/stores/branch.api';
+import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
@@ -125,6 +129,11 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
 
 export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
+  const user = useSelector((state: RootState) => state.auth.data?.user);
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -395,7 +404,16 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                 previousBalance: selectedPayment.previousBalance,
                 currentBalance: selectedPayment.currentBalance,
               }}
+              company={{
+                name: branchData?.name || 'Logix Plus Solutions',
+                address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+                phone: branchData?.phone,
+                email: branchData?.email,
+                logo: orgData?.logo?.url,
+              }}
               receiptNumber={selectedPayment.entry.reference || `RCP-${format(new Date(selectedPayment.entry.transactionDate), 'yyyyMMdd')}-${(selectedPayment.entry.id || selectedPayment.entry._id)?.slice(-6)}`}
+              userPreferredLanguage={preferredLanguage as 'en' | 'ur'}
+              isTrial={orgData?.subscription?.isTrial}
             />
           )}
         </DialogContent>
