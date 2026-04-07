@@ -256,7 +256,7 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
   
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>
-    <div class="footer-line" style="margin-top: 4px; font-style: italic;">${labels.powered_by}</div>
+    <div class="footer-line" style="margin-top: 4px; font-weight: bold;">${labels.powered_by}</div>
   </div>
   
   <div class="no-print">

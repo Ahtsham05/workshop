@@ -92,9 +92,17 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     .info-label { font-weight: bold; }
     .items-section { margin-bottom: 12px; }
     .items-header { border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px; font-weight: bold; font-size: 12px; }
-    .item-row { margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px dotted #ccc; }
-    .item-name { font-weight: bold; font-size: 13px; margin-bottom: 1px; }
-    .item-details { font-size: 12px; color: #555; display: flex; justify-content: space-between; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px; table-layout: fixed; }
+    .items-table th { border-bottom: 1px dashed #000; padding: 3px 2px; text-align: ${startAlign}; font-weight: bold; font-size: 11px; white-space: nowrap; }
+    .items-table th:first-child { width: 18px; text-align: center; }
+    .items-table th:nth-child(3) { width: 50px; text-align: center; }
+    .items-table th:nth-child(4) { width: 32px; text-align: center; }
+    .items-table th:last-child { width: 58px; text-align: ${language === 'ur' ? 'left' : 'right'}; }
+    .items-table td { padding: 3px 2px; vertical-align: top; border-bottom: 1px dotted #ddd; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word; }
+    .items-table td:first-child { text-align: center; }
+    .items-table td:nth-child(3), .items-table td:nth-child(4) { text-align: center; white-space: nowrap; }
+    .items-table td:last-child { text-align: ${language === 'ur' ? 'left' : 'right'}; font-weight: bold; white-space: nowrap; }
+    .items-table .total-row-table td { border-top: 1px dashed #000; border-bottom: none; font-weight: bold; padding-top: 4px; }
     .totals-section { border-top: 2px solid #000; padding-top: 8px; margin-bottom: 12px; }
     .total-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 13px; }
     .total-final { font-weight: bold; font-size: 16px; border-top: 1px solid #000; padding-top: 3px; margin-top: 3px; }
@@ -134,15 +142,34 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 
   <div class="items-section">
     <div class="items-header">${texts.items_purchased}</div>
-    ${items.map((item, index) => `
-      <div class="item-row">
-        <div class="item-name">${index + 1}. ${item.name}</div>
-        <div class="item-details">
-          <span>${item.quantity}${item.unit ? ` ${item.unit}` : ''} × ${formatCurrency(item.unitPrice)}</span>
-          <span><strong>${formatCurrency(item.subtotal)}</strong></span>
-        </div>
-      </div>
-    `).join('')}
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>S.r.</th>
+          <th>${texts.item}</th>
+          <th>${texts.price}</th>
+          <th>${texts.qty}</th>
+          <th>${texts.total}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${item.name}</td>
+          <td>${item.unitPrice.toFixed(2)}</td>
+          <td>${item.quantity}</td>
+          <td>${item.subtotal.toFixed(2)}</td>
+        </tr>
+        `).join('')}
+        <tr class="total-row-table">
+          <td colspan="2">${texts.total}:</td>
+          <td></td>
+          <td>${items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+          <td>${subtotal.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <div class="totals-section">
@@ -157,8 +184,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   ${type !== 'pending' ? `
     <div class="payment-section">
       <div class="total-row" style="margin-bottom: 3px;"><span>${texts.paid}:</span><span class="highlight">${formatCurrency(paidAmount)}</span></div>
-      ${balance > 0 ? `<div class="total-row" style="color: #d32f2f; font-weight: bold;"><span><strong>${texts.balance_due}:</strong></span><span><strong>${formatCurrency(balance)}</strong></span></div>` : ''}
-      ${balance === 0 ? `<div class="total-row" style="color: #2e7d32; font-weight: bold;"><span><strong>${texts.paid_in_full}</strong></span><span>✓</span></div>` : ''}
+      ${balance > 0 ? `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${texts.balance_due}:</strong></span><span><strong>${formatCurrency(balance)}</strong></span></div>` : ''}
+      ${balance === 0 ? `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${texts.paid_in_full}</strong></span><span>✓</span></div>` : ''}
     </div>
   ` : ''}
 
@@ -173,7 +200,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="footer">
     <div class="footer-line"><strong>${texts.thank_you}</strong></div>
     <div class="footer-line">${texts.keep_receipt}</div>
-    <div style="margin-top: 8px; font-size: 8px; color: #666; text-align: center; line-height: 1.2;">${texts.powered_by}</div>
+    <div style="margin-top: 8px; font-size: 10px; color: #000; font-weight: bold; text-align: center; line-height: 1.2;">${texts.powered_by}</div>
   </div>
 
   <div class="no-print">
@@ -344,7 +371,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div style="padding-top: 20px; margin-bottom: 20px;">
     <table class="totals-table">
       <tr style="background: #e8f5e9;"><td class="total-label" style="background: #e8f5e9;">${texts.paid}:</td><td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paidAmount)}</td></tr>
-      <tr style="background: ${balance > 0 ? '#ffebee' : '#e8f5e9'};"><td class="total-label" style="background: ${balance > 0 ? '#ffebee' : '#e8f5e9'}; color: ${balance > 0 ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">${texts.balance_due}:</td><td class="total-amount" style="background: ${balance > 0 ? '#ffebee' : '#e8f5e9'}; color: ${balance > 0 ? '#d32f2f' : '#2e7d32'}; font-size: 14px; font-weight: bold;">${formatCurrency(Math.max(balance, 0))}</td></tr>
+      <tr><td class="total-label" style="font-weight: bold; color: #000;">${texts.balance_due}:</td><td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.max(balance, 0))}</td></tr>
     </table>
   </div>
   ` : ''}
@@ -360,7 +387,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="footer">
     <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${texts.thank_you}</div>
     <div class="footer-line">${texts.keep_receipt}</div>
-    <div style="margin-top: 15px; font-size: 11px; color: #777; text-align: center; line-height: 1.3;">${texts.powered_by}</div>
+    <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">${texts.powered_by}</div>
   </div>
 
   <div class="no-print">

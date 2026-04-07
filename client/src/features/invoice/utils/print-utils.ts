@@ -210,23 +210,73 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       font-size: 12px;
     }
     
-    .item-row {
-      margin-bottom: 6px;
-      padding-bottom: 3px;
-      border-bottom: 1px dotted #ccc;
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 4px;
+      table-layout: fixed;
     }
     
-    .item-name {
+    .items-table th {
+      border-bottom: 1px dashed #000;
+      padding: 3px 2px;
+      text-align: ${startAlign};
       font-weight: bold;
-      font-size: 13px;
-      margin-bottom: 1px;
+      font-size: 11px;
+      white-space: nowrap;
     }
     
-    .item-details {
-      font-size: 12px;
-      color: #555;
-      display: flex;
-      justify-content: space-between;
+    .items-table th:first-child {
+      width: 18px;
+      text-align: center;
+    }
+    
+    .items-table th:nth-child(3) {
+      width: 50px;
+      text-align: center;
+    }
+    
+    .items-table th:nth-child(4) {
+      width: 32px;
+      text-align: center;
+    }
+    
+    .items-table th:last-child {
+      width: 58px;
+      text-align: ${language === 'ur' ? 'left' : 'right'};
+    }
+    
+    .items-table td {
+      padding: 3px 2px;
+      vertical-align: top;
+      border-bottom: 1px dotted #ddd;
+      font-size: 11px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    
+    .items-table td:first-child {
+      text-align: center;
+    }
+    
+    .items-table td:nth-child(3),
+    .items-table td:nth-child(4) {
+      text-align: center;
+      white-space: nowrap;
+    }
+    
+    .items-table td:last-child {
+      text-align: ${language === 'ur' ? 'left' : 'right'};
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    
+    .items-table .total-row-table td {
+      border-top: 1px dashed #000;
+      border-bottom: none;
+      font-weight: bold;
+      padding-top: 4px;
     }
     
     .totals-section {
@@ -379,17 +429,37 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="items-section">
     <div class="items-header">${urduTexts.items_purchased}</div>
-    ${items.map((item, index) => `
-      <div class="item-row">
-        <div class="item-name">${index + 1}. ${item.name}</div>
-        <div class="item-details">
-          <span>${item.quantity}${item.unit ? ` ${item.unit}` : ''} × ${formatCurrency(item.unitPrice)}</span>
-          <span><strong>${formatCurrency(item.subtotal)}</strong></span>
-        </div>
-      </div>
-    `).join('')}
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>S.r.</th>
+          <th>${urduTexts.product}</th>
+          <th>${urduTexts.price}</th>
+          <th>${urduTexts.qty}</th>
+          <th>${urduTexts.amount}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${item.name}</td>
+          <td>${item.unitPrice.toFixed(2)}</td>
+          <td>${item.quantity}</td>
+          <td>${item.subtotal.toFixed(2)}</td>
+        </tr>
+        `).join('')}
+        <tr class="total-row-table">
+          <td colspan="2">${urduTexts.total}:</td>
+          <td></td>
+          <td>${items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+          <td>${subtotal.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
   
+  ${(discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0) ? `
   <div class="totals-section">
     <div class="total-row">
       <span>${urduTexts.subtotal}:</span>
@@ -424,33 +494,52 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <span>${formatCurrency(total)}</span>
     </div>
   </div>
+  ` : `
+  <div class="totals-section">
+    <div class="total-row total-final">
+      <span>${urduTexts.total}:</span>
+      <span>${formatCurrency(total)}</span>
+    </div>
+  </div>
+  `}
   
   ${type !== 'pending' ? `
     <div class="payment-section">
-      <div class="total-row" style="font-size: 13px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px;">
-        <span>${urduTexts.current_invoice}:</span>
-        <span>${formatCurrency(total)}</span>
-      </div>
       ${(hasPrevious && customerId !== 'walk-in') ? `
-      <div class="total-row" style="font-size: 12px; color: #666; margin-bottom: 3px;">
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.previous_balance}:</span>
-        <span style="color: ${previousBalance > 0 ? '#d32f2f' : previousBalance < 0 ? '#2e7d32' : '#666'}">
-          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
-        </span>
+        <span style="font-weight: bold;">${formatCurrency(Math.abs(previousBalance))}</span>
       </div>
-      ` : ''}
-      <div class="total-row" style="font-size: 14px; font-weight: bold; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #d32f2f;">
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
+        <span>${urduTexts.current_invoice}:</span>
+        <span style="font-weight: bold;">${formatCurrency(currentInvoice)}</span>
+      </div>
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
+        <span>${urduTexts.total_receivable}:</span>
+        <span style="font-weight: bold;">${formatCurrency(totalWithPrev)}</span>
+      </div>
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
+        <span>${urduTexts.customer_receipt}:</span>
+        <span style="font-weight: bold;">${formatCurrency(paid)}</span>
+      </div>
+      <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
         <span>${urduTexts.net_balance}:</span>
-        <span>${formatCurrency(totalWithPrev)}</span>
+        <span>${formatCurrency(balanceDue)}</span>
       </div>
-      <div class="total-row" style="margin-bottom: 3px;">
+      ` : `
+      <div class="total-row" style="font-size: 13px; font-weight: bold; margin-bottom: 3px;">
+        <span>${urduTexts.current_invoice}:</span>
+        <span>${formatCurrency(currentInvoice)}</span>
+      </div>
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.paid}:</span>
-        <span class="highlight">${formatCurrency(paid)}</span>
+        <span>${formatCurrency(paid)}</span>
       </div>
-      <div class="total-row" style="color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">
-        <span><strong>${urduTexts.balance_due}:</strong></span>
-        <span><strong>${formatCurrency(balanceDue)}</strong></span>
+      <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
+        <span>${urduTexts.balance_due}:</span>
+        <span>${formatCurrency(balanceDue)}</span>
       </div>
+      `}
     </div>
   ` : ''}
   
@@ -471,7 +560,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     <div class="footer-line"><strong>${urduTexts.thank_you}</strong></div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
     <div class="footer-line">${urduTexts.visit_again}</div>
-    <div style="margin-top: 8px; font-size: 8px; color: #666; text-align: center; line-height: 1.2;">
+    <div style="margin-top: 8px; font-size: 10px; color: #000; font-weight: bold; text-align: center; line-height: 1.2;">
       ${urduTexts.powered_by}
     </div>
   </div>
@@ -945,7 +1034,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       ${type === 'credit' && dueDate ? `
       <div class="info-row">
         <span class="info-label">${urduTexts.due_date}:</span>
-        <span><strong style="color: #d32f2f;">${formatDisplayDate(dueDate)}</strong></span>
+        <span><strong style="color: #000;">${formatDisplayDate(dueDate)}</strong></span>
       </div>
       ` : ''}
     </div>
@@ -1023,29 +1112,29 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   ${type !== 'pending' ? `
   <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
     <table class="totals-table" style="width: 400px;">
-      <tr style="background: #e3f2fd;">
-        <td class="total-label" style="background: #e3f2fd; font-weight: bold;">${urduTexts.current_invoice}:</td>
-        <td class="total-amount" style="background: #e3f2fd; font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
+      <tr>
+        <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: ${previousBalance > 0 ? '#d32f2f' : previousBalance < 0 ? '#2e7d32' : '#666'}; font-size: 13px;">
+        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 13px;">
           ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
       ` : ''}
-      <tr style="background: #fff3e0; border-top: 2px solid #d32f2f;">
-        <td class="total-label" style="background: #fff3e0; font-weight: bold;">کل رقم:</td>
-        <td class="total-amount" style="background: #fff3e0; font-size: 14px; font-weight: bold; color: #d32f2f;">${formatCurrency(totalWithPrev)}</td>
+      <tr style="border-top: 2px solid #000;">
+        <td class="total-label" style="font-weight: bold;">${urduTexts.total_receivable || 'کل رقم'}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(totalWithPrev)}</td>
       </tr>
-      <tr style="background: #e8f5e9;">
-        <td class="total-label" style="background: #e8f5e9;">${urduTexts.amount_paid}:</td>
-        <td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
+      <tr>
+        <td class="total-label">${urduTexts.amount_paid}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
       </tr>
-      <tr style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'};">
-        <td class="total-label" style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'}; color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-weight: bold;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="background: ${((totalWithPrev - paid) > 0) ? '#ffebee' : '#e8f5e9'}; color: ${((totalWithPrev - paid) > 0) ? '#d32f2f' : '#2e7d32'}; font-size: 14px; font-weight: bold;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
+      <tr>
+        <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
     </table>
   </div>
@@ -1068,7 +1157,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="footer">
     <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
-    <div style="margin-top: 15px; font-size: 11px; color: #777; text-align: center; line-height: 1.3;">
+    <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">
       ${urduTexts.powered_by}
     </div>
   </div>

@@ -142,8 +142,8 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     <div class="total-row total-final"><span>${labels.total_charges}:</span><span>${fmtAmt(charges)}</span></div>
     <div class="total-row" style="margin-top: 3px;"><span>${labels.advance_paid}:</span><span class="highlight">${fmtAmt(advanceAmount)}</span></div>
     ${balance > 0
-      ? `<div class="total-row" style="color: #d32f2f; font-weight: bold;"><span><strong>${labels.balance_due}:</strong></span><span><strong>${fmtAmt(balance)}</strong></span></div>`
-      : `<div class="total-row" style="color: #2e7d32; font-weight: bold;"><span><strong>✓ ${labels.fully_paid}</strong></span><span></span></div>`
+      ? `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${labels.balance_due}:</strong></span><span><strong>${fmtAmt(balance)}</strong></span></div>`
+      : `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>✓ ${labels.fully_paid}</strong></span><span></span></div>`
     }
   </div>
 
@@ -156,7 +156,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>
     <div class="footer-line">${labels.keep_receipt}</div>
     ${companyPhone ? `<div class="footer-line">${labels.contact}: ${companyPhone}</div>` : ''}
-    <div style="margin-top: 8px; font-size: 8px; color: #666; text-align: center; line-height: 1.2;">${labels.powered_by}</div>
+    <div style="margin-top: 8px; font-size: 10px; color: #000; font-weight: bold; text-align: center; line-height: 1.2;">${labels.powered_by}</div>
   </div>
 
   <div class="no-print">
