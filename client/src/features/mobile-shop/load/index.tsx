@@ -65,6 +65,7 @@ type LoadSaleFormState = {
   walletId: string
   walletType: string
   amount: string
+  currentBalance: string
   commissionRate: string
   extraCharge: string
   mobileNumber: string
@@ -99,6 +100,7 @@ const initialSaleForm: LoadSaleFormState = {
   walletId: '',
   walletType: '',
   amount: '0',
+  currentBalance: '',
   commissionRate: '0',
   extraCharge: '0',
   mobileNumber: '',
@@ -205,6 +207,19 @@ export default function LoadManagementPage() {
         walletId: value,
         walletType: selectedWallet?.type || '',
         commissionRate: selectedWallet ? String(selectedWallet.commissionRate ?? 0) : prev.commissionRate,
+        currentBalance: '',
+      }))
+      return
+    }
+    if (field === 'currentBalance') {
+      const selectedWallet = wallets.find(w => w.id === saleForm.walletId)
+      const walletBalance = Number(selectedWallet?.balance ?? 0)
+      const currentBal = Number(value) || 0
+      const calculatedAmount = walletBalance - currentBal
+      setSaleForm(prev => ({
+        ...prev,
+        currentBalance: value,
+        amount: calculatedAmount > 0 ? String(calculatedAmount) : '0',
       }))
       return
     }
@@ -361,6 +376,7 @@ export default function LoadManagementPage() {
       walletId: wallets.find(w => w.type === t.walletType)?.id || t.walletId || '',
       walletType: t.walletType,
       amount: String(t.amount),
+      currentBalance: '',
       commissionRate: String(t.commissionRate || 0),
       extraCharge: String(t.extraCharge || 0),
       mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
@@ -652,24 +668,31 @@ export default function LoadManagementPage() {
                       </Select>
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='sale-amount'>Load Amount (Rs) *</Label>
-                      <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} />
+                      <Label htmlFor='current-balance'>Current Balance (Rs) - Optional</Label>
+                      <Input id='current-balance' type='number' min='0' step='0.01' placeholder='Enter current wallet balance' value={saleForm.currentBalance} onChange={(e) => handleSaleChange('currentBalance', e.target.value)} />
+                      {saleForm.walletId && (
+                        <p className='text-xs text-muted-foreground'>Wallet Balance: Rs {Number(wallets.find(w => w.id === saleForm.walletId)?.balance ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 2 })}</p>
+                      )}
                     </div>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
+                    <div className='space-y-2'>
+                      <Label htmlFor='sale-amount'>Load Amount (Rs) *</Label>
+                      <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} />
+                    </div>
                     <div className='space-y-2'>
                       <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
                       <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} />
                       <p className='text-xs text-muted-foreground'>Commission Profit: Rs {saleProfit.commissionProfit.toFixed(2)}</p>
                     </div>
+                  </div>
+
+                  <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='extra'>Extra Charges (Rs) - Optional</Label>
                       <Input id='extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={saleForm.extraCharge} onChange={(e) => handleSaleChange('extraCharge', e.target.value)} />
                     </div>
-                  </div>
-
-                  <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='phone'>Customer Phone Number - Optional</Label>
                       <Input id='phone' type='tel' placeholder='e.g., 03001234567 (if known)' value={saleForm.mobileNumber} onChange={(e) => handleSaleChange('mobileNumber', e.target.value)} />
