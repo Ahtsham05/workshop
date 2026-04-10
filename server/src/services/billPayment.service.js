@@ -23,24 +23,54 @@ const refreshOverdueStatuses = async (organizationId, branchId) => {
 };
 
 const syncBillCashEntry = async (billPayment) => {
-  if (billPayment.status !== 'paid') {
-    await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
-    return null;
-  }
-
-  return cashBookService.upsertReferenceEntry({
+  const commonFields = {
     organizationId: billPayment.organizationId,
     branchId: billPayment.branchId,
-    type: 'income',
     source: 'bill_payment',
-    amount: billPayment.totalReceived,
     paymentMethod: billPayment.paymentMethod,
     referenceId: billPayment._id,
     referenceModel: 'BillPayment',
-    description: `Bill: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
-    date: billPayment.paymentDate || billPayment.createdAt,
     createdBy: billPayment.createdBy,
+  };
+
+  // INCOME: total collected from customer (bill amount + service charge)
+  // Created as soon as bill is recorded — customer pays at the counter immediately
+  const incomeEntry = cashBookService.upsertReferenceEntry({
+    ...commonFields,
+    type: 'income',
+    amount: billPayment.totalReceived,
+    date: billPayment.createdAt,
+    description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
   });
+
+  // EXPENSE: bill amount paid to utility company — only when bill is actually paid
+  let expenseEntry;
+  if (billPayment.status === 'paid') {
+    expenseEntry = cashBookService.upsertReferenceEntry({
+      ...commonFields,
+      type: 'expense',
+      amount: billPayment.billAmount,
+      date: billPayment.paymentDate || billPayment.createdAt,
+      description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+    });
+  } else {
+    // Remove expense entry if bill reverted from paid
+    expenseEntry = cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment')
+      .then(() => null);
+    // Re-create only income after deleting all
+    return expenseEntry.then(() =>
+      cashBookService.upsertReferenceEntry({
+        ...commonFields,
+        type: 'income',
+        amount: billPayment.totalReceived,
+        date: billPayment.createdAt,
+        description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+      })
+    );
+  }
+
+  const [income, expense] = await Promise.all([incomeEntry, expenseEntry]);
+  return { income, expense };
 };
 
 const createBillPayment = async (body) => {
@@ -53,6 +83,32 @@ const createBillPayment = async (body) => {
   });
   await syncBillCashEntry(billPayment);
   return billPayment;
+};
+
+const createBillPaymentsBatch = async (body) => {
+  const { companyId, companyName, billType, serviceCharge, dueDate, paymentDate, paymentMethod, bills, organizationId, branchId, createdBy } = body;
+  const results = [];
+  for (const bill of bills) {
+    const singleBody = {
+      organizationId,
+      branchId,
+      createdBy,
+      companyId,
+      companyName,
+      billType,
+      serviceCharge: Number(serviceCharge || 0),
+      dueDate,
+      paymentDate: paymentDate || null,
+      paymentMethod,
+      status: 'pending',
+      billAmount: Number(bill.billAmount),
+      customerName: bill.customerName || 'Walk-in',
+      referenceNumber: bill.referenceNumber || '-',
+    };
+    const created = await createBillPayment(singleBody);
+    results.push(created);
+  }
+  return results;
 };
 
 const queryBillPayments = async (filter, options) => {
@@ -340,6 +396,7 @@ const getDueDateRangeSummary = async ({ organizationId, branchId, dueStartDate, 
 
 module.exports = {
   createBillPayment,
+  createBillPaymentsBatch,
   queryBillPayments,
   getBillPaymentById,
   updateBillPaymentById,

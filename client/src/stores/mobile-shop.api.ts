@@ -155,6 +155,17 @@ export interface CreateBillPaymentInput {
   notes?: string
 }
 
+export interface CreateBillPaymentsBatchInput {
+  companyId: string
+  companyName: string
+  billType: BillType
+  serviceCharge: number
+  dueDate: string
+  paymentDate?: string
+  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
+  bills: { billAmount: number; customerName?: string; referenceNumber?: string }[]
+}
+
 export interface BillPaymentTrendItem {
   _id: string
   billCount: number
@@ -218,8 +229,10 @@ export interface CashBookEntryRecord {
 }
 
 export interface CashBookSummary {
+  openingBalance: number
   totalIncome: number
   totalExpense: number
+  closingBalance: number
 }
 
 export interface CashBookQueryParams {
@@ -464,6 +477,10 @@ export const mobileShopApi = createApi({
       query: (body) => ({ url: '/bill-payments', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
     }),
+    createBillPaymentsBatch: builder.mutation<BillPaymentRecord[], CreateBillPaymentsBatchInput>({
+      query: (body) => ({ url: '/bill-payments/batch', method: 'POST', body }),
+      invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+    }),
     updateBillPayment: builder.mutation<BillPaymentRecord, { id: string; body: Partial<CreateBillPaymentInput> }>({
       query: ({ id, body }) => ({ url: `/bill-payments/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
@@ -539,6 +556,7 @@ export const {
   useDeleteUtilityCompanyMutation,
   useGetBillPaymentsQuery,
   useCreateBillPaymentMutation,
+  useCreateBillPaymentsBatchMutation,
   useUpdateBillPaymentMutation,
   useDeleteBillPaymentMutation,
   useGetBillPaymentReceiptQuery,

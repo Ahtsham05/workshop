@@ -94,8 +94,17 @@ const getBillDueSummary = catchAsync(async (req, res) => {
   res.send(summary);
 });
 
+const createBillPaymentsBatch = catchAsync(async (req, res) => {
+  const result = await billPaymentService.createBillPaymentsBatch({
+    ...req.body,
+    ...getBranchContext(req),
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
 module.exports = {
   createBillPayment,
+  createBillPaymentsBatch,
   getBillPayments,
   getBillPayment,
   updateBillPayment,

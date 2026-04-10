@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -51,6 +51,7 @@ import { MobilePageShell } from '../components/mobile-page-shell'
 import {
   useGetBillPaymentsQuery,
   useCreateBillPaymentMutation,
+  useCreateBillPaymentsBatchMutation,
   useDeleteBillPaymentMutation,
   useUpdateBillPaymentMutation,
   useGetBillPaymentReportQuery,
@@ -60,24 +61,28 @@ import {
   BILL_TYPES,
   type BillPaymentRecord,
   type CreateBillPaymentInput,
+  type CreateBillPaymentsBatchInput,
 } from '@/stores/mobile-shop.api'
 import { openBillReceiptPrintWindow } from './bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type BillFormState = {
+type BillRow = {
+  billAmount: string
   customerName: string
-  billType: string
+  referenceNumber: string
+}
+
+type BatchFormState = {
   companyId: string
   companyName: string
-  referenceNumber: string
-  billAmount: string
+  billType: string
   serviceCharge: string
   dueDate: string
   paymentDate: string
   paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
-  notes: string
+  bills: BillRow[]
 }
 
 type ActiveTab = 'bills' | 'companies'
@@ -96,18 +101,21 @@ const addDays = (d: Date, n: number) => {
   return result
 }
 
-const makeInitialForm = (): BillFormState => ({
+const makeEmptyBillRow = (): BillRow => ({
+  billAmount: '',
   customerName: '',
-  billType: 'electricity',
+  referenceNumber: '',
+})
+
+const makeInitialBatchForm = (): BatchFormState => ({
   companyId: '',
   companyName: '',
-  referenceNumber: '',
-  billAmount: '',
+  billType: 'electricity',
   serviceCharge: '0',
   dueDate: toDateLocal(new Date()),
   paymentDate: toDateLocal(new Date()),
   paymentMethod: 'cash',
-  notes: '',
+  bills: [makeEmptyBillRow()],
 })
 
 const BILL_TYPE_LABELS: Record<string, string> = {
@@ -403,7 +411,7 @@ export default function BillPaymentsPage() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterBillType, setFilterBillType] = useState<string>('all')
-  const [form, setForm] = useState<BillFormState>(makeInitialForm())
+  const [form, setForm] = useState<BatchFormState>(makeInitialBatchForm())
 
   // Due date filter state
   const [dueDatePreset, setDueDatePreset] = useState<DatePreset>('all')
@@ -423,14 +431,16 @@ export default function BillPaymentsPage() {
   if (dueEndDate) billQuery.dueEndDate = dueEndDate
 
   const { data, isLoading } = useGetBillPaymentsQuery(billQuery as any)
-  const [createBill, { isLoading: isCreating }] = useCreateBillPaymentMutation()
+  const [createBatchBills, { isLoading: isCreating }] = useCreateBillPaymentsBatchMutation()
   const [deleteBill, { isLoading: isDeleting }] = useDeleteBillPaymentMutation()
 
   const bills = data?.results ?? []
   const totalPages = data?.totalPages ?? 1
 
-  const totalReceived =
-    parseFloat(form.billAmount || '0') + parseFloat(form.serviceCharge || '0')
+  const svcCharge = parseFloat(form.serviceCharge || '0') || 0
+  const billsTotal = form.bills.reduce((sum, b) => sum + (parseFloat(b.billAmount) || 0), 0)
+  const totalServiceCharge = svcCharge * form.bills.filter((b) => parseFloat(b.billAmount) > 0).length
+  const grandTotal = billsTotal + totalServiceCharge
 
   const handlePresetChange = (preset: DatePreset, start: string, end: string) => {
     setDueDatePreset(preset)
@@ -458,38 +468,75 @@ export default function BillPaymentsPage() {
     }))
   }
 
+  const updateBillRow = useCallback((index: number, field: keyof BillRow, value: string) => {
+    setForm((f) => {
+      const bills = [...f.bills]
+      bills[index] = { ...bills[index], [field]: value }
+      return { ...f, bills }
+    })
+  }, [])
+
+  const addBillRow = useCallback(() => {
+    setForm((f) => ({ ...f, bills: [...f.bills, makeEmptyBillRow()] }))
+  }, [])
+
+  const removeBillRow = useCallback((index: number) => {
+    setForm((f) => {
+      if (f.bills.length <= 1) return f
+      return { ...f, bills: f.bills.filter((_, i) => i !== index) }
+    })
+  }, [])
+
+  const billAmountRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  const handleBillAmountKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const isLast = index === form.bills.length - 1
+    if (isLast) {
+      addBillRow()
+      // Focus new row after state update
+      setTimeout(() => {
+        billAmountRefs.current[index + 1]?.focus()
+      }, 0)
+    } else {
+      billAmountRefs.current[index + 1]?.focus()
+    }
+  }, [form.bills.length, addBillRow])
+
   const handleSubmit = async () => {
-    if (!form.customerName.trim()) return toast.error('Customer name is required')
     if (!form.companyId) return toast.error('Please select a company')
-    if (!form.referenceNumber.trim()) return toast.error('Reference number is required')
-    const billAmt = parseFloat(form.billAmount)
-    if (isNaN(billAmt) || billAmt <= 0) return toast.error('Bill amount must be > 0')
-    const svcCharge = parseFloat(form.serviceCharge)
-    if (isNaN(svcCharge) || svcCharge < 0) return toast.error('Service charge must be ≥ 0')
     if (!form.dueDate) return toast.error('Due date is required')
 
-    const payload: CreateBillPaymentInput = {
-      customerName: form.customerName.trim(),
-      billType: form.billType as CreateBillPaymentInput['billType'],
+    const validBills = form.bills.filter((b) => {
+      const amt = parseFloat(b.billAmount)
+      return !isNaN(amt) && amt > 0
+    })
+
+    if (validBills.length === 0) return toast.error('At least one bill with amount > 0 is required')
+
+    const payload: CreateBillPaymentsBatchInput = {
       companyId: form.companyId,
       companyName: form.companyName,
-      referenceNumber: form.referenceNumber.trim(),
-      billAmount: billAmt,
+      billType: form.billType as CreateBillPaymentsBatchInput['billType'],
       serviceCharge: svcCharge,
       dueDate: form.dueDate,
       paymentDate: form.paymentDate || undefined,
-      status: 'pending',
       paymentMethod: form.paymentMethod,
-      notes: form.notes || undefined,
+      bills: validBills.map((b) => ({
+        billAmount: parseFloat(b.billAmount),
+        customerName: b.customerName || undefined,
+        referenceNumber: b.referenceNumber || undefined,
+      })),
     }
 
     try {
-      await createBill(payload).unwrap()
-      toast.success('Bill recorded as pending')
-      setForm(makeInitialForm())
+      await createBatchBills(payload).unwrap()
+      toast.success(`${validBills.length} bill(s) recorded as pending`)
+      setForm(makeInitialBatchForm())
       setDialogOpen(false)
     } catch {
-      toast.error('Failed to record bill')
+      toast.error('Failed to record bills')
     }
   }
 
@@ -665,138 +712,176 @@ export default function BillPaymentsPage() {
       {/* ── Mark as Paid Dialog ── */}
       <MarkPaidDialog bill={markPaidTarget} onClose={() => setMarkPaidTarget(null)} />
 
-      {/* ── New Bill Dialog ── */}
+      {/* ── New Bill Dialog (Multi-bill) ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-lg'>
+        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'>
           <DialogHeader>
             <DialogTitle>New Bill Payment</DialogTitle>
           </DialogHeader>
           <div className='space-y-4'>
             {/* Company */}
-            <div>
-              <Label>Company *</Label>
-              <Select value={form.companyId} onValueChange={handleCompanyChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Select utility company' />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeCompanies.length === 0 ? (
-                    <SelectItem value='__none__' disabled>
-                      No companies. Add from Companies tab.
-                    </SelectItem>
-                  ) : (
-                    activeCompanies.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} ({BILL_TYPE_LABELS[c.billType]})
+            <div className='grid gap-4 sm:grid-cols-2'>
+              <div>
+                <Label>Company *</Label>
+                <Select value={form.companyId} onValueChange={handleCompanyChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select utility company' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeCompanies.length === 0 ? (
+                      <SelectItem value='__none__' disabled>
+                        No companies. Add from Companies tab.
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                    ) : (
+                      activeCompanies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({BILL_TYPE_LABELS[c.billType]})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Service Charge per Bill (Rs.)</Label>
+                <Input
+                  type='number'
+                  min='0'
+                  step='1'
+                  value={form.serviceCharge}
+                  onChange={(e) => setForm((f) => ({ ...f, serviceCharge: e.target.value }))}
+                />
+              </div>
             </div>
 
-            {/* Customer Name */}
-            <div>
-              <Label>Customer Name *</Label>
-              <Input
-                placeholder='Customer name'
-                value={form.customerName}
-                onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
-              />
+            <div className='grid gap-4 sm:grid-cols-3'>
+              <div>
+                <Label>Due Date *</Label>
+                <Input
+                  type='date'
+                  value={form.dueDate}
+                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Payment Date</Label>
+                <Input
+                  type='date'
+                  value={form.paymentDate}
+                  onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Payment Method *</Label>
+                <Select
+                  value={form.paymentMethod}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, paymentMethod: v as BatchFormState['paymentMethod'] }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='cash'>Cash</SelectItem>
+                    <SelectItem value='jazzcash'>JazzCash</SelectItem>
+                    <SelectItem value='easypaisa'>Easypaisa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Reference Number */}
-            <div>
-              <Label>Reference Number *</Label>
-              <Input
-                placeholder='Bill reference / consumer number'
-                value={form.referenceNumber}
-                onChange={(e) => setForm((f) => ({ ...f, referenceNumber: e.target.value }))}
-              />
+            {/* Bills rows */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-sm font-semibold'>Bills ({form.bills.length})</Label>
+                <Button type='button' variant='outline' size='sm' onClick={addBillRow}>
+                  <Plus className='mr-1 h-3 w-3' />
+                  Add Bill
+                </Button>
+              </div>
+
+              <div className='rounded-md border'>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className='w-[40px]'>#</TableHead>
+                      <TableHead>Bill Amount (Rs.) *</TableHead>
+                      <TableHead>Customer Name</TableHead>
+                      <TableHead>Ref #</TableHead>
+                      <TableHead className='w-[50px]'></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {form.bills.map((row, i) => (
+                      <TableRow key={i}>
+                        <TableCell className='text-muted-foreground text-xs'>{i + 1}</TableCell>
+                        <TableCell>
+                          <Input
+                            ref={(el) => { billAmountRefs.current[i] = el }}
+                            type='number'
+                            min='0.01'
+                            step='1'
+                            placeholder='0'
+                            className='h-8'
+                            value={row.billAmount}
+                            onChange={(e) => updateBillRow(i, 'billAmount', e.target.value)}
+                            onKeyDown={(e) => handleBillAmountKeyDown(e, i)}
+                            autoFocus={i === 0}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            placeholder='Optional'
+                            className='h-8'
+                            value={row.customerName}
+                            onChange={(e) => updateBillRow(i, 'customerName', e.target.value)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            placeholder='Optional'
+                            className='h-8'
+                            value={row.referenceNumber}
+                            onChange={(e) => updateBillRow(i, 'referenceNumber', e.target.value)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {form.bills.length > 1 && (
+                            <Button
+                              type='button'
+                              size='icon'
+                              variant='ghost'
+                              className='h-7 w-7'
+                              onClick={() => removeBillRow(i)}
+                            >
+                              <Trash2 className='h-3.5 w-3.5 text-destructive' />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
 
-            {/* Bill Amount */}
-            <div>
-              <Label>Bill Amount (Rs.) *</Label>
-              <Input
-                type='number'
-                min='0.01'
-                step='1'
-                placeholder='0'
-                value={form.billAmount}
-                onChange={(e) => setForm((f) => ({ ...f, billAmount: e.target.value }))}
-              />
-            </div>
-
-            {/* Service Charge */}
-            <div>
-              <Label>Service Charge (Rs.) *</Label>
-              <Input
-                type='number'
-                min='0'
-                step='1'
-                value={form.serviceCharge}
-                onChange={(e) => setForm((f) => ({ ...f, serviceCharge: e.target.value }))}
-              />
-            </div>
-
-            {/* Total (read-only) */}
-            <div className='rounded-md bg-muted px-4 py-2 text-sm'>
-              <span className='text-muted-foreground'>Total to Collect: </span>
-              <strong>Rs. {isNaN(totalReceived) ? '0' : totalReceived.toLocaleString()}</strong>
-              <span className='text-green-600 ml-3 text-xs'>
-                (Profit: Rs. {isNaN(parseFloat(form.serviceCharge)) ? '0' : parseFloat(form.serviceCharge).toLocaleString()})
-              </span>
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <Label>Due Date *</Label>
-              <Input
-                type='date'
-                value={form.dueDate}
-                onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-              />
-            </div>
-
-            {/* Payment Date */}
-            <div>
-              <Label>Payment Date</Label>
-              <Input
-                type='date'
-                value={form.paymentDate}
-                onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
-              />
-            </div>
-
-            {/* Payment Method */}
-            <div>
-              <Label>Payment Method *</Label>
-              <Select
-                value={form.paymentMethod}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, paymentMethod: v as BillFormState['paymentMethod'] }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='cash'>Cash</SelectItem>
-                  <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                  <SelectItem value='easypaisa'>Easypaisa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <Label>Notes (optional)</Label>
-              <Input
-                placeholder='Optional notes'
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              />
+            {/* Totals summary */}
+            <div className='rounded-md bg-muted px-4 py-3 text-sm space-y-1'>
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>Bills Total:</span>
+                <strong>Rs. {billsTotal.toLocaleString()}</strong>
+              </div>
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>
+                  Service Charges ({form.bills.filter((b) => parseFloat(b.billAmount) > 0).length} × Rs. {svcCharge}):
+                </span>
+                <strong className='text-green-600'>Rs. {totalServiceCharge.toLocaleString()}</strong>
+              </div>
+              <div className='flex justify-between border-t pt-1'>
+                <span className='font-semibold'>Total to Collect:</span>
+                <strong>Rs. {grandTotal.toLocaleString()}</strong>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -804,7 +889,7 @@ export default function BillPaymentsPage() {
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={isCreating}>
-              Save as Pending
+              Save {form.bills.filter((b) => parseFloat(b.billAmount) > 0).length} Bill(s) as Pending
             </Button>
           </DialogFooter>
         </DialogContent>

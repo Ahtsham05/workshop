@@ -21,6 +21,9 @@ router.get('/due-summary', validate(billPaymentValidation.getBillDueSummary), bi
 router.get('/due-today', billPaymentController.getBillsDueToday);
 router.get('/overdue', billPaymentController.getOverdueBills);
 
+// Batch create
+router.post('/batch', validate(billPaymentValidation.createBillPaymentsBatch), billPaymentController.createBillPaymentsBatch);
+
 // CRUD
 router
   .route('/')

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, NotebookText, Wallet } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, NotebookText, Wallet, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -122,7 +122,14 @@ export default function CashBookPage() {
         </CardContent>
       </Card>
 
-      <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
+      <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+        <StatCard
+          title='Opening Balance'
+          value={summary?.openingBalance || 0}
+          icon={<BookOpen className='h-4 w-4' />}
+          valuePrefix='Rs '
+          description='Balance before selected period'
+        />
         <StatCard
           title='Total Income'
           value={summary?.totalIncome || 0}
@@ -138,11 +145,11 @@ export default function CashBookPage() {
           description='Cash book expense entries'
         />
         <StatCard
-          title='Net Cash Flow'
-          value={(summary?.totalIncome || 0) - (summary?.totalExpense || 0)}
+          title='Closing Balance'
+          value={summary?.closingBalance || 0}
           icon={<Wallet className='h-4 w-4' />}
           valuePrefix='Rs '
-          description='Income minus expense'
+          description='Opening + Income − Expense'
         />
       </div>
 

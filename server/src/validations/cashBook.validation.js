@@ -3,7 +3,7 @@ const Joi = require('joi');
 const getCashBookEntries = {
   query: Joi.object().keys({
     type: Joi.string().valid('income', 'expense'),
-    source: Joi.string().valid('sale', 'load', 'repair', 'purchase', 'expense', 'other'),
+    source: Joi.string().valid('sale', 'load', 'repair', 'purchase', 'expense', 'other', 'sales_return', 'purchase_return', 'bill_payment'),
     paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank', 'card', 'cheque'),
     search: Joi.string(),
     startDate: Joi.date(),

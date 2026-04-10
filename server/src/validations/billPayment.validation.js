@@ -85,8 +85,31 @@ const getBillDueSummary = {
   }),
 };
 
+const createBillPaymentsBatch = {
+  body: Joi.object().keys({
+    companyId: Joi.string().custom(objectId).required(),
+    companyName: Joi.string().required(),
+    billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other').required(),
+    serviceCharge: Joi.number().min(0).required(),
+    dueDate: Joi.date().required(),
+    paymentDate: Joi.date(),
+    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa').required(),
+    bills: Joi.array()
+      .items(
+        Joi.object().keys({
+          billAmount: Joi.number().min(0.01).required(),
+          customerName: Joi.string().allow('').default(''),
+          referenceNumber: Joi.string().allow('').default(''),
+        })
+      )
+      .min(1)
+      .required(),
+  }),
+};
+
 module.exports = {
   createBillPayment,
+  createBillPaymentsBatch,
   getBillPayments,
   updateBillPayment,
   deleteBillPayment,

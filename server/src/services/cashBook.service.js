@@ -80,48 +80,70 @@ const queryEntries = async (filter, options) => {
 };
 
 const getSummary = async (filter = {}) => {
-  const match = {};
+  const baseMatch = {};
 
   if (filter.organizationId) {
-    match.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
+    baseMatch.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
       ? new mongoose.Types.ObjectId(String(filter.organizationId))
       : filter.organizationId;
   }
   if (filter.branchId) {
-    match.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
+    baseMatch.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
       ? new mongoose.Types.ObjectId(String(filter.branchId))
       : filter.branchId;
   }
 
+  // Exclude wallet entries — they are internal transfers that cancel out
+  baseMatch.paymentMethod = { $ne: 'wallet' };
+
+  // Build the date-range match for the selected period
+  const periodMatch = { ...baseMatch };
   if (filter.startDate || filter.endDate) {
-    match.date = {};
+    periodMatch.date = {};
     if (filter.startDate) {
-      match.date.$gte = new Date(filter.startDate);
+      periodMatch.date.$gte = new Date(filter.startDate);
     }
     if (filter.endDate) {
-      match.date.$lte = new Date(filter.endDate);
+      periodMatch.date.$lte = new Date(filter.endDate);
     }
   }
 
-  // Exclude wallet entries — they are internal transfers that cancel out
-  match.paymentMethod = { $ne: 'wallet' };
+  // Build the opening balance match (all entries BEFORE startDate)
+  const openingMatch = { ...baseMatch };
+  if (filter.startDate) {
+    openingMatch.date = { $lt: new Date(filter.startDate) };
+  }
 
-  const [summary] = await CashBookEntry.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: null,
-        totalIncome: {
-          $sum: { $cond: [{ $eq: ['$type', 'income'] }, '$amount', 0] },
-        },
-        totalExpense: {
-          $sum: { $cond: [{ $eq: ['$type', 'expense'] }, '$amount', 0] },
-        },
-      },
+  const aggregateGroup = {
+    _id: null,
+    totalIncome: {
+      $sum: { $cond: [{ $eq: ['$type', 'income'] }, '$amount', 0] },
     },
+    totalExpense: {
+      $sum: { $cond: [{ $eq: ['$type', 'expense'] }, '$amount', 0] },
+    },
+  };
+
+  // Run both aggregations in parallel
+  const [periodResult, openingResult] = await Promise.all([
+    CashBookEntry.aggregate([{ $match: periodMatch }, { $group: aggregateGroup }]),
+    filter.startDate
+      ? CashBookEntry.aggregate([{ $match: openingMatch }, { $group: aggregateGroup }])
+      : Promise.resolve([]),
   ]);
 
-  return summary || { totalIncome: 0, totalExpense: 0 };
+  const period = periodResult[0] || { totalIncome: 0, totalExpense: 0 };
+  const opening = openingResult[0] || { totalIncome: 0, totalExpense: 0 };
+
+  const openingBalance = opening.totalIncome - opening.totalExpense;
+  const closingBalance = openingBalance + period.totalIncome - period.totalExpense;
+
+  return {
+    openingBalance,
+    totalIncome: period.totalIncome,
+    totalExpense: period.totalExpense,
+    closingBalance,
+  };
 };
 
 module.exports = {
