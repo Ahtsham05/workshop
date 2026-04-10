@@ -1,2 +1,6 @@
 client/node_modules
 server/node_modules
+logix-plus-solutions/.next
+logix-plus-solutions/node_modules
+logix-plus-solutions/.env.local
+logix-plus-solutions/.env.development.local
