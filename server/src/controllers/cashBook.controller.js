@@ -18,7 +18,23 @@ const getCashBookSummary = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getOpeningBalance = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const result = await cashBookService.getOpeningBalance(filter);
+  res.send(result);
+});
+
+const setOpeningBalance = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const result = await cashBookService.setOpeningBalance(filter, req.body.amount);
+  res.send(result);
+});
+
 module.exports = {
   getCashBookEntries,
   getCashBookSummary,
+  getOpeningBalance,
+  setOpeningBalance,
 };

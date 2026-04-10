@@ -92,7 +92,7 @@ export function LedgerEntryForm({
       if (['sale', 'debit_note', 'opening_balance'].includes(transactionType)) {
         return { enableDebit: true, enableCredit: false };
       } else if (['payment_received', 'credit_note'].includes(transactionType)) {
-        return { enableDebit: true, enableCredit: true };
+        return { enableDebit: false, enableCredit: true };
       }
     } else {
       // For supplier: purchase/debit_note = credit, payment_made/credit_note = debit

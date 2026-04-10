@@ -94,7 +94,9 @@ const getSummary = async (filter = {}) => {
   }
 
   // Exclude wallet entries — they are internal transfers that cancel out
+  // Exclude opening_balance entries — handled separately below
   baseMatch.paymentMethod = { $ne: 'wallet' };
+  baseMatch.source = { $ne: 'opening_balance' };
 
   // Build the date-range match for the selected period
   const periodMatch = { ...baseMatch };
@@ -124,18 +126,24 @@ const getSummary = async (filter = {}) => {
     },
   };
 
-  // Run both aggregations in parallel
-  const [periodResult, openingResult] = await Promise.all([
+  // Run aggregations + manual opening balance fetch in parallel
+  const manualObFilter = {};
+  if (filter.organizationId) manualObFilter.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId) ? new mongoose.Types.ObjectId(String(filter.organizationId)) : filter.organizationId;
+  if (filter.branchId) manualObFilter.branchId = mongoose.Types.ObjectId.isValid(filter.branchId) ? new mongoose.Types.ObjectId(String(filter.branchId)) : filter.branchId;
+
+  const [periodResult, openingResult, manualObEntry] = await Promise.all([
     CashBookEntry.aggregate([{ $match: periodMatch }, { $group: aggregateGroup }]),
     filter.startDate
       ? CashBookEntry.aggregate([{ $match: openingMatch }, { $group: aggregateGroup }])
       : Promise.resolve([]),
+    CashBookEntry.findOne({ ...manualObFilter, source: 'opening_balance' }),
   ]);
 
   const period = periodResult[0] || { totalIncome: 0, totalExpense: 0 };
   const opening = openingResult[0] || { totalIncome: 0, totalExpense: 0 };
+  const manualOpeningBalance = manualObEntry ? manualObEntry.amount : 0;
 
-  const openingBalance = opening.totalIncome - opening.totalExpense;
+  const openingBalance = manualOpeningBalance + (opening.totalIncome - opening.totalExpense);
   const closingBalance = openingBalance + period.totalIncome - period.totalExpense;
 
   return {
@@ -146,6 +154,40 @@ const getSummary = async (filter = {}) => {
   };
 };
 
+const getOpeningBalance = async (filter = {}) => {
+  const query = { source: 'opening_balance' };
+  if (filter.organizationId) query.organizationId = filter.organizationId;
+  if (filter.branchId) query.branchId = filter.branchId;
+  const entry = await CashBookEntry.findOne(query);
+  return entry ? { amount: entry.amount, id: entry.id } : { amount: 0, id: null };
+};
+
+const setOpeningBalance = async (filter = {}, amount) => {
+  const query = { source: 'opening_balance' };
+  if (filter.organizationId) query.organizationId = filter.organizationId;
+  if (filter.branchId) query.branchId = filter.branchId;
+
+  if (amount === 0) {
+    await CashBookEntry.deleteOne(query);
+    return { amount: 0, id: null };
+  }
+
+  const entry = await CashBookEntry.findOneAndUpdate(
+    query,
+    {
+      ...query,
+      type: 'income',
+      amount,
+      paymentMethod: 'cash',
+      description: 'Opening Balance',
+      // Use epoch so it always precedes all real transactions
+      date: new Date('1900-01-01T00:00:00.000Z'),
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  return { amount: entry.amount, id: entry.id };
+};
+
 module.exports = {
   normalizePaymentMethod,
   createEntry,
@@ -153,4 +195,6 @@ module.exports = {
   deleteEntriesByReference,
   queryEntries,
   getSummary,
+  setOpeningBalance,
+  getOpeningBalance,
 };

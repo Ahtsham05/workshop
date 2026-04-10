@@ -221,7 +221,7 @@ export interface BillPaymentReceipt {
 export interface CashBookEntryRecord {
   id: string
   type: 'income' | 'expense'
-  source: 'sale' | 'load' | 'repair' | 'purchase' | 'expense' | 'other'
+  source: 'sale' | 'load' | 'repair' | 'purchase' | 'expense' | 'other' | 'opening_balance'
   amount: number
   paymentMethod: string
   description?: string
@@ -413,6 +413,14 @@ export const mobileShopApi = createApi({
       },
       providesTags: ['CashBook'],
     }),
+    getOpeningBalance: builder.query<{ amount: number; id: string | null }, void>({
+      query: () => '/cash-book/opening-balance',
+      providesTags: ['CashBook'],
+    }),
+    setOpeningBalance: builder.mutation<{ amount: number; id: string | null }, { amount: number }>({
+      query: (body) => ({ url: '/cash-book/opening-balance', method: 'POST', body }),
+      invalidatesTags: ['CashBook'],
+    }),
     getCashBookSummary: builder.query<CashBookSummary, CashBookQueryParams | void>({
       query: (params) => {
         const searchParams = new URLSearchParams()
@@ -549,6 +557,8 @@ export const {
   useUpdateRepairJobMutation,
   useGetCashBookEntriesQuery,
   useGetCashBookSummaryQuery,
+  useGetOpeningBalanceQuery,
+  useSetOpeningBalanceMutation,
   useDeleteRepairJobMutation,
   useGetUtilityCompaniesQuery,
   useCreateUtilityCompanyMutation,

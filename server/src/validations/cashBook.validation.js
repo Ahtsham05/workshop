@@ -21,7 +21,14 @@ const getCashBookSummary = {
   }),
 };
 
+const setOpeningBalance = {
+  body: Joi.object().keys({
+    amount: Joi.number().min(0).required(),
+  }),
+};
+
 module.exports = {
   getCashBookEntries,
   getCashBookSummary,
+  setOpeningBalance,
 };

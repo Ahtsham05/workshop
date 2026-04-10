@@ -14,4 +14,9 @@ router.route('/').get(validate(cashBookValidation.getCashBookEntries), cashBookC
 
 router.route('/summary').get(validate(cashBookValidation.getCashBookSummary), cashBookController.getCashBookSummary);
 
+router
+  .route('/opening-balance')
+  .get(cashBookController.getOpeningBalance)
+  .post(validate(cashBookValidation.setOpeningBalance), cashBookController.setOpeningBalance);
+
 module.exports = router;
