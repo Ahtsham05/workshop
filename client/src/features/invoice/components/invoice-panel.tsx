@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown } from 'lucide-react'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
 import { toast } from 'sonner'
@@ -70,7 +70,7 @@ export function InvoicePanel({
   updateQuantity,
   removeFromInvoice,
   updateInvoiceType,
-  // updateDiscount,
+  updateDiscount,
   taxRate,
   // setTaxRate,
   customers,
@@ -85,7 +85,7 @@ export function InvoicePanel({
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
-  // const [discountInput, setDiscountInput] = useState('0')
+  const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
@@ -95,6 +95,17 @@ export function InvoicePanel({
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(false)
+
+  // Refs for quantity inputs to focus after product selection
+  const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const itemsScrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll items list when items change
+  useEffect(() => {
+    if (itemsScrollRef.current) {
+      itemsScrollRef.current.scrollTop = itemsScrollRef.current.scrollHeight
+    }
+  }, [invoice.items.length])
 
   // Detect current keyboard language
   const currentKeyboardLanguage = detectCurrentKeyboardLanguage()
@@ -483,13 +494,59 @@ export function InvoicePanel({
     
     setProductSelectOpen('')
     setProductSearchQuery('')
+
+    // Focus the quantity input of the just-selected product
+    setTimeout(() => {
+      const qtyInput = qtyInputRefs.current[itemId]
+      if (qtyInput) {
+        qtyInput.focus()
+        qtyInput.select()
+      }
+    }, 100)
   }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
 
-  // const handleDiscountChange = useCallback((value: string) => {
-  //   setDiscountInput(value)
-  //   const discountAmount = parseFloat(value) || 0
-  //   updateDiscount(discountAmount)
-  // }, [updateDiscount])
+  // Handle Enter key on quantity input to move to next item or add new row
+  const handleQuantityKeyDown = useCallback((e: React.KeyboardEvent, currentItemId: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const currentIndex = invoice.items.findIndex(item => item.id === currentItemId)
+      if (currentIndex === -1) return
+      
+      // Look for the next empty manual entry row
+      const nextEmptyRow = invoice.items.find((item, idx) => idx > currentIndex && item.isManualEntry && !item.productId)
+      if (nextEmptyRow) {
+        // Open its product selector
+        setProductSelectOpen(nextEmptyRow.id)
+      } else {
+        // Add a new empty row and open its product selector
+        const newItemId = `manual-${Date.now()}`
+        setInvoice(prev => ({
+          ...prev,
+          items: [...prev.items, {
+            id: newItemId,
+            productId: '',
+            name: '',
+            image: undefined,
+            quantity: 1,
+            unitPrice: 0,
+            cost: 0,
+            subtotal: 0,
+            profit: 0,
+            isManualEntry: true
+          }]
+        }))
+        setTimeout(() => {
+          setProductSelectOpen(newItemId)
+        }, 150)
+      }
+    }
+  }, [invoice.items, setInvoice])
+
+  const handleDiscountChange = useCallback((value: string) => {
+    setDiscountInput(value)
+    const discountAmount = parseFloat(value) || 0
+    updateDiscount(discountAmount)
+  }, [updateDiscount])
 
   const handlePaidAmountChange = useCallback((value: string) => {
     setPaidAmountInput(value)
@@ -508,15 +565,11 @@ export function InvoicePanel({
       return
     }
 
-    if (invoice.items.length === 0) {
-      toast.error('Please add items to the invoice')
-      return
-    }
+    // Filter out empty auto-added entries (from multi-entry flow)
+    const itemsWithProducts = invoice.items.filter(item => item.productId && item.name)
 
-    // Check if any manual entries don't have a product selected
-    const incompleteItems = invoice.items.filter(item => item.isManualEntry && !item.productId)
-    if (incompleteItems.length > 0) {
-      toast.error(t('select_product_for_manual_entries'))
+    if (itemsWithProducts.length === 0) {
+      toast.error('Please add items to the invoice')
       return
     }
 
@@ -1072,7 +1125,7 @@ export function InvoicePanel({
           </div>
         </CardHeader>
         <CardContent className='p-4'>
-          <div className='space-y-2 max-h-96 overflow-y-auto'>
+          <div ref={itemsScrollRef} className='space-y-2 max-h-96 overflow-y-auto'>
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
@@ -1202,6 +1255,7 @@ export function InvoicePanel({
                         <Minus className='h-3 w-3' />
                       </Button>
                       <Input
+                        ref={(el) => { qtyInputRefs.current[item.id] = el }}
                         type="number"
                         min="1"
                         value={item.quantity}
@@ -1209,6 +1263,7 @@ export function InvoicePanel({
                           const qty = parseInt(e.target.value) || 1
                           updateQuantity(item.id, qty)
                         }}
+                        onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
                         onFocus={(e) => e.target.select()}
                         className='h-6 w-12 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                       />
@@ -1309,31 +1364,19 @@ export function InvoicePanel({
       {/* Totals and Payment */}
       <Card>
         <CardContent className='p-4 space-y-4'>
-          {/* Tax and Discount Controls */}
-          {/* <div className='grid grid-cols-2 gap-4'>
-            <div>
-              <Label htmlFor="taxRate">{t('tax_rate')} (%)</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={taxRate}
-                onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <Label htmlFor="discount">{t('discount')} (Rs)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={discountInput}
-                onChange={(e) => handleDiscountChange(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-          </div> */}
+          {/* Discount Control */}
+          <div>
+            <Label htmlFor="discount">{t('discount')} (Rs)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={discountInput}
+              onChange={(e) => handleDiscountChange(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
 
-          {/* <Separator /> */}
+          <Separator />
 
           {/* Totals Display */}
           <div className='space-y-2'>

@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandList,
 } from '@/components/ui/command'
 import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -67,6 +68,17 @@ export default function PurchasePanel({
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
+
+  // Refs for quantity inputs to focus after product selection
+  const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const itemsScrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll items list when items change
+  useEffect(() => {
+    if (itemsScrollRef.current) {
+      itemsScrollRef.current.scrollTop = itemsScrollRef.current.scrollHeight
+    }
+  }, [purchase.items.length])
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
@@ -198,8 +210,56 @@ export default function PurchasePanel({
       })
       setProductSelectOpen('')
       setProductSearchQuery('')
+      // Focus the quantity input of the just-selected product
+      const productId = product.id || product._id
+      setTimeout(() => {
+        const qtyInput = qtyInputRefs.current[productId]
+        if (qtyInput) {
+          qtyInput.focus()
+          qtyInput.select()
+        }
+      }, 100)
     },
     [setPurchase]
+  )
+
+  // Handle Enter key on quantity/price input to move to next item or add new row
+  const handlePurchaseQuantityKeyDown = useCallback(
+    (e: React.KeyboardEvent, currentIndex: number) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        // Look for the next empty manual entry row
+        const nextEmptyIdx = purchase.items.findIndex((item, idx) => {
+          const pid = item.product.id || (item.product as any)._id
+          return idx > currentIndex && item.isManualEntry && !pid
+        })
+        if (nextEmptyIdx !== -1) {
+          setProductSelectOpen(`manual-${nextEmptyIdx}`)
+        } else {
+          // Add a new empty row and open its product selector
+          setPurchase(prev => ({
+            ...prev,
+            items: [...prev.items, {
+              product: {
+                id: '',
+                _id: '',
+                name: '',
+                price: 0,
+                cost: 0,
+                stockQuantity: 0,
+              } as any,
+              quantity: 1,
+              purchasePrice: 0,
+              isManualEntry: true
+            }]
+          }))
+          setTimeout(() => {
+            setProductSelectOpen(`manual-${purchase.items.length}`)
+          }, 150)
+        }
+      }
+    },
+    [purchase.items, setPurchase]
   )
 
   // Handle save purchase
@@ -212,15 +272,14 @@ export default function PurchasePanel({
         return
       }
 
-      if (purchase.items.length === 0) {
-        toast.error(t('Please add at least one item to the purchase'))
-        return
-      }
+      // Filter out empty manual entries (auto-added rows with no product selected)
+      const validItems = purchase.items.filter((item) => {
+        const pid = item.product.id || (item.product as any)?._id
+        return pid && item.product.name
+      })
 
-      // Check for incomplete manual entries
-      const hasIncompleteItems = purchase.items.some((item) => item.isManualEntry && !item.product.id && !item.product._id)
-      if (hasIncompleteItems) {
-        toast.error(t('Please select products for all items or remove empty rows'))
+      if (validItems.length === 0) {
+        toast.error(t('Please add at least one item to the purchase'))
         return
       }
 
@@ -243,7 +302,7 @@ export default function PurchasePanel({
       // Map to backend format
       const purchaseData = {
         supplier: supplierId,
-        items: purchase.items.map((item) => {
+        items: validItems.map((item) => {
           // Backend uses 'id' property (transformed from _id by toJSON plugin)
           const productId = item.product.id || (item.product as any)._id;
           
@@ -584,7 +643,7 @@ export default function PurchasePanel({
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div ref={itemsScrollRef} className="space-y-2 max-h-96 overflow-y-auto">
             {purchase.items.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 {t('No items added yet')}
@@ -612,14 +671,15 @@ export default function PurchasePanel({
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-0" align="start">
-                          <Command>
+                          <Command shouldFilter={false}>
                             <CommandInput
                               placeholder={t('Search products...')}
                               value={productSearchQuery}
                               onValueChange={setProductSearchQuery}
                             />
                             <CommandEmpty>{t('No products found')}</CommandEmpty>
-                            <CommandGroup className="max-h-64 overflow-auto">
+                            <CommandList className="max-h-64 overflow-y-auto">
+                            <CommandGroup>
                               {products
                                 .filter((product: any) => {
                                   if (!productSearchQuery) return true
@@ -658,6 +718,7 @@ export default function PurchasePanel({
                                   </CommandItem>
                                 ))}
                             </CommandGroup>
+                            </CommandList>
                           </Command>
                         </PopoverContent>
                       </Popover>
@@ -716,10 +777,12 @@ export default function PurchasePanel({
                         <Minus className="h-3 w-3" />
                       </Button>
                       <Input
+                        ref={(el) => { qtyInputRefs.current[productId] = el }}
                         type="number"
                         min="1"
                         value={item.quantity}
                         onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
+                        onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
                         onFocus={(e) => e.target.select()}
                         className="h-6 w-12 text-center text-xs p-1"
                       />
