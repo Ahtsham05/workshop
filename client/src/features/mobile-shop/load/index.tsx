@@ -1056,7 +1056,7 @@ export default function LoadManagementPage() {
                     <div>
                       <div className='flex items-center justify-between mb-3'>
                         <Label className='text-base font-semibold'>Entries ({bulkWithdrawalForm.entries.length})</Label>
-                        <Button type='button' size='sm' variant='outline' onClick={addBulkEntry}>
+                        <Button type='button' size='sm' variant='outline' onClick={() => addBulkEntry()}>
                           <Plus className='mr-1 h-4 w-4' /> Add Row
                         </Button>
                       </div>
