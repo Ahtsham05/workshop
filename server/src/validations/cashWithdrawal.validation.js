@@ -53,8 +53,31 @@ const deleteCashWithdrawal = {
   }),
 };
 
+const createCashWithdrawalsBatch = {
+  body: Joi.object().keys({
+    walletId: Joi.string().required(),
+    walletType: Joi.string().trim().required(),
+    transactionType: Joi.string().valid('withdrawal', 'deposit').default('withdrawal'),
+    commissionRate: Joi.number().min(0).max(100).default(0),
+    date: Joi.date().default(() => new Date()),
+    entries: Joi.array()
+      .items(
+        Joi.object().keys({
+          amount: Joi.number().min(0.01).required(),
+          customerName: Joi.string().trim().allow(''),
+          customerNumber: Joi.string().trim().allow(''),
+          extraCharge: Joi.number().min(0).default(0),
+          notes: Joi.string().allow(''),
+        })
+      )
+      .min(1)
+      .required(),
+  }),
+};
+
 module.exports = {
   createCashWithdrawal,
+  createCashWithdrawalsBatch,
   getCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,

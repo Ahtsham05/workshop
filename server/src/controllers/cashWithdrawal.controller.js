@@ -25,6 +25,14 @@ const updateCashWithdrawal = catchAsync(async (req, res) => {
   res.send(withdrawal);
 });
 
+const createCashWithdrawalsBatch = catchAsync(async (req, res) => {
+  const result = await cashWithdrawalService.createCashWithdrawalsBatch({
+    ...req.body,
+    ...getBranchContext(req),
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
 const deleteCashWithdrawal = catchAsync(async (req, res) => {
   await cashWithdrawalService.deleteCashWithdrawal(req.params.withdrawalId);
   res.status(httpStatus.NO_CONTENT).send();
@@ -32,6 +40,7 @@ const deleteCashWithdrawal = catchAsync(async (req, res) => {
 
 module.exports = {
   createCashWithdrawal,
+  createCashWithdrawalsBatch,
   getCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,

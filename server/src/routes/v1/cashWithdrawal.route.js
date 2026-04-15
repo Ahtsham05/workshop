@@ -16,6 +16,10 @@ router
   .get(validate(cashWithdrawalValidation.getCashWithdrawals), cashWithdrawalController.getCashWithdrawals);
 
 router
+  .route('/batch')
+  .post(validate(cashWithdrawalValidation.createCashWithdrawalsBatch), cashWithdrawalController.createCashWithdrawalsBatch);
+
+router
   .route('/:withdrawalId')
   .patch(validate(cashWithdrawalValidation.updateCashWithdrawal), cashWithdrawalController.updateCashWithdrawal)
   .delete(validate(cashWithdrawalValidation.deleteCashWithdrawal), cashWithdrawalController.deleteCashWithdrawal);

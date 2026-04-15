@@ -240,9 +240,35 @@ const deleteCashWithdrawal = async (withdrawalId) => {
   return withdrawal;
 };
 
+const createCashWithdrawalsBatch = async (body) => {
+  const { walletId, walletType, transactionType, commissionRate, date, entries, organizationId, branchId, createdBy } = body;
+  const results = [];
+  for (const entry of entries) {
+    const singleBody = {
+      organizationId,
+      branchId,
+      createdBy,
+      walletId,
+      walletType,
+      transactionType,
+      commissionRate: Number(commissionRate || 0),
+      amount: Number(entry.amount),
+      customerName: entry.customerName || undefined,
+      customerNumber: entry.customerNumber || undefined,
+      extraCharge: Number(entry.extraCharge || 0),
+      notes: entry.notes || undefined,
+      date: date || new Date(),
+    };
+    const created = await createCashWithdrawal(singleBody);
+    results.push(created);
+  }
+  return results;
+};
+
 module.exports = {
   calculateWithdrawalProfit,
   createCashWithdrawal,
+  createCashWithdrawalsBatch,
   queryCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,

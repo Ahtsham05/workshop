@@ -90,6 +90,23 @@ export interface CreateCashWithdrawalInput {
   date: string
 }
 
+export interface CashWithdrawalBatchEntry {
+  amount: number
+  customerName?: string
+  customerNumber?: string
+  extraCharge?: number
+  notes?: string
+}
+
+export interface CreateCashWithdrawalsBatchInput {
+  walletId: string
+  walletType: string
+  transactionType: 'withdrawal' | 'deposit'
+  commissionRate: number
+  date: string
+  entries: CashWithdrawalBatchEntry[]
+}
+
 export interface RepairJobRecord {
   id: string
   customerName: string
@@ -356,6 +373,14 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    createCashWithdrawalsBatch: builder.mutation<CashWithdrawalRecord[], CreateCashWithdrawalsBatchInput>({
+      query: (body) => ({
+        url: '/cash-withdrawals/batch',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
     updateCashWithdrawal: builder.mutation<CashWithdrawalRecord, { id: string; body: Partial<CreateCashWithdrawalInput> }>({
       query: ({ id, body }) => ({
         url: `/cash-withdrawals/${id}`,
@@ -550,6 +575,7 @@ export const {
   useDeleteLoadTransactionMutation,
   useGetCashWithdrawalsQuery,
   useCreateCashWithdrawalMutation,
+  useCreateCashWithdrawalsBatchMutation,
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
   useGetRepairJobsQuery,

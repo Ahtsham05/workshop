@@ -39,6 +39,7 @@ import {
   useCreateLoadPurchaseMutation,
   useGetLoadPurchasesQuery,
   useCreateCashWithdrawalMutation,
+  useCreateCashWithdrawalsBatchMutation,
   useGetCashWithdrawalsQuery,
   useUpdateLoadPurchaseMutation,
   useDeleteLoadPurchaseMutation,
@@ -47,7 +48,7 @@ import {
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
 } from '@/stores/mobile-shop.api'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 type PurchaseFormState = {
@@ -84,6 +85,40 @@ type WithdrawalFormState = {
   notes: string
   date: string
 }
+
+type BulkWithdrawalEntry = {
+  amount: string
+  customerName: string
+  customerNumber: string
+  extraCharge: string
+  notes: string
+}
+
+type BulkWithdrawalFormState = {
+  walletId: string
+  walletType: string
+  transactionType: 'withdrawal' | 'deposit'
+  commissionRate: string
+  date: string
+  entries: BulkWithdrawalEntry[]
+}
+
+const makeEmptyBulkEntry = (): BulkWithdrawalEntry => ({
+  amount: '',
+  customerName: '',
+  customerNumber: '',
+  extraCharge: '0',
+  notes: '',
+})
+
+const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
+  walletId: '',
+  walletType: '',
+  transactionType: 'withdrawal',
+  commissionRate: '0',
+  date: format(new Date(), 'yyyy-MM-dd'),
+  entries: [makeEmptyBulkEntry()],
+})
 
 const initialPurchaseForm: PurchaseFormState = {
   walletId: '',
@@ -124,6 +159,8 @@ export default function LoadManagementPage() {
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchaseForm)
   const [saleForm, setSaleForm] = useState<LoadSaleFormState>(initialSaleForm)
   const [withdrawalForm, setWithdrawalForm] = useState<WithdrawalFormState>(initialWithdrawalForm)
+  const [withdrawalEntryMode, setWithdrawalEntryMode] = useState<'single' | 'bulk'>('single')
+  const [bulkWithdrawalForm, setBulkWithdrawalForm] = useState<BulkWithdrawalFormState>(makeInitialBulkWithdrawalForm)
 
   // Pagination state for each history table
   const [purchasePage, setPurchasePage] = useState(1)
@@ -136,6 +173,7 @@ export default function LoadManagementPage() {
   const [createLoadPurchase, { isLoading: isSavingPurchase }] = useCreateLoadPurchaseMutation()
   const [createLoadTransaction, { isLoading: isSavingSale }] = useCreateLoadTransactionMutation()
   const [createCashWithdrawal, { isLoading: isSavingWithdrawal }] = useCreateCashWithdrawalMutation()
+  const [createCashWithdrawalsBatch, { isLoading: isSavingBulk }] = useCreateCashWithdrawalsBatchMutation()
   const [updateLoadPurchase] = useUpdateLoadPurchaseMutation()
   const [deleteLoadPurchase] = useDeleteLoadPurchaseMutation()
   const [updateLoadTransaction] = useUpdateLoadTransactionMutation()
@@ -184,6 +222,23 @@ export default function LoadManagementPage() {
     const commissionProfit = (amount * commissionRate) / 100
     return { commissionProfit, totalProfit: commissionProfit + extraCharge }
   }, [withdrawalForm.amount, withdrawalForm.commissionRate, withdrawalForm.extraCharge])
+
+  const bulkWithdrawalTotals = useMemo(() => {
+    const commissionRate = Number(bulkWithdrawalForm.commissionRate) || 0
+    let totalAmount = 0
+    let totalProfit = 0
+    let validCount = 0
+    for (const e of bulkWithdrawalForm.entries) {
+      const amount = Number(e.amount) || 0
+      const extraCharge = Number(e.extraCharge) || 0
+      if (amount > 0) {
+        totalAmount += amount
+        totalProfit += (amount * commissionRate) / 100 + extraCharge
+        validCount++
+      }
+    }
+    return { totalAmount, totalProfit, validCount }
+  }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate])
 
   const handlePurchaseChange = (field: keyof PurchaseFormState, value: string) => {
     if (field === 'walletId') {
@@ -325,6 +380,107 @@ export default function LoadManagementPage() {
       setWithdrawalForm(initialWithdrawalForm)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save cash withdrawal')
+    }
+  }
+
+  // ─── Bulk Withdrawal Handlers ───
+  const handleBulkWithdrawalWalletChange = (walletId: string) => {
+    const selectedWallet = wallets.find(w => w.id === walletId)
+    setBulkWithdrawalForm(prev => {
+      const rate = prev.transactionType === 'withdrawal'
+        ? String(selectedWallet?.withdrawalCommissionRate ?? 0)
+        : String(selectedWallet?.depositCommissionRate ?? 0)
+      return {
+        ...prev,
+        walletId,
+        walletType: selectedWallet?.type || '',
+        commissionRate: selectedWallet ? rate : prev.commissionRate,
+      }
+    })
+  }
+
+  const handleBulkWithdrawalTypeChange = (transactionType: 'withdrawal' | 'deposit') => {
+    const selectedWallet = wallets.find(w => w.id === bulkWithdrawalForm.walletId)
+    const rate = transactionType === 'withdrawal'
+      ? String(selectedWallet?.withdrawalCommissionRate ?? 0)
+      : String(selectedWallet?.depositCommissionRate ?? 0)
+    setBulkWithdrawalForm(prev => ({
+      ...prev,
+      transactionType,
+      commissionRate: selectedWallet ? rate : prev.commissionRate,
+    }))
+  }
+
+  const handleBulkEntryChange = (index: number, field: keyof BulkWithdrawalEntry, value: string) => {
+    setBulkWithdrawalForm(prev => {
+      const entries = [...prev.entries]
+      entries[index] = { ...entries[index], [field]: value }
+      return { ...prev, entries }
+    })
+  }
+
+  const addBulkEntry = (focusIndex?: number) => {
+    setBulkWithdrawalForm(prev => ({ ...prev, entries: [...prev.entries, makeEmptyBulkEntry()] }))
+    const newIdx = focusIndex ?? -1
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>(`[data-bulk-amount="${newIdx === -1 ? '' : newIdx}"]`)
+      el?.focus()
+    }, 30)
+  }
+
+  const handleBulkEntryKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const isLastRow = idx === bulkWithdrawalForm.entries.length - 1
+      if (isLastRow) {
+        setBulkWithdrawalForm(prev => ({ ...prev, entries: [...prev.entries, makeEmptyBulkEntry()] }))
+        setTimeout(() => {
+          const el = document.querySelector<HTMLInputElement>(`[data-bulk-amount="${idx + 1}"]`)
+          el?.focus()
+        }, 30)
+      } else {
+        const el = document.querySelector<HTMLInputElement>(`[data-bulk-amount="${idx + 1}"]`)
+        el?.focus()
+      }
+    }
+  }
+
+  const removeBulkEntry = (index: number) => {
+    setBulkWithdrawalForm(prev => ({
+      ...prev,
+      entries: prev.entries.filter((_, i) => i !== index),
+    }))
+  }
+
+  const handleBulkWithdrawalSubmit = async () => {
+    if (!bulkWithdrawalForm.walletId) { toast.error('Please select a wallet'); return }
+    const validEntries = bulkWithdrawalForm.entries.filter(e => parseFloat(e.amount) > 0)
+    if (validEntries.length === 0) { toast.error('Enter at least one valid amount'); return }
+    try {
+      await createCashWithdrawalsBatch({
+        walletId: bulkWithdrawalForm.walletId,
+        walletType: bulkWithdrawalForm.walletType,
+        transactionType: bulkWithdrawalForm.transactionType,
+        commissionRate: Number(bulkWithdrawalForm.commissionRate) || 0,
+        date: new Date(bulkWithdrawalForm.date).toISOString(),
+        entries: validEntries.map(e => ({
+          amount: Number(e.amount),
+          customerName: e.customerName.trim() || undefined,
+          customerNumber: e.customerNumber.trim() || undefined,
+          extraCharge: Number(e.extraCharge) || 0,
+          notes: e.notes.trim() || undefined,
+        })),
+      }).unwrap()
+      toast.success(`${validEntries.length} ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'withdrawal' : 'deposit'} entries saved!`)
+      // Preserve wallet, type, commission and date — only clear entries
+      setBulkWithdrawalForm(prev => ({ ...prev, entries: [makeEmptyBulkEntry()] }))
+      // Focus first amount field of the fresh row
+      setTimeout(() => {
+        const el = document.querySelector<HTMLInputElement>('[data-bulk-amount="0"]')
+        el?.focus()
+      }, 50)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to save entries')
     }
   }
 
@@ -801,13 +957,229 @@ export default function LoadManagementPage() {
           <div className='grid gap-6'>
             <Card className='border-2 border-orange-200'>
               <CardHeader>
-                <CardTitle className='text-orange-700'>💸 {editingWithdrawal ? 'Edit' : 'Cash'} Withdrawal / Transfer</CardTitle>
-                <p className='text-sm text-muted-foreground mt-1'>
-                  Select type: <strong>Withdrawal</strong> = customer gets cash (wallet ↑, you earn 2%) | <strong>Deposit</strong> = customer sends via wallet (wallet ↓, you earn 1%)
-                </p>
+                <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
+                  <div>
+                    <CardTitle className='text-orange-700'>💸 {editingWithdrawal ? 'Edit' : 'Cash'} Withdrawal / Transfer</CardTitle>
+                    <p className='text-sm text-muted-foreground mt-1'>
+                      Select type: <strong>Withdrawal</strong> = customer gets cash (wallet ↑, you earn 2%) | <strong>Deposit</strong> = customer sends via wallet (wallet ↓, you earn 1%)
+                    </p>
+                  </div>
+                  {!editingWithdrawal && (
+                    <div className='flex rounded-lg border overflow-hidden shrink-0'>
+                      <button
+                        type='button'
+                        onClick={() => setWithdrawalEntryMode('single')}
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${withdrawalEntryMode === 'single' ? 'bg-orange-500 text-white' : 'bg-white text-muted-foreground hover:bg-muted'}`}
+                      >
+                        Single Entry
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => setWithdrawalEntryMode('bulk')}
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${withdrawalEntryMode === 'bulk' ? 'bg-orange-500 text-white' : 'bg-white text-muted-foreground hover:bg-muted'}`}
+                      >
+                        ⚡ Bulk Entry
+                      </button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={editingWithdrawal ? handleUpdateWithdrawal : handleWithdrawalSubmit}>
+                {withdrawalEntryMode === 'bulk' && !editingWithdrawal ? (
+                  /* ─── BULK ENTRY FORM ─── */
+                  <div className='space-y-6'>
+                    {/* Transaction Type */}
+                    <div className='grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg'>
+                      <button
+                        type='button'
+                        onClick={() => handleBulkWithdrawalTypeChange('withdrawal')}
+                        className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'bg-white shadow text-orange-700 border border-orange-200' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        💸 Withdrawal (Customer gets cash)
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => handleBulkWithdrawalTypeChange('deposit')}
+                        className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${bulkWithdrawalForm.transactionType === 'deposit' ? 'bg-white shadow text-purple-700 border border-purple-200' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        📲 Deposit (Customer sends via wallet)
+                      </button>
+                    </div>
+
+                    {bulkWithdrawalForm.transactionType === 'withdrawal' ? (
+                      <div className='rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm text-orange-800'>
+                        <strong>Withdrawal:</strong> Customer sends digital money → your wallet <strong>INCREASES</strong> → you give cash. Commission collected from customer.
+                      </div>
+                    ) : (
+                      <div className='rounded-lg bg-purple-50 border border-purple-200 p-3 text-sm text-purple-800'>
+                        <strong>Deposit/Send:</strong> Customer gives you cash → you send digital → your wallet <strong>DECREASES</strong>. Commission collected from customer.
+                      </div>
+                    )}
+
+                    {/* Shared fields */}
+                    <div className='grid gap-4 md:grid-cols-3'>
+                      <div className='space-y-2'>
+                        <Label>Select Wallet *</Label>
+                        <Select value={bulkWithdrawalForm.walletId} onValueChange={handleBulkWithdrawalWalletChange}>
+                          <SelectTrigger><SelectValue placeholder='Choose wallet...' /></SelectTrigger>
+                          <SelectContent>
+                            {wallets.length === 0 ? (
+                              <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
+                            ) : wallets.map((wallet) => (
+                              <SelectItem key={wallet.id} value={wallet.id}>
+                                {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className='space-y-2'>
+                        <Label>Commission Rate (%) - Shared</Label>
+                        <Input
+                          type='number' min='0' max='100' step='0.01'
+                          placeholder='e.g., 2'
+                          value={bulkWithdrawalForm.commissionRate}
+                          onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, commissionRate: e.target.value }))}
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label>Date</Label>
+                        <Input
+                          type='date'
+                          value={bulkWithdrawalForm.date}
+                          onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, date: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Entries table */}
+                    <div>
+                      <div className='flex items-center justify-between mb-3'>
+                        <Label className='text-base font-semibold'>Entries ({bulkWithdrawalForm.entries.length})</Label>
+                        <Button type='button' size='sm' variant='outline' onClick={addBulkEntry}>
+                          <Plus className='mr-1 h-4 w-4' /> Add Row
+                        </Button>
+                      </div>
+
+                      <div className='overflow-x-auto'>
+                        <table className='w-full text-sm border-collapse'>
+                          <thead>
+                            <tr className='border-b'>
+                              <th className='text-left p-2 w-8 text-muted-foreground font-medium'>#</th>
+                              <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Amount (Rs) *</th>
+                              <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Customer Name</th>
+                              <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Account / Phone</th>
+                              <th className='text-left p-2 min-w-[110px] text-muted-foreground font-medium'>Extra Charge</th>
+                              <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Notes</th>
+                              <th className='p-2 w-10'></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulkWithdrawalForm.entries.map((entry, idx) => (
+                              <tr key={idx} className='border-b last:border-b-0'>
+                                <td className='p-2 text-muted-foreground'>{idx + 1}</td>
+                                <td className='p-2'>
+                                  <Input
+                                    data-bulk-amount={idx}
+                                    type='number' min='0' step='0.01'
+                                    placeholder='0'
+                                    value={entry.amount}
+                                    onChange={(e) => handleBulkEntryChange(idx, 'amount', e.target.value)}
+                                    onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                    className='h-8'
+                                  />
+                                </td>
+                                <td className='p-2'>
+                                  <Input
+                                    placeholder='Optional'
+                                    value={entry.customerName}
+                                    onChange={(e) => handleBulkEntryChange(idx, 'customerName', e.target.value)}
+                                    onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                    className='h-8'
+                                  />
+                                </td>
+                                <td className='p-2'>
+                                  <Input
+                                    placeholder='Optional'
+                                    value={entry.customerNumber}
+                                    onChange={(e) => handleBulkEntryChange(idx, 'customerNumber', e.target.value)}
+                                    onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                    className='h-8'
+                                  />
+                                </td>
+                                <td className='p-2'>
+                                  <Input
+                                    type='number' min='0' step='0.01'
+                                    placeholder='0'
+                                    value={entry.extraCharge}
+                                    onChange={(e) => handleBulkEntryChange(idx, 'extraCharge', e.target.value)}
+                                    onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                    className='h-8'
+                                  />
+                                </td>
+                                <td className='p-2'>
+                                  <Input
+                                    placeholder='Optional'
+                                    value={entry.notes}
+                                    onChange={(e) => handleBulkEntryChange(idx, 'notes', e.target.value)}
+                                    onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                    className='h-8'
+                                  />
+                                </td>
+                                <td className='p-2'>
+                                  {bulkWithdrawalForm.entries.length > 1 && (
+                                    <Button
+                                      type='button' size='icon' variant='ghost'
+                                      className='h-8 w-8 text-red-500 hover:text-red-600'
+                                      onClick={() => removeBulkEntry(idx)}
+                                    >
+                                      <Trash2 className='h-4 w-4' />
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    <Card className='bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200'>
+                      <CardContent className='pt-4 pb-3'>
+                        <div className='grid grid-cols-3 gap-4 text-center'>
+                          <div>
+                            <p className='text-xs text-muted-foreground'>Valid Entries</p>
+                            <p className='text-xl font-bold text-orange-700'>{bulkWithdrawalTotals.validCount}</p>
+                          </div>
+                          <div>
+                            <p className='text-xs text-muted-foreground'>
+                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'Total Received' : 'Total Sent'}
+                            </p>
+                            <p className={`text-xl font-bold ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}`}>
+                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} Rs {bulkWithdrawalTotals.totalAmount.toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className='text-xs text-muted-foreground'>Your Total Profit</p>
+                            <p className='text-xl font-bold text-orange-700'>Rs {bulkWithdrawalTotals.totalProfit.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Button
+                      size='lg'
+                      onClick={handleBulkWithdrawalSubmit}
+                      disabled={isSavingBulk || !bulkWithdrawalForm.walletId || bulkWithdrawalTotals.validCount === 0}
+                      className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'
+                    >
+                      {isSavingBulk ? 'Saving...' : `✓ Save ${bulkWithdrawalTotals.validCount} ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'Withdrawal' : 'Deposit'} Entries`}
+                    </Button>
+                  </div>
+                ) : (
+                  /* ─── SINGLE ENTRY FORM ─── */
+                  <form className='space-y-6' onSubmit={editingWithdrawal ? handleUpdateWithdrawal : handleWithdrawalSubmit}>
 
                   {/* Transaction Type Toggle */}
                   <div className='grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg'>
@@ -935,6 +1307,7 @@ export default function LoadManagementPage() {
                     )}
                   </div>
                 </form>
+                )}
               </CardContent>
             </Card>
 
