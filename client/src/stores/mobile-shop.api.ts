@@ -284,7 +284,7 @@ export const mobileShopApi = createApi({
       providesTags: ['MobileDashboard'],
     }),
     getWallets: builder.query<PaginatedResult<WalletRecord>, void>({
-      query: () => '/wallets',
+      query: () => '/wallets?limit=100',
       providesTags: ['Wallets'],
     }),
     upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; id?: string }>({
