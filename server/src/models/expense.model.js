@@ -82,11 +82,21 @@ expenseSchema.plugin(paginate);
 
 expenseSchema.index({ organizationId: 1, branchId: 1 });
 
-// Generate expense number
+// Generate expense number with retry for race conditions
 expenseSchema.pre('save', async function(next) {
   if (this.isNew && !this.expenseNumber) {
-    const count = await mongoose.models.Expense.countDocuments();
-    this.expenseNumber = `EXP-${String(count + 1).padStart(6, '0')}`;
+    const lastExpense = await mongoose.models.Expense.findOne({ expenseNumber: { $exists: true, $ne: null } })
+      .sort({ expenseNumber: -1 })
+      .select('expenseNumber')
+      .lean();
+    let nextNum = 1;
+    if (lastExpense && lastExpense.expenseNumber) {
+      const match = lastExpense.expenseNumber.match(/EXP-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
+    this.expenseNumber = `EXP-${String(nextNum).padStart(6, '0')}`;
   }
   next();
 });

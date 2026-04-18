@@ -10,7 +10,23 @@ const cashBookService = require('./cashBook.service');
  * @returns {Promise<Expense>}
  */
 const createExpense = async (expenseBody) => {
-  const expense = await Expense.create(expenseBody);
+  let expense;
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      expense = await Expense.create(expenseBody);
+      break;
+    } catch (error) {
+      if (error.code === 11000 && error.keyPattern && error.keyPattern.expenseNumber && attempt < maxRetries - 1) {
+        // Duplicate expenseNumber from race condition, retry
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (!expense) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create expense after retries');
+  }
   await cashBookService.upsertReferenceEntry({
     organizationId: expense.organizationId,
     branchId: expense.branchId,
