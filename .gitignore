@@ -3,3 +3,5 @@ server/node_modules
 logix-plus-solutions/node_modules
 logix-plus-solutions/.next
 logix-plus-solutions/.env.local
+server/.wwebjs_auth/
+server/.wwebjs_cache/
