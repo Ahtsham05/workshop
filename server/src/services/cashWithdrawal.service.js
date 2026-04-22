@@ -265,6 +265,19 @@ const createCashWithdrawalsBatch = async (body) => {
   return results;
 };
 
+const deleteCashWithdrawalsBatch = async (ids) => {
+  const results = { deleted: 0, failed: 0 };
+  for (const id of ids) {
+    try {
+      await deleteCashWithdrawal(id);
+      results.deleted += 1;
+    } catch {
+      results.failed += 1;
+    }
+  }
+  return results;
+};
+
 module.exports = {
   calculateWithdrawalProfit,
   createCashWithdrawal,
@@ -272,4 +285,5 @@ module.exports = {
   queryCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,
+  deleteCashWithdrawalsBatch,
 };

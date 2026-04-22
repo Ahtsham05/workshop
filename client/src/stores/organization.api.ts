@@ -70,6 +70,7 @@ export const organizationApi = createApi({
     getMyOrganization: builder.query<Organization, void>({
       query: () => '/organizations/me',
       providesTags: ['Organization'],
+      keepUnusedDataFor: 60, // Re-fetch after 60s so plan changes propagate quickly
     }),
     updateOrganization: builder.mutation<Organization, { orgId: string; body: Partial<SetupOrganizationRequest> }>({
       query: ({ orgId, body }) => ({

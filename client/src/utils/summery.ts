@@ -14,7 +14,7 @@ const summery = {
     method: 'post',
   },
   refreshToken: {
-    url: '/auth/refresh-token',
+    url: '/auth/refresh-tokens',
     method: 'post',
   },
   forgotPassword: {

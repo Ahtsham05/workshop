@@ -208,3 +208,50 @@
         max-width: 100%;
       }
     } */
+
+/* ── Timetable print styles ─────────────────────────────────────── */
+@media print {
+  /* Hide all chrome — only the grid prints */
+  .print\:hidden,
+  header,
+  nav,
+  aside {
+    display: none !important;
+  }
+
+  /* Give the grid full page width */
+  #timetable-print-area {
+    width: 100% !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 0 !important;
+  }
+
+  #timetable-print-area table {
+    width: 100% !important;
+    min-width: unset !important;
+    font-size: 10px;
+  }
+
+  #timetable-print-area td,
+  #timetable-print-area th {
+    padding: 4px !important;
+  }
+
+  /* Preserve background colors for subject color-coding */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+}

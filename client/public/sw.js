@@ -2,8 +2,8 @@
 
 // Bump this version string every deployment to bust stale caches.
 // Format: logix-plus-vYYYY-MM-DD or any unique string per deploy.
-const CACHE_NAME = 'logix-plus-v2026-04-03';
-const RUNTIME_CACHE = 'logix-plus-runtime-v2026-04-03';
+const CACHE_NAME = 'logix-plus-v2026-04-18';
+const RUNTIME_CACHE = 'logix-plus-runtime-v2026-04-18';
 // NOTE: intentionally NOT caching index.html here.
 // index.html must always be fetched fresh so it references the latest JS/CSS chunk hashes.
 const ASSETS_TO_CACHE = [
@@ -61,8 +61,9 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response.ok) {
+            const responseClone = response.clone();
             const cache = caches.open(RUNTIME_CACHE);
-            cache.then((c) => c.put(request, response.clone()));
+            cache.then((c) => c.put(request, responseClone));
           }
           return response;
         })
@@ -73,17 +74,17 @@ self.addEventListener('fetch', (event) => {
         })
     );
   } else {
-    // Static assets - cache first
+    // Static assets - network first, fall back to cache
     event.respondWith(
-      caches.match(request).then((response) => {
-        return response || fetch(request).then((response) => {
-          if (response.ok && (request.method === 'GET')) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then((c) => c.put(request, response.clone()));
-          }
-          return response;
-        }).catch(() => {
-          return new Response('Offline - asset unavailable', { status: 503 });
+      fetch(request).then((response) => {
+        if (response.ok && (request.method === 'GET')) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(request, responseClone));
+        }
+        return response;
+      }).catch(() => {
+        return caches.match(request).then((response) => {
+          return response || new Response('Offline - asset unavailable', { status: 503 });
         });
       })
     );

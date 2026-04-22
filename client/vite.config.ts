@@ -15,12 +15,37 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    host: '0.0.0.0', // Allow external access
+    host: '0.0.0.0',
     port: 5173,
-    strictPort: false, // Allow port switching if 5173 is busy
-    cors: true, // Enable CORS for all origins in development
+    strictPort: true,
+    cors: true,
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: 5173,
+      clientPort: 5173,
+    },
+  },
+  optimizeDeps: {
+    // Force react + react-dom + react-redux into one pre-bundle pass so they
+    // all share a single React instance.  Without this, Vite may emit separate
+    // chunks (e.g. chunk-TJE776R7 for React, chunk-YSFGEKTM for react-redux)
+    // where each chunk has its own React copy — causing the
+    // "Cannot read properties of null (reading 'useContext')" crash.
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-redux',
+      '@reduxjs/toolkit',
+    ],
   },
   resolve: {
+    // Ensure only one copy of React exists in the bundle.
+    // Without this, Vite may pre-bundle react-redux (or other libs) with their
+    // own React copy, causing the "Invalid hook call" / useContext null crash.
+    dedupe: ['react', 'react-dom', 'react-redux'],
     alias: {
       '@': path.resolve(__dirname, './src'),
 

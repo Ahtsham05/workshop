@@ -1,128 +1,47 @@
 import { QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, Outlet, redirect, useLocation } from '@tanstack/react-router'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 // import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 // import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { TokenRefreshInitializer } from '@/components/token-refresh-initializer'
-import { SidebarProvider } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SearchProvider } from '@/context/search-context'
-import { ThemeProvider } from '@/context/theme-context'
-import { AuthProvider } from '@/context/auth-context'
-import { LanguageProvider } from '@/context/language-context'
-import { PermissionWrapper } from '@/context/permission-wrapper'
-import Dashboard from '@/features/dashboard'
 import GeneralError from '@/features/errors/general-error'
 import NotFoundError from '@/features/errors/not-found-error'
 
-// Root component that handles dashboard at root path and other routes
+/**
+ * Root route component — intentionally minimal.
+ *
+ * ALL context providers (Redux, Auth, Theme, Language, Font, Permissions)
+ * are already mounted in main.tsx ABOVE the RouterProvider.  Wrapping them
+ * again here would create duplicate provider trees and, more critically,
+ * cause Vite to pre-bundle react-redux with a separate React copy
+ * (chunk-TJE776R7) that diverges from react-dom's React instance —
+ * producing the "Cannot read properties of null (reading 'useContext')" crash.
+ *
+ * Route-specific layout (Sidebar, PermissionWrapper, auth guard) lives in
+ * src/routes/_authenticated.tsx which is the proper TanStack Router pattern.
+ */
 function RootComponent() {
-  const location = useLocation()
-  
-  // If we're at the root path, show the dashboard with sidebar
-  if (location.pathname === '/') {
-    return (
-      <LanguageProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <SearchProvider>
-              <NavigationProgress />
-              <TokenRefreshInitializer />
-              <PermissionWrapper>
-                <SidebarProvider>
-                  <AppSidebar />
-                  <main className="flex-1 overflow-hidden">
-                    <Dashboard />
-                  </main>
-                </SidebarProvider>
-              </PermissionWrapper>
-              <Toaster duration={50000} />
-              {import.meta.env.MODE === 'development' && (
-                <>
-                  {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
-                  {/* <TanStackRouterDevtools position='bottom-right' /> */}
-                </>
-              )}
-            </SearchProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </LanguageProvider>
-    )
-  }
-  
-  // For all other routes, use the normal outlet
   return (
-    <LanguageProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <SearchProvider>
-            <NavigationProgress />
-            <TokenRefreshInitializer />
-            <Outlet />
-            <Toaster duration={50000} />
-            {import.meta.env.MODE === 'development' && (
-              <>
-                {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
-                {/* <TanStackRouterDevtools position='bottom-right' /> */}
-              </>
-            )}
-          </SearchProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </LanguageProvider>
+    <SearchProvider>
+      <NavigationProgress />
+      <TokenRefreshInitializer />
+      <Outlet />
+      <Toaster duration={50000} />
+      {import.meta.env.MODE === 'development' && (
+        <>
+          {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
+          {/* <TanStackRouterDevtools position='bottom-right' /> */}
+        </>
+      )}
+    </SearchProvider>
   )
 }
+
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
-  beforeLoad: async ({ location }) => {
-    // Handle root path authentication check
-    if (location.pathname === '/') {
-      // Check authentication and redirect accordingly
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('accessToken')
-        const user = localStorage.getItem('user')
-        
-        // Robust authentication check
-        let isAuthenticated = false
-        
-        if (token && user) {
-          try {
-            const userData = JSON.parse(user)
-            if (userData && userData.id && token.trim() !== '') {
-              isAuthenticated = true
-            }
-          } catch (error) {
-            // Clear invalid data
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-            localStorage.removeItem('user')
-            isAuthenticated = false
-          }
-        }
-        
-        if (!isAuthenticated) {
-          // User is not authenticated, redirect to sign in
-          throw redirect({
-            to: '/sign-in',
-            search: {
-              redirect: '/',
-            },
-          })
-        }
-        // If authenticated, continue to render the dashboard content
-      } else {
-        // During SSR, default to sign-in
-        throw redirect({
-          to: '/sign-in',
-          search: {
-            redirect: '/',
-          },
-        })
-      }
-    }
-  },
   component: RootComponent,
   notFoundComponent: NotFoundError,
   errorComponent: GeneralError,

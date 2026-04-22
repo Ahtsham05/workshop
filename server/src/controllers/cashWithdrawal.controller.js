@@ -38,10 +38,16 @@ const deleteCashWithdrawal = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const deleteCashWithdrawalsBatch = catchAsync(async (req, res) => {
+  const result = await cashWithdrawalService.deleteCashWithdrawalsBatch(req.body.ids);
+  res.send(result);
+});
+
 module.exports = {
   createCashWithdrawal,
   createCashWithdrawalsBatch,
   getCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,
+  deleteCashWithdrawalsBatch,
 };

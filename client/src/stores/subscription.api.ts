@@ -1,5 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
+import { organizationApi } from './organization.api';
 
 export interface Payment {
   id: string;
@@ -175,6 +176,11 @@ export const subscriptionApi = createApi({
         method: 'PATCH',
       }),
       invalidatesTags: ['AdminPayment', 'Payment'],
+      async onQueryStarted(_paymentId, { dispatch, queryFulfilled }) {
+        await queryFulfilled
+        // Force-refresh the org query so plan upgrades are immediately visible
+        dispatch(organizationApi.util.invalidateTags(['Organization']))
+      },
     }),
 
     adminRejectPayment: builder.mutation<Payment, { paymentId: string; rejectionReason: string }>({

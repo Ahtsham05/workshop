@@ -22,7 +22,7 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
 
   // If loading, show nothing
   if (isLoading) {
-    return <>{children}</>
+    return <div>{children}</div>
   }
 
   // If trial is expired, show expiration screen
@@ -91,7 +91,7 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
   // If trial is ending soon (less than 3 days), show warning
   if (trialStatus?.daysRemaining !== null && trialStatus?.daysRemaining !== undefined && trialStatus.daysRemaining < 3 && trialStatus.daysRemaining > 0) {
     return (
-      <div className="relative">
+      <div>
         {/* Warning Banner */}
         <div className="bg-amber-950 border-b border-amber-500 px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -119,5 +119,5 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
   }
 
   // Trial is active or subscription is valid
-  return <>{children}</>
+  return <div>{children}</div>
 }

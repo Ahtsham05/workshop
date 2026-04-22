@@ -14,6 +14,7 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
+import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as errors503Import } from './routes/(errors)/503'
@@ -35,6 +36,7 @@ import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authentica
 import { Route as AuthenticatedSubscriptionIndexImport } from './routes/_authenticated/subscription/index'
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedSchoolIndexImport } from './routes/_authenticated/school/index'
 import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authenticated/sales-returns/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
@@ -61,6 +63,27 @@ import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenti
 import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
 import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
 import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
+import { Route as AuthenticatedSchoolWhatsappIndexImport } from './routes/_authenticated/school/whatsapp/index'
+import { Route as AuthenticatedSchoolVisitorsIndexImport } from './routes/_authenticated/school/visitors/index'
+import { Route as AuthenticatedSchoolTimetableIndexImport } from './routes/_authenticated/school/timetable/index'
+import { Route as AuthenticatedSchoolTeachersIndexImport } from './routes/_authenticated/school/teachers/index'
+import { Route as AuthenticatedSchoolTeacherPayrollIndexImport } from './routes/_authenticated/school/teacher-payroll/index'
+import { Route as AuthenticatedSchoolTeacherLeaveIndexImport } from './routes/_authenticated/school/teacher-leave/index'
+import { Route as AuthenticatedSchoolTeacherAttendanceIndexImport } from './routes/_authenticated/school/teacher-attendance/index'
+import { Route as AuthenticatedSchoolTeacherAssignmentsIndexImport } from './routes/_authenticated/school/teacher-assignments/index'
+import { Route as AuthenticatedSchoolSubjectsIndexImport } from './routes/_authenticated/school/subjects/index'
+import { Route as AuthenticatedSchoolStudentsIndexImport } from './routes/_authenticated/school/students/index'
+import { Route as AuthenticatedSchoolSectionsIndexImport } from './routes/_authenticated/school/sections/index'
+import { Route as AuthenticatedSchoolReportsIndexImport } from './routes/_authenticated/school/reports/index'
+import { Route as AuthenticatedSchoolMarksIndexImport } from './routes/_authenticated/school/marks/index'
+import { Route as AuthenticatedSchoolIdCardsIndexImport } from './routes/_authenticated/school/id-cards/index'
+import { Route as AuthenticatedSchoolFeesIndexImport } from './routes/_authenticated/school/fees/index'
+import { Route as AuthenticatedSchoolExamsIndexImport } from './routes/_authenticated/school/exams/index'
+import { Route as AuthenticatedSchoolClassesIndexImport } from './routes/_authenticated/school/classes/index'
+import { Route as AuthenticatedSchoolClassOverviewIndexImport } from './routes/_authenticated/school/class-overview/index'
+import { Route as AuthenticatedSchoolAttendanceIndexImport } from './routes/_authenticated/school/attendance/index'
+import { Route as AuthenticatedSchoolAttendanceScannerIndexImport } from './routes/_authenticated/school/attendance-scanner/index'
+import { Route as AuthenticatedSchoolAccountsIndexImport } from './routes/_authenticated/school/accounts/index'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
@@ -68,8 +91,23 @@ import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedHrEmployeesIndexImport } from './routes/_authenticated/hr/employees/index'
 import { Route as AuthenticatedHrDepartmentsIndexImport } from './routes/_authenticated/hr/departments/index'
 import { Route as AuthenticatedHrAttendanceIndexImport } from './routes/_authenticated/hr/attendance/index'
+import { Route as AuthenticatedSchoolStudentsPromotionImport } from './routes/_authenticated/school/students/promotion'
+import { Route as AuthenticatedSchoolStudentsImportImport } from './routes/_authenticated/school/students/import'
+import { Route as AuthenticatedSchoolStudentsCreateImport } from './routes/_authenticated/school/students/create'
+import { Route as AuthenticatedSchoolStudentsIdImport } from './routes/_authenticated/school/students/$id'
+import { Route as AuthenticatedSchoolReportsResultSheetImport } from './routes/_authenticated/school/reports/result-sheet'
+import { Route as AuthenticatedSchoolPortalsTeacherImport } from './routes/_authenticated/school/portals/teacher'
+import { Route as AuthenticatedSchoolPortalsParentImport } from './routes/_authenticated/school/portals/parent'
 import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
 import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
+import { Route as AuthenticatedSchoolStudentsIdIndexImport } from './routes/_authenticated/school/students/$id.index'
+import { Route as AuthenticatedSchoolFeesVouchersIndexImport } from './routes/_authenticated/school/fees/vouchers/index'
+import { Route as AuthenticatedSchoolFeesTransactionsIndexImport } from './routes/_authenticated/school/fees/transactions/index'
+import { Route as AuthenticatedSchoolFeesStructuresIndexImport } from './routes/_authenticated/school/fees/structures/index'
+import { Route as AuthenticatedSchoolFeesReportsIndexImport } from './routes/_authenticated/school/fees/reports/index'
+import { Route as AuthenticatedSchoolFeesExpensesIndexImport } from './routes/_authenticated/school/fees/expenses/index'
+import { Route as AuthenticatedSchoolFeesDashboardIndexImport } from './routes/_authenticated/school/fees/dashboard/index'
+import { Route as AuthenticatedSchoolFeesCategoriesIndexImport } from './routes/_authenticated/school/fees/categories/index'
 import { Route as AuthenticatedHrEmployeesIdEditImport } from './routes/_authenticated/hr/employees/$id.edit'
 
 // Create/Update Routes
@@ -88,6 +126,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
 const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
   id: '/voice-demo',
   path: '/voice-demo',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedSchoolRoute = AuthenticatedSchoolImport.update({
+  id: '/school',
+  path: '/school',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -223,6 +267,12 @@ const AuthenticatedSettingsIndexRoute = AuthenticatedSettingsIndexImport.update(
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any,
 )
+
+const AuthenticatedSchoolIndexRoute = AuthenticatedSchoolIndexImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedSchoolRoute,
+} as any)
 
 const AuthenticatedSalesReturnsIndexRoute =
   AuthenticatedSalesReturnsIndexImport.update({
@@ -402,6 +452,153 @@ const AuthenticatedMobileShopBillPaymentsRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedSchoolWhatsappIndexRoute =
+  AuthenticatedSchoolWhatsappIndexImport.update({
+    id: '/whatsapp/',
+    path: '/whatsapp/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolVisitorsIndexRoute =
+  AuthenticatedSchoolVisitorsIndexImport.update({
+    id: '/visitors/',
+    path: '/visitors/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTimetableIndexRoute =
+  AuthenticatedSchoolTimetableIndexImport.update({
+    id: '/timetable/',
+    path: '/timetable/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTeachersIndexRoute =
+  AuthenticatedSchoolTeachersIndexImport.update({
+    id: '/teachers/',
+    path: '/teachers/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTeacherPayrollIndexRoute =
+  AuthenticatedSchoolTeacherPayrollIndexImport.update({
+    id: '/teacher-payroll/',
+    path: '/teacher-payroll/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTeacherLeaveIndexRoute =
+  AuthenticatedSchoolTeacherLeaveIndexImport.update({
+    id: '/teacher-leave/',
+    path: '/teacher-leave/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTeacherAttendanceIndexRoute =
+  AuthenticatedSchoolTeacherAttendanceIndexImport.update({
+    id: '/teacher-attendance/',
+    path: '/teacher-attendance/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolTeacherAssignmentsIndexRoute =
+  AuthenticatedSchoolTeacherAssignmentsIndexImport.update({
+    id: '/teacher-assignments/',
+    path: '/teacher-assignments/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolSubjectsIndexRoute =
+  AuthenticatedSchoolSubjectsIndexImport.update({
+    id: '/subjects/',
+    path: '/subjects/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolStudentsIndexRoute =
+  AuthenticatedSchoolStudentsIndexImport.update({
+    id: '/students/',
+    path: '/students/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolSectionsIndexRoute =
+  AuthenticatedSchoolSectionsIndexImport.update({
+    id: '/sections/',
+    path: '/sections/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolReportsIndexRoute =
+  AuthenticatedSchoolReportsIndexImport.update({
+    id: '/reports/',
+    path: '/reports/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolMarksIndexRoute =
+  AuthenticatedSchoolMarksIndexImport.update({
+    id: '/marks/',
+    path: '/marks/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolIdCardsIndexRoute =
+  AuthenticatedSchoolIdCardsIndexImport.update({
+    id: '/id-cards/',
+    path: '/id-cards/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesIndexRoute =
+  AuthenticatedSchoolFeesIndexImport.update({
+    id: '/fees/',
+    path: '/fees/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolExamsIndexRoute =
+  AuthenticatedSchoolExamsIndexImport.update({
+    id: '/exams/',
+    path: '/exams/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolClassesIndexRoute =
+  AuthenticatedSchoolClassesIndexImport.update({
+    id: '/classes/',
+    path: '/classes/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolClassOverviewIndexRoute =
+  AuthenticatedSchoolClassOverviewIndexImport.update({
+    id: '/class-overview/',
+    path: '/class-overview/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolAttendanceIndexRoute =
+  AuthenticatedSchoolAttendanceIndexImport.update({
+    id: '/attendance/',
+    path: '/attendance/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolAttendanceScannerIndexRoute =
+  AuthenticatedSchoolAttendanceScannerIndexImport.update({
+    id: '/attendance-scanner/',
+    path: '/attendance-scanner/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolAccountsIndexRoute =
+  AuthenticatedSchoolAccountsIndexImport.update({
+    id: '/accounts/',
+    path: '/accounts/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
 const AuthenticatedProductsBulkEditIndexRoute =
   AuthenticatedProductsBulkEditIndexImport.update({
     id: '/products/bulk-edit/',
@@ -452,6 +649,55 @@ const AuthenticatedHrAttendanceIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedSchoolStudentsPromotionRoute =
+  AuthenticatedSchoolStudentsPromotionImport.update({
+    id: '/students/promotion',
+    path: '/students/promotion',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolStudentsImportRoute =
+  AuthenticatedSchoolStudentsImportImport.update({
+    id: '/students/import',
+    path: '/students/import',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolStudentsCreateRoute =
+  AuthenticatedSchoolStudentsCreateImport.update({
+    id: '/students/create',
+    path: '/students/create',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolStudentsIdRoute =
+  AuthenticatedSchoolStudentsIdImport.update({
+    id: '/students/$id',
+    path: '/students/$id',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolReportsResultSheetRoute =
+  AuthenticatedSchoolReportsResultSheetImport.update({
+    id: '/reports/result-sheet',
+    path: '/reports/result-sheet',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolPortalsTeacherRoute =
+  AuthenticatedSchoolPortalsTeacherImport.update({
+    id: '/portals/teacher',
+    path: '/portals/teacher',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolPortalsParentRoute =
+  AuthenticatedSchoolPortalsParentImport.update({
+    id: '/portals/parent',
+    path: '/portals/parent',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
 const AuthenticatedHrEmployeesCreateRoute =
   AuthenticatedHrEmployeesCreateImport.update({
     id: '/hr/employees/create',
@@ -466,6 +712,62 @@ const AuthenticatedHrEmployeesIdRoute = AuthenticatedHrEmployeesIdImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedSchoolStudentsIdIndexRoute =
+  AuthenticatedSchoolStudentsIdIndexImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedSchoolStudentsIdRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesVouchersIndexRoute =
+  AuthenticatedSchoolFeesVouchersIndexImport.update({
+    id: '/fees/vouchers/',
+    path: '/fees/vouchers/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesTransactionsIndexRoute =
+  AuthenticatedSchoolFeesTransactionsIndexImport.update({
+    id: '/fees/transactions/',
+    path: '/fees/transactions/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesStructuresIndexRoute =
+  AuthenticatedSchoolFeesStructuresIndexImport.update({
+    id: '/fees/structures/',
+    path: '/fees/structures/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesReportsIndexRoute =
+  AuthenticatedSchoolFeesReportsIndexImport.update({
+    id: '/fees/reports/',
+    path: '/fees/reports/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesExpensesIndexRoute =
+  AuthenticatedSchoolFeesExpensesIndexImport.update({
+    id: '/fees/expenses/',
+    path: '/fees/expenses/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesDashboardIndexRoute =
+  AuthenticatedSchoolFeesDashboardIndexImport.update({
+    id: '/fees/dashboard/',
+    path: '/fees/dashboard/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesCategoriesIndexRoute =
+  AuthenticatedSchoolFeesCategoriesIndexImport.update({
+    id: '/fees/categories/',
+    path: '/fees/categories/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
 
 const AuthenticatedHrEmployeesIdEditRoute =
   AuthenticatedHrEmployeesIdEditImport.update({
@@ -581,6 +883,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof AuthenticatedReportsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/school': {
+      id: '/_authenticated/school'
+      path: '/school'
+      fullPath: '/school'
+      preLoaderRoute: typeof AuthenticatedSchoolImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/voice-demo': {
@@ -779,6 +1088,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalesReturnsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/school/': {
+      id: '/_authenticated/school/'
+      path: '/'
+      fullPath: '/school/'
+      preLoaderRoute: typeof AuthenticatedSchoolIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -842,6 +1158,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrEmployeesCreateImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/school/portals/parent': {
+      id: '/_authenticated/school/portals/parent'
+      path: '/portals/parent'
+      fullPath: '/school/portals/parent'
+      preLoaderRoute: typeof AuthenticatedSchoolPortalsParentImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/portals/teacher': {
+      id: '/_authenticated/school/portals/teacher'
+      path: '/portals/teacher'
+      fullPath: '/school/portals/teacher'
+      preLoaderRoute: typeof AuthenticatedSchoolPortalsTeacherImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/reports/result-sheet': {
+      id: '/_authenticated/school/reports/result-sheet'
+      path: '/reports/result-sheet'
+      fullPath: '/school/reports/result-sheet'
+      preLoaderRoute: typeof AuthenticatedSchoolReportsResultSheetImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/$id': {
+      id: '/_authenticated/school/students/$id'
+      path: '/students/$id'
+      fullPath: '/school/students/$id'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsIdImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/create': {
+      id: '/_authenticated/school/students/create'
+      path: '/students/create'
+      fullPath: '/school/students/create'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsCreateImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/import': {
+      id: '/_authenticated/school/students/import'
+      path: '/students/import'
+      fullPath: '/school/students/import'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsImportImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/promotion': {
+      id: '/_authenticated/school/students/promotion'
+      path: '/students/promotion'
+      fullPath: '/school/students/promotion'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsPromotionImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/hr/attendance/': {
       id: '/_authenticated/hr/attendance/'
       path: '/hr/attendance'
@@ -891,12 +1256,215 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsBulkEditIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/school/accounts/': {
+      id: '/_authenticated/school/accounts/'
+      path: '/accounts'
+      fullPath: '/school/accounts'
+      preLoaderRoute: typeof AuthenticatedSchoolAccountsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/attendance-scanner/': {
+      id: '/_authenticated/school/attendance-scanner/'
+      path: '/attendance-scanner'
+      fullPath: '/school/attendance-scanner'
+      preLoaderRoute: typeof AuthenticatedSchoolAttendanceScannerIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/attendance/': {
+      id: '/_authenticated/school/attendance/'
+      path: '/attendance'
+      fullPath: '/school/attendance'
+      preLoaderRoute: typeof AuthenticatedSchoolAttendanceIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/class-overview/': {
+      id: '/_authenticated/school/class-overview/'
+      path: '/class-overview'
+      fullPath: '/school/class-overview'
+      preLoaderRoute: typeof AuthenticatedSchoolClassOverviewIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/classes/': {
+      id: '/_authenticated/school/classes/'
+      path: '/classes'
+      fullPath: '/school/classes'
+      preLoaderRoute: typeof AuthenticatedSchoolClassesIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/exams/': {
+      id: '/_authenticated/school/exams/'
+      path: '/exams'
+      fullPath: '/school/exams'
+      preLoaderRoute: typeof AuthenticatedSchoolExamsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/': {
+      id: '/_authenticated/school/fees/'
+      path: '/fees'
+      fullPath: '/school/fees'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/id-cards/': {
+      id: '/_authenticated/school/id-cards/'
+      path: '/id-cards'
+      fullPath: '/school/id-cards'
+      preLoaderRoute: typeof AuthenticatedSchoolIdCardsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/marks/': {
+      id: '/_authenticated/school/marks/'
+      path: '/marks'
+      fullPath: '/school/marks'
+      preLoaderRoute: typeof AuthenticatedSchoolMarksIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/reports/': {
+      id: '/_authenticated/school/reports/'
+      path: '/reports'
+      fullPath: '/school/reports'
+      preLoaderRoute: typeof AuthenticatedSchoolReportsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/sections/': {
+      id: '/_authenticated/school/sections/'
+      path: '/sections'
+      fullPath: '/school/sections'
+      preLoaderRoute: typeof AuthenticatedSchoolSectionsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/': {
+      id: '/_authenticated/school/students/'
+      path: '/students'
+      fullPath: '/school/students'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/subjects/': {
+      id: '/_authenticated/school/subjects/'
+      path: '/subjects'
+      fullPath: '/school/subjects'
+      preLoaderRoute: typeof AuthenticatedSchoolSubjectsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/teacher-assignments/': {
+      id: '/_authenticated/school/teacher-assignments/'
+      path: '/teacher-assignments'
+      fullPath: '/school/teacher-assignments'
+      preLoaderRoute: typeof AuthenticatedSchoolTeacherAssignmentsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/teacher-attendance/': {
+      id: '/_authenticated/school/teacher-attendance/'
+      path: '/teacher-attendance'
+      fullPath: '/school/teacher-attendance'
+      preLoaderRoute: typeof AuthenticatedSchoolTeacherAttendanceIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/teacher-leave/': {
+      id: '/_authenticated/school/teacher-leave/'
+      path: '/teacher-leave'
+      fullPath: '/school/teacher-leave'
+      preLoaderRoute: typeof AuthenticatedSchoolTeacherLeaveIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/teacher-payroll/': {
+      id: '/_authenticated/school/teacher-payroll/'
+      path: '/teacher-payroll'
+      fullPath: '/school/teacher-payroll'
+      preLoaderRoute: typeof AuthenticatedSchoolTeacherPayrollIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/teachers/': {
+      id: '/_authenticated/school/teachers/'
+      path: '/teachers'
+      fullPath: '/school/teachers'
+      preLoaderRoute: typeof AuthenticatedSchoolTeachersIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/timetable/': {
+      id: '/_authenticated/school/timetable/'
+      path: '/timetable'
+      fullPath: '/school/timetable'
+      preLoaderRoute: typeof AuthenticatedSchoolTimetableIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/visitors/': {
+      id: '/_authenticated/school/visitors/'
+      path: '/visitors'
+      fullPath: '/school/visitors'
+      preLoaderRoute: typeof AuthenticatedSchoolVisitorsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/whatsapp/': {
+      id: '/_authenticated/school/whatsapp/'
+      path: '/whatsapp'
+      fullPath: '/school/whatsapp'
+      preLoaderRoute: typeof AuthenticatedSchoolWhatsappIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/hr/employees/$id/edit': {
       id: '/_authenticated/hr/employees/$id/edit'
       path: '/edit'
       fullPath: '/hr/employees/$id/edit'
       preLoaderRoute: typeof AuthenticatedHrEmployeesIdEditImport
       parentRoute: typeof AuthenticatedHrEmployeesIdImport
+    }
+    '/_authenticated/school/fees/categories/': {
+      id: '/_authenticated/school/fees/categories/'
+      path: '/fees/categories'
+      fullPath: '/school/fees/categories'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesCategoriesIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/dashboard/': {
+      id: '/_authenticated/school/fees/dashboard/'
+      path: '/fees/dashboard'
+      fullPath: '/school/fees/dashboard'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesDashboardIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/expenses/': {
+      id: '/_authenticated/school/fees/expenses/'
+      path: '/fees/expenses'
+      fullPath: '/school/fees/expenses'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesExpensesIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/reports/': {
+      id: '/_authenticated/school/fees/reports/'
+      path: '/fees/reports'
+      fullPath: '/school/fees/reports'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesReportsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/structures/': {
+      id: '/_authenticated/school/fees/structures/'
+      path: '/fees/structures'
+      fullPath: '/school/fees/structures'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesStructuresIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/transactions/': {
+      id: '/_authenticated/school/fees/transactions/'
+      path: '/fees/transactions'
+      fullPath: '/school/fees/transactions'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesTransactionsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/fees/vouchers/': {
+      id: '/_authenticated/school/fees/vouchers/'
+      path: '/fees/vouchers'
+      fullPath: '/school/fees/vouchers'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesVouchersIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/students/$id/': {
+      id: '/_authenticated/school/students/$id/'
+      path: '/'
+      fullPath: '/school/students/$id/'
+      preLoaderRoute: typeof AuthenticatedSchoolStudentsIdIndexImport
+      parentRoute: typeof AuthenticatedSchoolStudentsIdImport
     }
   }
 }
@@ -926,6 +1494,123 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedSchoolStudentsIdRouteChildren {
+  AuthenticatedSchoolStudentsIdIndexRoute: typeof AuthenticatedSchoolStudentsIdIndexRoute
+}
+
+const AuthenticatedSchoolStudentsIdRouteChildren: AuthenticatedSchoolStudentsIdRouteChildren =
+  {
+    AuthenticatedSchoolStudentsIdIndexRoute:
+      AuthenticatedSchoolStudentsIdIndexRoute,
+  }
+
+const AuthenticatedSchoolStudentsIdRouteWithChildren =
+  AuthenticatedSchoolStudentsIdRoute._addFileChildren(
+    AuthenticatedSchoolStudentsIdRouteChildren,
+  )
+
+interface AuthenticatedSchoolRouteChildren {
+  AuthenticatedSchoolIndexRoute: typeof AuthenticatedSchoolIndexRoute
+  AuthenticatedSchoolPortalsParentRoute: typeof AuthenticatedSchoolPortalsParentRoute
+  AuthenticatedSchoolPortalsTeacherRoute: typeof AuthenticatedSchoolPortalsTeacherRoute
+  AuthenticatedSchoolReportsResultSheetRoute: typeof AuthenticatedSchoolReportsResultSheetRoute
+  AuthenticatedSchoolStudentsIdRoute: typeof AuthenticatedSchoolStudentsIdRouteWithChildren
+  AuthenticatedSchoolStudentsCreateRoute: typeof AuthenticatedSchoolStudentsCreateRoute
+  AuthenticatedSchoolStudentsImportRoute: typeof AuthenticatedSchoolStudentsImportRoute
+  AuthenticatedSchoolStudentsPromotionRoute: typeof AuthenticatedSchoolStudentsPromotionRoute
+  AuthenticatedSchoolAccountsIndexRoute: typeof AuthenticatedSchoolAccountsIndexRoute
+  AuthenticatedSchoolAttendanceScannerIndexRoute: typeof AuthenticatedSchoolAttendanceScannerIndexRoute
+  AuthenticatedSchoolAttendanceIndexRoute: typeof AuthenticatedSchoolAttendanceIndexRoute
+  AuthenticatedSchoolClassOverviewIndexRoute: typeof AuthenticatedSchoolClassOverviewIndexRoute
+  AuthenticatedSchoolClassesIndexRoute: typeof AuthenticatedSchoolClassesIndexRoute
+  AuthenticatedSchoolExamsIndexRoute: typeof AuthenticatedSchoolExamsIndexRoute
+  AuthenticatedSchoolFeesIndexRoute: typeof AuthenticatedSchoolFeesIndexRoute
+  AuthenticatedSchoolIdCardsIndexRoute: typeof AuthenticatedSchoolIdCardsIndexRoute
+  AuthenticatedSchoolMarksIndexRoute: typeof AuthenticatedSchoolMarksIndexRoute
+  AuthenticatedSchoolReportsIndexRoute: typeof AuthenticatedSchoolReportsIndexRoute
+  AuthenticatedSchoolSectionsIndexRoute: typeof AuthenticatedSchoolSectionsIndexRoute
+  AuthenticatedSchoolStudentsIndexRoute: typeof AuthenticatedSchoolStudentsIndexRoute
+  AuthenticatedSchoolSubjectsIndexRoute: typeof AuthenticatedSchoolSubjectsIndexRoute
+  AuthenticatedSchoolTeacherAssignmentsIndexRoute: typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
+  AuthenticatedSchoolTeacherAttendanceIndexRoute: typeof AuthenticatedSchoolTeacherAttendanceIndexRoute
+  AuthenticatedSchoolTeacherLeaveIndexRoute: typeof AuthenticatedSchoolTeacherLeaveIndexRoute
+  AuthenticatedSchoolTeacherPayrollIndexRoute: typeof AuthenticatedSchoolTeacherPayrollIndexRoute
+  AuthenticatedSchoolTeachersIndexRoute: typeof AuthenticatedSchoolTeachersIndexRoute
+  AuthenticatedSchoolTimetableIndexRoute: typeof AuthenticatedSchoolTimetableIndexRoute
+  AuthenticatedSchoolVisitorsIndexRoute: typeof AuthenticatedSchoolVisitorsIndexRoute
+  AuthenticatedSchoolWhatsappIndexRoute: typeof AuthenticatedSchoolWhatsappIndexRoute
+  AuthenticatedSchoolFeesCategoriesIndexRoute: typeof AuthenticatedSchoolFeesCategoriesIndexRoute
+  AuthenticatedSchoolFeesDashboardIndexRoute: typeof AuthenticatedSchoolFeesDashboardIndexRoute
+  AuthenticatedSchoolFeesExpensesIndexRoute: typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  AuthenticatedSchoolFeesReportsIndexRoute: typeof AuthenticatedSchoolFeesReportsIndexRoute
+  AuthenticatedSchoolFeesStructuresIndexRoute: typeof AuthenticatedSchoolFeesStructuresIndexRoute
+  AuthenticatedSchoolFeesTransactionsIndexRoute: typeof AuthenticatedSchoolFeesTransactionsIndexRoute
+  AuthenticatedSchoolFeesVouchersIndexRoute: typeof AuthenticatedSchoolFeesVouchersIndexRoute
+}
+
+const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
+  AuthenticatedSchoolIndexRoute: AuthenticatedSchoolIndexRoute,
+  AuthenticatedSchoolPortalsParentRoute: AuthenticatedSchoolPortalsParentRoute,
+  AuthenticatedSchoolPortalsTeacherRoute:
+    AuthenticatedSchoolPortalsTeacherRoute,
+  AuthenticatedSchoolReportsResultSheetRoute:
+    AuthenticatedSchoolReportsResultSheetRoute,
+  AuthenticatedSchoolStudentsIdRoute:
+    AuthenticatedSchoolStudentsIdRouteWithChildren,
+  AuthenticatedSchoolStudentsCreateRoute:
+    AuthenticatedSchoolStudentsCreateRoute,
+  AuthenticatedSchoolStudentsImportRoute:
+    AuthenticatedSchoolStudentsImportRoute,
+  AuthenticatedSchoolStudentsPromotionRoute:
+    AuthenticatedSchoolStudentsPromotionRoute,
+  AuthenticatedSchoolAccountsIndexRoute: AuthenticatedSchoolAccountsIndexRoute,
+  AuthenticatedSchoolAttendanceScannerIndexRoute:
+    AuthenticatedSchoolAttendanceScannerIndexRoute,
+  AuthenticatedSchoolAttendanceIndexRoute:
+    AuthenticatedSchoolAttendanceIndexRoute,
+  AuthenticatedSchoolClassOverviewIndexRoute:
+    AuthenticatedSchoolClassOverviewIndexRoute,
+  AuthenticatedSchoolClassesIndexRoute: AuthenticatedSchoolClassesIndexRoute,
+  AuthenticatedSchoolExamsIndexRoute: AuthenticatedSchoolExamsIndexRoute,
+  AuthenticatedSchoolFeesIndexRoute: AuthenticatedSchoolFeesIndexRoute,
+  AuthenticatedSchoolIdCardsIndexRoute: AuthenticatedSchoolIdCardsIndexRoute,
+  AuthenticatedSchoolMarksIndexRoute: AuthenticatedSchoolMarksIndexRoute,
+  AuthenticatedSchoolReportsIndexRoute: AuthenticatedSchoolReportsIndexRoute,
+  AuthenticatedSchoolSectionsIndexRoute: AuthenticatedSchoolSectionsIndexRoute,
+  AuthenticatedSchoolStudentsIndexRoute: AuthenticatedSchoolStudentsIndexRoute,
+  AuthenticatedSchoolSubjectsIndexRoute: AuthenticatedSchoolSubjectsIndexRoute,
+  AuthenticatedSchoolTeacherAssignmentsIndexRoute:
+    AuthenticatedSchoolTeacherAssignmentsIndexRoute,
+  AuthenticatedSchoolTeacherAttendanceIndexRoute:
+    AuthenticatedSchoolTeacherAttendanceIndexRoute,
+  AuthenticatedSchoolTeacherLeaveIndexRoute:
+    AuthenticatedSchoolTeacherLeaveIndexRoute,
+  AuthenticatedSchoolTeacherPayrollIndexRoute:
+    AuthenticatedSchoolTeacherPayrollIndexRoute,
+  AuthenticatedSchoolTeachersIndexRoute: AuthenticatedSchoolTeachersIndexRoute,
+  AuthenticatedSchoolTimetableIndexRoute:
+    AuthenticatedSchoolTimetableIndexRoute,
+  AuthenticatedSchoolVisitorsIndexRoute: AuthenticatedSchoolVisitorsIndexRoute,
+  AuthenticatedSchoolWhatsappIndexRoute: AuthenticatedSchoolWhatsappIndexRoute,
+  AuthenticatedSchoolFeesCategoriesIndexRoute:
+    AuthenticatedSchoolFeesCategoriesIndexRoute,
+  AuthenticatedSchoolFeesDashboardIndexRoute:
+    AuthenticatedSchoolFeesDashboardIndexRoute,
+  AuthenticatedSchoolFeesExpensesIndexRoute:
+    AuthenticatedSchoolFeesExpensesIndexRoute,
+  AuthenticatedSchoolFeesReportsIndexRoute:
+    AuthenticatedSchoolFeesReportsIndexRoute,
+  AuthenticatedSchoolFeesStructuresIndexRoute:
+    AuthenticatedSchoolFeesStructuresIndexRoute,
+  AuthenticatedSchoolFeesTransactionsIndexRoute:
+    AuthenticatedSchoolFeesTransactionsIndexRoute,
+  AuthenticatedSchoolFeesVouchersIndexRoute:
+    AuthenticatedSchoolFeesVouchersIndexRoute,
+}
+
+const AuthenticatedSchoolRouteWithChildren =
+  AuthenticatedSchoolRoute._addFileChildren(AuthenticatedSchoolRouteChildren)
+
 interface AuthenticatedHrEmployeesIdRouteChildren {
   AuthenticatedHrEmployeesIdEditRoute: typeof AuthenticatedHrEmployeesIdEditRoute
 }
@@ -944,6 +1629,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedMobileShopBillPaymentsRoute: typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -989,6 +1675,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedMobileShopBillPaymentsRoute:
@@ -1055,6 +1742,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/school': typeof AuthenticatedSchoolRouteWithChildren
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/': typeof AuthenticatedIndexRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -1083,6 +1771,7 @@ export interface FileRoutesByFullPath {
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
+  '/school/': typeof AuthenticatedSchoolIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
@@ -1092,6 +1781,13 @@ export interface FileRoutesByFullPath {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
+  '/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
+  '/school/students/$id': typeof AuthenticatedSchoolStudentsIdRouteWithChildren
+  '/school/students/create': typeof AuthenticatedSchoolStudentsCreateRoute
+  '/school/students/import': typeof AuthenticatedSchoolStudentsImportRoute
+  '/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
@@ -1099,7 +1795,36 @@ export interface FileRoutesByFullPath {
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
+  '/school/attendance-scanner': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
+  '/school/attendance': typeof AuthenticatedSchoolAttendanceIndexRoute
+  '/school/class-overview': typeof AuthenticatedSchoolClassOverviewIndexRoute
+  '/school/classes': typeof AuthenticatedSchoolClassesIndexRoute
+  '/school/exams': typeof AuthenticatedSchoolExamsIndexRoute
+  '/school/fees': typeof AuthenticatedSchoolFeesIndexRoute
+  '/school/id-cards': typeof AuthenticatedSchoolIdCardsIndexRoute
+  '/school/marks': typeof AuthenticatedSchoolMarksIndexRoute
+  '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
+  '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
+  '/school/subjects': typeof AuthenticatedSchoolSubjectsIndexRoute
+  '/school/teacher-assignments': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
+  '/school/teacher-attendance': typeof AuthenticatedSchoolTeacherAttendanceIndexRoute
+  '/school/teacher-leave': typeof AuthenticatedSchoolTeacherLeaveIndexRoute
+  '/school/teacher-payroll': typeof AuthenticatedSchoolTeacherPayrollIndexRoute
+  '/school/teachers': typeof AuthenticatedSchoolTeachersIndexRoute
+  '/school/timetable': typeof AuthenticatedSchoolTimetableIndexRoute
+  '/school/visitors': typeof AuthenticatedSchoolVisitorsIndexRoute
+  '/school/whatsapp': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
+  '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
+  '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/school/fees/reports': typeof AuthenticatedSchoolFeesReportsIndexRoute
+  '/school/fees/structures': typeof AuthenticatedSchoolFeesStructuresIndexRoute
+  '/school/fees/transactions': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
+  '/school/fees/vouchers': typeof AuthenticatedSchoolFeesVouchersIndexRoute
+  '/school/students/$id/': typeof AuthenticatedSchoolStudentsIdIndexRoute
 }
 
 export interface FileRoutesByTo {
@@ -1144,6 +1869,7 @@ export interface FileRoutesByTo {
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
+  '/school': typeof AuthenticatedSchoolIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
@@ -1153,6 +1879,12 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
+  '/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
+  '/school/students/create': typeof AuthenticatedSchoolStudentsCreateRoute
+  '/school/students/import': typeof AuthenticatedSchoolStudentsImportRoute
+  '/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
@@ -1160,7 +1892,36 @@ export interface FileRoutesByTo {
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
+  '/school/attendance-scanner': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
+  '/school/attendance': typeof AuthenticatedSchoolAttendanceIndexRoute
+  '/school/class-overview': typeof AuthenticatedSchoolClassOverviewIndexRoute
+  '/school/classes': typeof AuthenticatedSchoolClassesIndexRoute
+  '/school/exams': typeof AuthenticatedSchoolExamsIndexRoute
+  '/school/fees': typeof AuthenticatedSchoolFeesIndexRoute
+  '/school/id-cards': typeof AuthenticatedSchoolIdCardsIndexRoute
+  '/school/marks': typeof AuthenticatedSchoolMarksIndexRoute
+  '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
+  '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
+  '/school/subjects': typeof AuthenticatedSchoolSubjectsIndexRoute
+  '/school/teacher-assignments': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
+  '/school/teacher-attendance': typeof AuthenticatedSchoolTeacherAttendanceIndexRoute
+  '/school/teacher-leave': typeof AuthenticatedSchoolTeacherLeaveIndexRoute
+  '/school/teacher-payroll': typeof AuthenticatedSchoolTeacherPayrollIndexRoute
+  '/school/teachers': typeof AuthenticatedSchoolTeachersIndexRoute
+  '/school/timetable': typeof AuthenticatedSchoolTimetableIndexRoute
+  '/school/visitors': typeof AuthenticatedSchoolVisitorsIndexRoute
+  '/school/whatsapp': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
+  '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
+  '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/school/fees/reports': typeof AuthenticatedSchoolFeesReportsIndexRoute
+  '/school/fees/structures': typeof AuthenticatedSchoolFeesStructuresIndexRoute
+  '/school/fees/transactions': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
+  '/school/fees/vouchers': typeof AuthenticatedSchoolFeesVouchersIndexRoute
+  '/school/students/$id': typeof AuthenticatedSchoolStudentsIdIndexRoute
 }
 
 export interface FileRoutesById {
@@ -1180,6 +1941,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
@@ -1208,6 +1970,7 @@ export interface FileRoutesById {
   '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/sales-returns/': typeof AuthenticatedSalesReturnsIndexRoute
+  '/_authenticated/school/': typeof AuthenticatedSchoolIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
   '/_authenticated/subscription/': typeof AuthenticatedSubscriptionIndexRoute
@@ -1217,6 +1980,13 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/_authenticated/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
+  '/_authenticated/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
+  '/_authenticated/school/students/$id': typeof AuthenticatedSchoolStudentsIdRouteWithChildren
+  '/_authenticated/school/students/create': typeof AuthenticatedSchoolStudentsCreateRoute
+  '/_authenticated/school/students/import': typeof AuthenticatedSchoolStudentsImportRoute
+  '/_authenticated/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/_authenticated/hr/attendance/': typeof AuthenticatedHrAttendanceIndexRoute
   '/_authenticated/hr/departments/': typeof AuthenticatedHrDepartmentsIndexRoute
   '/_authenticated/hr/employees/': typeof AuthenticatedHrEmployeesIndexRoute
@@ -1224,7 +1994,36 @@ export interface FileRoutesById {
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
   '/_authenticated/hr/settings/': typeof AuthenticatedHrSettingsIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
+  '/_authenticated/school/accounts/': typeof AuthenticatedSchoolAccountsIndexRoute
+  '/_authenticated/school/attendance-scanner/': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
+  '/_authenticated/school/attendance/': typeof AuthenticatedSchoolAttendanceIndexRoute
+  '/_authenticated/school/class-overview/': typeof AuthenticatedSchoolClassOverviewIndexRoute
+  '/_authenticated/school/classes/': typeof AuthenticatedSchoolClassesIndexRoute
+  '/_authenticated/school/exams/': typeof AuthenticatedSchoolExamsIndexRoute
+  '/_authenticated/school/fees/': typeof AuthenticatedSchoolFeesIndexRoute
+  '/_authenticated/school/id-cards/': typeof AuthenticatedSchoolIdCardsIndexRoute
+  '/_authenticated/school/marks/': typeof AuthenticatedSchoolMarksIndexRoute
+  '/_authenticated/school/reports/': typeof AuthenticatedSchoolReportsIndexRoute
+  '/_authenticated/school/sections/': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/_authenticated/school/students/': typeof AuthenticatedSchoolStudentsIndexRoute
+  '/_authenticated/school/subjects/': typeof AuthenticatedSchoolSubjectsIndexRoute
+  '/_authenticated/school/teacher-assignments/': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
+  '/_authenticated/school/teacher-attendance/': typeof AuthenticatedSchoolTeacherAttendanceIndexRoute
+  '/_authenticated/school/teacher-leave/': typeof AuthenticatedSchoolTeacherLeaveIndexRoute
+  '/_authenticated/school/teacher-payroll/': typeof AuthenticatedSchoolTeacherPayrollIndexRoute
+  '/_authenticated/school/teachers/': typeof AuthenticatedSchoolTeachersIndexRoute
+  '/_authenticated/school/timetable/': typeof AuthenticatedSchoolTimetableIndexRoute
+  '/_authenticated/school/visitors/': typeof AuthenticatedSchoolVisitorsIndexRoute
+  '/_authenticated/school/whatsapp/': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/_authenticated/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/_authenticated/school/fees/categories/': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
+  '/_authenticated/school/fees/dashboard/': typeof AuthenticatedSchoolFeesDashboardIndexRoute
+  '/_authenticated/school/fees/expenses/': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/_authenticated/school/fees/reports/': typeof AuthenticatedSchoolFeesReportsIndexRoute
+  '/_authenticated/school/fees/structures/': typeof AuthenticatedSchoolFeesStructuresIndexRoute
+  '/_authenticated/school/fees/transactions/': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
+  '/_authenticated/school/fees/vouchers/': typeof AuthenticatedSchoolFeesVouchersIndexRoute
+  '/_authenticated/school/students/$id/': typeof AuthenticatedSchoolStudentsIdIndexRoute
 }
 
 export interface FileRouteTypes {
@@ -1245,6 +2044,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/barcode-demo'
     | '/reports'
+    | '/school'
     | '/voice-demo'
     | '/'
     | '/mobile-shop/bill-payments'
@@ -1273,6 +2073,7 @@ export interface FileRouteTypes {
     | '/purchase-returns'
     | '/roles'
     | '/sales-returns'
+    | '/school/'
     | '/settings/'
     | '/staff'
     | '/subscription'
@@ -1282,6 +2083,13 @@ export interface FileRouteTypes {
     | '/users'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/school/portals/parent'
+    | '/school/portals/teacher'
+    | '/school/reports/result-sheet'
+    | '/school/students/$id'
+    | '/school/students/create'
+    | '/school/students/import'
+    | '/school/students/promotion'
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/employees'
@@ -1289,7 +2097,36 @@ export interface FileRouteTypes {
     | '/hr/payroll'
     | '/hr/settings'
     | '/products/bulk-edit'
+    | '/school/accounts'
+    | '/school/attendance-scanner'
+    | '/school/attendance'
+    | '/school/class-overview'
+    | '/school/classes'
+    | '/school/exams'
+    | '/school/fees'
+    | '/school/id-cards'
+    | '/school/marks'
+    | '/school/reports'
+    | '/school/sections'
+    | '/school/students'
+    | '/school/subjects'
+    | '/school/teacher-assignments'
+    | '/school/teacher-attendance'
+    | '/school/teacher-leave'
+    | '/school/teacher-payroll'
+    | '/school/teachers'
+    | '/school/timetable'
+    | '/school/visitors'
+    | '/school/whatsapp'
     | '/hr/employees/$id/edit'
+    | '/school/fees/categories'
+    | '/school/fees/dashboard'
+    | '/school/fees/expenses'
+    | '/school/fees/reports'
+    | '/school/fees/structures'
+    | '/school/fees/transactions'
+    | '/school/fees/vouchers'
+    | '/school/students/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -1333,6 +2170,7 @@ export interface FileRouteTypes {
     | '/purchase-returns'
     | '/roles'
     | '/sales-returns'
+    | '/school'
     | '/settings'
     | '/staff'
     | '/subscription'
@@ -1342,6 +2180,12 @@ export interface FileRouteTypes {
     | '/users'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/school/portals/parent'
+    | '/school/portals/teacher'
+    | '/school/reports/result-sheet'
+    | '/school/students/create'
+    | '/school/students/import'
+    | '/school/students/promotion'
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/employees'
@@ -1349,7 +2193,36 @@ export interface FileRouteTypes {
     | '/hr/payroll'
     | '/hr/settings'
     | '/products/bulk-edit'
+    | '/school/accounts'
+    | '/school/attendance-scanner'
+    | '/school/attendance'
+    | '/school/class-overview'
+    | '/school/classes'
+    | '/school/exams'
+    | '/school/fees'
+    | '/school/id-cards'
+    | '/school/marks'
+    | '/school/reports'
+    | '/school/sections'
+    | '/school/students'
+    | '/school/subjects'
+    | '/school/teacher-assignments'
+    | '/school/teacher-attendance'
+    | '/school/teacher-leave'
+    | '/school/teacher-payroll'
+    | '/school/teachers'
+    | '/school/timetable'
+    | '/school/visitors'
+    | '/school/whatsapp'
     | '/hr/employees/$id/edit'
+    | '/school/fees/categories'
+    | '/school/fees/dashboard'
+    | '/school/fees/expenses'
+    | '/school/fees/reports'
+    | '/school/fees/structures'
+    | '/school/fees/transactions'
+    | '/school/fees/vouchers'
+    | '/school/students/$id'
   id:
     | '__root__'
     | '/_authenticated'
@@ -1367,6 +2240,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/barcode-demo'
     | '/_authenticated/reports'
+    | '/_authenticated/school'
     | '/_authenticated/voice-demo'
     | '/_authenticated/'
     | '/_authenticated/mobile-shop/bill-payments'
@@ -1395,6 +2269,7 @@ export interface FileRouteTypes {
     | '/_authenticated/purchase-returns/'
     | '/_authenticated/roles/'
     | '/_authenticated/sales-returns/'
+    | '/_authenticated/school/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
     | '/_authenticated/subscription/'
@@ -1404,6 +2279,13 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
+    | '/_authenticated/school/portals/parent'
+    | '/_authenticated/school/portals/teacher'
+    | '/_authenticated/school/reports/result-sheet'
+    | '/_authenticated/school/students/$id'
+    | '/_authenticated/school/students/create'
+    | '/_authenticated/school/students/import'
+    | '/_authenticated/school/students/promotion'
     | '/_authenticated/hr/attendance/'
     | '/_authenticated/hr/departments/'
     | '/_authenticated/hr/employees/'
@@ -1411,7 +2293,36 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/payroll/'
     | '/_authenticated/hr/settings/'
     | '/_authenticated/products/bulk-edit/'
+    | '/_authenticated/school/accounts/'
+    | '/_authenticated/school/attendance-scanner/'
+    | '/_authenticated/school/attendance/'
+    | '/_authenticated/school/class-overview/'
+    | '/_authenticated/school/classes/'
+    | '/_authenticated/school/exams/'
+    | '/_authenticated/school/fees/'
+    | '/_authenticated/school/id-cards/'
+    | '/_authenticated/school/marks/'
+    | '/_authenticated/school/reports/'
+    | '/_authenticated/school/sections/'
+    | '/_authenticated/school/students/'
+    | '/_authenticated/school/subjects/'
+    | '/_authenticated/school/teacher-assignments/'
+    | '/_authenticated/school/teacher-attendance/'
+    | '/_authenticated/school/teacher-leave/'
+    | '/_authenticated/school/teacher-payroll/'
+    | '/_authenticated/school/teachers/'
+    | '/_authenticated/school/timetable/'
+    | '/_authenticated/school/visitors/'
+    | '/_authenticated/school/whatsapp/'
     | '/_authenticated/hr/employees/$id/edit'
+    | '/_authenticated/school/fees/categories/'
+    | '/_authenticated/school/fees/dashboard/'
+    | '/_authenticated/school/fees/expenses/'
+    | '/_authenticated/school/fees/reports/'
+    | '/_authenticated/school/fees/structures/'
+    | '/_authenticated/school/fees/transactions/'
+    | '/_authenticated/school/fees/vouchers/'
+    | '/_authenticated/school/students/$id/'
   fileRoutesById: FileRoutesById
 }
 
@@ -1475,6 +2386,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
         "/_authenticated/reports",
+        "/_authenticated/school",
         "/_authenticated/voice-demo",
         "/_authenticated/",
         "/_authenticated/mobile-shop/bill-payments",
@@ -1567,6 +2479,48 @@ export const routeTree = rootRoute
     "/_authenticated/reports": {
       "filePath": "_authenticated/reports.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/school": {
+      "filePath": "_authenticated/school.tsx",
+      "parent": "/_authenticated",
+      "children": [
+        "/_authenticated/school/",
+        "/_authenticated/school/portals/parent",
+        "/_authenticated/school/portals/teacher",
+        "/_authenticated/school/reports/result-sheet",
+        "/_authenticated/school/students/$id",
+        "/_authenticated/school/students/create",
+        "/_authenticated/school/students/import",
+        "/_authenticated/school/students/promotion",
+        "/_authenticated/school/accounts/",
+        "/_authenticated/school/attendance-scanner/",
+        "/_authenticated/school/attendance/",
+        "/_authenticated/school/class-overview/",
+        "/_authenticated/school/classes/",
+        "/_authenticated/school/exams/",
+        "/_authenticated/school/fees/",
+        "/_authenticated/school/id-cards/",
+        "/_authenticated/school/marks/",
+        "/_authenticated/school/reports/",
+        "/_authenticated/school/sections/",
+        "/_authenticated/school/students/",
+        "/_authenticated/school/subjects/",
+        "/_authenticated/school/teacher-assignments/",
+        "/_authenticated/school/teacher-attendance/",
+        "/_authenticated/school/teacher-leave/",
+        "/_authenticated/school/teacher-payroll/",
+        "/_authenticated/school/teachers/",
+        "/_authenticated/school/timetable/",
+        "/_authenticated/school/visitors/",
+        "/_authenticated/school/whatsapp/",
+        "/_authenticated/school/fees/categories/",
+        "/_authenticated/school/fees/dashboard/",
+        "/_authenticated/school/fees/expenses/",
+        "/_authenticated/school/fees/reports/",
+        "/_authenticated/school/fees/structures/",
+        "/_authenticated/school/fees/transactions/",
+        "/_authenticated/school/fees/vouchers/"
+      ]
     },
     "/_authenticated/voice-demo": {
       "filePath": "_authenticated/voice-demo.tsx",
@@ -1680,6 +2634,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/sales-returns/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/school/": {
+      "filePath": "_authenticated/school/index.tsx",
+      "parent": "/_authenticated/school"
+    },
     "/_authenticated/settings/": {
       "filePath": "_authenticated/settings/index.tsx",
       "parent": "/_authenticated/settings"
@@ -1719,6 +2677,37 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/hr/employees/create.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/school/portals/parent": {
+      "filePath": "_authenticated/school/portals/parent.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/portals/teacher": {
+      "filePath": "_authenticated/school/portals/teacher.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/reports/result-sheet": {
+      "filePath": "_authenticated/school/reports/result-sheet.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/students/$id": {
+      "filePath": "_authenticated/school/students/$id.tsx",
+      "parent": "/_authenticated/school",
+      "children": [
+        "/_authenticated/school/students/$id/"
+      ]
+    },
+    "/_authenticated/school/students/create": {
+      "filePath": "_authenticated/school/students/create.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/students/import": {
+      "filePath": "_authenticated/school/students/import.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/students/promotion": {
+      "filePath": "_authenticated/school/students/promotion.tsx",
+      "parent": "/_authenticated/school"
+    },
     "/_authenticated/hr/attendance/": {
       "filePath": "_authenticated/hr/attendance/index.tsx",
       "parent": "/_authenticated"
@@ -1747,9 +2736,125 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/products/bulk-edit/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/school/accounts/": {
+      "filePath": "_authenticated/school/accounts/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/attendance-scanner/": {
+      "filePath": "_authenticated/school/attendance-scanner/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/attendance/": {
+      "filePath": "_authenticated/school/attendance/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/class-overview/": {
+      "filePath": "_authenticated/school/class-overview/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/classes/": {
+      "filePath": "_authenticated/school/classes/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/exams/": {
+      "filePath": "_authenticated/school/exams/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/": {
+      "filePath": "_authenticated/school/fees/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/id-cards/": {
+      "filePath": "_authenticated/school/id-cards/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/marks/": {
+      "filePath": "_authenticated/school/marks/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/reports/": {
+      "filePath": "_authenticated/school/reports/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/sections/": {
+      "filePath": "_authenticated/school/sections/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/students/": {
+      "filePath": "_authenticated/school/students/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/subjects/": {
+      "filePath": "_authenticated/school/subjects/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/teacher-assignments/": {
+      "filePath": "_authenticated/school/teacher-assignments/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/teacher-attendance/": {
+      "filePath": "_authenticated/school/teacher-attendance/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/teacher-leave/": {
+      "filePath": "_authenticated/school/teacher-leave/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/teacher-payroll/": {
+      "filePath": "_authenticated/school/teacher-payroll/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/teachers/": {
+      "filePath": "_authenticated/school/teachers/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/timetable/": {
+      "filePath": "_authenticated/school/timetable/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/visitors/": {
+      "filePath": "_authenticated/school/visitors/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/whatsapp/": {
+      "filePath": "_authenticated/school/whatsapp/index.tsx",
+      "parent": "/_authenticated/school"
+    },
     "/_authenticated/hr/employees/$id/edit": {
       "filePath": "_authenticated/hr/employees/$id.edit.tsx",
       "parent": "/_authenticated/hr/employees/$id"
+    },
+    "/_authenticated/school/fees/categories/": {
+      "filePath": "_authenticated/school/fees/categories/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/dashboard/": {
+      "filePath": "_authenticated/school/fees/dashboard/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/expenses/": {
+      "filePath": "_authenticated/school/fees/expenses/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/reports/": {
+      "filePath": "_authenticated/school/fees/reports/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/structures/": {
+      "filePath": "_authenticated/school/fees/structures/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/transactions/": {
+      "filePath": "_authenticated/school/fees/transactions/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/vouchers/": {
+      "filePath": "_authenticated/school/fees/vouchers/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/students/$id/": {
+      "filePath": "_authenticated/school/students/$id.index.tsx",
+      "parent": "/_authenticated/school/students/$id"
     }
   }
 }

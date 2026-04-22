@@ -1,0 +1,33 @@
+2026/04/23-01:39:34.692 828f Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/04/23-01:39:34.693 828f Recovering log #533
+2026/04/23-01:39:34.764 828f Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000533.log 
+2026/04/23-01:50:15.421 828f Level-0 table #551: started
+2026/04/23-01:50:15.447 828f Level-0 table #551: 1226836 bytes OK
+2026/04/23-01:50:15.450 828f Delete type=0 #533
+2026/04/23-01:51:13.259 8291 Compacting 1@0 + 0@1 files
+2026/04/23-01:51:13.283 8291 Generated table #552@0: 27014 keys, 526482 bytes
+2026/04/23-01:51:13.285 8291 Generated table #553@0: 35 keys, 3434 bytes
+2026/04/23-01:51:13.285 8291 Compacted 1@0 + 0@1 files => 529916 bytes
+2026/04/23-01:51:13.288 8291 compacted to: files[ 0 2 17 0 0 0 0 ]
+2026/04/23-01:51:13.288 8291 Delete type=2 #551
+2026/04/23-01:55:22.257 8291 Compacting 1@1 + 8@2 files
+2026/04/23-01:55:22.333 8291 Generated table #554@1: 89001 keys, 2239339 bytes
+2026/04/23-01:55:22.389 8291 Generated table #555@1: 47292 keys, 2263939 bytes
+2026/04/23-01:55:22.424 8291 Generated table #556@1: 23659 keys, 2176638 bytes
+2026/04/23-01:55:22.446 8291 Generated table #557@1: 1853 keys, 2145545 bytes
+2026/04/23-01:55:22.461 8291 Generated table #558@1: 2126 keys, 2146602 bytes
+2026/04/23-01:55:22.474 8291 Generated table #559@1: 1423 keys, 2138937 bytes
+2026/04/23-01:55:22.507 8291 Generated table #560@1: 17058 keys, 2195848 bytes
+2026/04/23-01:55:22.558 8291 Generated table #561@1: 26934 keys, 2241384 bytes
+2026/04/23-01:55:22.564 8291 Generated table #562@1: 1851 keys, 101018 bytes
+2026/04/23-01:55:22.564 8291 Compacted 1@1 + 8@2 files => 17649250 bytes
+2026/04/23-01:55:22.568 8291 compacted to: files[ 0 1 18 0 0 0 0 ]
+2026/04/23-01:55:22.568 8291 Delete type=2 #538
+2026/04/23-01:55:22.568 8291 Delete type=2 #552
+2026/04/23-01:55:22.568 8291 Delete type=2 #544
+2026/04/23-01:55:22.568 8291 Delete type=2 #540
+2026/04/23-01:55:22.568 8291 Delete type=2 #537
+2026/04/23-01:55:22.568 8291 Delete type=2 #543
+2026/04/23-01:55:22.568 8291 Delete type=2 #541
+2026/04/23-01:55:22.568 8291 Delete type=2 #539
+2026/04/23-01:55:22.568 8291 Delete type=2 #542

@@ -18,9 +18,11 @@ import { useGetSubscriptionUsageQuery, useGetMyOrganizationQuery } from '@/store
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { isMobileShopBusiness } from '@/lib/business-types'
+import { isMobileShopBusiness, isSchoolBusiness } from '@/lib/business-types'
 import { isFeatureAllowed } from '@/lib/feature-access'
 import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle } from 'lucide-react'
+import SchoolDashboard from '@/features/school/dashboard'
+import { Navigate } from '@tanstack/react-router'
 
 export default function Dashboard() {
   const { t } = useLanguage()
@@ -32,6 +34,29 @@ export default function Dashboard() {
   // Use organization's businessType as the source of truth; fall back to user's businessType
   const businessType = orgData?.businessType ?? user?.businessType
   const showMobileCards = isMobileShopBusiness(businessType) && isFeatureAllowed(planType, 'load')
+
+  if (isSchoolBusiness(businessType)) {
+    // Teachers must never see the admin school dashboard — redirect them immediately
+    const schoolRole = user?.schoolRole || (user?.linkedTeacherId ? 'teacher' : null)
+    if (schoolRole === 'teacher') {
+      return <Navigate to='/school/portals/teacher' />
+    }
+    return (
+      <>
+        <Header>
+          <div className='ml-auto flex items-center space-x-4'>
+            <Search />
+            <LanguageSwitch />
+            <ThemeSwitch />
+            <ProfileDropdown />
+          </div>
+        </Header>
+        <Main>
+          <SchoolDashboard />
+        </Main>
+      </>
+    )
+  }
   
   return (
     <>

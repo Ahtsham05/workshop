@@ -12,6 +12,10 @@ import { toast } from 'sonner'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { LockedFeatureCard } from '@/components/locked-feature-card'
 import { getPlanLabel } from '@/lib/feature-access'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { normalizeBusinessType } from '@/lib/business-types'
 import { SalesReport } from './components/sales-report'
 import { PurchaseReport } from './components/purchase-report'
 import { ProductReport } from './components/product-report'
@@ -31,6 +35,9 @@ import { RoiReport } from './components/roi-report'
 export default function ReportsPage() {
   const { t } = useLanguage()
   const { canAccess, planType } = useFeatureAccess()
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
   const now = new Date()
   const [startDate, setStartDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0))
   const [endDate, setEndDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
@@ -188,13 +195,13 @@ export default function ReportsPage() {
             <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
             <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
             <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
-            {canAccess('load') && (
+            {isMobileShop && canAccess('load') && (
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
-            {canAccess('repair') && (
+            {isMobileShop && canAccess('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
             )}
-            {canAccess('bill_payment') && (
+            {isMobileShop && canAccess('bill_payment') && (
               <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
             )}
             {canAccess('profit_loss') && (
@@ -252,23 +259,29 @@ export default function ReportsPage() {
           <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
         </TabsContent>
 
-        <TabsContent value='load' className='mt-6'>
-          {canAccess('load')
-            ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
-            : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isMobileShop && (
+          <TabsContent value='load' className='mt-6'>
+            {canAccess('load')
+              ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
 
-        <TabsContent value='repair' className='mt-6'>
-          {canAccess('repair')
-            ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
-            : <LockedFeatureCard featureName='Repair Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isMobileShop && (
+          <TabsContent value='repair' className='mt-6'>
+            {canAccess('repair')
+              ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              : <LockedFeatureCard featureName='Repair Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
 
-        <TabsContent value='bill-payments' className='mt-6'>
-          {canAccess('bill_payment')
-            ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
-            : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isMobileShop && (
+          <TabsContent value='bill-payments' className='mt-6'>
+            {canAccess('bill_payment')
+              ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
 
         <TabsContent value='roi' className='mt-6'>
           {canAccess('roi')

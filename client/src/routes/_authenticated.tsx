@@ -1,30 +1,31 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SidebarProvider } from '@/components/ui/sidebar'
-import { useAuth } from '@/context/auth-context'
-import { AuthLoadingScreen } from '@/components/auth-loading-screen'
 import { PermissionWrapper } from '@/context/permission-wrapper'
 import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
 
-// Authentication guard component for the _authenticated layout
+/**
+ * Authenticated layout component.
+ *
+ * Authentication is guaranteed by the beforeLoad guard below — if the user
+ * is not authenticated, beforeLoad throws a redirect to /sign-in BEFORE
+ * this component ever renders.  Therefore there is no need to re-check
+ * isAuthenticated here; doing so caused a race condition where React's
+ * concurrent scheduler rendered the component with a stale context value
+ * (isAuthenticated = false) before the AuthProvider re-render from Redux
+ * propagated, showing a persistent "Checking Authentication" spinner.
+ */
 function AuthenticatedLayout() {
-  const { isAuthenticated } = useAuth()
-
-  // If not authenticated, show loading or redirect
-  if (!isAuthenticated) {
-    return <AuthLoadingScreen />
-  }
-
   return (
     <TrialExpirationBoundary>
-    <PermissionWrapper>
-      <SidebarProvider>
-        <AppSidebar />
-        <main className="flex-1 overflow-hidden">
-          <Outlet />
-        </main>
-      </SidebarProvider>
-    </PermissionWrapper>
+      <PermissionWrapper>
+        <SidebarProvider>
+          <AppSidebar />
+          <main className="flex-1 overflow-hidden">
+            <Outlet />
+          </main>
+        </SidebarProvider>
+      </PermissionWrapper>
     </TrialExpirationBoundary>
   )
 }
@@ -54,8 +55,33 @@ export const Route = createFileRoute('/_authenticated')({
       if (userData.onboardingComplete === false) {
         throw redirect({ to: '/onboarding' })
       }
+
+      // ── Teacher portal guard ─────────────────────────────────────────────
+      // School teachers may ONLY access their portal and leave page.
+      // Every other route is blocked here so they can never land on admin pages
+      // via direct URL navigation or browser back/forward.
+      const schoolRole: string | null =
+        userData?.schoolRole || (userData?.linkedTeacherId ? 'teacher' : null)
+      if (schoolRole === 'teacher') {
+        const TEACHER_ALLOWED: string[] = [
+          '/school/portals/teacher',
+          '/school/teacher-leave',
+        ]
+        const allowed = TEACHER_ALLOWED.some(
+          (p) =>
+            location.pathname === p ||
+            location.pathname.startsWith(p + '/'),
+        )
+        if (!allowed) {
+          throw redirect({ to: '/school/portals/teacher' })
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
     } catch (error) {
-      if ((error as any)?.redirect) throw error
+      // Re-throw any router redirect/navigation errors unchanged.
+      // TanStack Router uses `isRedirect` on the thrown object; older builds
+      // used `redirect`. Check both so neither is swallowed.
+      if ((error as any)?.isRedirect || (error as any)?.redirect) throw error
       // Clear invalid data
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')

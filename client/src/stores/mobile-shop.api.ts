@@ -107,6 +107,40 @@ export interface CreateCashWithdrawalsBatchInput {
   entries: CashWithdrawalBatchEntry[]
 }
 
+export interface RepairStockEntry {
+  id: string
+  type: 'purchase' | 'repair_usage'
+  description: string
+  amount: number
+  repairJobRef?: string
+  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  notes?: string
+  date: string
+  createdAt?: string
+}
+
+export interface CreateRepairStockPurchaseInput {
+  description: string
+  amount: number
+  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  notes?: string
+  date?: string
+}
+
+export interface CreateRepairStockUsageInput {
+  description: string
+  amount: number
+  repairJobRef?: string
+  notes?: string
+  date?: string
+}
+
+export interface RepairStockSummary {
+  totalPurchased: number
+  totalUsed: number
+  balance: number
+}
+
 export interface RepairJobRecord {
   id: string
   customerName: string
@@ -277,7 +311,7 @@ export interface MobileDashboardSummary {
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'CashBook', 'UtilityCompanies', 'BillPayments'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -396,6 +430,14 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    deleteCashWithdrawalsBatch: builder.mutation<{ deleted: number; failed: number }, { ids: string[] }>({
+      query: (body) => ({
+        url: '/cash-withdrawals/batch',
+        method: 'DELETE',
+        body,
+      }),
+      invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
     getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, { page?: number; limit?: number; status?: string } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -428,6 +470,35 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
     }),
+
+    // ─── Repair Stock Ledger ─────────────────────────────────────────────────
+    getRepairStockLedger: builder.query<PaginatedResult<RepairStockEntry>, { page?: number; limit?: number; startDate?: string; endDate?: string } | void>({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 200), sortBy: 'date:asc' })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        if ((params as any)?.startDate) p.set('startDate', (params as any).startDate)
+        if ((params as any)?.endDate) p.set('endDate', (params as any).endDate)
+        return `/repair-stock?${p.toString()}`
+      },
+      providesTags: ['RepairStock'],
+    }),
+    createRepairStockPurchase: builder.mutation<RepairStockEntry, CreateRepairStockPurchaseInput>({
+      query: (body) => ({ url: '/repair-stock', method: 'POST', body }),
+      invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
+    }),
+    createRepairStockUsage: builder.mutation<RepairStockEntry, CreateRepairStockUsageInput>({
+      query: (body) => ({ url: '/repair-stock/use', method: 'POST', body }),
+      invalidatesTags: ['RepairStock'],
+    }),
+    deleteRepairStockEntry: builder.mutation<void, string>({
+      query: (id) => ({ url: `/repair-stock/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
+    }),
+    getRepairStockSummary: builder.query<RepairStockSummary, void>({
+      query: () => '/repair-stock/summary',
+      providesTags: ['RepairStock'],
+    }),
+
     getCashBookEntries: builder.query<PaginatedResult<CashBookEntryRecord>, CashBookQueryParams | void>({
       query: (params) => {
         const searchParams = new URLSearchParams({ limit: String(params?.limit ?? 10) })
@@ -578,6 +649,7 @@ export const {
   useCreateCashWithdrawalsBatchMutation,
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
+  useDeleteCashWithdrawalsBatchMutation,
   useGetRepairJobsQuery,
   useCreateRepairJobMutation,
   useUpdateRepairJobMutation,
@@ -586,6 +658,11 @@ export const {
   useGetOpeningBalanceQuery,
   useSetOpeningBalanceMutation,
   useDeleteRepairJobMutation,
+  useGetRepairStockLedgerQuery,
+  useCreateRepairStockPurchaseMutation,
+  useCreateRepairStockUsageMutation,
+  useDeleteRepairStockEntryMutation,
+  useGetRepairStockSummaryQuery,
   useGetUtilityCompaniesQuery,
   useCreateUtilityCompanyMutation,
   useUpdateUtilityCompanyMutation,

@@ -22,6 +22,7 @@ module.exports.LoadPurchase = require('./loadPurchase.model');
 module.exports.LoadTransaction = require('./loadTransaction.model');
 module.exports.CashWithdrawal = require('./cashWithdrawal.model');
 module.exports.RepairJob = require('./repairJob.model');
+module.exports.RepairStockItem = require('./repairStockItem.model');
 module.exports.CashBookEntry = require('./cashBookEntry.model');
 module.exports.SalesReturn = require('./salesReturn.model');
 module.exports.PurchaseReturn = require('./purchaseReturn.model');
@@ -29,6 +30,37 @@ module.exports.PurchaseReturn = require('./purchaseReturn.model');
 // Utility Bill Models
 module.exports.UtilityCompany = require('./utilityCompany.model');
 module.exports.BillPayment = require('./billPayment.model');
+
+// School Accounting Models
+module.exports.FeeCategory = require('./feeCategory.model');
+module.exports.SchoolTransaction = require('./schoolTransaction.model');
+module.exports.FeeStructure = require('./feeStructure.model');
+module.exports.FeeVoucher = require('./feeVoucher.model');
+module.exports.StudentCreditLedger = require('./studentCreditLedger.model');
+
+// Accounting System Models
+module.exports.AccountHead = require('./accountHead.model');
+module.exports.JournalEntry = require('./journalEntry.model');
+module.exports.BankAccount = require('./bankAccount.model');
+module.exports.Budget = require('./budget.model');
+
+// School Models
+module.exports.SchoolClass = require('./schoolClass.model');
+module.exports.Section = require('./section.model');
+module.exports.Subject = require('./subject.model');
+module.exports.Student = require('./student.model');
+module.exports.Teacher = require('./teacher.model');
+module.exports.SchoolAttendance = require('./schoolAttendance.model');
+module.exports.TeacherAttendance = require('./teacherAttendance.model');
+module.exports.TeacherLeave = require('./teacherLeave.model');
+module.exports.TeacherPayroll = require('./teacherPayroll.model');
+module.exports.TeacherAssignment = require('./teacherAssignment.model');
+module.exports.Exam = require('./exam.model');
+module.exports.Mark = require('./mark.model');
+module.exports.SchoolFee = require('./schoolFee.model');
+module.exports.Timetable = require('./timetable.model');
+module.exports.TimeSlot = require('./timeSlot.model');
+module.exports.Visitor = require('./visitor.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

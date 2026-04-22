@@ -75,10 +75,17 @@ const createCashWithdrawalsBatch = {
   }),
 };
 
+const deleteCashWithdrawalsBatch = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string().custom(objectId)).min(1).required(),
+  }),
+};
+
 module.exports = {
   createCashWithdrawal,
   createCashWithdrawalsBatch,
   getCashWithdrawals,
   updateCashWithdrawal,
   deleteCashWithdrawal,
+  deleteCashWithdrawalsBatch,
 };

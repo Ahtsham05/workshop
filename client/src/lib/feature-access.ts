@@ -17,6 +17,9 @@ export const BASE_FEATURES = [
   'sales',
   'invoicing',
   'basic_reports',
+  'school_management',
+  'cash_book',
+  'reports',
 ] as const
 
 /** Mobile shop and advanced report features — Growth plan and above. */
@@ -49,7 +52,7 @@ export type FeatureKey =
 
 /** Map each plan type to its allowed feature keys. */
 const PLAN_FEATURE_KEYS: Record<string, readonly string[]> = {
-  trial:      BASE_FEATURES,
+  trial:      [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
   starter:    BASE_FEATURES,
   growth:     [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
   business:   [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, ...BUSINESS_FEATURES],

@@ -8,7 +8,7 @@ const cashBookController = require('../../controllers/cashBook.controller');
 
 const router = express.Router();
 
-router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
+router.use(auth(), branchScope());
 
 router.route('/').get(validate(cashBookValidation.getCashBookEntries), cashBookController.getCashBookEntries);
 

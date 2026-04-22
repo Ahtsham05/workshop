@@ -22,6 +22,10 @@ import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDow
 import * as XLSX from 'xlsx'
 import { format, subMonths, subDays } from 'date-fns'
 import { toast } from 'sonner'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { normalizeBusinessType } from '@/lib/business-types'
 
 interface RoiReportProps {
   startDate: string
@@ -63,6 +67,10 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
   (_props, ref) => {
     const { t } = useLanguage()
     const [preset, setPreset] = useState<Preset>('1y')
+
+    const user = useSelector((state: RootState) => state.auth.data?.user)
+    const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+    const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
 
     const dates = useMemo(() => getPresetDates(preset), [preset])
 
@@ -209,11 +217,11 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(roiData?.investment ?? 0)}</div>
               <p className='text-xs text-muted-foreground mt-1'>
-                Inventory + Wallets + Expenses
+                {isMobileShop ? 'Inventory + Wallets + Expenses' : 'Inventory + Expenses'}
               </p>
               <div className='mt-1 space-y-0.5'>
                 <p className='text-xs text-purple-600'>📦 Stock: {fmt(roiData?.inventoryValue ?? 0)}</p>
-                <p className='text-xs text-blue-500'>💳 Wallets: {fmt(roiData?.walletBalance ?? 0)}</p>
+                {isMobileShop && <p className='text-xs text-blue-500'>💳 Wallets: {fmt(roiData?.walletBalance ?? 0)}</p>}
               </div>
             </CardContent>
           </Card>
@@ -244,22 +252,18 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             <CardHeader>
               <CardTitle className='text-base'>Investment Breakdown</CardTitle>
               <p className='text-xs text-muted-foreground'>
-                Investment = Current Inventory Value + Wallet Balance + Period Expenses.
+                Investment = Current Inventory Value{isMobileShop ? ' + Wallet Balance' : ''} + Period Expenses.
                 Inventory value is real-time (stock × cost) so it already reflects all purchases, sales, and returns.
                 Purchase returns recovery is shown for reference only.
               </p>
             </CardHeader>
             <CardContent className='space-y-3'>
               {[
-                { label: 'Current Inventory Value', value: b?.investment.inventoryValue ?? 0, color: 'text-purple-600' },
-                { label: 'Wallet Balance (JazzCash + EasyPaisa)', value: b?.investment.walletBalance ?? 0, color: 'text-blue-500' },
-                { label: 'Expenses', value: b?.investment.expenses ?? 0, color: 'text-orange-600' },
-                {
-                  label: 'Purchase Returns Recovery ℹ️',
-                  value: b?.investment.purchaseReturnsRecovery ?? 0,
-                  color: 'text-green-600',
-                },
-              ].map(({ label, value, color }) => (
+                { label: 'Current Inventory Value', value: b?.investment.inventoryValue ?? 0, color: 'text-purple-600', mobileOnly: false },
+                { label: 'Wallet Balance (JazzCash + EasyPaisa)', value: b?.investment.walletBalance ?? 0, color: 'text-blue-500', mobileOnly: true },
+                { label: 'Expenses', value: b?.investment.expenses ?? 0, color: 'text-orange-600', mobileOnly: false },
+                { label: 'Purchase Returns Recovery ℹ️', value: b?.investment.purchaseReturnsRecovery ?? 0, color: 'text-green-600', mobileOnly: false },
+              ].filter(({ mobileOnly }) => !mobileOnly || isMobileShop).map(({ label, value, color }) => (
                 <div key={label} className='flex justify-between items-center border-b pb-2 last:border-0'>
                   <span className='text-sm text-muted-foreground'>{label}</span>
                   <span className={`font-semibold text-sm ${color}`}>{fmt(value)}</span>
@@ -279,15 +283,15 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             </CardHeader>
             <CardContent className='space-y-3'>
               {[
-                { label: 'Sales Profit', value: b?.profit.salesProfit ?? 0, color: 'text-green-600' },
-                { label: 'Load Profit', value: b?.profit.loadProfit ?? 0, color: 'text-emerald-600' },
-                { label: 'Repair Profit', value: b?.profit.repairProfit ?? 0, color: 'text-teal-600' },
-                { label: 'Bill Payment Profit', value: b?.profit.billPaymentProfit ?? 0, color: 'text-cyan-600' },
-                { label: 'Withdrawal Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600' },
-                { label: 'Deposit Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600' },
-                { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500' },
-                { label: 'Sales Returns Impact', value: -(b?.profit.salesReturnsImpact ?? 0), color: 'text-rose-500' },
-              ].map(({ label, value, color }) => (
+                { label: 'Sales Profit', value: b?.profit.salesProfit ?? 0, color: 'text-green-600', mobileOnly: false },
+                { label: 'Load Profit', value: b?.profit.loadProfit ?? 0, color: 'text-emerald-600', mobileOnly: true },
+                { label: 'Repair Profit', value: b?.profit.repairProfit ?? 0, color: 'text-teal-600', mobileOnly: true },
+                { label: 'Bill Payment Profit', value: b?.profit.billPaymentProfit ?? 0, color: 'text-cyan-600', mobileOnly: true },
+                { label: 'Withdrawal Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600', mobileOnly: true },
+                { label: 'Deposit Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600', mobileOnly: true },
+                { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500', mobileOnly: false },
+                { label: 'Sales Returns Impact', value: -(b?.profit.salesReturnsImpact ?? 0), color: 'text-rose-500', mobileOnly: false },
+              ].filter(({ mobileOnly }) => !mobileOnly || isMobileShop).map(({ label, value, color }) => (
                 <div key={label} className='flex justify-between items-center border-b pb-2 last:border-0'>
                   <span className='text-sm text-muted-foreground'>{label}</span>
                   <span className={`font-semibold text-sm ${color}`}>{fmt(value)}</span>

@@ -19,8 +19,13 @@ interface BaseNavItem {
   permission?: string
   systemRole?: string[]
   businessTypes?: string[]
+  excludeBusinessTypes?: string[]
   /** Feature key that must be unlocked on the user's plan. Used with useFeatureAccess(). */
   requiredFeature?: string
+  /** If set, only users whose schoolRole is in this list can see this item */
+  allowedSchoolRoles?: string[]
+  /** If set, users whose schoolRole is in this list cannot see this item */
+  excludedSchoolRoles?: string[]
 }
 
 type NavLink = BaseNavItem & {
@@ -38,6 +43,8 @@ type NavItem = NavCollapsible | NavLink
 interface NavGroup {
   title: string
   items: NavItem[]
+  /** When true, the group label becomes a collapsible toggle */
+  collapsible?: boolean
 }
 
 interface SidebarData {

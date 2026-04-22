@@ -39,7 +39,9 @@ export const useSearch = () => {
   const searchContext = React.useContext(SearchContext)
 
   if (!searchContext) {
-    throw new Error('useSearch has to be used within <SearchContext.Provider>')
+    // During route transitions the provider tree may be briefly unavailable.
+    // Return a safe no-op to prevent a crash instead of throwing.
+    return { open: false, setOpen: (_v: boolean | ((prev: boolean) => boolean)) => {} }
   }
 
   return searchContext

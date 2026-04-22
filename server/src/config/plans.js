@@ -11,6 +11,7 @@ const BASE_FEATURES = [
   'sales',
   'invoicing',
   'basic_reports',
+  'school_management',
 ];
 
 /** Mobile shop and advanced report features — unlocked on Growth and above. */

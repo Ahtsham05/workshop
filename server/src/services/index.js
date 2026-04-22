@@ -25,6 +25,7 @@ module.exports.loadPurchaseService = require('./loadPurchase.service.js');
 module.exports.loadTransactionService = require('./loadTransaction.service.js');
 module.exports.cashWithdrawalService = require('./cashWithdrawal.service.js');
 module.exports.repairJobService = require('./repairJob.service.js');
+module.exports.repairStockItemService = require('./repairStockItem.service.js');
 module.exports.mobileDashboardService = require('./mobileDashboard.service.js');
 module.exports.salesReturnService = require('./salesReturn.service.js');
 module.exports.purchaseReturnService = require('./purchaseReturn.service.js');
@@ -32,6 +33,36 @@ module.exports.purchaseReturnService = require('./purchaseReturn.service.js');
 // Utility Bill Services
 module.exports.utilityCompanyService = require('./utilityCompany.service.js');
 module.exports.billPaymentService = require('./billPayment.service.js');
+
+// School Accounting Services
+module.exports.feeCategoryService = require('./feeCategory.service.js');
+module.exports.schoolTransactionService = require('./schoolTransaction.service.js');
+module.exports.feeStructureService = require('./feeStructure.service.js');
+module.exports.feeVoucherService = require('./feeVoucher.service.js');
+module.exports.schoolAccountingService = require('./schoolAccounting.service.js');
+module.exports.schoolReportsService = require('./schoolReports.service.js');
+module.exports.accountsSystemService = require('./accountsSystem.service.js');
+
+// School Services
+module.exports.schoolClassService = require('./schoolClass.service.js');
+module.exports.sectionService = require('./section.service.js');
+module.exports.subjectService = require('./subject.service.js');
+module.exports.studentService = require('./student.service.js');
+module.exports.teacherService = require('./teacher.service.js');
+module.exports.schoolAttendanceService = require('./schoolAttendance.service.js');
+module.exports.teacherAttendanceService = require('./teacherAttendance.service.js');
+module.exports.teacherLeaveService = require('./teacherLeave.service.js');
+module.exports.teacherPayrollService = require('./teacherPayroll.service.js');
+module.exports.teacherAssignmentService = require('./teacherAssignment.service.js');
+module.exports.examService = require('./exam.service.js');
+module.exports.markService = require('./mark.service.js');
+module.exports.schoolFeeService = require('./schoolFee.service.js');
+module.exports.timetableService = require('./timetable.service.js');
+module.exports.timeSlotService = require('./timeSlot.service.js');
+module.exports.whatsappService = require('./whatsapp.service.js');
+module.exports.schoolDashboardService = require('./schoolDashboard.service.js');
+module.exports.visitorService = require('./visitor.service.js');
+module.exports.schoolReportService = require('./schoolReport.service.js');
 
 // HR Services
 module.exports.employeeService = require('./employee.service.js');

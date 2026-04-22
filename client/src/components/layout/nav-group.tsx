@@ -30,44 +30,71 @@ import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
 // import { useLanguage } from '@/context/language-context'
 import { NoTranslate } from '@/components/no-translate'
 
-export function NavGroup({ title, items }: NavGroup) {
+export function NavGroup({ title, items, collapsible }: NavGroup) {
   const { state } = useSidebar()
   // const { t } = useLanguage()
   const href = useLocation({ select: (location) => location.href })
+
+  // Determine whether any child is currently active (for defaultOpen)
+  const isAnyChildActive = items.some(
+    (item) =>
+      checkIsActive(href, item) ||
+      item?.items?.some((sub: any) => checkIsActive(href, sub))
+  )
+
+  const menuItems = (
+    <SidebarMenu>
+      {items.map((item) => {
+        const key = `${item.title}-${item.url}`
+        const displayTitle = item.title
+
+        if (!item.items)
+          return <SidebarMenuLink
+            key={key}
+            item={{ ...item, title: displayTitle }}
+            href={href}
+          />
+
+        if (state === 'collapsed')
+          return (
+            <SidebarMenuCollapsedDropdown
+              key={key}
+              item={{ ...item, title: displayTitle }}
+              href={href}
+            />
+          )
+
+        return <SidebarMenuCollapsible
+          key={key}
+          item={{ ...item, title: displayTitle }}
+          href={href}
+        />
+      })}
+    </SidebarMenu>
+  )
+
+  if (collapsible) {
+    return (
+      <SidebarGroup>
+        <Collapsible defaultOpen={isAnyChildActive} className='group/collapsible-group'>
+          <SidebarGroupLabel asChild>
+            <CollapsibleTrigger className='flex w-full items-center'>
+              <NoTranslate>{title}</NoTranslate>
+              <ChevronRight className='ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/collapsible-group:rotate-90' />
+            </CollapsibleTrigger>
+          </SidebarGroupLabel>
+          <CollapsibleContent>{menuItems}</CollapsibleContent>
+        </Collapsible>
+      </SidebarGroup>
+    )
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>
         <NoTranslate>{title}</NoTranslate>
       </SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) => {
-          const key = `${item.title}-${item.url}`
-          // Use original title as is (already properly capitalized)
-          const displayTitle = item.title
-          
-          if (!item.items)
-            return <SidebarMenuLink 
-              key={key} 
-              item={{ ...item, title: displayTitle }} 
-              href={href} 
-            />
-
-          if (state === 'collapsed')
-            return (
-              <SidebarMenuCollapsedDropdown 
-                key={key} 
-                item={{ ...item, title: displayTitle }} 
-                href={href} 
-              />
-            )
-
-          return <SidebarMenuCollapsible 
-            key={key} 
-            item={{ ...item, title: displayTitle }} 
-            href={href} 
-          />
-        })}
-      </SidebarMenu>
+      {menuItems}
     </SidebarGroup>
   )
 }
@@ -206,8 +233,9 @@ const SidebarMenuCollapsedDropdown = ({
 
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
   return (
-    href === item.url || // /endpint?search=param
-    href.split('?')[0] === item.url || // endpoint
+    href === item.url || // exact match including query string
+    href.split('?')[0] === item.url || // base path matches (no query)
+    href === item.url?.split('?')[0] || // item url without query matches full href
     !!item?.items?.filter((i) => i.url === href).length || // if child nav is active
     (mainNav &&
       href.split('/')[1] !== '' &&

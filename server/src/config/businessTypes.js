@@ -9,6 +9,7 @@ const BUSINESS_TYPES = [
   'mobile_shop',
   'pharmacy',
   'factory',
+  'school',
 ];
 
 const BUSINESS_TYPE_ALIASES = {
@@ -19,6 +20,7 @@ const BUSINESS_TYPE_ALIASES = {
 };
 
 const MOBILE_SHOP_BUSINESS_TYPES = ['mobile_shop'];
+const SCHOOL_BUSINESS_TYPES = ['school'];
 
 const normalizeBusinessType = (value) => {
   if (!value) {
@@ -32,5 +34,6 @@ const normalizeBusinessType = (value) => {
 module.exports = {
   BUSINESS_TYPES,
   MOBILE_SHOP_BUSINESS_TYPES,
+  SCHOOL_BUSINESS_TYPES,
   normalizeBusinessType,
 };

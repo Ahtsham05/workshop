@@ -1,0 +1,142 @@
+/**
+ * IDCardFront — CR80 (85.6 × 54 mm) front face
+ * For screen use: 323 × 204 px at 96 dpi
+ */
+export interface IdCardStudent {
+  id: string;
+  admissionNumber: string;
+  firstName: string;
+  lastName?: string;
+  rollNumber?: string;
+  gender?: string;
+  photoUrl?: { url?: string };
+  classId?: { name?: string } | null;
+  sectionId?: { name?: string } | null;
+}
+
+interface Props {
+  student: IdCardStudent;
+  schoolName?: string;
+  schoolLogo?: string;
+}
+
+import StudentAvatar from '../components/student-avatar';
+
+export default function IDCardFront({
+  student,
+  schoolName = 'School Name',
+  schoolLogo,
+}: Props) {
+  const fullName = `${student.firstName} ${student.lastName || ''}`.trim();
+  const className = student.classId?.name ?? '—';
+  const section = student.sectionId?.name;
+  const classLabel = section ? `${className} - ${section}` : className;
+
+  return (
+    <div
+      className="id-card-front bg-white overflow-hidden flex flex-col"
+      style={{
+        width: '85.6mm',
+        height: '54mm',
+        fontFamily: "'Arial', sans-serif",
+        border: '1px solid #bfdbfe',
+        borderRadius: '3mm',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* ── Header ────────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%)',
+          padding: '2.5mm 3mm',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '2mm',
+          minHeight: '13mm',
+          flexShrink: 0,
+        }}
+      >
+        {/* Logo */}
+        {schoolLogo ? (
+          <img
+            src={schoolLogo}
+            alt="logo"
+            style={{ width: '9mm', height: '9mm', borderRadius: '50%', objectFit: 'cover', border: '0.5mm solid rgba(255,255,255,0.6)', flexShrink: 0 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '9mm', height: '9mm', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 'bold', fontSize: '4.5mm', flexShrink: 0,
+            }}
+          >
+            {schoolName.charAt(0)}
+          </div>
+        )}
+        {/* School info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: 'white', fontWeight: '800', fontSize: '3.2mm', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2 }}>
+            {schoolName}
+          </div>
+          <div style={{ color: '#bfdbfe', fontSize: '2.2mm', letterSpacing: '0.3mm' }}>
+            STUDENT IDENTITY CARD
+          </div>
+        </div>
+      </div>
+
+      {/* ── Body ──────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex', flex: 1,
+          padding: '2mm 3mm', gap: '2.5mm',
+          alignItems: 'flex-start',
+        }}
+      >
+        {/* Photo box */}
+        <StudentAvatar
+          photoUrl={student.photoUrl?.url}
+          gender={student.gender}
+          style={{ width: '15mm', height: '19mm', borderRadius: '1.5mm', border: '0.5mm solid #cbd5e1', flexShrink: 0 }}
+        />
+
+        {/* Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: '800', fontSize: '3.8mm', color: '#0f172a', marginBottom: '2mm', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2 }}>
+            {fullName}
+          </div>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <tbody>
+              <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', paddingBottom: '1mm', letterSpacing: '0.2mm', width: '20mm' }}>Class</td>
+                <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#1e293b', paddingBottom: '1mm' }}>{classLabel}</td>
+              </tr>
+              <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', paddingBottom: '1mm', letterSpacing: '0.2mm' }}>Roll No.</td>
+                <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#1e293b', paddingBottom: '1mm' }}>{student.rollNumber || '—'}</td>
+              </tr>
+              <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Adm. No.</td>
+                <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#2563eb' }}>{student.admissionNumber}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Footer strip ──────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(90deg, #1e3a8a, #2563eb)',
+          padding: '0.8mm 3mm',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>Valid Academic Year 2025–26</span>
+        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>&#9679; &#9679; &#9679;</span>
+      </div>
+    </div>
+  );
+}

@@ -112,6 +112,10 @@ export interface Permission {
   createPerformanceReviews?: boolean;
   managePerformanceReviews?: boolean;
   deletePerformanceReviews?: boolean;
+
+  // Fee & Accounting Permissions (School)
+  viewFeeAccounting?: boolean;
+  manageFeeAccounting?: boolean;
 }
 
 export interface Role {

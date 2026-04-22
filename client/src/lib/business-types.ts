@@ -7,6 +7,7 @@ export const BUSINESS_TYPE_OPTIONS = [
   { value: 'services', label: 'Services' },
   { value: 'restaurant', label: 'Restaurant / Food & Beverage' },
   { value: 'education', label: 'Education' },
+  { value: 'school', label: 'School' },
   { value: 'healthcare', label: 'Healthcare' },
   { value: 'other', label: 'Other' },
 ] as const
@@ -29,4 +30,8 @@ export const normalizeBusinessType = (value?: string | null) => {
 
 export const isMobileShopBusiness = (value?: string | null) => {
   return normalizeBusinessType(value) === 'mobile_shop'
+}
+
+export const isSchoolBusiness = (value?: string | null) => {
+  return normalizeBusinessType(value) === 'school'
 }

@@ -71,10 +71,32 @@ Axios.interceptors.request.use(
     if (accessToken) {
       config.headers!.Authorization = `Bearer ${accessToken}`;
     }
+
+    // Only send x-branch-id for users who have a branch selected AND are not
+    // school-role users (teachers, parents, students).  School module users
+    // are scoped to the organisation itself — they don't belong to a branch
+    // and the backend will 403 if a stale branch ID from a previous admin
+    // session is forwarded on their requests.
     const activeBranchId = localStorage.getItem('activeBranchId');
     if (activeBranchId) {
-      config.headers!['x-branch-id'] = activeBranchId;
+      try {
+        const raw = localStorage.getItem('user');
+        const user = raw ? JSON.parse(raw) : null;
+        const schoolRole: string | null =
+          user?.schoolRole || (user?.linkedTeacherId ? 'teacher' : null);
+        // schoolAdmin has full access and may legitimately use a branch header;
+        // all other school roles (teacher, parent, student) must not.
+        const isRestrictedSchoolRole =
+          schoolRole && schoolRole !== 'schoolAdmin';
+        if (!isRestrictedSchoolRole) {
+          config.headers!['x-branch-id'] = activeBranchId;
+        }
+      } catch {
+        // If user JSON is corrupt, just skip the header — the request will
+        // still go through and the backend will figure out the auth context.
+      }
     }
+
     return config;
   },
   (error: AxiosError) => Promise.reject(error)

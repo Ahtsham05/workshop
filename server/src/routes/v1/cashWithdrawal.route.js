@@ -17,7 +17,8 @@ router
 
 router
   .route('/batch')
-  .post(validate(cashWithdrawalValidation.createCashWithdrawalsBatch), cashWithdrawalController.createCashWithdrawalsBatch);
+  .post(validate(cashWithdrawalValidation.createCashWithdrawalsBatch), cashWithdrawalController.createCashWithdrawalsBatch)
+  .delete(validate(cashWithdrawalValidation.deleteCashWithdrawalsBatch), cashWithdrawalController.deleteCashWithdrawalsBatch);
 
 router
   .route('/:withdrawalId')

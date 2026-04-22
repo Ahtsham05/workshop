@@ -9,6 +9,10 @@ import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { format, subDays, subMonths } from 'date-fns'
 import { toast } from 'sonner'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { normalizeBusinessType } from '@/lib/business-types'
 
 interface ProfitLossReportProps {
   startDate: string
@@ -41,6 +45,10 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
     const [preset, setPreset] = useState<Preset>('custom')
+
+    const user = useSelector((state: RootState) => state.auth.data?.user)
+    const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+    const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
 
     const dates = useMemo(
       () => getPresetDates(preset, startDate, endDate),
@@ -205,16 +213,17 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
         </Card>
 
         {/* Additional profits */}
+        {(isMobileShop || (add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0) > 0) && (
         <Card>
           <CardHeader>
             <CardTitle>Additional Profits</CardTitle>
           </CardHeader>
           <CardContent className='space-y-3'>
-            <Row label='Load Profit' value={fmt(add?.loadProfit ?? 0)} valueClass='text-emerald-600' />
-            <Row label='Repair Profit' value={fmt(add?.repairProfit ?? 0)} valueClass='text-teal-600' />
-            <Row label='Bill Payment Profit' value={fmt(add?.billProfit ?? 0)} valueClass='text-cyan-600' />
-            <Row label='Withdrawal Profit' value={fmt(add?.withdrawalProfit ?? 0)} valueClass='text-orange-600' />
-            <Row label='Deposit Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />
+            {isMobileShop && <Row label='Load Profit' value={fmt(add?.loadProfit ?? 0)} valueClass='text-emerald-600' />}
+            {isMobileShop && <Row label='Repair Profit' value={fmt(add?.repairProfit ?? 0)} valueClass='text-teal-600' />}
+            {isMobileShop && <Row label='Bill Payment Profit' value={fmt(add?.billProfit ?? 0)} valueClass='text-cyan-600' />}
+            {isMobileShop && <Row label='Withdrawal Profit' value={fmt(add?.withdrawalProfit ?? 0)} valueClass='text-orange-600' />}
+            {isMobileShop && <Row label='Deposit Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />}
             <Row
               label='Total Additional'
               value={fmt((add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0))}
@@ -223,6 +232,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             />
           </CardContent>
         </Card>
+        )}
 
         {/* Expenses & adjustments */}
         <Card>

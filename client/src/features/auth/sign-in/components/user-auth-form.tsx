@@ -65,10 +65,23 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
         localStorage.setItem("accessToken", action.payload?.tokens?.access?.token)
         localStorage.setItem("refreshToken", action.payload?.tokens?.refresh?.token)
         localStorage.setItem("user", JSON.stringify(action.payload?.user))
+        // Always clear stale branch from previous session so the new user's
+        // requests never carry a branch ID that belongs to another account.
+        localStorage.removeItem("activeBranchId")
+        localStorage.removeItem("activeBranchName")
         
         // Redirect to onboarding if not completed
         if (!action.payload?.user?.onboardingComplete) {
           navigate({ to: '/onboarding', replace: true })
+          return
+        }
+
+        // School teachers go directly to their portal — never to the admin area
+        const loggedInUser = action.payload?.user
+        const isSchoolTeacher =
+          loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
+        if (isSchoolTeacher) {
+          navigate({ to: '/school/portals/teacher', replace: true })
           return
         }
 

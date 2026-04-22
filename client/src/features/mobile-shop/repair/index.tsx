@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Printer, Trash2, CheckCircle, PackageCheck, Eye } from 'lucide-react'
+import { Printer, Trash2, CheckCircle, PackageCheck, Eye, Plus, ShoppingCart, Package } from 'lucide-react'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
@@ -37,7 +37,13 @@ import {
   useDeleteRepairJobMutation,
   useGetRepairJobsQuery,
   useUpdateRepairJobMutation,
+  useGetRepairStockLedgerQuery,
+  useCreateRepairStockPurchaseMutation,
+  useCreateRepairStockUsageMutation,
+  useDeleteRepairStockEntryMutation,
+  useGetRepairStockSummaryQuery,
   type RepairJobRecord,
+  type RepairStockEntry,
 } from '@/stores/mobile-shop.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -75,6 +81,14 @@ type DeliverDialogState = {
   repair: RepairJobRecord | null
   receivedNow: string
   paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+}
+
+type StockFormState = {
+  description: string
+  amount: string
+  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  notes: string
+  date: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,6 +147,17 @@ export default function RepairPage() {
     receivedNow: '0',
     paymentMethod: 'cash',
   })
+
+  // ── Stock state ──
+  const [stockForm, setStockForm] = useState<StockFormState>({
+    description: '',
+    amount: '0',
+    paymentMethod: 'cash',
+    notes: '',
+    date: toDateTimeLocal(new Date()),
+  })
+  const [deleteStockConfirm, setDeleteStockConfirm] = useState<RepairStockEntry | null>(null)
+
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -147,6 +172,25 @@ export default function RepairPage() {
   const [createRepairJob, { isLoading: isSaving }] = useCreateRepairJobMutation()
   const [updateRepairJob, { isLoading: isUpdating }] = useUpdateRepairJobMutation()
   const [deleteRepairJob] = useDeleteRepairJobMutation()
+
+  // ── Stock queries/mutations ──
+  const { data: stockLedger } = useGetRepairStockLedgerQuery()
+  const { data: stockSummary } = useGetRepairStockSummaryQuery()
+  const [createRepairStockPurchase, { isLoading: isSavingStock }] = useCreateRepairStockPurchaseMutation()
+  const [createRepairStockUsage] = useCreateRepairStockUsageMutation()
+  const [deleteRepairStockEntry] = useDeleteRepairStockEntryMutation()
+
+  // All entries sorted asc (from API), with running balance computed per row
+  const ledgerRows = (() => {
+    const entries = stockLedger?.results ?? []
+    let running = 0
+    return entries.map((e) => {
+      const amt = isNaN(Number(e.amount)) ? 0 : Number(e.amount)
+      if (e.type === 'purchase') running += amt
+      else running -= amt
+      return { ...e, amount: amt, runningBalance: running }
+    })
+  })()
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
@@ -199,21 +243,28 @@ export default function RepairPage() {
     const charges = Number(completeDialog.charges)
     const advanceAmount = Number(completeDialog.advanceAmount)
     const cost = Number(completeDialog.cost)
+
     if (charges < 0 || advanceAmount < 0 || cost < 0) {
       toast.error('Amounts cannot be negative')
       return
     }
+
     try {
       const updated = await updateRepairJob({
         id: completeDialog.repair.id,
-        body: {
-          charges,
-          advanceAmount,
-          cost,
-          paymentMethod: completeDialog.paymentMethod,
-          status: 'completed',
-        },
+        body: { charges, advanceAmount, cost, paymentMethod: completeDialog.paymentMethod, status: 'completed' },
       }).unwrap()
+
+      // Auto-create a stock credit entry for the repair cost
+      if (cost > 0) {
+        await createRepairStockUsage({
+          description: `Repair: ${completeDialog.repair.deviceModel} — ${completeDialog.repair.customerName}`,
+          amount: cost,
+          repairJobRef: `${completeDialog.repair.deviceModel} (${completeDialog.repair.customerName})`,
+          date: new Date().toISOString(),
+        }).unwrap()
+      }
+
       toast.success('Job marked as completed')
       setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash' })
       setPrintRepair(updated as unknown as RepairJobRecord)
@@ -266,6 +317,42 @@ export default function RepairPage() {
       await deleteRepairJob(deleteConfirm.id).unwrap()
       toast.success('Repair job deleted')
       setDeleteConfirm(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to delete')
+    }
+  }
+
+  // ── Stock: Purchase ──
+  const handleStockSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!stockForm.description.trim()) {
+      toast.error('Description is required')
+      return
+    }
+    const amt = Number(stockForm.amount)
+    if (amt <= 0) { toast.error('Amount must be greater than 0'); return }
+    try {
+      await createRepairStockPurchase({
+        description: stockForm.description.trim(),
+        amount: amt,
+        paymentMethod: stockForm.paymentMethod,
+        notes: stockForm.notes.trim() || undefined,
+        date: stockForm.date || new Date().toISOString(),
+      }).unwrap()
+      toast.success('Stock purchased & cashbook updated')
+      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', notes: '', date: toDateTimeLocal(new Date()) })
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to save stock')
+    }
+  }
+
+  // ── Stock: Delete ──
+  const handleDeleteStock = async () => {
+    if (!deleteStockConfirm) return
+    try {
+      await deleteRepairStockEntry(deleteStockConfirm.id).unwrap()
+      toast.success('Entry deleted')
+      setDeleteStockConfirm(null)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to delete')
     }
@@ -595,6 +682,201 @@ export default function RepairPage() {
         </Card>
       </div>
 
+      {/* ── Repair Stock Section ── */}
+      <div className='mt-6 grid gap-6 xl:grid-cols-[400px_1fr]'>
+        {/* ── Purchase Stock Form ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <ShoppingCart className='h-5 w-5 text-primary' />
+              Purchase Repair Parts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className='grid gap-3' onSubmit={handleStockSubmit}>
+              <div className='space-y-1'>
+                <Label>Part / Item Description *</Label>
+                <Input
+                  placeholder='e.g. Samsung A54 Display, Battery iPhone 11'
+                  value={stockForm.description}
+                  onChange={(e) => setStockForm((p) => ({ ...p, description: e.target.value }))}
+                />
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Total Amount (Rs) *</Label>
+                <Input
+                  type='number'
+                  min='1'
+                  step='1'
+                  placeholder='0'
+                  value={stockForm.amount}
+                  onChange={(e) => setStockForm((p) => ({ ...p, amount: e.target.value }))}
+                />
+              </div>
+
+              <div className='grid gap-3 sm:grid-cols-2'>
+                <div className='space-y-1'>
+                  <Label>Payment Method</Label>
+                  <Select
+                    value={stockForm.paymentMethod}
+                    onValueChange={(v) => setStockForm((p) => ({ ...p, paymentMethod: v as StockFormState['paymentMethod'] }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='cash'>Cash</SelectItem>
+                      <SelectItem value='jazzcash'>JazzCash</SelectItem>
+                      <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
+                      <SelectItem value='bank'>Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='space-y-1'>
+                  <Label>Date / Time</Label>
+                  <Input
+                    type='datetime-local'
+                    value={stockForm.date}
+                    onChange={(e) => setStockForm((p) => ({ ...p, date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Notes</Label>
+                <Input
+                  placeholder='Optional notes'
+                  value={stockForm.notes}
+                  onChange={(e) => setStockForm((p) => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
+
+              <Button disabled={isSavingStock} type='submit' className='w-full'>
+                <Plus className='mr-2 h-4 w-4' />
+                {isSavingStock ? 'Saving...' : 'Purchase & Record in Cashbook'}
+              </Button>
+            </form>
+
+            {/* ── Stock Balance Summary ── */}
+            {stockSummary && (
+              <div className='mt-4 rounded-lg border overflow-hidden text-sm'>
+                <div className='bg-muted px-3 py-2 font-semibold text-xs uppercase tracking-wide text-muted-foreground'>
+                  Stock Balance
+                </div>
+                <div className='divide-y'>
+                  <div className='flex justify-between px-3 py-2 bg-blue-50'>
+                    <span className='text-blue-700'>Total Purchased (Dr)</span>
+                    <span className='font-semibold text-blue-700'>{fmtAmt(stockSummary.totalPurchased)}</span>
+                  </div>
+                  <div className='flex justify-between px-3 py-2 bg-red-50'>
+                    <span className='text-destructive'>Used in Repairs (Cr)</span>
+                    <span className='font-semibold text-destructive'>- {fmtAmt(stockSummary.totalUsed)}</span>
+                  </div>
+                  <div className='flex justify-between px-3 py-2 bg-green-50 font-bold'>
+                    <span className={stockSummary.balance >= 0 ? 'text-green-700' : 'text-destructive'}>
+                      Remaining Balance
+                    </span>
+                    <span className={stockSummary.balance >= 0 ? 'text-green-700 text-base' : 'text-destructive text-base'}>
+                      {fmtAmt(stockSummary.balance)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Stock Ledger Table ── */}
+        <Card className='flex flex-col'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <Package className='h-5 w-5 text-primary' />
+              Stock Ledger
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='flex-1 overflow-auto'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className='text-right text-blue-700'>Debit (In)</TableHead>
+                  <TableHead className='text-right text-destructive'>Credit (Out)</TableHead>
+                  <TableHead className='text-right text-green-700'>Balance</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ledgerRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className='text-center text-muted-foreground py-8'>
+                      No entries yet
+                    </TableCell>
+                  </TableRow>
+                )}
+                {/* Show newest first — reverse the balance-computed rows */}
+                {[...ledgerRows].reverse().map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className='text-xs text-muted-foreground whitespace-nowrap'>{fmtDate(row.date)}</TableCell>
+                    <TableCell>
+                      <div className='flex items-center gap-1.5'>
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${row.type === 'purchase' ? 'bg-blue-500' : 'bg-red-500'}`} />
+                        <span className='font-medium text-sm'>{row.description}</span>
+                      </div>
+                      {row.repairJobRef && (
+                        <div className='text-xs text-muted-foreground ml-3'>{row.repairJobRef}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      {row.type === 'purchase' ? (
+                        <span className='font-medium text-blue-700'>{fmtAmt(row.amount)}</span>
+                      ) : (
+                        <span className='text-muted-foreground'>—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      {row.type === 'repair_usage' ? (
+                        <span className='font-medium text-destructive'>{fmtAmt(row.amount)}</span>
+                      ) : (
+                        <span className='text-muted-foreground'>—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      <span className={`font-semibold ${row.runningBalance >= 0 ? 'text-green-700' : 'text-destructive'}`}>
+                        {fmtAmt(row.runningBalance)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {row.type === 'purchase' && (
+                        <Button size='icon' variant='ghost' title='Delete' onClick={() => setDeleteStockConfirm(row)}>
+                          <Trash2 className='h-4 w-4 text-destructive' />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Delete Stock Confirm Dialog ── */}
+      <Dialog open={!!deleteStockConfirm} onOpenChange={(open) => !open && setDeleteStockConfirm(null)}>
+        <DialogContent className='max-w-sm'>
+          <DialogHeader>
+            <DialogTitle>Delete Entry?</DialogTitle>
+          </DialogHeader>
+          <p className='text-sm text-muted-foreground'>
+            Delete <strong>{deleteStockConfirm?.description}</strong>?{' '}
+            {deleteStockConfirm?.type === 'purchase' && 'This will also reverse the cashbook expense entry.'}
+          </p>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setDeleteStockConfirm(null)}>Cancel</Button>
+            <Button variant='destructive' onClick={handleDeleteStock}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Print / View Dialog ── */}
       <Dialog open={!!printRepair} onOpenChange={(open) => !open && setPrintRepair(null)}>
         <DialogContent className='max-w-xl'>
@@ -769,7 +1051,7 @@ export default function RepairPage() {
                 </div>
 
                 <div className='space-y-1'>
-                  <Label>Parts / Repair Cost (Rs) <span className='text-muted-foreground font-normal'>— used for profit</span></Label>
+                  <Label>Parts / Repair Cost (Rs) <span className='text-muted-foreground font-normal'>— deducted from stock balance</span></Label>
                   <Input
                     type='number'
                     min='0'
@@ -777,6 +1059,13 @@ export default function RepairPage() {
                     value={completeDialog.cost}
                     onChange={(e) => setCompleteDialog((prev) => ({ ...prev, cost: e.target.value }))}
                   />
+                  {Number(completeDialog.cost) > 0 && stockSummary && (
+                    <p className='text-xs text-muted-foreground'>
+                      Stock balance after: <strong className={(stockSummary.balance - Number(completeDialog.cost)) >= 0 ? 'text-green-700' : 'text-destructive'}>
+                        {fmtAmt(stockSummary.balance - Number(completeDialog.cost))}
+                      </strong>
+                    </p>
+                  )}
                 </div>
 
                 <div className='space-y-1'>

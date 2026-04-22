@@ -32,6 +32,7 @@ const salesReturnRoute = require('./salesReturn.route');
 const purchaseReturnRoute = require('./purchaseReturn.route');
 const utilityCompanyRoute = require('./utilityCompany.route');
 const billPaymentRoute = require('./billPayment.route');
+const repairStockItemRoute = require('./repairStockItem.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -40,6 +41,38 @@ const departmentRoute = require('./department.route');
 const attendanceRoute = require('./attendance.route');
 const leaveRoute = require('./leave.route');
 const payrollRoute = require('./payroll.route');
+
+// School Routes
+const schoolClassRoute = require('./schoolClass.route');
+const sectionRoute = require('./section.route');
+const subjectRoute = require('./subject.route');
+const studentRoute = require('./student.route');
+const teacherRoute = require('./teacher.route');
+const schoolAttendanceRoute = require('./schoolAttendance.route');
+const examRoute = require('./exam.route');
+const markRoute = require('./mark.route');
+const schoolFeeRoute = require('./schoolFee.route');
+const timetableRoute = require('./timetable.route');
+const timeSlotRoute = require('./timeSlot.route');
+const schoolDashboardRoute = require('./schoolDashboard.route');
+const visitorRoute = require('./visitor.route');
+const schoolReportRoute = require('./schoolReport.route');
+const teacherPortalRoute = require('./teacherPortal.route');
+const parentPortalRoute = require('./parentPortal.route');
+const teacherAttendanceRoute = require('./teacherAttendance.route');
+const teacherLeaveRoute = require('./teacherLeave.route');
+const teacherPayrollRoute = require('./teacherPayroll.route');
+const teacherAssignmentRoute = require('./teacherAssignment.route');
+
+// School Accounting Routes
+const feeCategoryRoute = require('./feeCategory.route');
+const schoolTransactionRoute = require('./schoolTransaction.route');
+const feeStructureRoute = require('./feeStructure.route');
+const feeVoucherRoute = require('./feeVoucher.route');
+const schoolAccountingRoute = require('./schoolAccounting.route');
+const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
+const accountsSystemRoute = require('./accountsSystem.route');
+const whatsappRoute = require('./whatsapp.route');
 
 // Subscription & Admin Routes
 const paymentRoute = require('./payment.route');
@@ -145,6 +178,10 @@ const defaultRoutes = [
     route: repairJobRoute,
   },
   {
+    path: '/repair-stock',
+    route: repairStockItemRoute,
+  },
+  {
     path: '/cash-book',
     route: cashBookRoute,
   },
@@ -193,6 +230,121 @@ const defaultRoutes = [
   {
     path: '/payroll',
     route: payrollRoute
+  },
+  // School Routes
+  {
+    path: '/school-classes',
+    route: schoolClassRoute
+  },
+  {
+    path: '/sections',
+    route: sectionRoute
+  },
+  {
+    path: '/subjects',
+    route: subjectRoute
+  },
+  {
+    path: '/students',
+    route: studentRoute
+  },
+  {
+    path: '/teachers',
+    route: teacherRoute
+  },
+  {
+    path: '/school-attendance',
+    route: schoolAttendanceRoute
+  },
+  {
+    path: '/exams',
+    route: examRoute
+  },
+  {
+    path: '/marks',
+    route: markRoute
+  },
+  {
+    path: '/school-fees',
+    route: schoolFeeRoute
+  },
+  {
+    path: '/timetables',
+    route: timetableRoute
+  },
+  {
+    path: '/time-slots',
+    route: timeSlotRoute
+  },
+  {
+    path: '/school-dashboard',
+    route: schoolDashboardRoute
+  },
+  {
+    path: '/visitors',
+    route: visitorRoute
+  },
+  {
+    path: '/school-reports',
+    route: schoolReportRoute
+  },
+  {
+    path: '/teacher-portal',
+    route: teacherPortalRoute
+  },
+  {
+    path: '/parent-portal',
+    route: parentPortalRoute
+  },
+  // Teacher Management Routes
+  {
+    path: '/teacher-attendance',
+    route: teacherAttendanceRoute,
+  },
+  {
+    path: '/teacher-leaves',
+    route: teacherLeaveRoute,
+  },
+  {
+    path: '/teacher-payroll',
+    route: teacherPayrollRoute,
+  },
+  {
+    path: '/teacher-assignments',
+    route: teacherAssignmentRoute,
+  },
+  // School Accounting Routes
+  {
+    path: '/fee-categories',
+    route: feeCategoryRoute,
+  },
+  {
+    path: '/school-transactions',
+    route: schoolTransactionRoute,
+  },
+  {
+    path: '/fee-structures',
+    route: feeStructureRoute,
+  },
+  {
+    path: '/fee-vouchers',
+    route: feeVoucherRoute,
+  },
+  {
+    path: '/school-accounting',
+    route: schoolAccountingRoute,
+  },
+  {
+    path: '/school-reports-engine',
+    route: schoolReportsEngineRoute,
+  },
+  {
+    path: '/accounts-system',
+    route: accountsSystemRoute,
+  },
+  {
+    path: '/whatsapp',
+    route: whatsappRoute,
   },
   // Subscription & Admin
   {
@@ -249,6 +401,22 @@ const protectedPaths = [
   '/attendance',
   '/leaves',
   '/payroll',
+  '/school-classes',
+  '/sections',
+  '/subjects',
+  '/students',
+  '/teachers',
+  '/school-attendance',
+  '/exams',
+  '/marks',
+  '/school-fees',
+  '/timetables',
+  '/school-dashboard',
+  '/visitors',
+  '/teacher-attendance',
+  '/teacher-leaves',
+  '/teacher-payroll',
+  '/whatsapp',
   '/admin',
 ];
 

@@ -9,8 +9,35 @@ interface AuthState {
   activeBranchName: string | null;
 }
 
+/**
+ * Synchronously reads the persisted user from localStorage so the Redux store
+ * is fully populated on the VERY FIRST render.  This eliminates the race
+ * condition where the sidebar (or any other component) renders with user=null
+ * before the useEffect in auth-context fires.
+ */
+function loadInitialAuthData(): any | null {
+  try {
+    const token = localStorage.getItem('accessToken')
+    const userStr = localStorage.getItem('user')
+    const refreshToken = localStorage.getItem('refreshToken')
+    if (token && userStr) {
+      const user = JSON.parse(userStr)
+      if (user?.id) {
+        return {
+          user,
+          tokens: {
+            access: { token },
+            refresh: { token: refreshToken },
+          },
+        }
+      }
+    }
+  } catch (_e) {}
+  return null
+}
+
 const initialState: AuthState = {
-  data: null,
+  data: loadInitialAuthData(),
   activeBranchId: localStorage.getItem('activeBranchId') || null,
   activeBranchName: localStorage.getItem('activeBranchName') || null,
 };

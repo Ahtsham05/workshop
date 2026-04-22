@@ -76,9 +76,9 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- PWA Service Worker Registration -->
-    <script>
-      if ('serviceWorker' in navigator) {
+    <!-- PWA Service Worker Registration (production only — dev uses Vite HMR, SW cache breaks hot reload) -->
+    <script type="module">
+      if ('serviceWorker' in navigator && import.meta.env.PROD) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {
             // Service worker registration failed, app will still work

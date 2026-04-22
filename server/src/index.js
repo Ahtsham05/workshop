@@ -39,6 +39,23 @@ let server;
 mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => {
   logger.info('Connected to MongoDB');
 
+  // Drop stale indexes that conflict with the current schema
+  try {
+    const db = mongoose.connection.db;
+    const studentsCol = db.collection('students');
+    const indexes = await studentsCol.indexes();
+    // Drop any index referencing the old 'admissionNo' field
+    const staleIndexes = indexes.filter(
+      (i) => i.key && (i.key.admissionNo !== undefined || i.name === 'admissionNo_1_organizationId_1')
+    );
+    for (const idx of staleIndexes) {
+      await studentsCol.dropIndex(idx.name);
+      logger.info(`Dropped stale students index: ${idx.name}`);
+    }
+  } catch (err) {
+    logger.warn('Index migration warning (non-fatal):', err.message);
+  }
+
   // Initialize default roles (Admin, Manager, Cashier, Viewer)
   try {
     const { roleService } = require('./services');
@@ -50,6 +67,11 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => 
 
   server = app.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
+
+    // Try to auto-reconnect WhatsApp using any saved session.
+    // This runs in the background and is safe to fail silently.
+    const { whatsappService } = require('./services');
+    whatsappService.tryAutoConnect();
   });
 }).catch((error) => {
   logger.error('MongoDB connection error:', error);

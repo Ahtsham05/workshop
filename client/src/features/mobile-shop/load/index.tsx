@@ -32,6 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SimplePagination } from '@/components/ui/simple-pagination'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   useCreateLoadTransactionMutation,
   useGetLoadTransactionsQuery,
@@ -47,6 +48,7 @@ import {
   useDeleteLoadTransactionMutation,
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
+  useDeleteCashWithdrawalsBatchMutation,
 } from '@/stores/mobile-shop.api'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -180,6 +182,11 @@ export default function LoadManagementPage() {
   const [deleteLoadTransaction] = useDeleteLoadTransactionMutation()
   const [updateCashWithdrawal] = useUpdateCashWithdrawalMutation()
   const [deleteCashWithdrawal] = useDeleteCashWithdrawalMutation()
+  const [deleteCashWithdrawalsBatch, { isLoading: isDeletingBatch }] = useDeleteCashWithdrawalsBatchMutation()
+
+  // Bulk selection state
+  const [selectedWithdrawalIds, setSelectedWithdrawalIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
   // Edit state
   const [editingPurchase, setEditingPurchase] = useState<any>(null)
@@ -377,7 +384,23 @@ export default function LoadManagementPage() {
         date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Cash withdrawal recorded!')
-      setWithdrawalForm(initialWithdrawalForm)
+      const prevType = withdrawalForm.transactionType
+      const prevWalletId = withdrawalForm.walletId
+      const prevWalletType = withdrawalForm.walletType
+      const prevCommission = withdrawalForm.commissionRate
+      const prevDate = withdrawalForm.date
+      setWithdrawalForm({
+        walletId: prevWalletId,
+        walletType: prevWalletType,
+        amount: '0',
+        transactionType: prevType,
+        customerName: '',
+        customerNumber: '',
+        commissionRate: prevCommission,
+        extraCharge: '0',
+        notes: '',
+        date: prevDate,
+      })
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save cash withdrawal')
     }
@@ -481,6 +504,37 @@ export default function LoadManagementPage() {
       }, 50)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save entries')
+    }
+  }
+
+  // ─── Bulk Delete Handlers ───
+  const toggleWithdrawalSelection = (id: string) => {
+    setSelectedWithdrawalIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllWithdrawals = () => {
+    if (selectedWithdrawalIds.size === withdrawals.length) {
+      setSelectedWithdrawalIds(new Set())
+    } else {
+      setSelectedWithdrawalIds(new Set(withdrawals.map(w => w.id)))
+    }
+  }
+
+  const confirmBulkDelete = async () => {
+    if (selectedWithdrawalIds.size === 0) return
+    try {
+      const result = await deleteCashWithdrawalsBatch({ ids: Array.from(selectedWithdrawalIds) }).unwrap()
+      toast.success(`${result.deleted} withdrawal(s) deleted${result.failed > 0 ? `, ${result.failed} failed` : ''}`)
+      setSelectedWithdrawalIds(new Set())
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to delete withdrawals')
+    } finally {
+      setBulkDeleteConfirm(false)
     }
   }
 
@@ -995,14 +1049,14 @@ export default function LoadManagementPage() {
                         onClick={() => handleBulkWithdrawalTypeChange('withdrawal')}
                         className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'bg-white shadow text-orange-700 border border-orange-200' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        💸 Withdrawal (Customer gets cash)
+                        💸 Withdrawal (Customer gets cash) <span className='ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700'>↑ Cash Received in Account</span>
                       </button>
                       <button
                         type='button'
                         onClick={() => handleBulkWithdrawalTypeChange('deposit')}
                         className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${bulkWithdrawalForm.transactionType === 'deposit' ? 'bg-white shadow text-purple-700 border border-purple-200' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        📲 Deposit (Customer sends via wallet)
+                        📲 Deposit (Customer sends via wallet) <span className='ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-red-100 text-red-700'>↓ Cash Sent from Account</span>
                       </button>
                     </div>
 
@@ -1188,14 +1242,14 @@ export default function LoadManagementPage() {
                       onClick={() => handleWithdrawalChange('transactionType', 'withdrawal')}
                       className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${withdrawalForm.transactionType === 'withdrawal' ? 'bg-white shadow text-orange-700 border border-orange-200' : 'text-muted-foreground hover:text-foreground'}`}
                     >
-                      💸 Withdrawal (Customer gets cash)
+                      💸 Withdrawal (Customer gets cash) <span className='ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700'>↑ Cash Received in Account</span>
                     </button>
                     <button
                       type='button'
                       onClick={() => handleWithdrawalChange('transactionType', 'deposit')}
                       className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${withdrawalForm.transactionType === 'deposit' ? 'bg-white shadow text-purple-700 border border-purple-200' : 'text-muted-foreground hover:text-foreground'}`}
                     >
-                      📲 Deposit (Customer sends via wallet)
+                      📲 Deposit (Customer sends via wallet) <span className='ml-1 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold bg-red-100 text-red-700'>↓ Cash Sent from Account</span>
                     </button>
                   </div>
 
@@ -1312,7 +1366,22 @@ export default function LoadManagementPage() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>Recent Cash Withdrawals</CardTitle></CardHeader>
+              <CardHeader>
+                <div className='flex items-center justify-between'>
+                  <CardTitle>Recent Cash Withdrawals</CardTitle>
+                  {selectedWithdrawalIds.size > 0 && (
+                    <Button
+                      variant='destructive'
+                      size='sm'
+                      disabled={isDeletingBatch}
+                      onClick={() => setBulkDeleteConfirm(true)}
+                    >
+                      <Trash2 className='h-4 w-4 mr-1' />
+                      {isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedWithdrawalIds.size})`}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
               <CardContent>
                 {withdrawals.length === 0 ? (
                   <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No withdrawals yet.</p></div>
@@ -1321,6 +1390,12 @@ export default function LoadManagementPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className='w-10'>
+                          <Checkbox
+                            checked={withdrawals.length > 0 && selectedWithdrawalIds.size === withdrawals.length}
+                            onCheckedChange={toggleAllWithdrawals}
+                          />
+                        </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Wallet</TableHead>
@@ -1334,7 +1409,13 @@ export default function LoadManagementPage() {
                     </TableHeader>
                     <TableBody>
                       {withdrawals.map((w) => (
-                        <TableRow key={w.id}>
+                        <TableRow key={w.id} className={selectedWithdrawalIds.has(w.id) ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedWithdrawalIds.has(w.id)}
+                              onCheckedChange={() => toggleWithdrawalSelection(w.id)}
+                            />
+                          </TableCell>
                           <TableCell className='text-sm'>{format(new Date(w.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell>
                             <span className={`text-xs font-medium px-2 py-1 rounded-full ${w.transactionType === 'withdrawal' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -1388,6 +1469,23 @@ export default function LoadManagementPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className='bg-red-600 hover:bg-red-700'>
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteConfirm} onOpenChange={(open) => !open && setBulkDeleteConfirm(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedWithdrawalIds.size} withdrawal(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected withdrawal records. Wallet balances and cash book entries will be reversed for each. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className='bg-red-600 hover:bg-red-700'>
+              {isDeletingBatch ? 'Deleting...' : `Delete ${selectedWithdrawalIds.size} Record(s)`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

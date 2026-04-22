@@ -74,6 +74,22 @@ const userSchema = mongoose.Schema(
       enum: ['en', 'ur'],
       default: 'en',
     },
+    // School portal links
+    linkedTeacherId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Teacher',
+      default: null,
+    },
+    linkedStudentIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Student',
+    }],
+    // school portal role: teacher | parent  (derived, stored for fast filtering)
+    schoolRole: {
+      type: String,
+      enum: ['schoolAdmin', 'teacher', 'parent', null],
+      default: null,
+    },
   },
   {
     timestamps: true,
