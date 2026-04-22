@@ -1,3 +1,2 @@
-2026/04/23-01:39:34.694 82ad Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Session Storage/MANIFEST-000001
-2026/04/23-01:39:34.694 82ad Recovering log #3
-2026/04/23-01:39:34.695 82ad Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Session Storage/000003.log 
+2026/04/23-02:38:24.647 9906 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Session Storage since it was missing.
+2026/04/23-02:38:24.659 9906 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Session Storage/MANIFEST-000001

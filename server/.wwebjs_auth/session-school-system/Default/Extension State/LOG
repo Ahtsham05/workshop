@@ -1,3 +1,2 @@
-2026/04/23-01:39:34.291 828f Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Extension State/MANIFEST-000001
-2026/04/23-01:39:34.292 828f Recovering log #3
-2026/04/23-01:39:34.292 828f Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Extension State/000003.log 
+2026/04/23-02:38:24.706 98e4 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Extension State since it was missing.
+2026/04/23-02:38:24.718 98e4 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Extension State/MANIFEST-000001

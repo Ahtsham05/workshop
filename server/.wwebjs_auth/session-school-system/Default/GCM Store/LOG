@@ -1,3 +1,2 @@
-2026/04/23-01:39:39.332 829a Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/GCM Store/MANIFEST-000001
-2026/04/23-01:39:39.332 829a Recovering log #3
-2026/04/23-01:39:39.332 829a Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/GCM Store/000003.log 
+2026/04/23-02:38:37.664 98e5 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/GCM Store since it was missing.
+2026/04/23-02:38:37.674 98e5 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/GCM Store/MANIFEST-000001

@@ -1,3 +1,2 @@
-2026/04/23-01:39:34.175 829c Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Service Worker/Database/MANIFEST-000001
-2026/04/23-01:39:34.176 829c Recovering log #3
-2026/04/23-01:39:34.176 829c Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Service Worker/Database/000003.log 
+2026/04/23-02:38:27.985 98e4 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Service Worker/Database since it was missing.
+2026/04/23-02:38:27.991 98e4 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Service Worker/Database/MANIFEST-000001

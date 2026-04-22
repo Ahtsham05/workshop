@@ -1,3 +1,2 @@
-2026/04/23-01:39:34.255 828f Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/shared_proto_db/MANIFEST-000001
-2026/04/23-01:39:34.255 828f Recovering log #3
-2026/04/23-01:39:34.255 828f Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/shared_proto_db/000003.log 
+2026/04/23-02:38:24.671 98e5 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/shared_proto_db since it was missing.
+2026/04/23-02:38:24.686 98e5 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/shared_proto_db/MANIFEST-000001

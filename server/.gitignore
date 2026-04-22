@@ -1,6 +1,10 @@
 # Dependencies
 node_modules
 
+# WhatsApp Web JS session data (runtime auth cache — never commit)
+.wwebjs_auth/
+.wwebjs_cache/
+
 # yarn error logs
 yarn-error.log
 

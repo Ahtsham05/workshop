@@ -58,43 +58,45 @@ function StateIndicator({ state }: { state: string }) {
 
 export default function WhatsAppMessaging() {
   // ── Status polling ──────────────────────────────────────────────────────────
-  // Always poll while not READY or AUTH_FAILURE — never stop on missing data
-  const { data: status, refetch: refetchStatus } = useGetWhatsAppStatusQuery(undefined, {
-    pollingInterval: 2000,
+  // Poll every 3s while not stable; stop entirely once READY or AUTH_FAILURE.
+  // Using a state-driven pollingInterval avoids the type error from function syntax
+  // while still stopping unnecessary requests.
+  const [pollInterval, setPollInterval] = useState(3000);
+  const { data: status } = useGetWhatsAppStatusQuery(undefined, {
+    pollingInterval: pollInterval,
   });
 
-  // Extra safety: force a refetch every 2s when not stable, in case RTK
-  // polling gets paused by tab visibility or invalidatesTags
-  const refetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     const s = status?.state;
     if (s === 'READY' || s === 'AUTH_FAILURE') {
-      if (refetchIntervalRef.current) {
-        clearInterval(refetchIntervalRef.current);
-        refetchIntervalRef.current = null;
-      }
+      setPollInterval(0); // stable — stop polling
     } else {
-      if (!refetchIntervalRef.current) {
-        refetchIntervalRef.current = setInterval(() => {
-          refetchStatus();
-        }, 2000);
-      }
+      setPollInterval(3000); // still transitioning — keep polling
     }
-    return () => {};
-  }, [status?.state, refetchStatus]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (refetchIntervalRef.current) clearInterval(refetchIntervalRef.current);
-    };
-  }, []);
+  }, [status?.state]);
 
   const [connect, { isLoading: connecting }] = useConnectWhatsAppMutation();
   const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation();
   const [clearSession, { isLoading: clearingSession }] = useClearWhatsAppSessionMutation();
 
-  const state = status?.state ?? 'DISCONNECTED';
+  // ── Pending-connect guard ──────────────────────────────────────────────────
+  // After clicking Connect, the server takes 1-3 s to transition from DISCONNECTED
+  // → LOADING. Without this, the next status poll returns DISCONNECTED and the UI
+  // flips back to the Connect button before the real state arrives.
+  const [pendingConnect, setPendingConnect] = useState(false);
+  useEffect(() => {
+    // Once server acknowledges the connection attempt, clear our local flag
+    if (status?.state && status.state !== 'DISCONNECTED') {
+      setPendingConnect(false);
+    }
+  }, [status?.state]);
+
+  // Derive effective state: while we're waiting for server confirmation after
+  // clicking Connect, treat it as LOADING so UI stays in "connecting" view.
+  const state =
+    pendingConnect && (!status?.state || status.state === 'DISCONNECTED')
+      ? 'LOADING'
+      : (status?.state ?? 'DISCONNECTED');
   const isReady = state === 'READY';
 
   // ── Loading elapsed-time tracker ───────────────────────────────────────────
@@ -166,9 +168,11 @@ export default function WhatsAppMessaging() {
 
   async function handleConnect() {
     try {
+      setPendingConnect(true);
       await connect().unwrap();
       toast.info('WhatsApp is starting — QR code will appear shortly');
     } catch {
+      setPendingConnect(false);
       toast.error('Failed to start WhatsApp');
     }
   }

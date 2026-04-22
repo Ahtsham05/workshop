@@ -1,3 +1,2 @@
-2026/04/23-01:39:34.183 82ad Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Local Storage/leveldb/MANIFEST-000001
-2026/04/23-01:39:34.188 82ad Recovering log #7
-2026/04/23-01:39:34.189 82ad Reusing old log /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Local Storage/leveldb/000007.log 
+2026/04/23-02:38:24.550 9906 Creating DB /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Local Storage/leveldb since it was missing.
+2026/04/23-02:38:24.570 9906 Reusing MANIFEST /home/ahtsham/workshop/server/.wwebjs_auth/session-school-system/Default/Local Storage/leveldb/MANIFEST-000001
