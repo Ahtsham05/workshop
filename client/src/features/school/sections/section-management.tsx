@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
+
 import { Plus, Pencil, Trash2, LayoutList, Users, Wand2, X, CheckCircle2, Loader2, LayoutGrid } from 'lucide-react';
 import { useGetSectionsQuery, useCreateSectionMutation, useUpdateSectionMutation, useDeleteSectionMutation, useGetSchoolClassesQuery } from '@/stores/school.api';
 import { toast } from 'sonner';

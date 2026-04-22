@@ -10,7 +10,7 @@ import { Plus, Search, Pencil, Trash2, Users, Phone, Mail, GraduationCap, Calend
 import { useGetTeachersQuery, useCreateTeacherMutation, useUpdateTeacherMutation, useDeleteTeacherMutation, useGetSubjectsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
+
 
 const GRADIENT_COLORS = [
   'from-blue-500 to-indigo-600',
@@ -74,6 +74,7 @@ export default function TeacherList() {
       qualification: teacher.qualification || '', specialization: teacher.specialization || '',
       status: teacher.status || 'active',
       salary: { basicSalary: teacher.salary?.basicSalary || 0, allowances: teacher.salary?.allowances || 0 },
+      portalPassword: '',
       subjects: (teacher.subjects || []).map((s: any) => s._id || s.id || s),
     });
     setDialogOpen(true);

@@ -364,7 +364,7 @@ export const sidebarData: SidebarData = {
         },
         {
           title: 'Timetable',
-          url: '/school/portals/teacher?tab=timetable',
+          url: '/school/portals/teacher?tab=timetable' as any,
           icon: IconClock,
           businessTypes: ['school'],
           requiredFeature: 'school_management',
@@ -372,7 +372,7 @@ export const sidebarData: SidebarData = {
         },
         {
           title: 'Subjects',
-          url: '/school/portals/teacher?tab=subjects',
+          url: '/school/portals/teacher?tab=subjects' as any,
           icon: BookOpen,
           businessTypes: ['school'],
           requiredFeature: 'school_management',

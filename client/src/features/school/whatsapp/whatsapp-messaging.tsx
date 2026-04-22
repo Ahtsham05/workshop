@@ -60,13 +60,7 @@ export default function WhatsAppMessaging() {
   // ── Status polling ──────────────────────────────────────────────────────────
   // Always poll while not READY or AUTH_FAILURE — never stop on missing data
   const { data: status, refetch: refetchStatus } = useGetWhatsAppStatusQuery(undefined, {
-    pollingInterval: (currentData) => {
-      const s = currentData?.state;
-      // Stop only when stable
-      if (s === 'READY' || s === 'AUTH_FAILURE') return 0;
-      // Poll every 2s while connecting / QR pending / disconnected
-      return 2000;
-    },
+    pollingInterval: 2000,
   });
 
   // Extra safety: force a refetch every 2s when not stable, in case RTK

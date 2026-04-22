@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { Navigate, useLocation } from '@tanstack/react-router'
+import { Navigate } from '@tanstack/react-router'
 import { useSchoolRole } from '@/hooks/use-school-role'
 import { useUserRole } from '@/hooks/use-user-role'
 

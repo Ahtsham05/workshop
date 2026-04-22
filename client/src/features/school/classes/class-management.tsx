@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, BookOpen, Users, ChevronRight } from 'lucide-react';
-import { useGetSchoolClassesQuery, useCreateSchoolClassMutation, useUpdateSchoolClassMutation, useDeleteSchoolClassMutation, useGetSectionsQuery, useGetAllSectionsQuery } from '@/stores/school.api';
+import { Plus, Pencil, Trash2, BookOpen, Users } from 'lucide-react';
+import { useGetSchoolClassesQuery, useCreateSchoolClassMutation, useUpdateSchoolClassMutation, useDeleteSchoolClassMutation, useGetAllSectionsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 

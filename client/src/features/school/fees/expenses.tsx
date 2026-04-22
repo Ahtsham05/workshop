@@ -88,7 +88,6 @@ const emptyForm = () => ({
 });
 
 export default function Expenses() {
-  const now = new Date();
   const todayStr = today();
   const foMonth = firstOfMonth();
 

@@ -24,7 +24,6 @@ import {
   type AppUser,
   type EffectiveRole,
 } from '@/lib/rbac'
-import { deriveSchoolRole } from '@/lib/school-permissions'
 import { normalizeBusinessType } from '@/lib/business-types'
 
 export interface UserRoleInfo {
@@ -75,7 +74,6 @@ export function useUserRole(): UserRoleInfo {
   const user = resolveUser(reduxUser)
   const effectiveRole = getUserRole(user)
   const businessType = normalizeBusinessType(user?.businessType)
-  const schoolRole = deriveSchoolRole(user)
 
   return {
     effectiveRole,
