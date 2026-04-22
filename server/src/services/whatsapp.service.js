@@ -71,7 +71,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ── Core client management ─────────────────────────────────────────────────────
+// ── Chrome executable auto-detection ──────────────────────────────────────────
+// Try common install paths. If none are found, omit executablePath so Puppeteer
+// falls back to its bundled Chromium — this makes it work on any server without
+// needing a specific Chrome installation.
+function _findChrome() {
+  const fs = require('fs');
+  const candidates = [
+    process.env.CHROME_PATH,                    // allow explicit override via env
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/snap/bin/chromium',
+    '/usr/local/bin/chromium',
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch (_) { /* skip */ }
+  }
+  return null; // let Puppeteer use bundled Chromium
+}
 
 function _createClient() {
   const client = new Client({
@@ -79,32 +98,39 @@ function _createClient() {
       clientId: 'school-system',
       dataPath: '.wwebjs_auth',
     }),
-    // Use system Google Chrome — much more stable than bundled Chromium
-    // and avoids the "Check your internet connection" WebSocket drop
-    puppeteer: {
-      executablePath: '/usr/bin/google-chrome-stable',
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-background-networking',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--disable-translate',
-        '--hide-scrollbars',
-        '--metrics-recording-only',
-        '--mute-audio',
-        '--no-first-run',
-        '--safebrowsing-disable-auto-update',
-        '--ignore-certificate-errors',
-        '--ignore-ssl-errors',
-        '--ignore-certificate-errors-spki-list',
-        // Do NOT add --single-process or --no-zygote — they break the WS session
-      ],
-      timeout: 60000,
-    },
+    puppeteer: (() => {
+      const chromePath = _findChrome();
+      const opts = {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--ignore-certificate-errors',
+          '--ignore-ssl-errors',
+          '--ignore-certificate-errors-spki-list',
+          // Do NOT add --single-process or --no-zygote — they break the WS session
+        ],
+        timeout: 60000,
+      };
+      if (chromePath) {
+        logger.info(`WhatsApp: using Chrome at ${chromePath}`);
+        opts.executablePath = chromePath;
+      } else {
+        logger.info('WhatsApp: no system Chrome found — using bundled Puppeteer Chromium');
+      }
+      return opts;
+    })(),
     // Keep the WhatsApp Web version that wwebjs ships with
     webVersionCache: {
       type: 'local',
