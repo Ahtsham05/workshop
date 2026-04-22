@@ -5,3 +5,6 @@ logix-plus-solutions/.next
 logix-plus-solutions/.env.local
 server/.wwebjs_auth
 server/.wwebjs_cache
+# Safety net: ignore if service ever writes to workspace root by mistake
+.wwebjs_auth
+.wwebjs_cache

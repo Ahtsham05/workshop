@@ -34,7 +34,7 @@ let _loadingTimer = null;  // watchdog: reset to DISCONNECTED if stuck in LOADIN
 function _cleanChromeLocks() {
   const fs = require('fs');
   const path = require('path');
-  const sessionDir = path.join(process.cwd(), '.wwebjs_auth', 'session-school-system');
+  const sessionDir = path.join(__dirname, '..', '..', '.wwebjs_auth', 'session-school-system');
   const lockFiles = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
   for (const f of lockFiles) {
     const p = path.join(sessionDir, f);
@@ -72,31 +72,58 @@ function sleep(ms) {
 }
 
 // ── Chrome executable auto-detection ──────────────────────────────────────────
-// Try common install paths. If none are found, omit executablePath so Puppeteer
-// falls back to its bundled Chromium — this makes it work on any server without
-// needing a specific Chrome installation.
+// Priority:
+//   1. CHROME_PATH env variable (explicit override)
+//   2. Common system Chrome/Chromium paths
+//   3. Dynamic `which` lookup (finds Chrome wherever it's installed)
+//   4. Puppeteer's own bundled Chrome (downloaded during npm install)
 function _findChrome() {
   const fs = require('fs');
+  const { execSync } = require('child_process');
+
   const candidates = [
-    process.env.CHROME_PATH,                    // allow explicit override via env
+    process.env.CHROME_PATH,                    // explicit override via env
     '/usr/bin/google-chrome-stable',
     '/usr/bin/google-chrome',
     '/usr/bin/chromium-browser',
     '/usr/bin/chromium',
     '/snap/bin/chromium',
     '/usr/local/bin/chromium',
+    '/usr/local/bin/google-chrome',
   ].filter(Boolean);
+
   for (const p of candidates) {
     try { if (fs.existsSync(p)) return p; } catch (_) { /* skip */ }
   }
-  return null; // let Puppeteer use bundled Chromium
+
+  // Dynamic lookup — works for any installation path
+  const whichTargets = ['google-chrome-stable', 'google-chrome', 'chromium-browser', 'chromium'];
+  for (const bin of whichTargets) {
+    try {
+      const p = execSync(`which ${bin} 2>/dev/null`, { timeout: 3000 }).toString().trim();
+      if (p && fs.existsSync(p)) return p;
+    } catch (_) { /* not found */ }
+  }
+
+  // Fall back to puppeteer's bundled Chrome — available if `puppeteer` (not
+  // puppeteer-core) is installed and Chrome was downloaded via npm install.
+  try {
+    const { executablePath } = require('puppeteer');
+    const p = executablePath();
+    if (p && fs.existsSync(p)) return p;
+  } catch (_) { /* puppeteer not available */ }
+
+  return null;
 }
 
 function _createClient() {
+  const path = require('path');
+  // Use absolute path so it works regardless of process.cwd() on the server
+  const dataPath = path.join(__dirname, '..', '..', '.wwebjs_auth');
   const client = new Client({
     authStrategy: new LocalAuth({
       clientId: 'school-system',
-      dataPath: '.wwebjs_auth',
+      dataPath,
     }),
     puppeteer: (() => {
       const chromePath = _findChrome();
@@ -106,6 +133,7 @@ function _createClient() {
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
+          '--disable-gpu',               // required on headless Linux servers
           '--disable-extensions',
           '--disable-background-networking',
           '--disable-default-apps',
@@ -119,7 +147,6 @@ function _createClient() {
           '--ignore-certificate-errors',
           '--ignore-ssl-errors',
           '--ignore-certificate-errors-spki-list',
-          // Do NOT add --single-process or --no-zygote — they break the WS session
         ],
         timeout: 60000,
       };
@@ -127,7 +154,7 @@ function _createClient() {
         logger.info(`WhatsApp: using Chrome at ${chromePath}`);
         opts.executablePath = chromePath;
       } else {
-        logger.info('WhatsApp: no system Chrome found — using bundled Puppeteer Chromium');
+        logger.error('WhatsApp: no Chrome/Chromium found! Install Chrome on the server or set CHROME_PATH env variable.');
       }
       return opts;
     })(),
@@ -247,7 +274,7 @@ async function initialize() {
 async function tryAutoConnect() {
   const fs = require('fs');
   const path = require('path');
-  const sessionDir = path.join(process.cwd(), '.wwebjs_auth');
+  const sessionDir = path.join(__dirname, '..', '..', '.wwebjs_auth');
   if (!fs.existsSync(sessionDir)) {
     logger.info('WhatsApp: no saved session — skipping auto-connect on startup');
     return;
@@ -279,7 +306,7 @@ async function disconnect() {
   // causes "stuck on LOADING" with no QR shown).
   const fs = require('fs');
   const path = require('path');
-  const sessionDir = path.join(process.cwd(), '.wwebjs_auth');
+  const sessionDir = path.join(__dirname, '..', '..', '.wwebjs_auth');
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
     logger.info('WhatsApp: session cleared on disconnect');
@@ -291,7 +318,7 @@ async function clearSession() {
   await disconnect();
   const fs = require('fs');
   const path = require('path');
-  const sessionDir = path.join(process.cwd(), '.wwebjs_auth');
+  const sessionDir = path.join(__dirname, '..', '..', '.wwebjs_auth');
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
     logger.info('WhatsApp: session cleared');
