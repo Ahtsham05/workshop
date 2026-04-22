@@ -26,7 +26,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const userBusinessType = normalizeBusinessType(org?.businessType || user?.businessType)
   const { canAccess } = useFeatureAccess()
 
-  const isSysAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
+  // const isSysAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
   // Only the platform system_admin bypasses plan/feature gates.
   // superAdmin is an org owner and must still be gated by their subscription.
   const isPlatformAdmin = user?.systemRole === 'system_admin'
