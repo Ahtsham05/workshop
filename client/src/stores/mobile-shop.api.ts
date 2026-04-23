@@ -308,10 +308,56 @@ export interface MobileDashboardSummary {
   billsOverdue: number
 }
 
+export interface InstallmentPlanRecord {
+  id: string
+  planNumber: string
+  customerName: string
+  customerPhone?: string
+  customerCNIC?: string
+  customerAddress?: string
+  guarantorName?: string
+  guarantorPhone?: string
+  itemDescription: string
+  totalAmount: number
+  downPayment: number
+  remainingAmount: number
+  totalInstallments: number
+  installmentAmount: number
+  paidInstallments: number
+  totalPaid: number
+  totalOutstanding: number
+  nextDueDate?: string
+  startDate: string
+  status: 'active' | 'completed' | 'defaulted' | 'cancelled'
+  notes?: string
+  createdAt: string
+}
+
+export interface InstallmentPaymentRecord {
+  id: string
+  installmentPlanId: string
+  amount: number
+  paymentNumber: number
+  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  isDownPayment: boolean
+  date: string
+  notes?: string
+  createdAt: string
+}
+
+export interface InstallmentSummary {
+  active:      { count: number; totalOutstanding: number; totalAmount: number }
+  completed:   { count: number; totalOutstanding: number; totalAmount: number }
+  defaulted:   { count: number; totalOutstanding: number; totalAmount: number }
+  cancelled:   { count: number; totalOutstanding: number; totalAmount: number }
+  overdueCount: number
+  totalCollected: number
+}
+
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -629,6 +675,65 @@ export const mobileShopApi = createApi({
       },
       providesTags: ['BillPayments'],
     }),
+
+    // ── Installments ──────────────────────────────────────────────────────────
+    getInstallmentPlans: builder.query<
+      PaginatedResult<InstallmentPlanRecord>,
+      { page?: number; limit?: number; status?: string; search?: string; startDate?: string; endDate?: string } | void
+    >({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 20) })
+        if ((params as any)?.page)      p.set('page', String((params as any).page))
+        if ((params as any)?.status)    p.set('status', (params as any).status)
+        if ((params as any)?.search)    p.set('search', (params as any).search)
+        if ((params as any)?.startDate) p.set('startDate', (params as any).startDate)
+        if ((params as any)?.endDate)   p.set('endDate', (params as any).endDate)
+        return `/installments?${p.toString()}`
+      },
+      providesTags: ['Installments'],
+    }),
+    getInstallmentPlan: builder.query<InstallmentPlanRecord, string>({
+      query: (id) => `/installments/${id}`,
+      providesTags: ['Installments'],
+    }),
+    createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string }>({
+      query: (body) => ({ url: '/installments', method: 'POST', body }),
+      invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+    }),
+    updateInstallmentPlan: builder.mutation<InstallmentPlanRecord, { id: string; body: Partial<InstallmentPlanRecord> }>({
+      query: ({ id, body }) => ({ url: `/installments/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['Installments'],
+    }),
+    deleteInstallmentPlan: builder.mutation<void, string>({
+      query: (id) => ({ url: `/installments/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+    }),
+    recordInstallmentPayment: builder.mutation<
+      { payment: InstallmentPaymentRecord; plan: InstallmentPlanRecord },
+      { planId: string; amount: number; paymentMethod?: string; date?: string; notes?: string }
+    >({
+      query: ({ planId, ...body }) => ({ url: `/installments/${planId}/payments`, method: 'POST', body }),
+      invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+    }),
+    getInstallmentPayments: builder.query<
+      PaginatedResult<InstallmentPaymentRecord>,
+      { planId: string; page?: number; limit?: number }
+    >({
+      query: ({ planId, ...params }) => {
+        const p = new URLSearchParams({ limit: String(params.limit ?? 50) })
+        if (params.page) p.set('page', String(params.page))
+        return `/installments/${planId}/payments?${p.toString()}`
+      },
+      providesTags: ['Installments'],
+    }),
+    deleteInstallmentPayment: builder.mutation<void, { planId: string; paymentId: string }>({
+      query: ({ planId, paymentId }) => ({ url: `/installments/${planId}/payments/${paymentId}`, method: 'DELETE' }),
+      invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+    }),
+    getInstallmentSummary: builder.query<InstallmentSummary, void>({
+      query: () => '/installments/summary',
+      providesTags: ['Installments'],
+    }),
   }),
 })
 
@@ -677,4 +782,14 @@ export const {
   useGetOverdueBillsQuery,
   useGetBillPaymentReportQuery,
   useGetBillDueSummaryQuery,
+  // Installments
+  useGetInstallmentPlansQuery,
+  useGetInstallmentPlanQuery,
+  useCreateInstallmentPlanMutation,
+  useUpdateInstallmentPlanMutation,
+  useDeleteInstallmentPlanMutation,
+  useRecordInstallmentPaymentMutation,
+  useGetInstallmentPaymentsQuery,
+  useDeleteInstallmentPaymentMutation,
+  useGetInstallmentSummaryQuery,
 } = mobileShopApi

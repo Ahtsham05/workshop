@@ -63,6 +63,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
 
     const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data?.summary
+    const savingsMap = new Map<string, number>((data?.purchases ?? []).map(p => [p._id, p.totalPurchaseProfit ?? 0]))
 
     return (
       <div className='space-y-6'>
@@ -94,8 +95,18 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
               <TrendingUp className='h-4 w-4 text-green-500' />
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-green-600'>{fmt(s?.totalProfit ?? 0)}</div>
-              <p className='text-xs text-muted-foreground'>earned from commissions &amp; charges</p>
+              <div className='text-2xl font-bold text-green-600'>{fmt(s?.purchaseSavings ?? 0)}</div>
+              <p className='text-xs text-muted-foreground'>supplier commission &amp; discounts</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Purchase Savings</CardTitle>
+              <TrendingUp className='h-4 w-4 text-emerald-500' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold text-emerald-600'>{fmt(s?.purchaseSavings ?? 0)}</div>
+              <p className='text-xs text-muted-foreground'>supplier commission &amp; discounts</p>
             </CardContent>
           </Card>
           <Card>
@@ -183,7 +194,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                       <TableCell className='font-medium capitalize'>{row._id}</TableCell>
                       <TableCell className='text-right'><Badge variant='secondary'>{row.transactions}</Badge></TableCell>
                       <TableCell className='text-right text-blue-600 font-medium'>{fmt(row.totalSold)}</TableCell>
-                      <TableCell className='text-right text-green-600 font-medium'>{fmt(row.totalProfit)}</TableCell>
+                      <TableCell className='text-right text-green-600 font-medium'>{fmt(row.totalProfit + (savingsMap.get(row._id) ?? 0))}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -205,6 +216,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                     <TableHead>Wallet / Network</TableHead>
                     <TableHead className='text-right'>Purchases</TableHead>
                     <TableHead className='text-right'>Total Purchased</TableHead>
+                    <TableHead className='text-right text-emerald-600'>Savings</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -213,6 +225,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                       <TableCell className='font-medium capitalize'>{row._id}</TableCell>
                       <TableCell className='text-right'><Badge variant='secondary'>{row.count}</Badge></TableCell>
                       <TableCell className='text-right text-orange-600 font-medium'>{fmt(row.totalPurchased)}</TableCell>
+                      <TableCell className='text-right text-emerald-600 font-medium'>{fmt(row.totalPurchaseProfit ?? 0)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

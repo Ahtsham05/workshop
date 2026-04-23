@@ -544,8 +544,8 @@ const getRoiReport = catchAsync(async (req, res) => {
       { ...scope, invoiceDate: { $gte: from, $lte: to }, status: { $ne: 'cancelled' } },
       { $ifNull: ['$totalProfit', 0] }
     ),
-    // Load profit = commission + extra charges earned on transactions
-    aggregateSum(LoadTransaction, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$profit', 0] }),
+    // Load profit = purchase savings only (supplier commission/discount)
+    aggregateSum(LoadPurchase, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$profit', 0] }),
     // Repair profit = charges collected minus parts cost
     (async () => {
       const result = await RepairJob.aggregate([
@@ -731,6 +731,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     salesReturnsAgg,
     purchaseReturnsAgg,
     loadProfitAgg,
+    loadPurchaseSavingsAgg,
     repairAgg,
     billPaymentAgg,
     cashWithdrawalProfitAgg,
@@ -755,8 +756,13 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
       { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
     ]),
-    // Load transaction profit
+    // Load transaction profit (sale commissions)
     LoadTransaction.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$profit', 0] } } } },
+    ]),
+    // Load purchase savings (supplier commission/discount)
+    LoadPurchase.aggregate([
       { $match: { ...scope, date: { $gte: from, $lte: to } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$profit', 0] } } } },
     ]),
@@ -806,6 +812,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const sr      = salesReturnsAgg[0]   || { total: 0, count: 0 };
   const pr      = purchaseReturnsAgg[0]|| { total: 0, count: 0 };
   const ld      = loadProfitAgg[0]     || { total: 0 };
+  const ldp     = loadPurchaseSavingsAgg[0] || { total: 0 };
   const rep     = repairAgg[0]         || { charges: 0, cost: 0 };
   const bill    = billPaymentAgg[0]    || { total: 0 };
   const cwW     = cashWithdrawalProfitAgg[0] || { total: 0 };
@@ -821,7 +828,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const costOfGoodsSold   = inv.totalCost;
   const grossProfit       = netRevenue - costOfGoodsSold;
 
-  const loadProfit        = ld.total;
+  const loadProfit        = ldp.total;
   const repairProfit      = rep.charges - rep.cost;
   const billProfit        = bill.total;
   const withdrawalProfit  = cwW.total;
@@ -1041,7 +1048,7 @@ async function getLoadReport(req, res) {
     ]),
     LoadPurchase.aggregate([
       { $match: purchaseMatch },
-      { $group: { _id: '$walletType', totalPurchased: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $group: { _id: '$walletType', totalPurchased: { $sum: '$amount' }, totalPurchaseProfit: { $sum: { $ifNull: ['$profit', 0] } }, count: { $sum: 1 } } },
       { $sort: { totalPurchased: -1 } },
     ]),
     Wallet.find(scope).lean(),
@@ -1071,10 +1078,11 @@ async function getLoadReport(req, res) {
   ]);
 
   const totalPurchased = purchases.reduce((s, p) => s + p.totalPurchased, 0);
+  const purchaseSavings = purchases.reduce((s, p) => s + (p.totalPurchaseProfit || 0), 0);
   const sm = summary[0] || { totalTransactions: 0, totalSold: 0, totalProfit: 0, totalExtraCharges: 0 };
   const ws = withdrawalSummary[0] || { totalCount: 0, totalWithdrawals: 0, totalDeposits: 0, totalWithdrawalAmount: 0, totalDepositAmount: 0, totalProfit: 0 };
   res.status(httpStatus.OK).send({
-    summary: { ...sm, totalPurchased, netBalance: totalPurchased - sm.totalSold },
+    summary: { ...sm, totalProfit: sm.totalProfit + purchaseSavings, purchaseSavings, totalPurchased, netBalance: totalPurchased - sm.totalSold },
     byWallet, datewise, purchases, wallets,
     withdrawalSummary: ws,
     withdrawalDatewise,

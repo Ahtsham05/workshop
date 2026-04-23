@@ -61,6 +61,7 @@ import { Route as AuthenticatedSettingsAccountImport } from './routes/_authentic
 import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenticated/mobile-shop/wallet'
 import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
 import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
+import { Route as AuthenticatedMobileShopInstallmentsImport } from './routes/_authenticated/mobile-shop/installments'
 import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
 import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
 import { Route as AuthenticatedSchoolWhatsappIndexImport } from './routes/_authenticated/school/whatsapp/index'
@@ -435,6 +436,13 @@ const AuthenticatedMobileShopLoadRoute =
   AuthenticatedMobileShopLoadImport.update({
     id: '/mobile-shop/load',
     path: '/mobile-shop/load',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopInstallmentsRoute =
+  AuthenticatedMobileShopInstallmentsImport.update({
+    id: '/mobile-shop/installments',
+    path: '/mobile-shop/installments',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -918,6 +926,13 @@ declare module '@tanstack/react-router' {
       path: '/mobile-shop/cash-book'
       fullPath: '/mobile-shop/cash-book'
       preLoaderRoute: typeof AuthenticatedMobileShopCashBookImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/installments': {
+      id: '/_authenticated/mobile-shop/installments'
+      path: '/mobile-shop/installments'
+      fullPath: '/mobile-shop/installments'
+      preLoaderRoute: typeof AuthenticatedMobileShopInstallmentsImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-shop/load': {
@@ -1634,6 +1649,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedMobileShopBillPaymentsRoute: typeof AuthenticatedMobileShopBillPaymentsRoute
   AuthenticatedMobileShopCashBookRoute: typeof AuthenticatedMobileShopCashBookRoute
+  AuthenticatedMobileShopInstallmentsRoute: typeof AuthenticatedMobileShopInstallmentsRoute
   AuthenticatedMobileShopLoadRoute: typeof AuthenticatedMobileShopLoadRoute
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
   AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
@@ -1681,6 +1697,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileShopBillPaymentsRoute:
     AuthenticatedMobileShopBillPaymentsRoute,
   AuthenticatedMobileShopCashBookRoute: AuthenticatedMobileShopCashBookRoute,
+  AuthenticatedMobileShopInstallmentsRoute:
+    AuthenticatedMobileShopInstallmentsRoute,
   AuthenticatedMobileShopLoadRoute: AuthenticatedMobileShopLoadRoute,
   AuthenticatedMobileShopRepairRoute: AuthenticatedMobileShopRepairRoute,
   AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
@@ -1747,6 +1765,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
@@ -1845,6 +1864,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
@@ -1946,6 +1966,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
+  '/_authenticated/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/_authenticated/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
@@ -2049,6 +2070,7 @@ export interface FileRouteTypes {
     | '/'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
+    | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
     | '/mobile-shop/wallet'
@@ -2146,6 +2168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
+    | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
     | '/mobile-shop/wallet'
@@ -2245,6 +2268,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/mobile-shop/bill-payments'
     | '/_authenticated/mobile-shop/cash-book'
+    | '/_authenticated/mobile-shop/installments'
     | '/_authenticated/mobile-shop/load'
     | '/_authenticated/mobile-shop/repair'
     | '/_authenticated/mobile-shop/wallet'
@@ -2391,6 +2415,7 @@ export const routeTree = rootRoute
         "/_authenticated/",
         "/_authenticated/mobile-shop/bill-payments",
         "/_authenticated/mobile-shop/cash-book",
+        "/_authenticated/mobile-shop/installments",
         "/_authenticated/mobile-shop/load",
         "/_authenticated/mobile-shop/repair",
         "/_authenticated/mobile-shop/wallet",
@@ -2536,6 +2561,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/cash-book": {
       "filePath": "_authenticated/mobile-shop/cash-book.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/installments": {
+      "filePath": "_authenticated/mobile-shop/installments.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/mobile-shop/load": {

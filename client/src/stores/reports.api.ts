@@ -198,6 +198,7 @@ export interface LoadReportSummary {
   totalProfit: number
   totalExtraCharges: number
   totalPurchased: number
+  purchaseSavings: number
   netBalance: number
 }
 export interface LoadByWallet {
@@ -215,6 +216,7 @@ export interface LoadDatewise {
 export interface LoadPurchaseByWallet {
   _id: string
   totalPurchased: number
+  totalPurchaseProfit: number
   count: number
 }
 export interface WalletBalance {

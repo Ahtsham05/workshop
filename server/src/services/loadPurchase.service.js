@@ -14,7 +14,7 @@ const createLoadPurchase = async (purchaseBody) => {
     organizationId: purchase.organizationId,
     branchId: purchase.branchId,
     type: purchase.walletType,
-    amount: purchase.amount,
+    amount: purchase.amount + purchase.profit,
     operation: 'add',
     userId: purchase.createdBy,
   });
@@ -70,12 +70,13 @@ const getLoadPurchaseById = async (loadPurchaseId) => {
 const updateLoadPurchase = async (purchaseId, updateBody) => {
   const purchase = await getLoadPurchaseById(purchaseId);
 
-  // Reverse old wallet adjustment
+  // Reverse old wallet adjustment (amount + profit that was originally added)
+  const oldWalletAmount = purchase.amount + purchase.profit;
   await walletService.adjustWalletBalance({
     organizationId: purchase.organizationId,
     branchId: purchase.branchId,
     type: purchase.walletType,
-    amount: purchase.amount,
+    amount: oldWalletAmount,
     operation: 'deduct',
     userId: purchase.createdBy,
   });
@@ -89,12 +90,12 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
   purchase.profit = commissionProfit + Number(purchase.extraCharge || 0);
   await purchase.save();
 
-  // Apply new wallet adjustment
+  // Apply new wallet adjustment (amount + profit)
   await walletService.adjustWalletBalance({
     organizationId: purchase.organizationId,
     branchId: purchase.branchId,
     type: purchase.walletType,
-    amount: purchase.amount,
+    amount: purchase.amount + purchase.profit,
     operation: 'add',
     userId: purchase.createdBy,
   });
@@ -120,12 +121,12 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
 const deleteLoadPurchase = async (purchaseId) => {
   const purchase = await getLoadPurchaseById(purchaseId);
 
-  // Reverse wallet adjustment
+  // Reverse wallet adjustment (amount + profit that was originally added)
   await walletService.adjustWalletBalance({
     organizationId: purchase.organizationId,
     branchId: purchase.branchId,
     type: purchase.walletType,
-    amount: purchase.amount,
+    amount: purchase.amount + purchase.profit,
     operation: 'deduct',
     userId: purchase.createdBy,
   });

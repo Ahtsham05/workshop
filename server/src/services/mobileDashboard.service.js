@@ -69,7 +69,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const [invoices, loadTransactions, loadPurchases, repairJobs, expenses, wallets, billPayments] = await Promise.all([
     Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
     LoadTransaction.find(match).select('amount profit paymentMethod walletType'),
-    LoadPurchase.find(match).select('amount paymentMethod walletType'),
+    LoadPurchase.find(match).select('amount profit paymentMethod walletType'),
     RepairJob.find(match).select('charges paymentMethod'),
     Expense.find({
       organizationId,
@@ -107,7 +107,8 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const loadCash = loadTransactions.reduce((sum, transaction) => {
     return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
   }, 0);
-  const loadProfit = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.profit || 0), 0);
+  const loadPurchaseProfit = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.profit || 0), 0);
+  const loadProfit = loadPurchaseProfit;
 
   const totalRepairIncome = repairJobs.reduce((sum, job) => sum + Number(job.charges || 0), 0);
   const repairCash = repairJobs.reduce((sum, job) => {

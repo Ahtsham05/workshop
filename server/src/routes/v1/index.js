@@ -33,6 +33,7 @@ const purchaseReturnRoute = require('./purchaseReturn.route');
 const utilityCompanyRoute = require('./utilityCompany.route');
 const billPaymentRoute = require('./billPayment.route');
 const repairStockItemRoute = require('./repairStockItem.route');
+const installmentRoute = require('./installment.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -180,6 +181,10 @@ const defaultRoutes = [
   {
     path: '/repair-stock',
     route: repairStockItemRoute,
+  },
+  {
+    path: '/installments',
+    route: installmentRoute,
   },
   {
     path: '/cash-book',
@@ -389,6 +394,8 @@ const protectedPaths = [
   '/load-purchases',
   '/load-transactions',
   '/repairs',
+  '/repair-stock',
+  '/installments',
   '/cash-book',
   '/mobile-dashboard',
   '/mobile-reports',

@@ -12,10 +12,9 @@ const calculateProfit = ({ amount, commissionRate = 0, extraCharge = 0 }) => {
 };
 
 const createLoadTransaction = async (transactionBody) => {
-  const profit = calculateProfit(transactionBody);
   const transaction = await LoadTransaction.create({
     ...transactionBody,
-    profit,
+    profit: 0,
   });
 
   await walletService.adjustWalletBalance({
@@ -90,7 +89,7 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
   await cashBookService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
 
   Object.assign(transaction, updateBody);
-  transaction.profit = calculateProfit(transaction);
+  transaction.profit = 0;
   await transaction.save();
 
   // Apply new wallet deduction

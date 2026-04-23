@@ -609,6 +609,12 @@ export const sidebarData: SidebarData = {
           businessTypes: ['mobile_shop'],
           requiredFeature: 'bill_payment',
         },
+        {
+          title: 'Installments',
+          url: '/mobile-shop/installments',
+          icon: IconCreditCard,
+          businessTypes: ['mobile_shop'],
+        },
 
       ],
     },

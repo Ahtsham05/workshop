@@ -894,7 +894,6 @@ export default function LoadManagementPage() {
                     <div className='space-y-2'>
                       <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
                       <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} />
-                      <p className='text-xs text-muted-foreground'>Commission Profit: Rs {saleProfit.commissionProfit.toFixed(2)}</p>
                     </div>
                   </div>
 
@@ -912,33 +911,6 @@ export default function LoadManagementPage() {
                       <Input id='sale-date' type='date' value={saleForm.date} onChange={(e) => handleSaleChange('date', e.target.value)} />
                     </div>
                   </div>
-
-                  <Card className='bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'>
-                    <CardContent className='pt-6'>
-                      <div className='space-y-3'>
-                        <div className='flex justify-between items-center'>
-                          <span className='text-muted-foreground'>Load Amount:</span>
-                          <span className='font-semibold'>Rs {saleProfit.amount.toFixed(2)}</span>
-                        </div>
-                        {saleProfit.commissionProfit > 0 && (
-                          <div className='flex justify-between items-center'>
-                            <span className='text-muted-foreground'>Commission Profit ({saleForm.commissionRate}%):</span>
-                            <span className='text-green-600 font-semibold'>+ Rs {saleProfit.commissionProfit.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {saleProfit.extraCharge > 0 && (
-                          <div className='flex justify-between items-center'>
-                            <span className='text-muted-foreground'>Extra Charges:</span>
-                            <span className='text-green-600 font-semibold'>+ Rs {saleProfit.extraCharge.toFixed(2)}</span>
-                          </div>
-                        )}
-                        <div className='border-t-2 border-green-200 pt-3 flex justify-between items-center'>
-                          <span className='text-lg font-bold'>Total Profit:</span>
-                          <span className='text-2xl font-bold text-green-700'>Rs {saleProfit.totalProfit.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
 
                   <div className='flex gap-2'>
                     <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
