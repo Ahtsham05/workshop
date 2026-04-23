@@ -83,13 +83,15 @@ function _findChrome() {
 
   const candidates = [
     process.env.CHROME_PATH,                    // explicit override via env
+    process.env.PUPPETEER_EXECUTABLE_PATH,      // set in Dockerfile / Railway
+    '/usr/bin/chromium',                        // Debian/Ubuntu Docker image
+    '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
     '/snap/bin/chromium',
     '/usr/local/bin/chromium',
     '/usr/local/bin/google-chrome',
+    '/usr/local/bin/chrome',
   ].filter(Boolean);
 
   for (const p of candidates) {
@@ -132,10 +134,17 @@ function _createClient() {
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',               // required on headless Linux servers
+          // ── Critical for Docker / cloud containers ─────────────────────────
+          '--disable-dev-shm-usage',     // /dev/shm is tiny in containers
+          '--no-zygote',                 // disables zygote process (needed in some containers)
+          '--single-process',            // avoids multi-process issues in restricted envs
+          // ── Performance / stability ────────────────────────────────────────
+          '--disable-gpu',
           '--disable-extensions',
           '--disable-background-networking',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
           '--disable-default-apps',
           '--disable-sync',
           '--disable-translate',

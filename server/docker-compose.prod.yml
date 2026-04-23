@@ -3,4 +3,25 @@ version: '3'
 services:
   node-app:
     container_name: node-app-prod
-    command: yarn start
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: node-app-prod
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      # Chrome path set by Dockerfile
+      - CHROME_PATH=/usr/bin/chromium
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    volumes:
+      # Persist WhatsApp session across container restarts
+      - whatsapp_session:/usr/src/node-app/.wwebjs_auth
+    command: node src/index.js
+
+volumes:
+  whatsapp_session:
+    driver: local
+

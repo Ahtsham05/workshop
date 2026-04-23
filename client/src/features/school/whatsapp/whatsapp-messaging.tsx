@@ -39,11 +39,12 @@ import {
 
 function StateIndicator({ state }: { state: string }) {
   const map: Record<string, { label: string; color: string; Icon: any }> = {
-    READY:        { label: 'Connected', color: 'bg-green-100 text-green-700 border-green-300', Icon: CheckCircle2 },
-    QR_READY:     { label: 'Scan QR', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', Icon: QrCode },
-    LOADING:      { label: 'Connecting…', color: 'bg-blue-100 text-blue-700 border-blue-300', Icon: Loader2 },
-    AUTH_FAILURE: { label: 'Auth Failed', color: 'bg-red-100 text-red-700 border-red-300', Icon: XCircle },
-    DISCONNECTED: { label: 'Disconnected', color: 'bg-gray-100 text-gray-600 border-gray-300', Icon: WifiOff },
+    READY:                  { label: 'Connected', color: 'bg-green-100 text-green-700 border-green-300', Icon: CheckCircle2 },
+    QR_READY:               { label: 'Scan QR', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', Icon: QrCode },
+    LOADING:                { label: 'Connecting…', color: 'bg-blue-100 text-blue-700 border-blue-300', Icon: Loader2 },
+    AUTH_FAILURE:           { label: 'Auth Failed', color: 'bg-red-100 text-red-700 border-red-300', Icon: XCircle },
+    DISCONNECTED:           { label: 'Disconnected', color: 'bg-gray-100 text-gray-600 border-gray-300', Icon: WifiOff },
+    SERVERLESS_UNSUPPORTED: { label: 'Not Available', color: 'bg-orange-100 text-orange-700 border-orange-300', Icon: AlertTriangle },
   };
   const cfg = map[state] ?? map.DISCONNECTED;
   return (
@@ -68,7 +69,7 @@ export default function WhatsAppMessaging() {
 
   useEffect(() => {
     const s = status?.state;
-    if (s === 'READY' || s === 'AUTH_FAILURE') {
+    if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'SERVERLESS_UNSUPPORTED') {
       setPollInterval(0); // stable — stop polling
     } else {
       setPollInterval(3000); // still transitioning — keep polling
@@ -297,7 +298,24 @@ export default function WhatsAppMessaging() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {state === 'DISCONNECTED' ? (
+          {state === 'SERVERLESS_UNSUPPORTED' ? (
+            <div className="flex items-start gap-3 rounded-md border border-orange-200 bg-orange-50 p-4">
+              <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-orange-800">WhatsApp Not Available on This Server</p>
+                <p className="text-xs text-orange-700">
+                  WhatsApp messaging requires a <strong>persistent server</strong> with Chrome installed.
+                  This backend is currently deployed as a <strong>serverless function (Vercel)</strong> which
+                  cannot run Chrome or maintain a live WebSocket connection.
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  To enable WhatsApp: deploy the backend to <strong>Railway</strong>, <strong>Render</strong>,
+                  <strong> Fly.io</strong>, or a <strong>VPS</strong> using the provided Dockerfile.
+                  Then update <code className="bg-orange-100 px-1 rounded">VITE_BACKEND_URL</code> to point to the new server.
+                </p>
+              </div>
+            </div>
+          ) : state === 'DISCONNECTED' ? (
             <div className="flex items-center gap-3 flex-wrap">
               <p className="text-sm text-gray-600">
                 Connect WhatsApp by scanning a QR code with your phone.

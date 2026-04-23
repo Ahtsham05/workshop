@@ -5,6 +5,31 @@ const { whatsappService } = require('../services');
 const Student = require('../models/student.model');
 const { applyBranchFilter } = require('../utils/branchFilter');
 
+// ── Serverless / Vercel guard ──────────────────────────────────────────────────
+// whatsapp-web.js uses Puppeteer (Chrome) and keeps an in-memory WebSocket
+// connection alive. Neither works on Vercel serverless functions because:
+//   1. Every request is a new process instance — in-memory state is lost.
+//   2. Chrome binary is not available on Vercel.
+//   3. The filesystem is read-only — session files cannot be written.
+// This guard returns a clear 503 so the frontend can display a helpful message
+// instead of hanging forever in "Connecting…".
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.FUNCTION_NAME);
+
+function rejectIfServerless(res) {
+  if (IS_SERVERLESS) {
+    res.status(503).json({
+      state: 'SERVERLESS_UNSUPPORTED',
+      error: 'WhatsApp messaging requires a persistent server.',
+      message:
+        'This backend is deployed as a serverless function (Vercel/Lambda) which cannot ' +
+        'run Chrome or maintain a persistent WebSocket connection. ' +
+        'Deploy the backend to Railway, Render, Fly.io, or a VPS using the provided Dockerfile.',
+    });
+    return true;
+  }
+  return false;
+}
+
 // ── Connection Management ──────────────────────────────────────────────────────
 
 /**
@@ -12,6 +37,7 @@ const { applyBranchFilter } = require('../utils/branchFilter');
  * Returns current WhatsApp connection state and QR image (if waiting to scan).
  */
 const getStatus = catchAsync(async (req, res) => {
+  if (rejectIfServerless(res)) return;
   const status = whatsappService.getStatus();
   // Disable ETag/caching so the client always gets a fresh status response
   res.set('Cache-Control', 'no-store');
@@ -24,6 +50,7 @@ const getStatus = catchAsync(async (req, res) => {
  * fresh QR code is guaranteed to appear every time the button is clicked.
  */
 const connect = catchAsync(async (req, res) => {
+  if (rejectIfServerless(res)) return;
   const current = whatsappService.getStatus();
   if (current.state === 'READY') {
     return res.send({ message: 'Already connected', state: 'READY' });
