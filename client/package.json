@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "knip": "knip"
+    "knip": "knip",
+    "build:electron": "tsc -b && cross-env VITE_ELECTRON=true vite build --outDir ../desktop/out/renderer"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
@@ -86,6 +87,7 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react-swc": "^3.9.0",
+    "cross-env": "^7.0.3",
     "eslint": "^9.24.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
