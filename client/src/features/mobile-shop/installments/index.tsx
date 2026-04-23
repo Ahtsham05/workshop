@@ -28,7 +28,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MobilePageShell } from '@/features/mobile-shop/components/mobile-page-shell'
@@ -899,7 +899,7 @@ export default function InstallmentsPage() {
                   <DetailRow label='Paid' value={`${fmt(detailPlan.totalPaid)} (${detailPlan.paidInstallments}/${detailPlan.totalInstallments})`} />
                   <DetailRow label='Outstanding' value={fmt(detailPlan.totalOutstanding)} highlight danger={detailPlan.totalOutstanding > 0} />
                   {detailPlan.nextDueDate && detailPlan.status === 'active' && (
-                    <DetailRow label='Next Due' value={format(new Date(detailPlan.nextDueDate), 'dd MMM yyyy')} danger={isDue(detailPlan)} />
+                    <DetailRow label='Next Due' value={format(new Date(detailPlan.nextDueDate), 'dd MMM yyyy')} danger={!!isDue(detailPlan)} />
                   )}
                   <DetailRow label='Start Date' value={format(new Date(detailPlan.startDate), 'dd MMM yyyy')} />
                 </div>

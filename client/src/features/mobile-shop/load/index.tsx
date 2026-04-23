@@ -206,14 +206,6 @@ export default function LoadManagementPage() {
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
 
-  const saleProfit = useMemo(() => {
-    const amount = Number(saleForm.amount) || 0
-    const commissionRate = Number(saleForm.commissionRate) || 0
-    const extraCharge = Number(saleForm.extraCharge) || 0
-    const commissionProfit = (amount * commissionRate) / 100
-    return { amount, commissionRate, commissionProfit, extraCharge, totalProfit: commissionProfit + extraCharge }
-  }, [saleForm.amount, saleForm.commissionRate, saleForm.extraCharge])
-
   const purchaseProfit = useMemo(() => {
     const amount = Number(purchaseForm.amount) || 0
     const commissionRate = Number(purchaseForm.commissionRate) || 0
