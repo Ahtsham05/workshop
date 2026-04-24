@@ -40,3 +40,7 @@ export const isMobileShopBusiness = (value?: string | null) => {
 export const isSchoolBusiness = (value?: string | null) => {
   return normalizeBusinessType(value) === 'school'
 }
+
+export const isWholesaleRetailBusiness = (value?: string | null) => {
+  return normalizeBusinessType(value) === 'wholesale_retail'
+}

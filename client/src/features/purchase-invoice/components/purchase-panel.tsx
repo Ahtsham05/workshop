@@ -32,6 +32,7 @@ import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import type { Purchase, PurchaseItem, Supplier } from '../index'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
+import { isWholesaleRetailBusiness } from '@/lib/business-types'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -89,6 +90,7 @@ export default function PurchasePanel({
   const suppliers: Supplier[] = suppliersData?.results || []
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
 
   // Filter suppliers by search query
   const filteredSuppliers = suppliers.filter(supplier => {
@@ -806,57 +808,59 @@ export default function PurchasePanel({
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1 min-w-[110px]">
-                    <Label className="text-xs text-center">{t('unit')}</Label>
-                    <Select
-                      value={item.unit || item.product.unit || 'pcs'}
-                      onValueChange={(value) => {
-                        const resolved = resolveUnitConversion({
-                          product: item.product,
-                          quantity: item.quantity,
-                          unit: value,
-                        })
+                  {showUnitConversions && (
+                    <div className="flex flex-col gap-1 min-w-[110px]">
+                      <Label className="text-xs text-center">{t('unit')}</Label>
+                      <Select
+                        value={item.unit || item.product.unit || 'pcs'}
+                        onValueChange={(value) => {
+                          const resolved = resolveUnitConversion({
+                            product: item.product,
+                            quantity: item.quantity,
+                            unit: value,
+                          })
 
-                        const adjustedPurchasePrice = getUnitAdjustedPrice({
-                          product: item.product,
-                          unit: value,
-                          basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
-                          conversionFactor: resolved?.conversionFactor,
-                        })
+                          const adjustedPurchasePrice = getUnitAdjustedPrice({
+                            product: item.product,
+                            unit: value,
+                            basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
+                            conversionFactor: resolved?.conversionFactor,
+                          })
 
-                        if (!resolved || adjustedPurchasePrice === null) {
-                          toast.error(`Missing conversion for ${item.product.name}`)
-                          return
-                        }
+                          if (!resolved || adjustedPurchasePrice === null) {
+                            toast.error(`Missing conversion for ${item.product.name}`)
+                            return
+                          }
 
-                        setPurchase((prev) => ({
-                          ...prev,
-                          items: prev.items.map((purchaseItem, purchaseIndex) =>
-                            purchaseIndex === index
-                              ? {
-                                  ...purchaseItem,
-                                  unit: resolved.lineUnit,
-                                  conversionFactor: resolved.conversionFactor,
-                                  stockQuantity: resolved.stockQuantity,
-                                  purchasePrice: adjustedPurchasePrice,
-                                }
-                              : purchaseItem
-                          ),
-                        }))
-                      }}
-                    >
-                      <SelectTrigger className="h-6 text-xs px-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getProductUnitOptions(item.product).map((unitOption) => (
-                          <SelectItem key={unitOption.value} value={unitOption.value}>
-                            {unitOption.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                          setPurchase((prev) => ({
+                            ...prev,
+                            items: prev.items.map((purchaseItem, purchaseIndex) =>
+                              purchaseIndex === index
+                                ? {
+                                    ...purchaseItem,
+                                    unit: resolved.lineUnit,
+                                    conversionFactor: resolved.conversionFactor,
+                                    stockQuantity: resolved.stockQuantity,
+                                    purchasePrice: adjustedPurchasePrice,
+                                  }
+                                : purchaseItem
+                            ),
+                          }))
+                        }}
+                      >
+                        <SelectTrigger className="h-6 text-xs px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getProductUnitOptions(item.product).map((unitOption) => (
+                            <SelectItem key={unitOption.value} value={unitOption.value}>
+                              {unitOption.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {/* Price Controls */}
                   <div className="flex flex-col gap-1">

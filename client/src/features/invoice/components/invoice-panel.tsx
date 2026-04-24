@@ -42,6 +42,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
+import { isWholesaleRetailBusiness } from '@/lib/business-types'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
@@ -123,6 +124,7 @@ export function InvoicePanel({
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const resolvedInvoiceLanguage = resolveInvoiceLanguage({
     language: invoice.language,
     isUrduOnly: invoice.isUrduOnly,
@@ -1306,101 +1308,103 @@ export function InvoicePanel({
                     </div>
                   </div>
 
-                    <div className='flex flex-col gap-1 min-w-[110px]'>
-                      <Label className='text-xs text-center'>{t('unit')}</Label>
-                      <Select
-                        value={item.unit || 'pcs'}
-                        onValueChange={(value) => {
-                          const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
-                          if (!selectedProduct) {
-                            toast.error('Product not found for this line')
-                            return
-                          }
+                    {showUnitConversions && (
+                      <div className='flex flex-col gap-1 min-w-[110px]'>
+                        <Label className='text-xs text-center'>{t('unit')}</Label>
+                        <Select
+                          value={item.unit || 'pcs'}
+                          onValueChange={(value) => {
+                            const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
+                            if (!selectedProduct) {
+                              toast.error('Product not found for this line')
+                              return
+                            }
 
-                          const adjustedUnitPrice = getUnitAdjustedPrice({
-                            product: selectedProduct,
-                            unit: value,
-                            basePrice: selectedProduct.price || item.unitPrice || 0,
-                          })
+                            const adjustedUnitPrice = getUnitAdjustedPrice({
+                              product: selectedProduct,
+                              unit: value,
+                              basePrice: selectedProduct.price || item.unitPrice || 0,
+                            })
 
-                          if (adjustedUnitPrice === null) {
-                            toast.error(`Missing conversion for ${item.name}`)
-                            return
-                          }
+                            if (adjustedUnitPrice === null) {
+                              toast.error(`Missing conversion for ${item.name}`)
+                              return
+                            }
 
-                          const lineValues = calculateInvoiceLineValues({
-                            product: selectedProduct,
-                            quantity: item.quantity,
-                            unit: value,
-                            unitPrice: adjustedUnitPrice,
-                            cost: item.cost,
-                          })
+                            const lineValues = calculateInvoiceLineValues({
+                              product: selectedProduct,
+                              quantity: item.quantity,
+                              unit: value,
+                              unitPrice: adjustedUnitPrice,
+                              cost: item.cost,
+                            })
 
-                          if (!lineValues) {
-                            toast.error(`Missing conversion for ${item.name}`)
-                            return
-                          }
+                            if (!lineValues) {
+                              toast.error(`Missing conversion for ${item.name}`)
+                              return
+                            }
 
-                          const previousStockQuantity = item.stockQuantity || item.quantity
-                          const stockDifference = lineValues.stockQuantity - previousStockQuantity
+                            const previousStockQuantity = item.stockQuantity || item.quantity
+                            const stockDifference = lineValues.stockQuantity - previousStockQuantity
 
-                          if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
-                            toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
-                            return
-                          }
+                            if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
+                              toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
+                              return
+                            }
 
-                          if (stockDifference !== 0) {
-                            setProducts((prevProducts) => prevProducts.map((productRow) =>
-                              (productRow._id || productRow.id) === item.productId
-                                ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
-                                : productRow
-                            ))
-                          }
+                            if (stockDifference !== 0) {
+                              setProducts((prevProducts) => prevProducts.map((productRow) =>
+                                (productRow._id || productRow.id) === item.productId
+                                  ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
+                                  : productRow
+                              ))
+                            }
 
-                          const newItems = invoice.items.map((invoiceItem) =>
-                            invoiceItem.id === item.id
-                              ? {
-                                  ...invoiceItem,
-                                  unit: lineValues.lineUnit,
-                                  conversionFactor: lineValues.conversionFactor,
-                                  stockQuantity: lineValues.stockQuantity,
-                                  unitPrice: adjustedUnitPrice,
-                                  subtotal: lineValues.subtotal,
-                                  profit: lineValues.profit,
-                                }
-                              : invoiceItem
-                          )
+                            const newItems = invoice.items.map((invoiceItem) =>
+                              invoiceItem.id === item.id
+                                ? {
+                                    ...invoiceItem,
+                                    unit: lineValues.lineUnit,
+                                    conversionFactor: lineValues.conversionFactor,
+                                    stockQuantity: lineValues.stockQuantity,
+                                    unitPrice: adjustedUnitPrice,
+                                    subtotal: lineValues.subtotal,
+                                    profit: lineValues.profit,
+                                  }
+                                : invoiceItem
+                            )
 
-                          if (calculateTotals) {
-                            const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-                            setInvoice((prev) => ({
-                              ...prev,
-                              items: newItems,
-                              subtotal: totals.subtotal,
-                              tax: totals.tax,
-                              total: totals.total,
-                              totalProfit: totals.totalProfit,
-                              totalCost: totals.totalCost,
-                              balance: totals.total - prev.paidAmount,
-                            }))
-                          }
-                        }}
-                      >
-                        <SelectTrigger className='h-6 text-xs px-2'>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(products.find((p) => (p._id || p.id) === item.productId)
-                            ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
-                            : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
-                          ).map((unitOption) => (
-                            <SelectItem key={unitOption.value} value={unitOption.value}>
-                              {unitOption.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                            if (calculateTotals) {
+                              const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                              setInvoice((prev) => ({
+                                ...prev,
+                                items: newItems,
+                                subtotal: totals.subtotal,
+                                tax: totals.tax,
+                                total: totals.total,
+                                totalProfit: totals.totalProfit,
+                                totalCost: totals.totalCost,
+                                balance: totals.total - prev.paidAmount,
+                              }))
+                            }
+                          }}
+                        >
+                          <SelectTrigger className='h-6 text-xs px-2'>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(products.find((p) => (p._id || p.id) === item.productId)
+                              ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
+                              : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
+                            ).map((unitOption) => (
+                              <SelectItem key={unitOption.value} value={unitOption.value}>
+                                {unitOption.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                   {/* Price Controls */}
                   <div className='flex flex-col gap-1'>

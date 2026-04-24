@@ -58,6 +58,8 @@ import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
 import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
+import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -107,6 +109,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
   
   const dispatch = useDispatch<AppDispatch>()
   const { categories } = useSelector((state: RootState) => state.category)
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const showConversionRules = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   
   // Refetch categories when dialog opens (in case new ones were added)
   useEffect(() => {
@@ -630,95 +635,97 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='unitConversions'
-                render={({ field }) => {
-                  const conversionRows = field.value || []
-                  const baseUnit = form.watch('unit') || DEFAULT_UNIT
+              {showConversionRules && (
+                <FormField
+                  control={form.control}
+                  name='unitConversions'
+                  render={({ field }) => {
+                    const conversionRows = field.value || []
+                    const baseUnit = form.watch('unit') || DEFAULT_UNIT
 
-                  const updateRule = (index: number, patch: Record<string, unknown>) => {
-                    const nextRules = [...conversionRows]
-                    nextRules[index] = { ...nextRules[index], ...patch }
-                    field.onChange(nextRules)
-                  }
+                    const updateRule = (index: number, patch: Record<string, unknown>) => {
+                      const nextRules = [...conversionRows]
+                      nextRules[index] = { ...nextRules[index], ...patch }
+                      field.onChange(nextRules)
+                    }
 
-                  return (
-                    <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                      <FormLabel className='col-span-2 md:text-right pt-2'>
-                        Conversion Rules
-                      </FormLabel>
-                      <FormControl>
-                        <div className='col-span-4 space-y-3'>
-                          <div className='rounded-md border p-3 bg-muted/20 text-sm text-muted-foreground'>
-                            Stock is stored in <span className='font-medium text-foreground'>{getAllUnits().find((unit) => unit.value === baseUnit)?.label || baseUnit}</span>. Add rules like bag to pcs = 50.
-                          </div>
-
-                          {conversionRows.map((rule, index) => (
-                            <div key={`${rule.fromUnit || 'rule'}-${index}`} className='grid grid-cols-12 gap-2 rounded-md border p-3'>
-                              <div className='col-span-4'>
-                                <Label className='text-xs mb-1 block'>Purchase/Sale Unit</Label>
-                                <Select
-                                  value={rule.fromUnit || ''}
-                                  onValueChange={(value) => updateRule(index, { fromUnit: value, toUnit: baseUnit, isActive: true })}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder='Select unit' />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {getAllUnits().map((unit) => (
-                                      <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className='col-span-3'>
-                                <Label className='text-xs mb-1 block'>Stock Unit</Label>
-                                <Input value={getAllUnits().find((unit) => unit.value === baseUnit)?.label || baseUnit} disabled />
-                              </div>
-                              <div className='col-span-3'>
-                                <Label className='text-xs mb-1 block'>Factor</Label>
-                                <Input
-                                  type='number'
-                                  min='0.000001'
-                                  step='0.000001'
-                                  value={rule.factor ?? ''}
-                                  onChange={(e) => updateRule(index, { factor: Number(e.target.value || 0), toUnit: baseUnit, isActive: true })}
-                                  placeholder='e.g. 50'
-                                />
-                              </div>
-                              <div className='col-span-2 flex items-end justify-end'>
-                                <Button
-                                  type='button'
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => field.onChange(conversionRows.filter((_, rowIndex) => rowIndex !== index))}
-                                >
-                                  <X className='h-4 w-4' />
-                                </Button>
-                              </div>
+                    return (
+                      <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                        <FormLabel className='col-span-2 md:text-right pt-2'>
+                          Conversion Rules
+                        </FormLabel>
+                        <FormControl>
+                          <div className='col-span-4 space-y-3'>
+                            <div className='rounded-md border p-3 bg-muted/20 text-sm text-muted-foreground'>
+                              Stock is stored in <span className='font-medium text-foreground'>{getAllUnits().find((unit) => unit.value === baseUnit)?.label || baseUnit}</span>. Add rules like bag to pcs = 50.
                             </div>
-                          ))}
 
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => field.onChange([
-                              ...conversionRows,
-                              { fromUnit: '', toUnit: baseUnit, factor: 1, businessTypes: ['wholesale_retail'], isActive: true },
-                            ])}
-                          >
-                            <Plus className='mr-2 h-4 w-4' />
-                            Add Conversion Rule
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage className='col-span-4 col-start-3' />
-                    </FormItem>
-                  )
-                }}
-              />
+                            {conversionRows.map((rule, index) => (
+                              <div key={`${rule.fromUnit || 'rule'}-${index}`} className='grid grid-cols-12 gap-2 rounded-md border p-3'>
+                                <div className='col-span-4'>
+                                  <Label className='text-xs mb-1 block'>Purchase/Sale Unit</Label>
+                                  <Select
+                                    value={rule.fromUnit || ''}
+                                    onValueChange={(value) => updateRule(index, { fromUnit: value, toUnit: baseUnit, isActive: true })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder='Select unit' />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {getAllUnits().map((unit) => (
+                                        <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className='col-span-3'>
+                                  <Label className='text-xs mb-1 block'>Stock Unit</Label>
+                                  <Input value={getAllUnits().find((unit) => unit.value === baseUnit)?.label || baseUnit} disabled />
+                                </div>
+                                <div className='col-span-3'>
+                                  <Label className='text-xs mb-1 block'>Factor</Label>
+                                  <Input
+                                    type='number'
+                                    min='0.000001'
+                                    step='0.000001'
+                                    value={rule.factor ?? ''}
+                                    onChange={(e) => updateRule(index, { factor: Number(e.target.value || 0), toUnit: baseUnit, isActive: true })}
+                                    placeholder='e.g. 50'
+                                  />
+                                </div>
+                                <div className='col-span-2 flex items-end justify-end'>
+                                  <Button
+                                    type='button'
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => field.onChange(conversionRows.filter((_, rowIndex) => rowIndex !== index))}
+                                  >
+                                    <X className='h-4 w-4' />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => field.onChange([
+                                ...conversionRows,
+                                { fromUnit: '', toUnit: baseUnit, factor: 1, businessTypes: ['wholesale_retail'], isActive: true },
+                              ])}
+                            >
+                              <Plus className='mr-2 h-4 w-4' />
+                              Add Conversion Rule
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage className='col-span-4 col-start-3' />
+                      </FormItem>
+                    )
+                  }}
+                />
+              )}
             </form>
           </Form>
         </div>
