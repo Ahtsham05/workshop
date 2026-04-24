@@ -26,6 +26,16 @@ const loadTransactionSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+      index: true,
+    },
+    customerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     mobileNumber: {
       type: String,
       default: 'N/A',

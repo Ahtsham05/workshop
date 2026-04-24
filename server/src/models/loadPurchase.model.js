@@ -20,6 +20,11 @@ const loadPurchaseSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supplier',
+      index: true,
+    },
     amount: {
       type: Number,
       required: true,

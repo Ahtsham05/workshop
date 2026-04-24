@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, RepairJob, CashWithdrawal } = require('../models');
+const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, RepairJob, CashWithdrawal, SimSale } = require('../models');
 
 const getRange = (query) => {
   const now = new Date();
@@ -182,59 +182,90 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   if (branchId) txBaseMatch.branchId = branchId;
 
   // ── 2. Net change AFTER end date (to back-calculate closing balance at end) ──
-  // Load sales DECREASE balance; cash withdrawals INCREASE balance; cash deposits DECREASE balance
-  const [loadAfterRes, cashAfterRes] = await Promise.all([
+  // Load sales DECREASE balance; SimSale load DECREASES balance; cash withdrawals INCREASE balance; cash deposits DECREASE balance
+  const [loadAfterRes, cashAfterRes, simSaleAfterRes] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gt: end } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
     CashWithdrawal.aggregate([
       { $match: { ...txBaseMatch, date: { $gt: end } } },
-      { $group: {
-        _id: null,
-        totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
-        totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
-      } },
+      {
+        $group: {
+          _id: null,
+          totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
+          totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
+        },
+      },
+    ]),
+    SimSale.aggregate([
+      { $match: { ...txBaseMatch, date: { $gt: end } } },
+      { $group: { _id: null, total: { $sum: '$loadAmount' } } },
     ]),
   ]);
 
-  const totalLoadAfter = loadAfterRes[0]?.total ?? 0;
-  const totalWithdrawalsAfter = cashAfterRes[0]?.totalWithdrawals ?? 0;
-  const totalDepositsAfter = cashAfterRes[0]?.totalDeposits ?? 0;
+  const totalLoadAfter = loadAfterRes[0] ? loadAfterRes[0].total : 0;
+  const totalWithdrawalsAfter = cashAfterRes[0] ? cashAfterRes[0].totalWithdrawals : 0;
+  const totalDepositsAfter = cashAfterRes[0] ? cashAfterRes[0].totalDeposits : 0;
+  const totalSimSaleLoadAfter = simSaleAfterRes[0] ? simSaleAfterRes[0].total : 0;
 
-  // currentBalance = closingAtEnd - loadSold + withdrawals - deposits  (all events after end)
-  // => closingAtEnd = currentBalance + loadSold - withdrawals + deposits
-  const closingAtEnd = currentBalance + totalLoadAfter - totalWithdrawalsAfter + totalDepositsAfter;
+  // currentBalance = closingAtEnd - loadSold - simSaleLoad + withdrawals - deposits  (all events after end)
+  // => closingAtEnd = currentBalance + loadSold + simSaleLoad - withdrawals + deposits
+  const closingAtEnd = currentBalance + totalLoadAfter + totalSimSaleLoadAfter - totalWithdrawalsAfter + totalDepositsAfter;
 
   // ── 3. Daily aggregation within range ──
-  const [dailyLoad, dailyCash] = await Promise.all([
+  const [dailyLoad, dailyCash, dailySimSale] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
-      { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-        totalSold: { $sum: '$amount' },
-        loadProfit: { $sum: '$profit' },
-        loadTransactions: { $sum: 1 },
-      } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalSold: { $sum: '$amount' },
+          loadProfit: { $sum: '$profit' },
+          loadTransactions: { $sum: 1 },
+        },
+      },
       { $sort: { _id: 1 } },
     ]),
     CashWithdrawal.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
-      { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-        totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
-        totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
-        cashProfit: { $sum: '$profit' },
-        cashTransactions: { $sum: 1 },
-      } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
+          totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
+          cashProfit: { $sum: '$profit' },
+          cashTransactions: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    SimSale.aggregate([
+      { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalSimSaleLoad: { $sum: '$loadAmount' },
+          simSaleCommission: { $sum: '$commission' },
+          simSaleTransactions: { $sum: 1 },
+        },
+      },
       { $sort: { _id: 1 } },
     ]),
   ]);
 
-  const loadMap = {};
-  for (const d of dailyLoad) loadMap[d._id] = d;
-  const cashMap = {};
-  for (const d of dailyCash) cashMap[d._id] = d;
+  const loadMap = dailyLoad.reduce((acc, d) => {
+    acc[d._id] = d;
+    return acc;
+  }, {});
+  const cashMap = dailyCash.reduce((acc, d) => {
+    acc[d._id] = d;
+    return acc;
+  }, {});
+  const simSaleMap = dailySimSale.reduce((acc, d) => {
+    acc[d._id] = d;
+    return acc;
+  }, {});
 
   // ── 4. Build every calendar date in range ──
   const rows = [];
@@ -243,28 +274,38 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     const key = cursor.toISOString().slice(0, 10);
     const ld = loadMap[key];
     const cw = cashMap[key];
+    const ss = simSaleMap[key];
+    const ldTotalSold = ld ? ld.totalSold : 0;
+    const cwTotalWithdrawals = cw ? cw.totalWithdrawals : 0;
+    const cwTotalDeposits = cw ? cw.totalDeposits : 0;
+    const ssTotalSimSaleLoad = ss ? ss.totalSimSaleLoad : 0;
     rows.push({
       date: key,
-      hasSales: !!(ld || cw),
-      totalSold: ld?.totalSold ?? 0,
-      totalWithdrawals: cw?.totalWithdrawals ?? 0,
-      totalDeposits: cw?.totalDeposits ?? 0,
-      totalProfit: (ld?.loadProfit ?? 0) + (cw?.cashProfit ?? 0),
-      transactions: (ld?.loadTransactions ?? 0) + (cw?.cashTransactions ?? 0),
+      hasSales: !!(ld || cw || ss),
+      totalSold: ldTotalSold,
+      totalSimSaleLoad: ssTotalSimSaleLoad,
+      totalWithdrawals: cwTotalWithdrawals,
+      totalDeposits: cwTotalDeposits,
+      totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + (ss ? ss.simSaleCommission : 0),
+      transactions: (ld ? ld.loadTransactions : 0) + (cw ? cw.cashTransactions : 0) + (ss ? ss.simSaleTransactions : 0),
     });
     cursor.setDate(cursor.getDate() + 1);
   }
 
   // ── 5. Walk backwards to assign running balances ──
-  // Each day: closing = opening - loadSold + withdrawals - deposits
-  // => opening = closing + loadSold - withdrawals + deposits
+  // Each day: closing = opening - loadSold - simSaleLoad + withdrawals - deposits
+  // => opening = closing + loadSold + simSaleLoad - withdrawals + deposits
   let runningClose = closingAtEnd;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const netDecrease = rows[i].totalSold - rows[i].totalWithdrawals + rows[i].totalDeposits;
-    rows[i].closingBalance = runningClose;
-    rows[i].openingBalance = runningClose + netDecrease;
-    runningClose = rows[i].openingBalance;
-  }
+  rows
+    .slice()
+    .reverse()
+    .forEach((row, idx) => {
+      const actualIdx = rows.length - 1 - idx;
+      const netDecrease = row.totalSold + row.totalSimSaleLoad - row.totalWithdrawals + row.totalDeposits;
+      rows[actualIdx].closingBalance = runningClose;
+      rows[actualIdx].openingBalance = runningClose + netDecrease;
+      runningClose = rows[actualIdx].openingBalance;
+    });
 
   res.send({
     walletType,

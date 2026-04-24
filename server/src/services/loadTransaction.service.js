@@ -1,9 +1,10 @@
-const { LoadTransaction } = require('../models');
+const httpStatus = require('http-status');
+const { LoadTransaction, Customer } = require('../models');
 const walletService = require('./wallet.service');
 const cashBookService = require('./cashBook.service');
+const customerLedgerService = require('./customerLedger.service');
 
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
 
 const calculateProfit = ({ amount, commissionRate = 0, extraCharge = 0 }) => {
   const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
@@ -11,9 +12,66 @@ const calculateProfit = ({ amount, commissionRate = 0, extraCharge = 0 }) => {
   return totalProfit;
 };
 
+const sanitizeCustomerId = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  return value;
+};
+
+const resolveLinkedCustomer = async ({ customerId, organizationId, branchId }) => {
+  const normalizedCustomerId = sanitizeCustomerId(customerId);
+  if (!normalizedCustomerId) {
+    return null;
+  }
+
+  const customer = await Customer.findOne({
+    _id: normalizedCustomerId,
+    organizationId,
+    branchId,
+  }).select('name');
+
+  if (!customer) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Selected customer not found in this branch');
+  }
+
+  return customer;
+};
+
+const syncCustomerLedgerForLoadTransaction = async (transaction) => {
+  await customerLedgerService.deleteLedgerEntriesByReference(transaction._id);
+
+  if (!transaction.customerId) {
+    return;
+  }
+
+  await customerLedgerService.createLedgerEntry({
+    organizationId: transaction.organizationId,
+    branchId: transaction.branchId,
+    customer: transaction.customerId,
+    transactionType: 'sale',
+    transactionDate: transaction.date,
+    reference: `LOAD-SALE-${String(transaction._id).slice(-6).toUpperCase()}`,
+    referenceId: transaction._id,
+    description: `Load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
+    debit: Number(transaction.amount) || 0,
+    credit: 0,
+    paymentMethod: 'Cash',
+    notes: transaction.notes || `Wallet: ${transaction.walletType}`,
+  });
+};
+
 const createLoadTransaction = async (transactionBody) => {
+  const linkedCustomer = await resolveLinkedCustomer({
+    customerId: transactionBody.customerId,
+    organizationId: transactionBody.organizationId,
+    branchId: transactionBody.branchId,
+  });
+
   const transaction = await LoadTransaction.create({
     ...transactionBody,
+    customerId: linkedCustomer ? linkedCustomer._id : undefined,
+    customerName: linkedCustomer ? linkedCustomer.name : '',
     profit: 0,
   });
 
@@ -40,6 +98,8 @@ const createLoadTransaction = async (transactionBody) => {
     createdBy: transaction.createdBy,
   });
 
+  await syncCustomerLedgerForLoadTransaction(transaction);
+
   return transaction;
 };
 
@@ -62,6 +122,7 @@ const queryLoadTransactions = async (filter, options) => {
   return LoadTransaction.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
+    populate: 'customerId',
   });
 };
 
@@ -76,6 +137,14 @@ const getLoadTransactionById = async (transactionId) => {
 const updateLoadTransaction = async (transactionId, updateBody) => {
   const transaction = await getLoadTransactionById(transactionId);
 
+  const linkedCustomer = await resolveLinkedCustomer({
+    customerId: Object.prototype.hasOwnProperty.call(updateBody, 'customerId')
+      ? updateBody.customerId
+      : transaction.customerId,
+    organizationId: transaction.organizationId,
+    branchId: transaction.branchId,
+  });
+
   // Reverse old wallet deduction (add back)
   await walletService.adjustWalletBalance({
     organizationId: transaction.organizationId,
@@ -89,6 +158,8 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
   await cashBookService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
 
   Object.assign(transaction, updateBody);
+  transaction.customerId = linkedCustomer ? linkedCustomer._id : undefined;
+  transaction.customerName = linkedCustomer ? linkedCustomer.name : '';
   transaction.profit = 0;
   await transaction.save();
 
@@ -116,6 +187,8 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
     createdBy: transaction.createdBy,
   });
 
+  await syncCustomerLedgerForLoadTransaction(transaction);
+
   return transaction;
 };
 
@@ -133,6 +206,7 @@ const deleteLoadTransaction = async (transactionId) => {
   });
 
   await cashBookService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
+  await customerLedgerService.deleteLedgerEntriesByReference(transaction._id);
   await transaction.deleteOne();
   return transaction;
 };

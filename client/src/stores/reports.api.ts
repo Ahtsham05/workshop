@@ -200,6 +200,8 @@ export interface LoadReportSummary {
   totalPurchased: number
   purchaseSavings: number
   netBalance: number
+  simSaleLoadSold?: number
+  simSaleTransactions?: number
 }
 export interface LoadByWallet {
   _id: string
@@ -398,10 +400,107 @@ export interface MonthlyRoiReport {
   period: { from: string; to: string }
 }
 
+
+// ── Sim Sale Report ──────────────────────────────────────────────────────────
+export interface SimSaleReportSummary {
+  totalSales: number
+  totalSimAmount: number
+  totalLoadAmount: number
+  totalPurchaseAmount: number
+  totalSaleAmount: number
+  totalCommission: number
+}
+export interface SimSaleByProduct {
+  _id: string
+  count: number
+  totalSaleAmount: number
+  totalSimAmount: number
+  totalLoadAmount: number
+  totalCommission: number
+}
+export interface SimSaleByWallet {
+  _id: string
+  count: number
+  totalLoadAmount: number
+}
+export interface SimSaleDatewise {
+  _id: string
+  count: number
+  totalSaleAmount: number
+  totalCommission: number
+  totalLoadAmount: number
+}
+export interface SimSaleRecentRecord {
+  _id: string
+  productName: string
+  customerName?: string
+  customerMobile?: string
+  simAmount: number
+  loadAmount: number
+  saleAmount: number
+  commission: number
+  walletType?: string
+  date: string
+}
+export interface SimSaleReport {
+  summary: SimSaleReportSummary
+  byProduct: SimSaleByProduct[]
+  byWallet: SimSaleByWallet[]
+  datewise: SimSaleDatewise[]
+  recentSales: SimSaleRecentRecord[]
+  period: { startDate: string; endDate: string }
+}
+
+// ── Installment Report ───────────────────────────────────────────────────────
+export interface InstallmentPlanSummary {
+  totalPlans: number
+  totalAmount: number
+  totalPaid: number
+  totalOutstanding: number
+  totalDownPayment: number
+}
+export interface InstallmentByStatus {
+  _id: string
+  count: number
+  totalAmount: number
+  totalOutstanding: number
+  totalPaid: number
+}
+export interface InstallmentPaymentSummaryData {
+  totalPayments: number
+  totalCollected: number
+}
+export interface InstallmentPaymentDatewiseItem {
+  _id: string
+  payments: number
+  totalCollected: number
+}
+export interface InstallmentPlanRecord {
+  _id: string
+  planNumber: string
+  customerName: string
+  customerPhone?: string
+  itemDescription: string
+  totalAmount: number
+  totalPaid: number
+  totalOutstanding: number
+  status: string
+  nextDueDate?: string
+  startDate: string
+}
+export interface InstallmentReport {
+  planSummary: InstallmentPlanSummary
+  byStatus: InstallmentByStatus[]
+  paymentSummary: InstallmentPaymentSummaryData
+  paymentDatewise: InstallmentPaymentDatewiseItem[]
+  overdueCount: number
+  recentPlans: InstallmentPlanRecord[]
+  period: { startDate: string; endDate: string }
+}
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'RoiReport', 'MonthlyRoi'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -615,6 +714,27 @@ export const reportsApi = createApi({
       },
       providesTags: ['MonthlyRoi'],
     }),
+    getSimSaleReport: builder.query<SimSaleReport, { startDate?: string; endDate?: string; productId?: string; walletType?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.productId) searchParams.set('productId', params.productId)
+        if (params.walletType) searchParams.set('walletType', params.walletType)
+        return `/sim-sales?${searchParams.toString()}`
+      },
+      providesTags: ['SimSaleReport'],
+    }),
+    getInstallmentReport: builder.query<InstallmentReport, { startDate?: string; endDate?: string; status?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.status) searchParams.set('status', params.status)
+        return `/installments?${searchParams.toString()}`
+      },
+      providesTags: ['InstallmentReport'],
+    }),
   }),
 })
 
@@ -637,4 +757,6 @@ export const {
   useGetRepairReportQuery,
   useGetRoiReportQuery,
   useGetMonthlyRoiQuery,
+  useGetSimSaleReportQuery,
+  useGetInstallmentReportQuery,
 } = reportsApi

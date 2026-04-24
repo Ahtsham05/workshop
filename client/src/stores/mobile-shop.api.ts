@@ -23,6 +23,7 @@ export interface WalletRecord {
 export interface LoadPurchaseRecord {
   id: string
   walletType: string
+  supplierId?: string
   amount: number
   supplierName?: string
   paymentMethod: 'cash' | 'bank'
@@ -39,6 +40,8 @@ export interface LoadTransactionRecord {
   type: 'normal' | 'package'
   walletType: string
   walletId?: string
+  customerId?: string
+  customerName?: string
   network: string
   mobileNumber: string
   amount: number
@@ -53,6 +56,8 @@ export interface CreateLoadTransactionInput {
   type: 'normal' | 'package'
   walletType: string
   walletId: string
+  customerId?: string
+  customerName?: string
   network: string
   mobileNumber: string
   amount: number
@@ -354,10 +359,49 @@ export interface InstallmentSummary {
   totalCollected: number
 }
 
+export interface SimSaleRecord {
+  id: string
+  jobNumber: number
+  date: string
+  productId?: string
+  productName?: string
+  simAmount: number
+  walletType?: string
+  loadAmount: number
+  purchaseAmount: number
+  saleAmount: number
+  commission: number
+  customerId?: string
+  customerName?: string
+  customerMobile?: string
+  customerCNIC?: string
+  customerLocation?: string
+  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa'
+  notes?: string
+  createdAt?: string
+}
+
+export interface CreateSimSaleInput {
+  date?: string
+  productId?: string
+  productName?: string
+  simAmount: number
+  walletType?: string
+  loadAmount?: number
+  saleAmount: number
+  customerId?: string
+  customerName?: string
+  customerMobile?: string
+  customerCNIC?: string
+  customerLocation?: string
+  paymentMethod?: 'cash' | 'bank' | 'jazzcash' | 'easypaisa'
+  notes?: string
+}
+
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -734,6 +778,28 @@ export const mobileShopApi = createApi({
       query: () => '/installments/summary',
       providesTags: ['Installments'],
     }),
+
+    // ─── Sim Sales ───────────────────────────────────────────────────────────
+    getSimSales: builder.query<PaginatedResult<SimSaleRecord>, { page?: number; limit?: number } | void>({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        return `/sim-sales?${p.toString()}`
+      },
+      providesTags: ['SimSales'],
+    }),
+    createSimSale: builder.mutation<SimSaleRecord, CreateSimSaleInput>({
+      query: (body) => ({ url: '/sim-sales', method: 'POST', body }),
+      invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    updateSimSale: builder.mutation<SimSaleRecord, { id: string; body: Partial<CreateSimSaleInput> }>({
+      query: ({ id, body }) => ({ url: `/sim-sales/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteSimSale: builder.mutation<void, string>({
+      query: (id) => ({ url: `/sim-sales/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
   }),
 })
 
@@ -792,4 +858,9 @@ export const {
   useGetInstallmentPaymentsQuery,
   useDeleteInstallmentPaymentMutation,
   useGetInstallmentSummaryQuery,
+  // Sim Sales
+  useGetSimSalesQuery,
+  useCreateSimSaleMutation,
+  useUpdateSimSaleMutation,
+  useDeleteSimSaleMutation,
 } = mobileShopApi

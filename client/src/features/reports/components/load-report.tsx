@@ -86,7 +86,12 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(s?.totalSold ?? 0)}</div>
-              <p className='text-xs text-muted-foreground'>load sold to customers</p>
+              <p className='text-xs text-muted-foreground'>includes direct load + sim sale load</p>
+              {!!(s?.simSaleLoadSold && s.simSaleLoadSold > 0) && (
+                <p className='mt-1 text-xs text-orange-600'>
+                  Sim Sale Load: {fmt(s.simSaleLoadSold)} ({s?.simSaleTransactions ?? 0} tx)
+                </p>
+              )}
             </CardContent>
           </Card>
           <Card>

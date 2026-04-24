@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal, BillPayment } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment } = require('../models');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -515,7 +515,7 @@ const getRoiReport = catchAsync(async (req, res) => {
         { $match: { ...scope } },
         { $group: { _id: null, total: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } } } },
       ]);
-      return result[0]?.total || 0;
+      return result[0] ? result[0].total : 0;
     })(),
     // Current digital wallet balances (JazzCash, EasyPaisa, etc.)
     (async () => {
@@ -877,15 +877,6 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   });
 });
 
-module.exports = {
-  getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
-  getCustomerReport, getSupplierReport, getExpenseReport,
-  getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
-  getSalesReturnsReport, getPurchaseReturnsReport,
-  getLoadReport, getRepairReport,
-  getRoiReport, getMonthlyRoi,
-};
-
 /* ── Sales Returns Report ───────────────────────────────────────────────────── */
 async function getSalesReturnsReport(req, res) {
   const scope = buildScope(req);
@@ -1029,9 +1020,26 @@ async function getLoadReport(req, res) {
   const txMatch = { ...scope, date: { $gte: start, $lte: end } };
   const purchaseMatch = { ...scope, date: { $gte: start, $lte: end } };
   const withdrawalMatch = { ...scope, date: { $gte: start, $lte: end } };
-  if (walletType) { txMatch.walletType = walletType; purchaseMatch.walletType = walletType; withdrawalMatch.walletType = walletType; }
+  const simSaleMatch = { ...scope, date: { $gte: start, $lte: end } };
+  if (walletType) {
+    txMatch.walletType = walletType;
+    purchaseMatch.walletType = walletType;
+    withdrawalMatch.walletType = walletType;
+    simSaleMatch.walletType = walletType;
+  }
 
-  const [summary, byWallet, datewise, purchases, wallets, withdrawalSummary, withdrawalDatewise] = await Promise.all([
+  const [
+    summary,
+    byWallet,
+    datewise,
+    purchases,
+    wallets,
+    withdrawalSummary,
+    withdrawalDatewise,
+    simSaleSummary,
+    simSaleByWallet,
+    simSaleDatewise,
+  ] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: txMatch },
       { $group: { _id: null, totalTransactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' }, totalExtraCharges: { $sum: { $ifNull: ['$extraCharge', 0] } } } },
@@ -1075,15 +1083,105 @@ async function getLoadReport(req, res) {
       } },
       { $sort: { _id: 1 } },
     ]),
+    SimSale.aggregate([
+      { $match: simSaleMatch },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalSold: { $sum: '$loadAmount' },
+        },
+      },
+    ]),
+    SimSale.aggregate([
+      { $match: simSaleMatch },
+      {
+        $group: {
+          _id: '$walletType',
+          transactions: { $sum: 1 },
+          totalSold: { $sum: '$loadAmount' },
+        },
+      },
+      { $sort: { totalSold: -1 } },
+    ]),
+    SimSale.aggregate([
+      { $match: simSaleMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          transactions: { $sum: 1 },
+          totalSold: { $sum: '$loadAmount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
   ]);
 
   const totalPurchased = purchases.reduce((s, p) => s + p.totalPurchased, 0);
   const purchaseSavings = purchases.reduce((s, p) => s + (p.totalPurchaseProfit || 0), 0);
   const sm = summary[0] || { totalTransactions: 0, totalSold: 0, totalProfit: 0, totalExtraCharges: 0 };
+  const simSm = simSaleSummary[0] || { totalTransactions: 0, totalSold: 0 };
   const ws = withdrawalSummary[0] || { totalCount: 0, totalWithdrawals: 0, totalDeposits: 0, totalWithdrawalAmount: 0, totalDepositAmount: 0, totalProfit: 0 };
+
+  const byWalletMap = {};
+  byWallet.forEach((row) => {
+    const key = row._id || 'unknown';
+    byWalletMap[key] = {
+      _id: key,
+      transactions: row.transactions || 0,
+      totalSold: row.totalSold || 0,
+      totalProfit: row.totalProfit || 0,
+    };
+  });
+  simSaleByWallet.forEach((row) => {
+    const key = row._id || 'unknown';
+    if (!byWalletMap[key]) {
+      byWalletMap[key] = { _id: key, transactions: 0, totalSold: 0, totalProfit: 0 };
+    }
+    byWalletMap[key].transactions += row.transactions || 0;
+    byWalletMap[key].totalSold += row.totalSold || 0;
+  });
+  const mergedByWallet = Object.values(byWalletMap).sort((a, b) => b.totalSold - a.totalSold);
+
+  const datewiseMap = {};
+  datewise.forEach((row) => {
+    const key = row._id;
+    datewiseMap[key] = {
+      _id: key,
+      transactions: row.transactions || 0,
+      totalSold: row.totalSold || 0,
+      totalProfit: row.totalProfit || 0,
+    };
+  });
+  simSaleDatewise.forEach((row) => {
+    const key = row._id;
+    if (!datewiseMap[key]) {
+      datewiseMap[key] = { _id: key, transactions: 0, totalSold: 0, totalProfit: 0 };
+    }
+    datewiseMap[key].transactions += row.transactions || 0;
+    datewiseMap[key].totalSold += row.totalSold || 0;
+  });
+  const mergedDatewise = Object.values(datewiseMap).sort((a, b) => (a._id > b._id ? 1 : -1));
+
+  const totalSoldIncludingSimSale = sm.totalSold + simSm.totalSold;
+  const totalTransactionsIncludingSimSale = sm.totalTransactions + simSm.totalTransactions;
+
   res.status(httpStatus.OK).send({
-    summary: { ...sm, totalProfit: sm.totalProfit + purchaseSavings, purchaseSavings, totalPurchased, netBalance: totalPurchased - sm.totalSold },
-    byWallet, datewise, purchases, wallets,
+    summary: {
+      ...sm,
+      totalTransactions: totalTransactionsIncludingSimSale,
+      totalSold: totalSoldIncludingSimSale,
+      totalProfit: sm.totalProfit + purchaseSavings,
+      purchaseSavings,
+      totalPurchased,
+      netBalance: totalPurchased - totalSoldIncludingSimSale,
+      simSaleLoadSold: simSm.totalSold,
+      simSaleTransactions: simSm.totalTransactions,
+    },
+    byWallet: mergedByWallet,
+    datewise: mergedDatewise,
+    purchases,
+    wallets,
     withdrawalSummary: ws,
     withdrawalDatewise,
     period: { startDate: start, endDate: end },
@@ -1127,3 +1225,177 @@ async function getRepairReport(req, res) {
     period: { startDate: start, endDate: end },
   });
 }
+
+/* ── Sim Sale Report ─────────────────────────────────────────────────────────── */
+const getSimSaleReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { productId, walletType } = req.query;
+
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+    baseMatch.productId = new mongoose.Types.ObjectId(productId);
+  }
+  if (walletType) baseMatch.walletType = walletType;
+
+  const [summary, byProduct, byWallet, datewise, recentSales] = await Promise.all([
+    SimSale.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: 1 },
+          totalSimAmount: { $sum: '$simAmount' },
+          totalLoadAmount: { $sum: '$loadAmount' },
+          totalPurchaseAmount: { $sum: '$purchaseAmount' },
+          totalSaleAmount: { $sum: '$saleAmount' },
+          totalCommission: { $sum: '$commission' },
+        },
+      },
+    ]),
+    SimSale.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: '$productName',
+          count: { $sum: 1 },
+          totalSaleAmount: { $sum: '$saleAmount' },
+          totalSimAmount: { $sum: '$simAmount' },
+          totalLoadAmount: { $sum: '$loadAmount' },
+          totalCommission: { $sum: '$commission' },
+        },
+      },
+      { $sort: { totalSaleAmount: -1 } },
+    ]),
+    SimSale.aggregate([
+      { $match: { ...baseMatch, walletType: { $exists: true, $ne: '' } } },
+      {
+        $group: {
+          _id: '$walletType',
+          count: { $sum: 1 },
+          totalLoadAmount: { $sum: '$loadAmount' },
+        },
+      },
+      { $sort: { totalLoadAmount: -1 } },
+    ]),
+    SimSale.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          count: { $sum: 1 },
+          totalSaleAmount: { $sum: '$saleAmount' },
+          totalCommission: { $sum: '$commission' },
+          totalLoadAmount: { $sum: '$loadAmount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    SimSale.find(baseMatch).sort({ date: -1 }).limit(20).lean(),
+  ]);
+
+  const sm = summary[0] || {
+    totalSales: 0, totalSimAmount: 0, totalLoadAmount: 0,
+    totalPurchaseAmount: 0, totalSaleAmount: 0, totalCommission: 0,
+  };
+
+  res.status(httpStatus.OK).send({
+    summary: sm,
+    byProduct,
+    byWallet,
+    datewise,
+    recentSales,
+    period: { startDate: start, endDate: end },
+  });
+});
+
+/* ── Installment Report ──────────────────────────────────────────────────────── */
+const getInstallmentReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { status } = req.query;
+
+  const planMatch = { ...scope };
+  if (status) planMatch.status = status;
+
+  const paymentMatch = { ...scope, date: { $gte: start, $lte: end } };
+
+  const [planSummary, byStatus, recentPlans, paymentSummary, paymentDatewise, overdueCount] = await Promise.all([
+    InstallmentPlan.aggregate([
+      { $match: planMatch },
+      {
+        $group: {
+          _id: null,
+          totalPlans: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+          totalPaid: { $sum: '$totalPaid' },
+          totalOutstanding: { $sum: '$totalOutstanding' },
+          totalDownPayment: { $sum: '$downPayment' },
+        },
+      },
+    ]),
+    InstallmentPlan.aggregate([
+      { $match: planMatch },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+          totalOutstanding: { $sum: '$totalOutstanding' },
+          totalPaid: { $sum: '$totalPaid' },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]),
+    InstallmentPlan.find(planMatch).sort({ startDate: -1 }).limit(20).lean(),
+    InstallmentPayment.aggregate([
+      { $match: paymentMatch },
+      {
+        $group: {
+          _id: null,
+          totalPayments: { $sum: 1 },
+          totalCollected: { $sum: '$amount' },
+        },
+      },
+    ]),
+    InstallmentPayment.aggregate([
+      { $match: paymentMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          payments: { $sum: 1 },
+          totalCollected: { $sum: '$amount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    InstallmentPlan.countDocuments({
+      ...scope,
+      status: 'active',
+      nextDueDate: { $lt: new Date() },
+    }),
+  ]);
+
+  const ps = planSummary[0] || { totalPlans: 0, totalAmount: 0, totalPaid: 0, totalOutstanding: 0, totalDownPayment: 0 };
+  const pmtS = paymentSummary[0] || { totalPayments: 0, totalCollected: 0 };
+
+  res.status(httpStatus.OK).send({
+    planSummary: ps,
+    byStatus,
+    paymentSummary: pmtS,
+    paymentDatewise,
+    overdueCount,
+    recentPlans,
+    period: { startDate: start, endDate: end },
+  });
+});
+
+module.exports = {
+  getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
+  getCustomerReport, getSupplierReport, getExpenseReport,
+  getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
+  getSalesReturnsReport, getPurchaseReturnsReport,
+  getLoadReport, getRepairReport,
+  getRoiReport, getMonthlyRoi,
+  getSimSaleReport, getInstallmentReport,
+};

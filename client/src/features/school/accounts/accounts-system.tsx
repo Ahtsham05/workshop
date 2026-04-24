@@ -1013,9 +1013,16 @@ function BudgetsTab() {
         <Select value={financialYear} onValueChange={setFinancialYear}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {[`${new Date().getFullYear() - 1}-${new Date().getFullYear()}`, fy, `${new Date().getFullYear() + 1}-${new Date().getFullYear() + 2}`].map((y) => (
-              <SelectItem key={y} value={y}>{y}</SelectItem>
-            ))}
+            {(() => {
+              const fyYear = parseInt(fy.split('-')[0]);
+              return [
+                `${fyYear - 1}-${fyYear}`,
+                `${fyYear}-${fyYear + 1}`,
+                `${fyYear + 1}-${fyYear + 2}`,
+              ].map((y) => (
+                <SelectItem key={y} value={y}>{y}</SelectItem>
+              ));
+            })()}
           </SelectContent>
         </Select>
         <div className="flex-1" />

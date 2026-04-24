@@ -126,6 +126,13 @@ export const sidebarData: SidebarData = {
           // No specific permission for accounting - will always show if user is authenticated
         },
         {
+          title: 'Accounts System',
+          url: '/school/accounts',
+          icon: IconCash,
+          excludeBusinessTypes: ['school'],
+          // Double-entry bookkeeping — available to all non-school business types
+        },
+        {
           title: 'Cash Book',
           url: '/mobile-shop/cash-book',
           icon: NotebookText,
@@ -592,6 +599,19 @@ export const sidebarData: SidebarData = {
           title: 'Load Management',
           url: '/mobile-shop/load',
           icon: Smartphone,
+          businessTypes: ['mobile_shop'],
+          requiredFeature: 'load',
+        },
+        {
+          title: 'Sim Sale',
+          url: '/mobile-shop/sim-sale',
+          icon: Smartphone,
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'Cash Management',
+          url: '/mobile-shop/cash-management',
+          icon: IconCash,
           businessTypes: ['mobile_shop'],
           requiredFeature: 'load',
         },

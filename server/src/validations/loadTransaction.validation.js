@@ -6,6 +6,8 @@ const createLoadTransaction = {
   body: Joi.object().keys({
     walletType: Joi.string().trim().required(),
     walletId: Joi.string().required(),
+    customerId: Joi.string().custom(objectId),
+    customerName: Joi.string().allow(''),
     mobileNumber: Joi.string().allow('', 'N/A').default('N/A'),
     amount: Joi.number().min(0.01).required(),
     commissionRate: Joi.number().min(0).max(100).default(0),
@@ -36,19 +38,23 @@ const updateLoadTransaction = {
   params: Joi.object().keys({
     transactionId: Joi.string().custom(objectId).required(),
   }),
-  body: Joi.object().keys({
-    walletType: Joi.string().trim(),
-    walletId: Joi.string(),
-    mobileNumber: Joi.string().allow('', 'N/A'),
-    amount: Joi.number().min(0.01),
-    commissionRate: Joi.number().min(0).max(100),
-    extraCharge: Joi.number().min(0),
-    paymentMethod: Joi.string().valid('cash', 'wallet'),
-    notes: Joi.string().allow(''),
-    date: Joi.date(),
-    type: Joi.string().valid('normal', 'package'),
-    network: Joi.string(),
-  }).min(1),
+  body: Joi.object()
+    .keys({
+      walletType: Joi.string().trim(),
+      walletId: Joi.string(),
+      customerId: Joi.alternatives().try(Joi.string().custom(objectId), Joi.valid(null), Joi.valid('')),
+      customerName: Joi.string().allow(''),
+      mobileNumber: Joi.string().allow('', 'N/A'),
+      amount: Joi.number().min(0.01),
+      commissionRate: Joi.number().min(0).max(100),
+      extraCharge: Joi.number().min(0),
+      paymentMethod: Joi.string().valid('cash', 'wallet'),
+      notes: Joi.string().allow(''),
+      date: Joi.date(),
+      type: Joi.string().valid('normal', 'package'),
+      network: Joi.string(),
+    })
+    .min(1),
 };
 
 const deleteLoadTransaction = {

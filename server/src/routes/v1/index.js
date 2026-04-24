@@ -23,6 +23,7 @@ const membershipRoute = require('./membership.route');
 const walletRoute = require('./wallet.route');
 const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
+const simSaleRoute = require('./simSale.route');
 const cashWithdrawalRoute = require('./cashWithdrawal.route');
 const repairJobRoute = require('./repairJob.route');
 const cashBookRoute = require('./cashBook.route');
@@ -169,6 +170,10 @@ const defaultRoutes = [
   {
     path: '/load-transactions',
     route: loadTransactionRoute,
+  },
+  {
+    path: '/sim-sales',
+    route: simSaleRoute,
   },
   {
     path: '/cash-withdrawals',

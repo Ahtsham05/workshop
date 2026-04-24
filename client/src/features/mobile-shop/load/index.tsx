@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,12 +51,17 @@ import {
   useDeleteCashWithdrawalMutation,
   useDeleteCashWithdrawalsBatchMutation,
 } from '@/stores/mobile-shop.api'
+import { useGetAllCustomersQuery } from '@/stores/customer.api'
+import { useDispatch, useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 type PurchaseFormState = {
   walletId: string
   walletType: string
+  savedSupplierId: string
   amount: string
   supplierName: string
   paymentMethod: 'cash' | 'bank'
@@ -67,6 +73,8 @@ type PurchaseFormState = {
 type LoadSaleFormState = {
   walletId: string
   walletType: string
+  customerId: string
+  customerName: string
   amount: string
   currentBalance: string
   commissionRate: string
@@ -125,6 +133,7 @@ const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
 const initialPurchaseForm: PurchaseFormState = {
   walletId: '',
   walletType: '',
+  savedSupplierId: '',
   amount: '0',
   supplierName: '',
   paymentMethod: 'cash',
@@ -136,6 +145,8 @@ const initialPurchaseForm: PurchaseFormState = {
 const initialSaleForm: LoadSaleFormState = {
   walletId: '',
   walletType: '',
+  customerId: '',
+  customerName: '',
   amount: '0',
   currentBalance: '',
   commissionRate: '0',
@@ -157,7 +168,14 @@ const initialWithdrawalForm: WithdrawalFormState = {
   date: format(new Date(), 'yyyy-MM-dd'),
 }
 
-export default function LoadManagementPage() {
+type LoadManagementPageProps = {
+  mode?: 'load' | 'cash-management'
+}
+
+export default function LoadManagementPage({ mode = 'load' }: LoadManagementPageProps) {
+  const isCashManagementMode = mode === 'cash-management'
+  const dispatch = useDispatch<any>()
+
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchaseForm)
   const [saleForm, setSaleForm] = useState<LoadSaleFormState>(initialSaleForm)
   const [withdrawalForm, setWithdrawalForm] = useState<WithdrawalFormState>(initialWithdrawalForm)
@@ -197,14 +215,24 @@ export default function LoadManagementPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal'; id: string } | null>(null)
 
   const { data: walletsData } = useGetWalletsQuery()
+  const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const suppliersRedux = useSelector((state: RootState) => state.supplier.data)
   const { data: purchasesData } = useGetLoadPurchasesQuery({ page: purchasePage, limit: purchaseLimit })
   const { data: transactionsData } = useGetLoadTransactionsQuery({ page: transactionPage, limit: transactionLimit })
   const { data: withdrawalsData } = useGetCashWithdrawalsQuery({ page: withdrawalPage, limit: withdrawalLimit })
 
   const wallets = walletsData?.results ?? []
+  const customers = Array.isArray(customersData) ? customersData : []
+  const suppliers = Array.isArray(suppliersRedux) ? suppliersRedux : []
   const purchases = purchasesData?.results ?? []
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
+
+  useEffect(() => {
+    if (!suppliers.length) {
+      dispatch(fetchAllSuppliers({}))
+    }
+  }, [dispatch, suppliers.length])
 
   const purchaseProfit = useMemo(() => {
     const amount = Number(purchaseForm.amount) || 0
@@ -240,6 +268,16 @@ export default function LoadManagementPage() {
   }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate])
 
   const handlePurchaseChange = (field: keyof PurchaseFormState, value: string) => {
+    if (field === 'savedSupplierId') {
+      const normalizedValue = value === '__none__' ? '' : value
+      const selectedSupplier = suppliers.find((s: any) => s.id === normalizedValue || s._id === normalizedValue || s.value === normalizedValue)
+      setPurchaseForm(prev => ({
+        ...prev,
+        savedSupplierId: normalizedValue,
+        supplierName: selectedSupplier?.name || '',
+      }))
+      return
+    }
     if (field === 'walletId') {
       const selectedWallet = wallets.find(w => w.id === value)
       setPurchaseForm(prev => ({
@@ -254,6 +292,16 @@ export default function LoadManagementPage() {
   }
 
   const handleSaleChange = (field: keyof LoadSaleFormState, value: string) => {
+    if (field === 'customerId') {
+      const normalizedValue = value === '__none__' ? '' : value
+      const selectedCustomer = customers.find((c: any) => c.id === normalizedValue || c._id === normalizedValue)
+      setSaleForm(prev => ({
+        ...prev,
+        customerId: normalizedValue,
+        customerName: selectedCustomer?.name || '',
+      }))
+      return
+    }
     if (field === 'walletId') {
       const selectedWallet = wallets.find(w => w.id === value)
       setSaleForm(prev => ({
@@ -318,6 +366,7 @@ export default function LoadManagementPage() {
     try {
       await createLoadPurchase({
         walletType: purchaseForm.walletType,
+        supplierId: purchaseForm.savedSupplierId || undefined,
         amount: Number(purchaseForm.amount),
         supplierName: purchaseForm.supplierName.trim() || undefined,
         paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
@@ -341,6 +390,8 @@ export default function LoadManagementPage() {
       await createLoadTransaction({
         walletId: saleForm.walletId,
         walletType: saleForm.walletType,
+        customerId: saleForm.customerId || undefined,
+        customerName: saleForm.customerName || undefined,
         amount: Number(saleForm.amount),
         commissionRate: Number(saleForm.commissionRate),
         extraCharge: Number(saleForm.extraCharge),
@@ -532,9 +583,11 @@ export default function LoadManagementPage() {
 
   // ─── Edit / Delete Handlers ───
   const handleEditPurchase = (p: any) => {
+    const purchaseSupplierId = p.supplierId?.id || p.supplierId?._id || p.supplierId || ''
     setPurchaseForm({
       walletId: wallets.find(w => w.type === p.walletType)?.id || '',
       walletType: p.walletType,
+      savedSupplierId: purchaseSupplierId || suppliers.find((s: any) => s.name === p.supplierName)?.id || suppliers.find((s: any) => s.name === p.supplierName)?._id || '',
       amount: String(p.amount),
       supplierName: p.supplierName || '',
       paymentMethod: p.paymentMethod || 'cash',
@@ -553,6 +606,7 @@ export default function LoadManagementPage() {
         id: editingPurchase.id,
         body: {
           walletType: purchaseForm.walletType,
+          supplierId: purchaseForm.savedSupplierId || undefined,
           amount: Number(purchaseForm.amount),
           supplierName: purchaseForm.supplierName.trim() || undefined,
           paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
@@ -577,6 +631,8 @@ export default function LoadManagementPage() {
     setSaleForm({
       walletId: wallets.find(w => w.type === t.walletType)?.id || t.walletId || '',
       walletType: t.walletType,
+      customerId: t.customerId?.id || t.customerId?._id || t.customerId || '',
+      customerName: t.customerName || t.customerId?.name || '',
       amount: String(t.amount),
       currentBalance: '',
       commissionRate: String(t.commissionRate || 0),
@@ -596,6 +652,8 @@ export default function LoadManagementPage() {
         body: {
           walletType: saleForm.walletType,
           walletId: saleForm.walletId,
+          customerId: saleForm.customerId || undefined,
+          customerName: saleForm.customerName || '',
           amount: Number(saleForm.amount),
           commissionRate: Number(saleForm.commissionRate),
           extraCharge: Number(saleForm.extraCharge),
@@ -684,17 +742,19 @@ export default function LoadManagementPage() {
 
   return (
     <MobilePageShell
-      title='Load Management'
-      description='Purchase, sell mobile load and manage cash withdrawals'
+      title={isCashManagementMode ? 'Cash Management' : 'Load Management'}
+      description={isCashManagementMode ? 'Manage cash withdrawals and deposits' : 'Purchase and sell mobile load'}
     >
-      <Tabs defaultValue='sell'>
-        <TabsList className='mb-4'>
-          <TabsTrigger value='purchase'>📥 Purchase Load</TabsTrigger>
-          <TabsTrigger value='sell'>📤 Sell Load</TabsTrigger>
-          <TabsTrigger value='withdrawal'>💸 Cash Withdrawal</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue={isCashManagementMode ? 'withdrawal' : 'sell'}>
+        {!isCashManagementMode && (
+          <TabsList className='mb-4'>
+            <TabsTrigger value='purchase'>📥 Purchase Load</TabsTrigger>
+            <TabsTrigger value='sell'>📤 Sell Load</TabsTrigger>
+          </TabsList>
+        )}
 
         {/* ── PURCHASE LOAD TAB ── */}
+        {!isCashManagementMode && (
         <TabsContent value='purchase'>
           <div className='grid gap-6'>
             <Card className='border-2 border-blue-200'>
@@ -725,6 +785,24 @@ export default function LoadManagementPage() {
                       <Label htmlFor='supplier'>Supplier Name - Optional</Label>
                       <Input id='supplier' placeholder='e.g., Jazz Supplier, Local Agent' value={purchaseForm.supplierName} onChange={(e) => handlePurchaseChange('supplierName', e.target.value)} />
                     </div>
+                  </div>
+
+                  <div className='space-y-2 md:max-w-md'>
+                    <Label htmlFor='purchase-supplier'>Saved Supplier - Optional</Label>
+                    <SearchableSelect
+                      options={suppliers.map((s: any) => ({
+                        value: s.id || s._id || s.value,
+                        label: s.name,
+                        sublabel: s.phone || s.mobile || undefined,
+                      }))}
+                      value={purchaseForm.savedSupplierId}
+                      onValueChange={(v) => handlePurchaseChange('savedSupplierId', v)}
+                      placeholder='Choose supplier (optional)'
+                      searchPlaceholder='Search suppliers...'
+                      clearLabel='No supplier'
+                      emptyText='No suppliers found.'
+                    />
+                    <p className='text-xs text-muted-foreground'>Selecting a supplier auto-fills Supplier Name for this purchase.</p>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
@@ -843,8 +921,10 @@ export default function LoadManagementPage() {
             </Card>
           </div>
         </TabsContent>
+        )}
 
         {/* ── SELL LOAD TAB ── */}
+        {!isCashManagementMode && (
         <TabsContent value='sell'>
           <div className='grid gap-6'>
             <Card className='border-2 border-green-200'>
@@ -876,6 +956,24 @@ export default function LoadManagementPage() {
                         <p className='text-xs text-muted-foreground'>Wallet Balance: Rs {Number(wallets.find(w => w.id === saleForm.walletId)?.balance ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 2 })}</p>
                       )}
                     </div>
+                  </div>
+
+                  <div className='space-y-2 md:max-w-md'>
+                    <Label htmlFor='sale-customer'>Saved Customer - Optional</Label>
+                    <SearchableSelect
+                      options={customers.map((c: any) => ({
+                        value: c.id || c._id,
+                        label: c.name,
+                        sublabel: c.phone || c.mobile || undefined,
+                      }))}
+                      value={saleForm.customerId}
+                      onValueChange={(v) => handleSaleChange('customerId', v)}
+                      placeholder='Choose customer (optional)'
+                      searchPlaceholder='Search customers...'
+                      clearLabel='No customer'
+                      emptyText='No customers found.'
+                    />
+                    <p className='text-xs text-muted-foreground'>If selected, this load sale will also be added in customer ledger.</p>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
@@ -930,6 +1028,7 @@ export default function LoadManagementPage() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Wallet</TableHead>
+                        <TableHead>Customer</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Phone</TableHead>
                         <TableHead className='text-green-600 font-bold'>Profit</TableHead>
@@ -941,6 +1040,7 @@ export default function LoadManagementPage() {
                         <TableRow key={t.id}>
                           <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell className='font-medium'>{t.walletType}</TableCell>
+                          <TableCell className='font-medium'>{t.customerName || (t as any).customerId?.name || '-'}</TableCell>
                           <TableCell>Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-sm'>{t.mobileNumber === 'N/A' ? '-' : t.mobileNumber}</TableCell>
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
@@ -969,8 +1069,10 @@ export default function LoadManagementPage() {
             </Card>
           </div>
         </TabsContent>
+        )}
 
         {/* ── CASH WITHDRAWAL TAB ── */}
+        {isCashManagementMode && (
         <TabsContent value='withdrawal'>
           <div className='grid gap-6'>
             <Card className='border-2 border-orange-200'>
@@ -1419,6 +1521,7 @@ export default function LoadManagementPage() {
             </Card>
           </div>
         </TabsContent>
+        )}
       </Tabs>
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>

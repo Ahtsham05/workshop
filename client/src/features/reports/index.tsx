@@ -31,6 +31,8 @@ import { LoadReport } from './components/load-report'
 import { RepairReport } from './components/repair-report'
 import { BillPaymentReport } from './components/bill-payment-report'
 import { RoiReport } from './components/roi-report'
+import { SimSaleReport } from './components/sim-sale-report'
+import { InstallmentReport } from './components/installment-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -210,6 +212,12 @@ export default function ReportsPage() {
             {canAccess('roi') && (
               <TabsTrigger value='roi' className='text-xs sm:text-sm px-2 sm:px-3'>ROI</TabsTrigger>
             )}
+            {isMobileShop && (
+              <TabsTrigger value='sim-sale' className='text-xs sm:text-sm px-2 sm:px-3'>Sim Sale</TabsTrigger>
+            )}
+            {isMobileShop && (
+              <TabsTrigger value='installments' className='text-xs sm:text-sm px-2 sm:px-3'>Installments</TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -288,6 +296,18 @@ export default function ReportsPage() {
             ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
             : <LockedFeatureCard featureName='ROI Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
+
+        {isMobileShop && (
+          <TabsContent value='sim-sale' className='mt-6'>
+            <SimSaleReport ref={activeTab === 'sim-sale' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          </TabsContent>
+        )}
+
+        {isMobileShop && (
+          <TabsContent value='installments' className='mt-6'>
+            <InstallmentReport ref={activeTab === 'installments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

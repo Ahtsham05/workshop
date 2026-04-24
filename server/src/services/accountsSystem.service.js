@@ -181,12 +181,12 @@ const getAccountTree = async (scope) => {
   // Build tree structure
   const map = {};
   const roots = [];
-  accounts.forEach((a) => { map[a.id] = { ...a, children: [] }; });
+  accounts.forEach((a) => { map[String(a._id)] = { ...a, children: [] }; });
   accounts.forEach((a) => {
-    if (a.parentId && map[a.parentId]) {
-      map[a.parentId].children.push(map[a.id]);
+    if (a.parentId && map[String(a.parentId)]) {
+      map[String(a.parentId)].children.push(map[String(a._id)]);
     } else {
-      roots.push(map[a.id]);
+      roots.push(map[String(a._id)]);
     }
   });
   return roots;
@@ -596,6 +596,8 @@ const getBalanceSheet = async (scope, asOfDate) => {
     },
     {
       $project: {
+        accountId: '$_id',
+        _id: 0,
         code: '$account.code',
         name: '$account.name',
         rootType: '$account.rootType',
@@ -664,14 +666,14 @@ const getBalanceSheet = async (scope, asOfDate) => {
   const netIncome = totalRevenue - totalExpenses;
 
   return {
-    assets: { accounts: assets, total: totalAssets },
-    liabilities: { accounts: liabilities, total: totalLiabilities },
-    equity: { accounts: equity, total: totalEquity, netIncome },
-    totals: {
-      totalAssets,
-      totalLiabilitiesAndEquity: totalLiabilities + totalEquity + netIncome,
-      isBalanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + netIncome)) < 0.01,
-    },
+    assets,
+    liabilities,
+    equity,
+    totalAssets,
+    totalLiabilities,
+    totalEquity,
+    netIncome,
+    isBalanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + netIncome)) < 0.01,
   };
 };
 
@@ -712,6 +714,8 @@ const getIncomeStatement = async (scope, startDate, endDate) => {
     },
     {
       $project: {
+        accountId: '$_id',
+        _id: 0,
         code: '$account.code',
         name: '$account.name',
         rootType: '$account.rootType',
@@ -735,8 +739,10 @@ const getIncomeStatement = async (scope, startDate, endDate) => {
   const totalExpenses = expenses.reduce((s, r) => s + r.balance, 0);
 
   return {
-    revenue: { accounts: revenue, total: totalRevenue },
-    expenses: { accounts: expenses, total: totalExpenses },
+    revenue,
+    expenses,
+    totalRevenue,
+    totalExpenses,
     netIncome: totalRevenue - totalExpenses,
     netIncomePercentage: totalRevenue > 0 ? ((totalRevenue - totalExpenses) / totalRevenue * 100).toFixed(1) : 0,
   };

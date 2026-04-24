@@ -23,6 +23,7 @@ module.exports.cashBookService = require('./cashBook.service.js');
 module.exports.walletService = require('./wallet.service.js');
 module.exports.loadPurchaseService = require('./loadPurchase.service.js');
 module.exports.loadTransactionService = require('./loadTransaction.service.js');
+module.exports.simSaleService = require('./simSale.service.js');
 module.exports.cashWithdrawalService = require('./cashWithdrawal.service.js');
 module.exports.repairJobService = require('./repairJob.service.js');
 module.exports.repairStockItemService = require('./repairStockItem.service.js');

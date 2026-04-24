@@ -8,77 +8,51 @@ const mobileReportsController = require('../../controllers/mobileReports.control
 const router = express.Router();
 router.use(auth(), branchScope());
 
-router
-  .route('/sales')
-  .get(auth('viewReports'), reportsController.getSalesReport);
+router.route('/sales').get(auth('viewReports'), reportsController.getSalesReport);
 
-router
-  .route('/purchases')
-  .get(auth('viewReports'), reportsController.getPurchaseReport);
+router.route('/purchases').get(auth('viewReports'), reportsController.getPurchaseReport);
 
-router
-  .route('/products')
-  .get(auth('viewReports'), reportsController.getProductReport);
+router.route('/products').get(auth('viewReports'), reportsController.getProductReport);
 
-router
-  .route('/products/:productId')
-  .get(auth('viewReports'), reportsController.getProductDetailReport);
+router.route('/products/:productId').get(auth('viewReports'), reportsController.getProductDetailReport);
 
-router
-  .route('/customers')
-  .get(auth('viewReports'), reportsController.getCustomerReport);
+router.route('/customers').get(auth('viewReports'), reportsController.getCustomerReport);
 
-router
-  .route('/suppliers')
-  .get(auth('viewReports'), reportsController.getSupplierReport);
+router.route('/suppliers').get(auth('viewReports'), reportsController.getSupplierReport);
 
-router
-  .route('/expenses')
-  .get(auth('viewReports'), reportsController.getExpenseReport);
+router.route('/expenses').get(auth('viewReports'), reportsController.getExpenseReport);
 
-router
-  .route('/profit-loss')
-  .get(auth('viewReports'), reportsController.getProfitLossReport);
+router.route('/profit-loss').get(auth('viewReports'), reportsController.getProfitLossReport);
 
 router
   .route('/profit-loss-full')
   .get(auth('viewReports'), checkFeatureAccess('profit_loss'), reportsController.getProfitLossFullReport);
 
-router
-  .route('/inventory')
-  .get(auth('viewReports'), reportsController.getInventoryReport);
+router.route('/inventory').get(auth('viewReports'), reportsController.getInventoryReport);
 
-router
-  .route('/tax')
-  .get(auth('viewReports'), reportsController.getTaxReport);
+router.route('/tax').get(auth('viewReports'), reportsController.getTaxReport);
 
-router
-  .route('/sales-returns')
-  .get(auth('viewReports'), reportsController.getSalesReturnsReport);
+router.route('/sales-returns').get(auth('viewReports'), reportsController.getSalesReturnsReport);
 
-router
-  .route('/purchase-returns')
-  .get(auth('viewReports'), reportsController.getPurchaseReturnsReport);
+router.route('/purchase-returns').get(auth('viewReports'), reportsController.getPurchaseReturnsReport);
 
-router
-  .route('/load')
-  .get(auth('viewReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
+router.route('/load').get(auth('viewReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
 
 router
   .route('/load/wallet-balance-statement')
   .get(auth('viewReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
 
-router
-  .route('/repair')
-  .get(auth('viewReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
+router.route('/repair').get(auth('viewReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
+
+router.route('/roi').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
+
+router.route('/roi/monthly').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
+
+router.route('/sim-sales').get(auth('viewReports'), reportsController.getSimSaleReport);
 
 router
-  .route('/roi')
-  .get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
-
-router
-  .route('/roi/monthly')
-  .get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
+  .route('/installments')
+  .get(auth('viewReports'), reportsController.getInstallmentReport);
 
 module.exports = router;
 
