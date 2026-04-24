@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   LayoutDashboard, BookOpen, FileText, Landmark, PiggyBank, BarChart3,
   Plus, ChevronRight, ChevronDown, Trash2, Edit, RotateCcw, Eye,
@@ -602,6 +603,8 @@ function JournalEntriesTab() {
         </Button>
       </div>
 
+      {showCreate && <JournalEntryFormDialog onClose={() => setShowCreate(false)} />}
+
       {isLoading ? <LoadingState /> : (
         <Card>
           <CardContent className="p-0">
@@ -667,19 +670,20 @@ function JournalEntriesTab() {
         </div>
       )}
 
-      {/* Create Journal Entry */}
-      {showCreate && <JournalEntryFormDialog open={showCreate} onClose={() => setShowCreate(false)} />}
-
       {/* View Journal Entry */}
       {viewId && <JournalEntryViewDialog id={viewId} onClose={() => setViewId(null)} />}
     </div>
   );
 }
 
-function JournalEntryFormDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
   const { data: accountsData } = useGetPostingAccountsQuery(undefined);
   const [createEntry, { isLoading }] = useCreateJournalEntryMutation();
   const accounts = accountsData?.data || [];
+  const accountOptions = useMemo(
+    () => accounts.map((a: any) => ({ value: a._id, label: `${a.code} — ${a.name}`, sublabel: a.rootType })),
+    [accounts],
+  );
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [entryType, setEntryType] = useState('ADJUSTMENT');
@@ -689,6 +693,10 @@ function JournalEntryFormDialog({ open, onClose }: { open: boolean; onClose: () 
     { accountId: '', debit: 0, credit: 0, narration: '' },
     { accountId: '', debit: 0, credit: 0, narration: '' },
   ]);
+
+  const debitRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const creditRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const narrationRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
@@ -701,6 +709,21 @@ function JournalEntryFormDialog({ open, onClose }: { open: boolean; onClose: () 
   const addLine = () => setLines((prev) => [...prev, { accountId: '', debit: 0, credit: 0, narration: '' }]);
   const removeLine = (idx: number) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
+  const handleEnterOnField = (idx: number) => {
+    const currentLine = lines[idx];
+    if (currentLine.accountId && (currentLine.debit > 0 || currentLine.credit > 0)) {
+      const nextIdx = idx + 1;
+      if (nextIdx >= lines.length) {
+        addLine();
+        setTimeout(() => {
+          debitRefs.current[nextIdx]?.focus();
+        }, 50);
+      } else {
+        debitRefs.current[nextIdx]?.focus();
+      }
+    }
+  };
+
   const handleSubmit = () => {
     const payload = {
       date, entryType, description, reference,
@@ -710,19 +733,21 @@ function JournalEntryFormDialog({ open, onClose }: { open: boolean; onClose: () 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>New Journal Entry</DialogTitle>
-          <DialogDescription>Create a double-entry journal voucher. Debits must equal credits.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-            <div>
-              <Label>Entry Type</Label>
+    <Card className="border-primary/20">
+      <CardHeader>
+        <CardTitle>New Journal Entry</CardTitle>
+        <CardDescription>Create a double-entry journal voucher. Debits must equal credits. Press Enter to move to next row.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+          <div className="grid grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Entry Type</Label>
               <Select value={entryType} onValueChange={setEntryType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {['FEE_RECEIPT', 'EXPENSE', 'SALARY', 'ADVANCE', 'TRANSFER', 'ADJUSTMENT', 'OPENING', 'REFUND'].map((t) => (
                     <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>
@@ -730,78 +755,137 @@ function JournalEntryFormDialog({ open, onClose }: { open: boolean; onClose: () 
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Reference</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional ref" /></div>
+            <div className="space-y-2 col-span-2">
+              <Label className="text-sm font-medium">Reference (Optional)</Label>
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional ref" className="h-9" />
+            </div>
           </div>
-          <div><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description of this entry" rows={2} /></div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Description *</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description of this entry" rows={2} className="resize-none" />
+          </div>
 
           {/* Journal Lines */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-medium">Journal Lines</Label>
-              <Button variant="outline" size="sm" onClick={addLine}><Plus className="h-3 w-3 mr-1" />Add Line</Button>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Journal Lines *</Label>
+              <Button variant="outline" size="sm" onClick={addLine}><Plus className="h-3 w-3 mr-1" />Add Line Manually</Button>
             </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
+            <div className="border rounded-lg overflow-x-auto">
+              <Table className="text-sm">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Account</TableHead>
-                    <TableHead>Debit</TableHead>
-                    <TableHead>Credit</TableHead>
-                    <TableHead>Narration</TableHead>
-                    <TableHead className="w-8" />
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-[45%] py-3">Account</TableHead>
+                    <TableHead className="text-center py-3">Debit (PKR)</TableHead>
+                    <TableHead className="text-center py-3">Credit (PKR)</TableHead>
+                    <TableHead className="py-3">Narration</TableHead>
+                    <TableHead className="w-8 py-3" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {lines.map((line, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Select value={line.accountId} onValueChange={(v) => updateLine(idx, 'accountId', v)}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select account" /></SelectTrigger>
-                          <SelectContent>
-                            {accounts.map((a: any) => <SelectItem key={a._id} value={a._id}>{a.code} — {a.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                    <TableRow key={idx} className="hover:bg-muted/30">
+                      <TableCell className="py-2">
+                        <SearchableSelect
+                          options={accountOptions}
+                          value={line.accountId}
+                          onValueChange={(v) => {
+                            updateLine(idx, 'accountId', v);
+                            setTimeout(() => debitRefs.current[idx]?.focus(), 0);
+                          }}
+                          placeholder="Select account"
+                          searchPlaceholder="Search account by code or name"
+                          emptyText="No account found"
+                          className="h-9 text-sm w-full"
+                        />
                       </TableCell>
-                      <TableCell>
-                        <Input type="number" className="h-8 text-xs w-24" value={line.debit || ''} onChange={(e) => updateLine(idx, 'debit', Number(e.target.value))} placeholder="0" />
+                      <TableCell className="py-2">
+                        <Input
+                          ref={(el) => { debitRefs.current[idx] = el; }}
+                          type="number"
+                          className="h-9 text-sm text-right w-32"
+                          value={line.debit || ''}
+                          onChange={(e) => updateLine(idx, 'debit', Number(e.target.value))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              creditRefs.current[idx]?.focus();
+                            }
+                          }}
+                          placeholder="0"
+                        />
                       </TableCell>
-                      <TableCell>
-                        <Input type="number" className="h-8 text-xs w-24" value={line.credit || ''} onChange={(e) => updateLine(idx, 'credit', Number(e.target.value))} placeholder="0" />
+                      <TableCell className="py-2">
+                        <Input
+                          ref={(el) => { creditRefs.current[idx] = el; }}
+                          type="number"
+                          className="h-9 text-sm text-right w-32"
+                          value={line.credit || ''}
+                          onChange={(e) => updateLine(idx, 'credit', Number(e.target.value))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              narrationRefs.current[idx]?.focus();
+                            }
+                          }}
+                          placeholder="0"
+                        />
                       </TableCell>
-                      <TableCell>
-                        <Input className="h-8 text-xs" value={line.narration} onChange={(e) => updateLine(idx, 'narration', e.target.value)} placeholder="Note" />
+                      <TableCell className="py-2">
+                        <Input
+                          ref={(el) => { narrationRefs.current[idx] = el; }}
+                          className="h-9 text-sm"
+                          value={line.narration}
+                          onChange={(e) => updateLine(idx, 'narration', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleEnterOnField(idx);
+                            }
+                          }}
+                          placeholder="Note"
+                        />
                       </TableCell>
-                      <TableCell>
-                        {lines.length > 2 && <button onClick={() => removeLine(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
+                      <TableCell className="py-2">
+                        {lines.length > 2 && (
+                          <button onClick={() => removeLine(idx)} className="p-1 text-red-400 hover:text-red-600 transition-colors">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
-                  <TableRow className="bg-muted/50 font-medium">
-                    <TableCell className="text-right text-xs">Totals:</TableCell>
-                    <TableCell className="text-xs">{fmt(totalDebit)}</TableCell>
-                    <TableCell className="text-xs">{fmt(totalCredit)}</TableCell>
-                    <TableCell colSpan={2}>
+                  <TableRow className="bg-muted/60 font-semibold border-t-2">
+                    <TableCell className="py-3 text-right">Totals:</TableCell>
+                    <TableCell className="py-3 text-center">{fmt(totalDebit)}</TableCell>
+                    <TableCell className="py-3 text-center">{fmt(totalCredit)}</TableCell>
+                    <TableCell colSpan={2} className="py-3">
                       {totalDebit > 0 && (
                         isBalanced
-                          ? <span className="text-green-600 text-xs flex items-center gap-1"><CheckCircle className="h-3 w-3" />Balanced</span>
-                          : <span className="text-red-600 text-xs flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Difference: {fmt(Math.abs(totalDebit - totalCredit))}</span>
+                          ? <span className="text-green-600 text-sm flex items-center gap-2"><CheckCircle className="h-4 w-4" />Balanced ✓</span>
+                          : <span className="text-red-600 text-sm flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Difference: {fmt(Math.abs(totalDebit - totalCredit))}</span>
                       )}
                     </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
             </div>
+            <p className="text-xs text-muted-foreground">Tip: Press Enter to move through fields. Auto-add new row when narration field is filled on last row.</p>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={!isBalanced || !description || isLoading}>
+      </CardContent>
+      <div className="flex justify-end gap-2 pt-4 border-t px-6 pb-6">
+          <Button variant="outline" onClick={onClose} size="lg">Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!isBalanced || !description || isLoading}
+            size="lg"
+            className={isBalanced && description ? 'bg-green-600 hover:bg-green-700' : ''}
+          >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Post Entry
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Card>
   );
 }
 
