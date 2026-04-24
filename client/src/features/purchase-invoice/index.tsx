@@ -15,6 +15,8 @@ export interface PurchaseItem {
   product: Product;
   quantity: number;
   unit?: string; // Unit of measurement
+  conversionFactor?: number;
+  stockQuantity?: number;
   purchasePrice: number; // price we bought it at
   isManualEntry?: boolean; // flag for manual product selection
 }
@@ -184,6 +186,8 @@ const PurchaseInvoicePage = () => {
         product,
         quantity,
         unit: product.unit || 'pcs',
+        conversionFactor: 1,
+        stockQuantity: quantity,
         purchasePrice: product.cost || product.price,
       };
 
@@ -308,6 +312,9 @@ const PurchaseInvoicePage = () => {
     const transformedItems = (purchaseToEdit.items || []).map((item: any) => ({
       product: item.product, // Already populated by backend
       quantity: item.quantity,
+      unit: item.unit || item.product?.unit,
+      conversionFactor: item.conversionFactor,
+      stockQuantity: item.stockQuantity,
       purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
     }));
     

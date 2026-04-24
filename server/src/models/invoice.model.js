@@ -23,6 +23,14 @@ const invoiceItemSchema = new mongoose.Schema({
     },
     quantity: { type: Number, required: true, min: 1 },
     unit: { type: String, default: DEFAULT_UNIT }, // Unit of measurement
+    conversionFactor: { type: Number, default: 1, min: 0.000001 },
+    stockQuantity: {
+        type: Number,
+        min: 0,
+        default: function defaultStockQuantity() {
+            return this.quantity;
+        }
+    },
     unitPrice: { type: Number, required: true, min: 0 },
     cost: { type: Number, required: true, min: 0 },
     subtotal: { type: Number, required: true, min: 0 },
@@ -158,7 +166,7 @@ InvoiceSchema.methods.calculateTotals = function() {
     
     // Calculate total profit and cost
     this.totalProfit = this.items.reduce((sum, item) => sum + item.profit, 0);
-    this.totalCost = this.items.reduce((sum, item) => sum + (item.cost * item.quantity), 0);
+    this.totalCost = this.items.reduce((sum, item) => sum + (item.cost * (item.stockQuantity || item.quantity)), 0);
     
     // Calculate total with tax, discount, and charges
     const discountedSubtotal = this.subtotal - this.discount;

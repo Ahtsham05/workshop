@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
+const { DEFAULT_UNIT } = require('../config/units');
 
 const salesReturnItemSchema = new mongoose.Schema(
   {
@@ -10,6 +11,15 @@ const salesReturnItemSchema = new mongoose.Schema(
     },
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
+    unit: { type: String, default: DEFAULT_UNIT },
+    conversionFactor: { type: Number, default: 1, min: 0.000001 },
+    stockQuantity: {
+      type: Number,
+      min: 0,
+      default: function defaultStockQuantity() {
+        return this.quantity;
+      },
+    },
     price: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
   },

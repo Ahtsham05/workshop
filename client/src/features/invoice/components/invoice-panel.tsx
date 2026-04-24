@@ -41,6 +41,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
@@ -400,6 +401,7 @@ export function InvoicePanel({
     // Get current stock from the products state (real-time stock)
     const currentProduct = products.find(p => (p._id || p.id) === productId)
     const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
+    const unitOptions = getProductUnitOptions(product)
     
     console.log('=== PRODUCT SELECT DEBUG ===')
     console.log('Selected product:', product.name, 'ID:', productId)
@@ -415,17 +417,32 @@ export function InvoicePanel({
 
     // If this item already had a product selected, restore its stock first
     if (currentItem.productId && !currentItem.isManualEntry) {
+      const previousStockQuantity = currentItem.stockQuantity || currentItem.quantity
       setProducts(prevProducts => prevProducts.map(p => 
         (p._id || p.id) === currentItem.productId 
-          ? { ...p, stockQuantity: p.stockQuantity + currentItem.quantity }
+          ? { ...p, stockQuantity: p.stockQuantity + previousStockQuantity }
           : p
       ))
-      console.log(`Stock restored for previous product: ${currentItem.name} + ${currentItem.quantity}`)
+      console.log(`Stock restored for previous product: ${currentItem.name} + ${previousStockQuantity}`)
+    }
+
+    const lineValues = calculateInvoiceLineValues({
+      product,
+      quantity: currentItem.quantity,
+      unit: unitOptions[0]?.value || product.unit,
+      unitPrice: product.price,
+      cost: product.cost,
+      conversionFactor: unitOptions[0]?.factor,
+    })
+
+    if (!lineValues) {
+      toast.error(`Missing conversion for ${product.name}`)
+      return
     }
 
     // Check if we have enough stock for the current quantity
-    if (currentItem.quantity > currentStock) {
-      toast.error(`${product.name} - Not enough stock available. Current stock: ${currentStock}, Required: ${currentItem.quantity}`)
+    if (lineValues.stockQuantity > currentStock) {
+      toast.error(`${product.name} - Not enough stock available. Current stock: ${currentStock}, Required: ${lineValues.stockQuantity}`)
       console.log('ERROR: Not enough stock for current quantity')
       return
     }
@@ -437,11 +454,13 @@ export function InvoicePanel({
             productId: productId,
             name: product.name,
             image: product.image,
-            unit: product.unit,
+            unit: lineValues.lineUnit,
+            conversionFactor: lineValues.conversionFactor,
+            stockQuantity: lineValues.stockQuantity,
             unitPrice: product.price,
             cost: product.cost,
-            subtotal: product.price * item.quantity,
-            profit: item.quantity * (product.price - product.cost),
+            subtotal: lineValues.subtotal,
+            profit: lineValues.profit,
             isManualEntry: false
           }
         : item
@@ -450,11 +469,11 @@ export function InvoicePanel({
     // Update stock to reflect the selection (decrease by current item quantity)
     setProducts(prevProducts => prevProducts.map(p => 
       (p._id || p.id) === productId 
-        ? { ...p, stockQuantity: p.stockQuantity - currentItem.quantity }
+        ? { ...p, stockQuantity: p.stockQuantity - lineValues.stockQuantity }
         : p
     ))
     
-    console.log(`Stock updated: ${product.name} - decreased by ${currentItem.quantity}`)
+    console.log(`Stock updated: ${product.name} - decreased by ${lineValues.stockQuantity}`)
     console.log('=== PRODUCT SELECT DEBUG END ===')
     
     if (calculateTotals) {
@@ -602,6 +621,9 @@ export function InvoicePanel({
           name: item.name,
           image: item.image,
           quantity: item.quantity,
+          unit: item.unit,
+          conversionFactor: item.conversionFactor,
+          stockQuantity: item.stockQuantity,
           unitPrice: item.unitPrice,
           cost: item.cost,
           subtotal: item.subtotal,
@@ -1106,6 +1128,9 @@ export function InvoicePanel({
                   name: '',
                   image: undefined,
                   quantity: 1,
+                  unit: 'pcs',
+                  conversionFactor: 1,
+                  stockQuantity: 1,
                   unitPrice: 0,
                   cost: 0,
                   subtotal: 0,
@@ -1281,6 +1306,102 @@ export function InvoicePanel({
                     </div>
                   </div>
 
+                    <div className='flex flex-col gap-1 min-w-[110px]'>
+                      <Label className='text-xs text-center'>{t('unit')}</Label>
+                      <Select
+                        value={item.unit || 'pcs'}
+                        onValueChange={(value) => {
+                          const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
+                          if (!selectedProduct) {
+                            toast.error('Product not found for this line')
+                            return
+                          }
+
+                          const adjustedUnitPrice = getUnitAdjustedPrice({
+                            product: selectedProduct,
+                            unit: value,
+                            basePrice: selectedProduct.price || item.unitPrice || 0,
+                          })
+
+                          if (adjustedUnitPrice === null) {
+                            toast.error(`Missing conversion for ${item.name}`)
+                            return
+                          }
+
+                          const lineValues = calculateInvoiceLineValues({
+                            product: selectedProduct,
+                            quantity: item.quantity,
+                            unit: value,
+                            unitPrice: adjustedUnitPrice,
+                            cost: item.cost,
+                          })
+
+                          if (!lineValues) {
+                            toast.error(`Missing conversion for ${item.name}`)
+                            return
+                          }
+
+                          const previousStockQuantity = item.stockQuantity || item.quantity
+                          const stockDifference = lineValues.stockQuantity - previousStockQuantity
+
+                          if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
+                            toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
+                            return
+                          }
+
+                          if (stockDifference !== 0) {
+                            setProducts((prevProducts) => prevProducts.map((productRow) =>
+                              (productRow._id || productRow.id) === item.productId
+                                ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
+                                : productRow
+                            ))
+                          }
+
+                          const newItems = invoice.items.map((invoiceItem) =>
+                            invoiceItem.id === item.id
+                              ? {
+                                  ...invoiceItem,
+                                  unit: lineValues.lineUnit,
+                                  conversionFactor: lineValues.conversionFactor,
+                                  stockQuantity: lineValues.stockQuantity,
+                                  unitPrice: adjustedUnitPrice,
+                                  subtotal: lineValues.subtotal,
+                                  profit: lineValues.profit,
+                                }
+                              : invoiceItem
+                          )
+
+                          if (calculateTotals) {
+                            const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                            setInvoice((prev) => ({
+                              ...prev,
+                              items: newItems,
+                              subtotal: totals.subtotal,
+                              tax: totals.tax,
+                              total: totals.total,
+                              totalProfit: totals.totalProfit,
+                              totalCost: totals.totalCost,
+                              balance: totals.total - prev.paidAmount,
+                            }))
+                          }
+                        }}
+                      >
+                        <SelectTrigger className='h-6 text-xs px-2'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(products.find((p) => (p._id || p.id) === item.productId)
+                            ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
+                            : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
+                          ).map((unitOption) => (
+                            <SelectItem key={unitOption.value} value={unitOption.value}>
+                              {unitOption.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                   {/* Price Controls */}
                   <div className='flex flex-col gap-1'>
                     <Label className='text-xs text-center'>{t('price')}</Label>
@@ -1293,7 +1414,30 @@ export function InvoicePanel({
                         const newPrice = parseFloat(e.target.value) || 0.01
                         const newItems = invoice.items.map(i => 
                           i.id === item.id 
-                            ? { ...i, unitPrice: newPrice, subtotal: newPrice * i.quantity, profit: i.quantity * (newPrice - i.cost) }
+                            ? (() => {
+                                const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
+                                const lineValues = calculateInvoiceLineValues({
+                                  product: selectedProduct,
+                                  quantity: i.quantity,
+                                  unit: i.unit,
+                                  unitPrice: newPrice,
+                                  cost: i.cost,
+                                  conversionFactor: i.conversionFactor,
+                                })
+
+                                if (!lineValues) {
+                                  return i
+                                }
+
+                                return {
+                                  ...i,
+                                  unitPrice: newPrice,
+                                  subtotal: lineValues.subtotal,
+                                  profit: lineValues.profit,
+                                  stockQuantity: lineValues.stockQuantity,
+                                  conversionFactor: lineValues.conversionFactor,
+                                }
+                              })()
                             : i
                         )
                         

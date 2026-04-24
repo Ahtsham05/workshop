@@ -1,8 +1,19 @@
 const httpStatus = require('http-status');
-const { Invoice, Product, Customer, CustomerLedger } = require('../models');
+const { Invoice, Product, Customer, CustomerLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
+const { normalizeBusinessType } = require('../config/businessTypes');
+const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+const getOrganizationBusinessType = async (organizationId) => {
+  if (!organizationId) {
+    return 'other';
+  }
+
+  const organization = await Organization.findById(organizationId).select('businessType').lean();
+  return normalizeBusinessType(organization?.businessType);
+};
 
 const syncWalkInInvoiceCashEntry = async (invoice) => {
   const isWalkIn = !invoice.customerId || invoice.customerId === 'walk-in';
@@ -45,6 +56,7 @@ const createInvoice = async (invoiceBody, userId) => {
   console.log('Invoice type:', invoiceBody.type);
   console.log('Number of items:', invoiceBody.items?.length);
   console.log('Customer ID:', invoiceBody.customerId);
+  const businessType = await getOrganizationBusinessType(invoiceBody.organizationId);
   
   // Validate required fields
   if (!invoiceBody.items || invoiceBody.items.length === 0) {
@@ -74,16 +86,18 @@ const createInvoice = async (invoiceBody, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
     }
 
+    const conversion = toStockQuantity({ product, item, businessType });
+
     // Check stock availability for all invoice types
-    if (product.stockQuantity < item.quantity) {
+    if (product.stockQuantity < conversion.stockQuantity) {
       console.error('Insufficient stock:', {
         product: product.name,
         available: product.stockQuantity,
-        requested: item.quantity
+        requested: conversion.stockQuantity
       });
       throw new ApiError(
         httpStatus.BAD_REQUEST, 
-        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`
+        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
       );
     }
 
@@ -93,10 +107,13 @@ const createInvoice = async (invoiceBody, userId) => {
       name: item.name || product.name,
       image: item.image || product.image,
       quantity: item.quantity,
+      unit: conversion.lineUnit,
+      conversionFactor: conversion.conversionFactor,
+      stockQuantity: conversion.stockQuantity,
       unitPrice: item.unitPrice,
       cost: item.cost || product.cost,
       subtotal: item.quantity * item.unitPrice,
-      profit: item.quantity * (item.unitPrice - (item.cost || product.cost)),
+      profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
       isManualEntry: item.isManualEntry || false
     };
 
@@ -212,10 +229,10 @@ const createInvoice = async (invoiceBody, userId) => {
   for (const item of validatedItems) {
     await Product.findByIdAndUpdate(
       item.productId,
-      { $inc: { stockQuantity: -item.quantity } },
+      { $inc: { stockQuantity: -item.stockQuantity } },
       { new: true }
     );
-    console.log(`Stock reduced for product ${item.productId}: -${item.quantity}`);
+    console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
   }
 
   // Populate references conditionally
@@ -370,6 +387,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   const originalPaidAmount = invoice.paidAmount || 0;
   const originalCustomerId = invoice.customerId;
   const originalType = invoice.type;
+  const businessType = await getOrganizationBusinessType(invoice.organizationId);
   
   // Prevent updating finalized invoices unless specifically allowed
   // if (invoice.status === 'finalized' || invoice.status === 'paid') {
@@ -384,7 +402,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     for (const item of invoice.items) {
       await Product.findByIdAndUpdate(
         item.productId,
-        { $inc: { stockQuantity: item.quantity } },
+        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
         { new: true }
       );
     }
@@ -401,10 +419,12 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
       }
 
-      if (product.stockQuantity < item.quantity) {
+      const conversion = getStockQuantityFromItem({ product, item, businessType });
+
+      if (product.stockQuantity < conversion.stockQuantity) {
         throw new ApiError(
           httpStatus.BAD_REQUEST, 
-          `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`
+          `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
         );
       }
 
@@ -413,10 +433,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         name: item.name || product.name,
         image: item.image || product.image,
         quantity: item.quantity,
+        unit: conversion.lineUnit,
+        conversionFactor: conversion.conversionFactor,
+        stockQuantity: conversion.stockQuantity,
         unitPrice: item.unitPrice,
         cost: item.cost || product.cost,
         subtotal: item.quantity * item.unitPrice,
-        profit: item.quantity * (item.unitPrice - (item.cost || product.cost)),
+        profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
         isManualEntry: item.isManualEntry || false
       };
 
@@ -429,7 +452,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     for (const item of validatedItems) {
       await Product.findByIdAndUpdate(
         item.productId,
-        { $inc: { stockQuantity: -item.quantity } },
+        { $inc: { stockQuantity: -item.stockQuantity } },
         { new: true }
       );
     }
@@ -567,7 +590,7 @@ const deleteInvoiceById = async (invoiceId) => {
   for (const item of invoice.items) {
     await Product.findByIdAndUpdate(
       item.productId,
-      { $inc: { stockQuantity: item.quantity } },
+      { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
       { new: true }
     );
   }

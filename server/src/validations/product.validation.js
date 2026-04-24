@@ -1,5 +1,13 @@
 const Joi = require('joi');
 
+const unitConversionSchema = Joi.object().keys({
+  fromUnit: Joi.string().required(),
+  toUnit: Joi.string().required(),
+  factor: Joi.number().positive().required(),
+  businessTypes: Joi.array().items(Joi.string()).optional(),
+  isActive: Joi.boolean().optional(),
+});
+
 const createProduct = {
   body: Joi.object().keys({
     name: Joi.string().required(),
@@ -26,6 +34,7 @@ const createProduct = {
       publicId: Joi.string(),
     }).optional(),
     unit: Joi.string().allow('').optional(),
+    unitConversions: Joi.array().items(unitConversionSchema).optional(),
   }),
 };
 
@@ -79,6 +88,7 @@ const updateProduct = {
       publicId: Joi.string(),
     }).optional(),
     unit: Joi.string().allow(''),
+    unitConversions: Joi.array().items(unitConversionSchema),
   }),
 };
 
@@ -126,6 +136,7 @@ const bulkAddProducts = {
         unit: Joi.string().allow('').optional(),
         sku: Joi.string().allow('').optional(),
         lowStockThreshold: Joi.number().optional(),
+        unitConversions: Joi.array().items(unitConversionSchema).optional(),
       })
     ).required().min(1)
   }),

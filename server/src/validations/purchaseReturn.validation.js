@@ -11,6 +11,9 @@ const createPurchaseReturn = {
           productId: Joi.string().custom(objectId).required(),
           name: Joi.string().required(),
           quantity: Joi.number().integer().min(1).required(),
+          unit: Joi.string().allow('').optional(),
+          conversionFactor: Joi.number().positive().optional(),
+          stockQuantity: Joi.number().positive().optional(),
           costPrice: Joi.number().min(0).required(),
           total: Joi.number().min(0).required(),
         })

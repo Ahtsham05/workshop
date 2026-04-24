@@ -13,6 +13,7 @@ import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
 import { toast } from 'sonner'
+import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
@@ -28,6 +29,8 @@ export interface InvoiceItem {
   image?: { url: string; publicId: string }
   quantity: number
   unit?: string
+  conversionFactor?: number
+  stockQuantity?: number
   unitPrice: number
   cost: number
   subtotal: number
@@ -78,6 +81,13 @@ export interface Product {
   cost: number
   stockQuantity: number
   unit?: string  // Unit of measurement
+  unitConversions?: {
+    fromUnit: string
+    toUnit: string
+    factor: number
+    businessTypes?: string[]
+    isActive?: boolean
+  }[]
   image?: { url: string; publicId: string }
   category?: { _id: string; name: string }
   categories?: { _id: string; name: string }[]
@@ -267,7 +277,7 @@ export default function InvoicePage() {
   const calculateTotals = useCallback((items: InvoiceItem[], discountAmount: number = 0, deliveryCharge: number = 0, serviceCharge: number = 0) => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
     const totalProfit = items.reduce((sum, item) => sum + item.profit, 0)
-    const totalCost = items.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+    const totalCost = items.reduce((sum, item) => sum + (item.cost * (item.stockQuantity || item.quantity)), 0)
     const discountedSubtotal = subtotal - discountAmount
     const taxableAmount = discountedSubtotal + deliveryCharge + serviceCharge
     const tax = taxableAmount * (taxRate / 100)
@@ -293,6 +303,20 @@ export default function InvoicePage() {
     // Get current stock from the products state (real-time stock)
     const currentProduct = products.find(p => (p._id || p.id) === productId)
     const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
+    const defaultUnitOption = getProductUnitOptions(product)[0]
+    const defaultLine = calculateInvoiceLineValues({
+      product,
+      quantity,
+      unit: defaultUnitOption?.value || product.unit,
+      unitPrice: product.price,
+      cost: product.cost,
+      conversionFactor: defaultUnitOption?.factor,
+    })
+
+    if (!defaultLine) {
+      toast.error(`Missing unit conversion for ${product.name}`)
+      return
+    }
     
     console.log('Current stock from products state:', currentStock)
     console.log('Product stock from parameter:', product.stockQuantity)
@@ -313,18 +337,35 @@ export default function InvoicePage() {
       // Update existing item - check stock for new total quantity
       const existingItem = invoice.items[existingItemIndex]
       const newQuantity = existingItem.quantity + quantity
+      const recalculatedLine = calculateInvoiceLineValues({
+        product,
+        quantity: newQuantity,
+        unit: existingItem.unit,
+        unitPrice: existingItem.unitPrice,
+        cost: existingItem.cost,
+        conversionFactor: existingItem.conversionFactor,
+      })
+
+      if (!recalculatedLine) {
+        toast.error(`Missing unit conversion for ${product.name}`)
+        return
+      }
       
       console.log('Existing item quantity:', existingItem.quantity)
       console.log('Requested additional quantity:', quantity) 
       console.log('New total quantity would be:', newQuantity)
       
       // Calculate actual available stock including items already in invoice
-      const totalAvailableStock = currentStock + existingItem.quantity
+      const totalAvailableStock = currentStock + (existingItem.stockQuantity || existingItem.quantity)
       console.log('Total available stock (current + existing):', totalAvailableStock)
       
       // Check if new quantity exceeds total available stock
-      if (newQuantity > totalAvailableStock) {
-        const availableQuantity = totalAvailableStock - existingItem.quantity
+      if (recalculatedLine.stockQuantity > totalAvailableStock) {
+        const perUnitImpact = existingItem.quantity > 0
+          ? (existingItem.stockQuantity || existingItem.quantity) / existingItem.quantity
+          : 1
+        const availableStockToAdd = totalAvailableStock - (existingItem.stockQuantity || existingItem.quantity)
+        const availableQuantity = Math.floor(availableStockToAdd / perUnitImpact)
         console.log('Available quantity to add:', availableQuantity)
         
         if (availableQuantity <= 0) {
@@ -336,8 +377,18 @@ export default function InvoicePage() {
           // Add only the available quantity
           actualQuantityAdded = availableQuantity
           const finalQuantity = existingItem.quantity + actualQuantityAdded
-          const newSubtotal = finalQuantity * product.price
-          const newProfit = finalQuantity * (product.price - product.cost)
+          const partialLine = calculateInvoiceLineValues({
+            product,
+            quantity: finalQuantity,
+            unit: existingItem.unit,
+            unitPrice: existingItem.unitPrice,
+            cost: existingItem.cost,
+            conversionFactor: existingItem.conversionFactor,
+          })
+          if (!partialLine) {
+            toast.error(`Missing unit conversion for ${product.name}`)
+            return
+          }
           
           console.log('PARTIAL ADD: Adding', actualQuantityAdded, 'units')
           
@@ -345,15 +396,15 @@ export default function InvoicePage() {
           newItems[existingItemIndex] = {
             ...existingItem,
             quantity: finalQuantity,
-            subtotal: newSubtotal,
-            profit: newProfit
+            subtotal: partialLine.subtotal,
+            profit: partialLine.profit,
+            stockQuantity: partialLine.stockQuantity,
+            conversionFactor: partialLine.conversionFactor
           }
         }
       } else {
         // Stock is sufficient
         actualQuantityAdded = quantity
-        const newSubtotal = newQuantity * product.price
-        const newProfit = newQuantity * (product.price - product.cost)
         
         console.log('FULL ADD: Adding', actualQuantityAdded, 'units')
         console.log('Updating existing item:', existingItem.name, 'New quantity:', newQuantity)
@@ -362,31 +413,48 @@ export default function InvoicePage() {
         newItems[existingItemIndex] = {
           ...existingItem,
           quantity: newQuantity,
-          subtotal: newSubtotal,
-          profit: newProfit
+          subtotal: recalculatedLine.subtotal,
+          profit: recalculatedLine.profit,
+          stockQuantity: recalculatedLine.stockQuantity,
+          conversionFactor: recalculatedLine.conversionFactor
         }
       }
     } else {
       // Add new item - check stock for requested quantity
-      if (quantity > currentStock) {
+      if (defaultLine.stockQuantity > currentStock) {
         toast.error(`${product.name} - Requested quantity (${quantity}) exceeds stock (${currentStock})`)
         if (currentStock > 0) {
           // Add available stock instead
-          actualQuantityAdded = currentStock
+          const perUnitImpact = defaultLine.stockQuantity / quantity
+          actualQuantityAdded = Math.max(1, Math.floor(currentStock / perUnitImpact))
+          const cappedLine = calculateInvoiceLineValues({
+            product,
+            quantity: actualQuantityAdded,
+            unit: defaultLine.lineUnit,
+            unitPrice: product.price,
+            cost: product.cost,
+            conversionFactor: defaultLine.conversionFactor,
+          })
+          if (!cappedLine) {
+            toast.error(`Missing unit conversion for ${product.name}`)
+            return
+          }
           const newItem: InvoiceItem = {
             id: `${productId}_${Date.now()}_${Math.random()}`,
             productId: productId,
             name: product.name,
             image: product.image,
-            quantity: currentStock,
-            unit: product.unit,
+            quantity: actualQuantityAdded,
+            unit: cappedLine.lineUnit,
+            conversionFactor: cappedLine.conversionFactor,
+            stockQuantity: cappedLine.stockQuantity,
             unitPrice: product.price,
             cost: product.cost,
-            subtotal: currentStock * product.price,
-            profit: currentStock * (product.price - product.cost)
+            subtotal: cappedLine.subtotal,
+            profit: cappedLine.profit
           }
           
-          toast.info(`Added ${currentStock} units of ${product.name} (maximum available)`)
+          toast.info(`Added ${actualQuantityAdded} ${cappedLine.lineUnit} of ${product.name} (maximum available)`)
           console.log('Adding new item with max stock:', newItem)
           newItems = [...invoice.items, newItem]
         } else {
@@ -401,11 +469,13 @@ export default function InvoicePage() {
           name: product.name,
           image: product.image,
           quantity,
-          unit: product.unit,
+          unit: defaultLine.lineUnit,
+          conversionFactor: defaultLine.conversionFactor,
+          stockQuantity: defaultLine.stockQuantity,
           unitPrice: product.price,
           cost: product.cost,
-          subtotal: quantity * product.price,
-          profit: quantity * (product.price - product.cost)
+          subtotal: defaultLine.subtotal,
+          profit: defaultLine.profit
         }
         
         console.log('Adding new item:', newItem)
@@ -415,17 +485,20 @@ export default function InvoicePage() {
     
     // Update stock in real-time
     if (actualQuantityAdded > 0) {
+      const stockImpact = existingItemIndex >= 0
+        ? ((newItems[existingItemIndex].stockQuantity || 0) - (invoice.items[existingItemIndex].stockQuantity || invoice.items[existingItemIndex].quantity || 0))
+        : (newItems[newItems.length - 1].stockQuantity || actualQuantityAdded)
       console.log('STOCK UPDATE: Decreasing stock by', actualQuantityAdded)
       console.log('STOCK UPDATE: Current stock before update:', currentStock)
       
       setProducts(prevProducts => prevProducts.map(p => 
         (p._id || p.id) === productId 
-          ? { ...p, stockQuantity: p.stockQuantity - actualQuantityAdded }
+          ? { ...p, stockQuantity: p.stockQuantity - stockImpact }
           : p
       ))
       
-      console.log('STOCK UPDATE: New stock will be:', currentStock - actualQuantityAdded)
-      console.log(`Stock updated: ${product.name} - decreased by ${actualQuantityAdded}`)
+      console.log('STOCK UPDATE: New stock will be:', currentStock - stockImpact)
+      console.log(`Stock updated: ${product.name} - decreased by ${stockImpact}`)
     }
     
     console.log('=== ADD TO INVOICE DEBUG END ===')
@@ -459,11 +532,11 @@ export default function InvoicePage() {
     if (removedItem) {
       setProducts(prevProducts => prevProducts.map(p => 
         (p._id || p.id) === removedItem.productId 
-          ? { ...p, stockQuantity: p.stockQuantity + removedItem.quantity }
+          ? { ...p, stockQuantity: p.stockQuantity + (removedItem.stockQuantity || removedItem.quantity) }
           : p
       ))
       
-      console.log(`Stock restored: ${removedItem.name} + ${removedItem.quantity}`)
+      console.log(`Stock restored: ${removedItem.name} + ${(removedItem.stockQuantity || removedItem.quantity)}`)
     }
     
     setInvoice(prev => ({
@@ -503,8 +576,23 @@ export default function InvoicePage() {
       const quantityDifference = newQuantity - currentItem.quantity
       
       if (quantityDifference > 0) {
+        const recalculatedLine = resolveUnitConversion({
+          product,
+          quantity: newQuantity,
+          unit: currentItem.unit,
+          conversionFactor: currentItem.conversionFactor,
+        })
+
+        if (!recalculatedLine) {
+          toast.error(`${currentItem.name} is missing a unit conversion`)
+          return
+        }
+
+        const existingStockQuantity = currentItem.stockQuantity || currentItem.quantity
+        const stockDifference = recalculatedLine.stockQuantity - existingStockQuantity
+
         // Increasing quantity - check if we have enough stock
-        if (quantityDifference > product.stockQuantity) {
+        if (stockDifference > product.stockQuantity) {
           toast.error(`${currentItem.name} - Cannot increase by ${quantityDifference}. Only ${product.stockQuantity} units available`)
           return
         }
@@ -512,14 +600,26 @@ export default function InvoicePage() {
         // Update stock (decrease)
         setProducts(prevProducts => prevProducts.map(p => 
           (p._id || p.id) === currentItem.productId 
-            ? { ...p, stockQuantity: p.stockQuantity - quantityDifference }
+            ? { ...p, stockQuantity: p.stockQuantity - stockDifference }
             : p
         ))
         
-        console.log(`Stock updated: ${currentItem.name} - decreased by ${quantityDifference}`)
+        console.log(`Stock updated: ${currentItem.name} - decreased by ${stockDifference}`)
       } else if (quantityDifference < 0) {
         // Decreasing quantity - restore stock
-        const quantityToRestore = Math.abs(quantityDifference)
+        const recalculatedLine = resolveUnitConversion({
+          product,
+          quantity: newQuantity,
+          unit: currentItem.unit,
+          conversionFactor: currentItem.conversionFactor,
+        })
+
+        if (!recalculatedLine) {
+          toast.error(`${currentItem.name} is missing a unit conversion`)
+          return
+        }
+
+        const quantityToRestore = (currentItem.stockQuantity || currentItem.quantity) - recalculatedLine.stockQuantity
         
         setProducts(prevProducts => prevProducts.map(p => 
           (p._id || p.id) === currentItem.productId 
@@ -533,13 +633,24 @@ export default function InvoicePage() {
     
     const newItems = invoice.items.map(item => {
       if (item.id === itemId) {
-        const newSubtotal = newQuantity * item.unitPrice
-        const newProfit = newQuantity * (item.unitPrice - item.cost)
+        const lineValues = calculateInvoiceLineValues({
+          product: product || { unit: item.unit },
+          quantity: newQuantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          cost: item.cost,
+          conversionFactor: item.conversionFactor,
+        })
+        if (!lineValues) {
+          return item
+        }
         return {
           ...item,
           quantity: newQuantity,
-          subtotal: newSubtotal,
-          profit: newProfit
+          subtotal: lineValues.subtotal,
+          profit: lineValues.profit,
+          stockQuantity: lineValues.stockQuantity,
+          conversionFactor: lineValues.conversionFactor
         }
       }
       return item
@@ -611,7 +722,7 @@ export default function InvoicePage() {
           if (productIndex !== -1) {
             updatedProducts[productIndex] = {
               ...updatedProducts[productIndex],
-              stockQuantity: updatedProducts[productIndex].stockQuantity + item.quantity
+              stockQuantity: updatedProducts[productIndex].stockQuantity + (item.stockQuantity || item.quantity)
             }
           }
         })
@@ -693,6 +804,9 @@ export default function InvoicePage() {
       productId: item.productId || '',
       name: item.name || '',
       quantity: item.quantity || 1,
+      unit: item.unit,
+      conversionFactor: item.conversionFactor,
+      stockQuantity: item.stockQuantity,
       unitPrice: item.unitPrice || 0,
       cost: item.cost || 0,
       subtotal: item.subtotal || (item.quantity * item.unitPrice) || 0,
@@ -740,7 +854,7 @@ export default function InvoicePage() {
           if (productIndex !== -1) {
             updatedProducts[productIndex] = {
               ...updatedProducts[productIndex],
-              stockQuantity: updatedProducts[productIndex].stockQuantity + item.quantity
+              stockQuantity: updatedProducts[productIndex].stockQuantity + (item.stockQuantity || item.quantity)
             }
           }
         })

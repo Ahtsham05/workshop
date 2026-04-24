@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
+const { BUSINESS_TYPES } = require('../config/businessTypes');
 
 const ProductSchema = new mongoose.Schema({
     organizationId: {
@@ -35,6 +36,35 @@ const ProductSchema = new mongoose.Schema({
         default: DEFAULT_UNIT,
         enum: Object.values(UNITS)
     },
+    unitConversions: [
+        {
+            fromUnit: {
+                type: String,
+                required: true,
+                enum: Object.values(UNITS),
+            },
+            toUnit: {
+                type: String,
+                required: true,
+                enum: Object.values(UNITS),
+            },
+            factor: {
+                type: Number,
+                required: true,
+                min: 0.000001,
+            },
+            businessTypes: [
+                {
+                    type: String,
+                    enum: BUSINESS_TYPES,
+                },
+            ],
+            isActive: {
+                type: Boolean,
+                default: true,
+            },
+        },
+    ],
     sku: { type: String },  // SKU for inventory management
     category: { type: String }, // Keep for backward compatibility
     categories: [{ // New multi-category support

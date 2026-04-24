@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+const unitConversionSchema = z.object({
+  fromUnit: z.string().min(1, { message: 'From unit is required.' }),
+  toUnit: z.string().min(1, { message: 'To unit is required.' }),
+  factor: z.number().positive({ message: 'Conversion factor must be greater than 0.' }),
+  businessTypes: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+})
+
 // Define a schema for a single product
 export const productSchema = z.object({
   id: z.string().optional(),
@@ -11,6 +19,7 @@ export const productSchema = z.object({
   cost: z.number().min(0, { message: 'Cost must be a positive number.' }), // product cost as number
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }), // stock quantity cannot be negative
   unit: z.string().optional(), // unit of measurement (pcs, kg, etc.)
+  unitConversions: z.array(unitConversionSchema).optional(),
   image: z.object({
     url: z.string(),
     publicId: z.string(),

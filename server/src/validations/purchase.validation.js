@@ -9,6 +9,8 @@ const createPurchase = {
         product: Joi.string().required(),
         quantity: Joi.number().required(),
         unit: Joi.string().allow(''), // Allow unit field
+        conversionFactor: Joi.number().positive().optional(),
+        stockQuantity: Joi.number().positive().optional(),
         priceAtPurchase: Joi.number().required(),
         total: Joi.number().required(),
       })
@@ -52,6 +54,8 @@ const updatePurchase = {
         product: Joi.string(),
         quantity: Joi.number(),
         unit: Joi.string().allow(''), // Allow unit field
+        conversionFactor: Joi.number().positive().optional(),
+        stockQuantity: Joi.number().positive().optional(),
         priceAtPurchase: Joi.number(),
         total: Joi.number(),
       })

@@ -1,6 +1,7 @@
 const BUSINESS_TYPES = [
   'retail',
   'wholesale',
+  'wholesale_retail',
   'services',
   'restaurant',
   'education',
@@ -16,6 +17,10 @@ const BUSINESS_TYPE_ALIASES = {
   mobileshope: 'mobile_shop',
   'mobile shop': 'mobile_shop',
   'mobile-shop': 'mobile_shop',
+  'wholesale to retail': 'wholesale_retail',
+  'wholesaler to retail': 'wholesale_retail',
+  'whole saler to retail': 'wholesale_retail',
+  'wholesale-retail': 'wholesale_retail',
   manufacturing: 'factory',
 };
 

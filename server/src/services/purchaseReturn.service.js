@@ -1,7 +1,18 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PurchaseReturn, Purchase, Product, SupplierLedger, Supplier, SalesReturn, CashBookEntry } = require('../models');
+const { PurchaseReturn, Purchase, Product, SupplierLedger, Supplier, SalesReturn, CashBookEntry, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { normalizeBusinessType } = require('../config/businessTypes');
+const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+const getOrganizationBusinessType = async (organizationId) => {
+  if (!organizationId) {
+    return 'other';
+  }
+
+  const organization = await Organization.findById(organizationId).select('businessType').lean();
+  return normalizeBusinessType(organization?.businessType);
+};
 
 /**
  * Validate that return quantities do not exceed what was originally purchased.
@@ -18,7 +29,7 @@ const validateReturnQuantities = async (purchase, returnItems) => {
   for (const ret of previousReturns) {
     for (const item of ret.items) {
       const key = item.productId.toString();
-      alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + item.quantity;
+      alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
     }
   }
 
@@ -26,7 +37,7 @@ const validateReturnQuantities = async (purchase, returnItems) => {
   const purchasedMap = {};
   for (const item of purchase.items) {
     const key = item.product.toString();
-    purchasedMap[key] = (purchasedMap[key] || 0) + item.quantity;
+    purchasedMap[key] = (purchasedMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
   }
 
   for (const returnItem of returnItems) {
@@ -34,11 +45,12 @@ const validateReturnQuantities = async (purchase, returnItems) => {
     const purchasedQty = purchasedMap[key] || 0;
     const alreadyReturned = alreadyReturnedMap[key] || 0;
     const returnable = purchasedQty - alreadyReturned;
+    const requestedStockQty = Number(returnItem.stockQuantity || returnItem.quantity || 0);
 
-    if (returnItem.quantity > returnable) {
+    if (requestedStockQty > returnable) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Cannot return ${returnItem.quantity} units of product ${returnItem.name}. ` +
+        `Cannot return ${returnItem.quantity} ${returnItem.unit || 'unit(s)'} of product ${returnItem.name}. ` +
           `Only ${returnable} unit(s) are returnable (purchased: ${purchasedQty}, already returned: ${alreadyReturned}).`
       );
     }
@@ -56,6 +68,8 @@ const createPurchaseReturn = async (returnBody) => {
   session.startTransaction();
 
   try {
+    const businessType = await getOrganizationBusinessType(returnBody.organizationId);
+
     // 1. Validate the original purchase (only when purchaseId is provided)
     let purchase = null;
     if (returnBody.purchaseId) {
@@ -67,11 +81,11 @@ const createPurchaseReturn = async (returnBody) => {
       if (purchase.supplier.toString() !== returnBody.supplierId.toString()) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Supplier does not match the purchase record');
       }
-      // 2. Validate return quantities against original purchase
-      await validateReturnQuantities(purchase, returnBody.items);
     }
 
-    // 3. Prevent negative stock
+    const normalizedItems = [];
+
+    // 3. Prevent negative stock and normalize return quantities to stock unit
     for (const item of returnBody.items) {
       const product = await Product.findOne({
         _id: item.productId,
@@ -81,23 +95,52 @@ const createPurchaseReturn = async (returnBody) => {
       if (!product) {
         throw new ApiError(httpStatus.NOT_FOUND, `Product ${item.productId} not found`);
       }
-      if (product.stockQuantity < item.quantity) {
+
+      const purchaseLineItem = purchase?.items?.find(
+        (purchaseItem) => purchaseItem.product.toString() === item.productId.toString()
+      );
+
+      const conversionInput = {
+        ...item,
+        unit: item.unit || purchaseLineItem?.unit,
+        conversionFactor: item.conversionFactor || purchaseLineItem?.conversionFactor,
+      };
+
+      const conversion = getStockQuantityFromItem({ product, item: conversionInput, businessType });
+
+      if (product.stockQuantity < conversion.stockQuantity) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           `Insufficient stock for product "${product.name}". ` +
-            `Available: ${product.stockQuantity}, Requested to return: ${item.quantity}.`
+            `Available: ${product.stockQuantity}, Requested to return: ${conversion.stockQuantity}.`
         );
       }
+
+      normalizedItems.push({
+        ...item,
+        unit: conversion.lineUnit,
+        conversionFactor: conversion.conversionFactor,
+        stockQuantity: conversion.stockQuantity,
+      });
+    }
+
+    if (purchase) {
+      await validateReturnQuantities(purchase, normalizedItems);
     }
 
     // 4. Persist the return document
-    const [purchaseReturn] = await PurchaseReturn.create([returnBody], { session });
+    const [purchaseReturn] = await PurchaseReturn.create([
+      {
+        ...returnBody,
+        items: normalizedItems,
+      },
+    ], { session });
 
     // 5. Decrease stock for each returned item
-    for (const item of returnBody.items) {
+    for (const item of normalizedItems) {
       await Product.findOneAndUpdate(
         { _id: item.productId, organizationId: returnBody.organizationId },
-        { $inc: { stockQuantity: -item.quantity } },
+        { $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) } },
         { session, new: true }
       );
     }
@@ -268,7 +311,7 @@ const updatePurchaseReturnStatus = async (id, status, userId, rejectionReason) =
     // Reverse stock reduction that happened at creation time
     for (const item of ret.items) {
       await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stockQuantity: item.quantity },
+        $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) },
       });
     }
   }
@@ -283,7 +326,7 @@ const deletePurchaseReturn = async (id) => {
   // Reverse stock decrease
   for (const item of ret.items) {
     await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stockQuantity: item.quantity },
+      $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) },
     });
   }
 

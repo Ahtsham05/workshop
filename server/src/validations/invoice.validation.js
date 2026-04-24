@@ -10,6 +10,8 @@ const invoiceItem = Joi.object({
   }).optional(),
   quantity: Joi.number().integer().min(1).required(),
   unit: Joi.string().allow(''), // Allow unit field
+  conversionFactor: Joi.number().positive().optional(),
+  stockQuantity: Joi.number().positive().optional(),
   unitPrice: Joi.number().min(0).required(),
   cost: Joi.number().min(0).required(),
   subtotal: Joi.number().min(0).required(),

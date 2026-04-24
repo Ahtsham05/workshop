@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import type { Purchase, PurchaseItem, Supplier } from '../index'
+import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -199,10 +200,13 @@ export default function PurchasePanel({
     (itemIndex: number, product: any) => {
       setPurchase((prev) => {
         const newItems = [...prev.items]
+        const unitOptions = getProductUnitOptions(product)
         newItems[itemIndex] = {
           product: product,
           quantity: newItems[itemIndex].quantity || 1,
-          unit: product.unit || 'pcs',
+          unit: unitOptions[0]?.value || product.unit || 'pcs',
+          conversionFactor: unitOptions[0]?.factor || 1,
+          stockQuantity: newItems[itemIndex].quantity || 1,
           purchasePrice: product.cost || 0,
           isManualEntry: false
         }
@@ -316,6 +320,8 @@ export default function PurchasePanel({
             product: productId,
             quantity: item.quantity,
             unit: item.unit || item.product.unit || 'pcs',
+            conversionFactor: item.conversionFactor,
+            stockQuantity: item.stockQuantity,
             priceAtPurchase: item.purchasePrice,
             total: item.quantity * item.purchasePrice,
           };
@@ -798,6 +804,58 @@ export default function PurchasePanel({
                     <div className='text-[10px] text-center text-muted-foreground mt-0.5'>
                       {item.unit || item.product.unit || 'pcs'}
                     </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1 min-w-[110px]">
+                    <Label className="text-xs text-center">{t('unit')}</Label>
+                    <Select
+                      value={item.unit || item.product.unit || 'pcs'}
+                      onValueChange={(value) => {
+                        const resolved = resolveUnitConversion({
+                          product: item.product,
+                          quantity: item.quantity,
+                          unit: value,
+                        })
+
+                        const adjustedPurchasePrice = getUnitAdjustedPrice({
+                          product: item.product,
+                          unit: value,
+                          basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
+                          conversionFactor: resolved?.conversionFactor,
+                        })
+
+                        if (!resolved || adjustedPurchasePrice === null) {
+                          toast.error(`Missing conversion for ${item.product.name}`)
+                          return
+                        }
+
+                        setPurchase((prev) => ({
+                          ...prev,
+                          items: prev.items.map((purchaseItem, purchaseIndex) =>
+                            purchaseIndex === index
+                              ? {
+                                  ...purchaseItem,
+                                  unit: resolved.lineUnit,
+                                  conversionFactor: resolved.conversionFactor,
+                                  stockQuantity: resolved.stockQuantity,
+                                  purchasePrice: adjustedPurchasePrice,
+                                }
+                              : purchaseItem
+                          ),
+                        }))
+                      }}
+                    >
+                      <SelectTrigger className="h-6 text-xs px-2">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getProductUnitOptions(item.product).map((unitOption) => (
+                          <SelectItem key={unitOption.value} value={unitOption.value}>
+                            {unitOption.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Price Controls */}

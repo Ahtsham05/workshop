@@ -28,6 +28,14 @@ const PurchaseSchema = new mongoose.Schema({
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
       quantity: { type: Number, required: true },
       unit: { type: String, default: DEFAULT_UNIT }, // Unit of measurement
+      conversionFactor: { type: Number, default: 1, min: 0.000001 },
+      stockQuantity: {
+        type: Number,
+        min: 0,
+        default: function defaultStockQuantity() {
+          return this.quantity;
+        },
+      },
       priceAtPurchase: { type: Number, required: true }, // Purchase price of the product
       total: { type: Number, required: true }, // quantity * priceAtPurchase
     },

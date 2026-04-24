@@ -1,8 +1,31 @@
 const httpStatus = require('http-status');
-const { Purchase, Product, SupplierLedger } = require('../models');
+const { Purchase, Product, SupplierLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
+const { normalizeBusinessType } = require('../config/businessTypes');
+const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+const getOrganizationBusinessType = async (organizationId) => {
+  if (!organizationId) {
+    return 'other';
+  }
+
+  const organization = await Organization.findById(organizationId).select('businessType').lean();
+  return normalizeBusinessType(organization?.businessType);
+};
+
+const getPurchaseProductId = (item) => {
+  if (item?.product?._id) {
+    return item.product._id.toString();
+  }
+
+  if (item?.product) {
+    return item.product.toString();
+  }
+
+  return '';
+};
 
 const syncDirectPurchaseCashEntry = async (purchase) => {
   const hasSupplier = !!purchase.supplier;
@@ -40,14 +63,20 @@ const syncDirectPurchaseCashEntry = async (purchase) => {
 const createPurchase = async (purchaseBody) => {
   // First, create the purchase
   const purchase = await Purchase.create(purchaseBody);
+  const businessType = await getOrganizationBusinessType(purchase.organizationId);
 
   // Now, update the stock quantity of each product in the purchase
   for (const item of purchase.items) {
     const product = await Product.findById(item.product);
 
     if (product) {
-      // Increase stock quantity based on the purchased quantity
-      product.stockQuantity += item.quantity;
+      const conversion = toStockQuantity({ product, item, businessType });
+      item.unit = conversion.lineUnit;
+      item.conversionFactor = conversion.conversionFactor;
+      item.stockQuantity = conversion.stockQuantity;
+
+      // Increase stock in product stock unit (typically pcs)
+      product.stockQuantity += conversion.stockQuantity;
 
       // Save the updated product
       await product.save();
@@ -172,24 +201,31 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalPaidAmount = purchase.paidAmount || 0;
   const originalSupplier = purchase.supplier?._id || purchase.supplier;
   const originalPaymentType = purchase.paymentType;
+  const businessType = await getOrganizationBusinessType(purchase.organizationId);
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
 
     // Find the existing purchase item
-    const existingItem = purchase.items.find(item => item.product._id.toString() === updatedItem.product.toString());
+    const existingItem = purchase.items.find((item) => getPurchaseProductId(item) === updatedItem.product.toString());
 
     if (existingItem) {
       // EXISTING ITEM - Calculate the difference and adjust stock
       const product = await Product.findById(updatedItem.product);
 
       if (product) {
+        const updatedStock = getStockQuantityFromItem({ product, item: updatedItem, businessType });
+
         // Subtract the previous quantity and add the updated quantity
-        const previousQuantity = existingItem.quantity;
-        const quantityDifference = updatedItem.quantity - previousQuantity;
+        const previousQuantity = Number(existingItem.stockQuantity || existingItem.quantity || 0);
+        const quantityDifference = updatedStock.stockQuantity - previousQuantity;
 
         // Update the stock quantity
         product.stockQuantity += quantityDifference;
+
+        updatedItem.unit = updatedStock.lineUnit;
+        updatedItem.conversionFactor = updatedStock.conversionFactor;
+        updatedItem.stockQuantity = updatedStock.stockQuantity;
 
         // Update the product price with the new price
         product.price = updatedItem.priceAtPurchase;
@@ -202,8 +238,14 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
       const product = await Product.findById(updatedItem.product);
 
       if (product) {
+        const updatedStock = getStockQuantityFromItem({ product, item: updatedItem, businessType });
+
         // Add the full quantity since this is a new item
-        product.stockQuantity += updatedItem.quantity;
+        product.stockQuantity += updatedStock.stockQuantity;
+
+        updatedItem.unit = updatedStock.lineUnit;
+        updatedItem.conversionFactor = updatedStock.conversionFactor;
+        updatedItem.stockQuantity = updatedStock.stockQuantity;
 
         // Update the product price with the new price
         product.price = updatedItem.priceAtPurchase;
@@ -216,7 +258,8 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
 
   // Handle removed items - decrease stock for items that were in original but not in update
   for (const originalItem of purchase.items) {
-    const stillExists = updateBody.items?.find(item => item.product.toString() === originalItem.product._id.toString());
+    const originalProductId = getPurchaseProductId(originalItem);
+    const stillExists = updateBody.items?.find((item) => item.product.toString() === originalProductId);
     
     if (!stillExists) {
       // REMOVED ITEM - Subtract the quantity from stock
@@ -224,7 +267,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
       
       if (product) {
         // Subtract the quantity since this item was removed
-        product.stockQuantity -= originalItem.quantity;
+        product.stockQuantity -= Number(originalItem.stockQuantity || originalItem.quantity || 0);
         
         // Save the product with updated stock
         await product.save();
@@ -347,7 +390,7 @@ const deletePurchaseById = async (purchaseId) => {
     
     if (product) {
       // Subtract the purchased quantity from the product's stockQuantity
-      product.stockQuantity -= item.quantity;
+      product.stockQuantity -= Number(item.stockQuantity || item.quantity || 0);
 
       // Save the updated product stock
       await product.save();

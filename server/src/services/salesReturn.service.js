@@ -1,8 +1,19 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { SalesReturn, Invoice, Product, CustomerLedger, Customer, CashBookEntry } = require('../models');
+const { SalesReturn, Invoice, Product, CustomerLedger, Customer, CashBookEntry, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const { normalizeBusinessType } = require('../config/businessTypes');
+const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+const getOrganizationBusinessType = async (organizationId) => {
+  if (!organizationId) {
+    return 'other';
+  }
+
+  const organization = await Organization.findById(organizationId).select('businessType').lean();
+  return normalizeBusinessType(organization?.businessType);
+};
 
 /**
  * Validate that return quantities do not exceed what was originally sold.
@@ -19,7 +30,7 @@ const validateReturnQuantities = async (invoice, returnItems) => {
   for (const ret of previousReturns) {
     for (const item of ret.items) {
       const key = item.productId.toString();
-      alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + item.quantity;
+      alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
     }
   }
 
@@ -27,7 +38,7 @@ const validateReturnQuantities = async (invoice, returnItems) => {
   const soldMap = {};
   for (const item of invoice.items) {
     const key = item.productId.toString();
-    soldMap[key] = (soldMap[key] || 0) + item.quantity;
+    soldMap[key] = (soldMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
   }
 
   for (const returnItem of returnItems) {
@@ -35,11 +46,12 @@ const validateReturnQuantities = async (invoice, returnItems) => {
     const soldQty = soldMap[key] || 0;
     const alreadyReturned = alreadyReturnedMap[key] || 0;
     const returnable = soldQty - alreadyReturned;
+    const requestedStockQty = Number(returnItem.stockQuantity || returnItem.quantity || 0);
 
-    if (returnItem.quantity > returnable) {
+    if (requestedStockQty > returnable) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Cannot return ${returnItem.quantity} units of product ${returnItem.name}. ` +
+        `Cannot return ${returnItem.quantity} ${returnItem.unit || 'unit(s)'} of product ${returnItem.name}. ` +
           `Only ${returnable} unit(s) are returnable (sold: ${soldQty}, already returned: ${alreadyReturned}).`
       );
     }
@@ -66,20 +78,57 @@ const createSalesReturn = async (returnBody) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot create return for a cancelled invoice');
     }
 
+    const businessType = await getOrganizationBusinessType(returnBody.organizationId);
+    const invoiceItemsMap = new Map(
+      (invoice.items || []).map((item) => [item.productId.toString(), item])
+    );
+
+    const normalizedItems = [];
+    for (const item of returnBody.items) {
+      const product = await Product.findOne({
+        _id: item.productId,
+        organizationId: returnBody.organizationId,
+      }).session(session);
+
+      if (!product) {
+        throw new ApiError(httpStatus.NOT_FOUND, `Product ${item.productId} not found`);
+      }
+
+      const invoiceLineItem = invoiceItemsMap.get(item.productId.toString());
+      const conversionInput = {
+        ...item,
+        unit: item.unit || invoiceLineItem?.unit,
+        conversionFactor: item.conversionFactor || invoiceLineItem?.conversionFactor,
+      };
+
+      const conversion = getStockQuantityFromItem({ product, item: conversionInput, businessType });
+      normalizedItems.push({
+        ...item,
+        unit: conversion.lineUnit,
+        conversionFactor: conversion.conversionFactor,
+        stockQuantity: conversion.stockQuantity,
+      });
+    }
+
     // 2. Validate return quantities
-    await validateReturnQuantities(invoice, returnBody.items);
+    await validateReturnQuantities(invoice, normalizedItems);
 
     // 3. Persist the return document
-    const [salesReturn] = await SalesReturn.create([returnBody], { session });
+    const [salesReturn] = await SalesReturn.create([
+      {
+        ...returnBody,
+        items: normalizedItems,
+      },
+    ], { session });
 
     // 4. Increase stock for each returned item (atomic increment)
-    for (const item of returnBody.items) {
+    for (const item of normalizedItems) {
       const updated = await Product.findOneAndUpdate(
         {
           _id: item.productId,
           organizationId: returnBody.organizationId,
         },
-        { $inc: { stockQuantity: item.quantity } },
+        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
         { session, new: true }
       );
       if (!updated) {
@@ -127,18 +176,19 @@ const _isFullyReturned = async (invoice, newItems) => {
   for (const ret of previousReturns) {
     for (const item of ret.items) {
       const key = item.productId.toString();
-      returnedMap[key] = (returnedMap[key] || 0) + item.quantity;
+      returnedMap[key] = (returnedMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
     }
   }
   // Include the current return's items
   for (const item of newItems) {
     const key = item.productId.toString();
-    returnedMap[key] = (returnedMap[key] || 0) + item.quantity;
+    returnedMap[key] = (returnedMap[key] || 0) + Number(item.stockQuantity || item.quantity || 0);
   }
 
   for (const soldItem of invoice.items) {
     const returned = returnedMap[soldItem.productId.toString()] || 0;
-    if (returned < soldItem.quantity) {
+    const soldStockQuantity = Number(soldItem.stockQuantity || soldItem.quantity || 0);
+    if (returned < soldStockQuantity) {
       return false;
     }
   }
@@ -302,7 +352,7 @@ const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
     // Reverse stock that was added at creation time
     for (const item of ret.items) {
       await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stockQuantity: -item.quantity },
+        $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) },
       });
     }
   }
@@ -317,7 +367,7 @@ const deleteSalesReturn = async (id) => {
   // Reverse stock
   for (const item of ret.items) {
     await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stockQuantity: -item.quantity },
+      $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) },
     });
   }
 

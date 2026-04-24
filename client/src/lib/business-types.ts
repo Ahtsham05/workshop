@@ -4,6 +4,7 @@ export const BUSINESS_TYPE_OPTIONS = [
   { value: 'factory', label: 'Factory' },
   { value: 'retail', label: 'Retail' },
   { value: 'wholesale', label: 'Wholesale' },
+  { value: 'wholesale_retail', label: 'Wholesale to Retail' },
   { value: 'services', label: 'Services' },
   { value: 'restaurant', label: 'Restaurant / Food & Beverage' },
   { value: 'education', label: 'Education' },
@@ -16,6 +17,10 @@ const BUSINESS_TYPE_ALIASES: Record<string, string> = {
   mobileshope: 'mobile_shop',
   'mobile shop': 'mobile_shop',
   'mobile-shop': 'mobile_shop',
+  'wholesale to retail': 'wholesale_retail',
+  'wholesaler to retail': 'wholesale_retail',
+  'whole saler to retail': 'wholesale_retail',
+  'wholesale-retail': 'wholesale_retail',
   manufacturing: 'factory',
 }
 
