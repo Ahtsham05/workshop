@@ -15,4 +15,6 @@ router
   .post(validate(walletValidation.upsertWallet), walletController.upsertWallet)
   .get(validate(walletValidation.getWallets), walletController.getWallets);
 
+router.route('/:walletId').delete(validate(walletValidation.deleteWallet), walletController.deleteWallet);
+
 module.exports = router;

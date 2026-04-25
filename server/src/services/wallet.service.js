@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Wallet } = require('../models');
+const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 const getWalletFilter = ({ organizationId, branchId, type }) => ({
@@ -25,7 +25,17 @@ const ensureWallet = async ({ organizationId, branchId, type, userId }) => {
   return wallet;
 };
 
-const createOrUpdateWallet = async ({ organizationId, branchId, type, balance = 0, commissionRate = 0, withdrawalCommissionRate = 0, depositCommissionRate = 0, id, userId }) => {
+const createOrUpdateWallet = async ({
+  organizationId,
+  branchId,
+  type,
+  balance = 0,
+  commissionRate = 0,
+  withdrawalCommissionRate = 0,
+  depositCommissionRate = 0,
+  id,
+  userId,
+}) => {
   let wallet;
 
   if (id) {
@@ -95,10 +105,29 @@ const getWalletById = async (walletId) => {
   return Wallet.findById(walletId);
 };
 
+const deleteWallet = async ({ walletId, organizationId, branchId }) => {
+  const wallet = await Wallet.findOne({ _id: walletId, organizationId, branchId });
+
+  if (!wallet) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
+  }
+
+  await Promise.all([
+    LoadTransaction.deleteMany({ organizationId, branchId, $or: [{ walletId: wallet._id }, { walletType: wallet.type }] }),
+    CashWithdrawal.deleteMany({ organizationId, branchId, $or: [{ walletId: wallet._id }, { walletType: wallet.type }] }),
+    LoadPurchase.deleteMany({ organizationId, branchId, walletType: wallet.type }),
+    SimSale.deleteMany({ organizationId, branchId, walletType: wallet.type }),
+  ]);
+
+  await wallet.deleteOne();
+  return wallet;
+};
+
 module.exports = {
   ensureWallet,
   createOrUpdateWallet,
   adjustWalletBalance,
   queryWallets,
   getWalletById,
+  deleteWallet,
 };

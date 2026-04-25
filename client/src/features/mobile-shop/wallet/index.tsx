@@ -6,6 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -13,8 +23,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useGetWalletsQuery, useUpsertWalletMutation } from '@/stores/mobile-shop.api'
-import { Edit2 } from 'lucide-react'
+import { useDeleteWalletMutation, useGetWalletsQuery, useUpsertWalletMutation } from '@/stores/mobile-shop.api'
+import { Edit2, Trash2 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 
 const formatWalletDate = (dateValue?: string) => {
@@ -39,12 +49,14 @@ const formatWalletBalance = (value?: number) => {
 export default function WalletPage() {
   const { data, isLoading } = useGetWalletsQuery()
   const [upsertWallet, { isLoading: isSaving }] = useUpsertWalletMutation()
+  const [deleteWallet, { isLoading: isDeleting }] = useDeleteWalletMutation()
   const [walletName, setWalletName] = useState('')
   const [balance, setBalance] = useState('0')
   const [commissionRate, setCommissionRate] = useState('0')
   const [withdrawalCommissionRate, setWithdrawalCommissionRate] = useState('0')
   const [depositCommissionRate, setDepositCommissionRate] = useState('0')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [walletToDelete, setWalletToDelete] = useState<{ id: string; type: string } | null>(null)
 
   const wallets = data?.results ?? []
 
@@ -93,6 +105,20 @@ export default function WalletPage() {
     setCommissionRate('0')
     setWithdrawalCommissionRate('0')
     setDepositCommissionRate('0')
+  }
+
+  const handleDeleteWallet = async () => {
+    if (!walletToDelete) return
+    try {
+      await deleteWallet(walletToDelete.id).unwrap()
+      toast.success('Wallet deleted')
+      if (editingId === walletToDelete.id) {
+        handleCancel()
+      }
+      setWalletToDelete(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to delete wallet')
+    }
   }
 
   return (
@@ -236,6 +262,14 @@ export default function WalletPage() {
                         >
                           <Edit2 className='h-4 w-4' />
                         </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          className='text-red-600 hover:text-red-700'
+                          onClick={() => setWalletToDelete({ id: wallet.id, type: wallet.type })}
+                        >
+                          <Trash2 className='h-4 w-4' />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -245,6 +279,28 @@ export default function WalletPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={!!walletToDelete} onOpenChange={(open) => !open && setWalletToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete wallet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete wallet "{walletToDelete?.type}" only if it has zero balance and no linked records.
+              If transactions exist, deletion will be blocked to keep history safe.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className='bg-red-600 hover:bg-red-700'
+              onClick={handleDeleteWallet}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Wallet'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MobilePageShell>
   )
 }

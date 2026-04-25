@@ -21,7 +21,16 @@ const getWallets = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const deleteWallet = catchAsync(async (req, res) => {
+  await walletService.deleteWallet({
+    walletId: req.params.walletId,
+    ...getBranchContext(req),
+  });
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   upsertWallet,
   getWallets,
+  deleteWallet,
 };

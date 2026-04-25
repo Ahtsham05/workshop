@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { objectId } = require('./custom.validation');
 
 const upsertWallet = {
   body: Joi.object().keys({
@@ -20,7 +21,14 @@ const getWallets = {
   }),
 };
 
+const deleteWallet = {
+  params: Joi.object().keys({
+    walletId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   upsertWallet,
   getWallets,
+  deleteWallet,
 };
