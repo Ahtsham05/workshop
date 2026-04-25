@@ -183,6 +183,7 @@ export interface CreateServiceCatalogInput {
 
 export interface ServiceInvoiceItemInput {
   serviceId: string
+  unitPrice?: number
   quantity: number
 }
 

@@ -124,6 +124,18 @@ export default function ServicesPage() {
     [invoiceLines]
   )
 
+  const handleInvoiceLinePriceChange = (serviceId: string, value: string) => {
+    const numericPrice = Number(value)
+    const nextPrice = Number.isFinite(numericPrice) && numericPrice >= 0 ? numericPrice : 0
+    setInvoiceLines((prev) =>
+      prev.map((line) =>
+        line.serviceId === serviceId
+          ? { ...line, unitPrice: nextPrice, total: nextPrice * line.quantity }
+          : line
+      )
+    )
+  }
+
   const setCatalogField = <K extends keyof CatalogForm>(key: K, value: CatalogForm[K]) => {
     setCatalogForm((prev) => ({ ...prev, [key]: value }))
   }
@@ -227,6 +239,7 @@ export default function ServicesPage() {
         notes: invoiceForm.notes.trim(),
         items: invoiceLines.map((line) => ({
           serviceId: line.serviceId,
+          unitPrice: line.unitPrice,
           quantity: line.quantity,
         })),
       }).unwrap()
@@ -254,7 +267,7 @@ export default function ServicesPage() {
   return (
     <MobilePageShell
       title='Services Management'
-      description='Save services with fixed prices, then create service invoices by selecting saved services only.'
+      description='Save services with default prices, then create service invoices and adjust line prices at invoice time.'
     >
       <div className='space-y-4'>
         <div className='flex gap-2'>
@@ -454,7 +467,16 @@ export default function ServicesPage() {
                           {invoiceLines.map((line) => (
                             <TableRow key={line.serviceId}>
                               <TableCell className='font-medium'>{line.serviceName}</TableCell>
-                              <TableCell className='text-right'>{fmtAmt(line.unitPrice)}</TableCell>
+                              <TableCell className='text-right'>
+                                <Input
+                                  type='number'
+                                  min={0}
+                                  step='0.01'
+                                  value={line.unitPrice}
+                                  onChange={(e) => handleInvoiceLinePriceChange(line.serviceId, e.target.value)}
+                                  className='h-8 w-28 ml-auto text-right'
+                                />
+                              </TableCell>
                               <TableCell className='text-center'>
                                 <div className='flex items-center justify-center gap-2'>
                                   <Button

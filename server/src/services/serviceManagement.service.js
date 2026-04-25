@@ -138,7 +138,10 @@ const createServiceInvoice = async (invoiceBody) => {
     if (!service || quantity <= 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid service item data');
     }
-    const unitPrice = Number(service.price || 0);
+    const requestedUnitPrice = Number(item.unitPrice);
+    const unitPrice = Number.isFinite(requestedUnitPrice) && requestedUnitPrice >= 0
+      ? requestedUnitPrice
+      : Number(service.price || 0);
     return {
       serviceId: service._id,
       serviceName: service.serviceName,

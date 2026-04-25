@@ -51,6 +51,7 @@ const createServiceInvoice = {
       .items(
         Joi.object().keys({
           serviceId: Joi.string().custom(objectId).required(),
+          unitPrice: Joi.number().min(0),
           quantity: Joi.number().integer().min(1).required(),
         })
       )
