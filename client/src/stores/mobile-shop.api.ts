@@ -470,6 +470,13 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['Wallets', 'MobileDashboard'],
     }),
+    deleteWallet: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/wallets/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'SimSales', 'CashBook', 'MobileDashboard'],
+    }),
     getLoadPurchases: builder.query<PaginatedResult<LoadPurchaseRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -928,6 +935,7 @@ export const {
   useGetMobileDashboardSummaryQuery,
   useGetWalletsQuery,
   useUpsertWalletMutation,
+  useDeleteWalletMutation,
   useGetLoadPurchasesQuery,
   useCreateLoadPurchaseMutation,
   useUpdateLoadPurchaseMutation,
