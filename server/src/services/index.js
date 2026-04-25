@@ -26,6 +26,7 @@ module.exports.loadTransactionService = require('./loadTransaction.service.js');
 module.exports.simSaleService = require('./simSale.service.js');
 module.exports.cashWithdrawalService = require('./cashWithdrawal.service.js');
 module.exports.repairJobService = require('./repairJob.service.js');
+module.exports.serviceManagementService = require('./serviceManagement.service.js');
 module.exports.repairStockItemService = require('./repairStockItem.service.js');
 module.exports.mobileDashboardService = require('./mobileDashboard.service.js');
 module.exports.salesReturnService = require('./salesReturn.service.js');

@@ -623,6 +623,12 @@ export const sidebarData: SidebarData = {
           requiredFeature: 'repair',
         },
         {
+          title: 'Services',
+          url: '/mobile-shop/services',
+          icon: NotebookText,
+          businessTypes: ['mobile_shop'],
+        },
+        {
           title: 'Bill Payments',
           url: '/mobile-shop/bill-payments',
           icon: Receipt,

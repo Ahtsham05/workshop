@@ -1,6 +1,7 @@
 module.exports.authValidation = require('./auth.validation');
 module.exports.userValidation = require('./user.validation');
 module.exports.invoiceValidation = require('./invoice.validation');
+module.exports.serviceValidation = require('./service.validation');
 
 // School Accounting Validations
 module.exports.feeCategoryValidation = require('./feeCategory.validation');

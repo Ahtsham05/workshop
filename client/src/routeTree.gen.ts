@@ -60,6 +60,7 @@ import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authen
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenticated/mobile-shop/wallet'
 import { Route as AuthenticatedMobileShopSimSaleImport } from './routes/_authenticated/mobile-shop/sim-sale'
+import { Route as AuthenticatedMobileShopServicesImport } from './routes/_authenticated/mobile-shop/services'
 import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
 import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
 import { Route as AuthenticatedMobileShopInstallmentsImport } from './routes/_authenticated/mobile-shop/installments'
@@ -431,6 +432,13 @@ const AuthenticatedMobileShopSimSaleRoute =
   AuthenticatedMobileShopSimSaleImport.update({
     id: '/mobile-shop/sim-sale',
     path: '/mobile-shop/sim-sale',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopServicesRoute =
+  AuthenticatedMobileShopServicesImport.update({
+    id: '/mobile-shop/services',
+    path: '/mobile-shop/services',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -970,6 +978,13 @@ declare module '@tanstack/react-router' {
       path: '/mobile-shop/repair'
       fullPath: '/mobile-shop/repair'
       preLoaderRoute: typeof AuthenticatedMobileShopRepairImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/services': {
+      id: '/_authenticated/mobile-shop/services'
+      path: '/mobile-shop/services'
+      fullPath: '/mobile-shop/services'
+      preLoaderRoute: typeof AuthenticatedMobileShopServicesImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-shop/sim-sale': {
@@ -1683,6 +1698,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileShopInstallmentsRoute: typeof AuthenticatedMobileShopInstallmentsRoute
   AuthenticatedMobileShopLoadRoute: typeof AuthenticatedMobileShopLoadRoute
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
+  AuthenticatedMobileShopServicesRoute: typeof AuthenticatedMobileShopServicesRoute
   AuthenticatedMobileShopSimSaleRoute: typeof AuthenticatedMobileShopSimSaleRoute
   AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
@@ -1735,6 +1751,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedMobileShopInstallmentsRoute,
   AuthenticatedMobileShopLoadRoute: AuthenticatedMobileShopLoadRoute,
   AuthenticatedMobileShopRepairRoute: AuthenticatedMobileShopRepairRoute,
+  AuthenticatedMobileShopServicesRoute: AuthenticatedMobileShopServicesRoute,
   AuthenticatedMobileShopSimSaleRoute: AuthenticatedMobileShopSimSaleRoute,
   AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
@@ -1804,6 +1821,7 @@ export interface FileRoutesByFullPath {
   '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -1905,6 +1923,7 @@ export interface FileRoutesByTo {
   '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -2009,6 +2028,7 @@ export interface FileRoutesById {
   '/_authenticated/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/_authenticated/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
+  '/_authenticated/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/_authenticated/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -2115,6 +2135,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
+    | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
     | '/mobile-shop/wallet'
     | '/settings/account'
@@ -2215,6 +2236,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
+    | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
     | '/mobile-shop/wallet'
     | '/settings/account'
@@ -2317,6 +2339,7 @@ export interface FileRouteTypes {
     | '/_authenticated/mobile-shop/installments'
     | '/_authenticated/mobile-shop/load'
     | '/_authenticated/mobile-shop/repair'
+    | '/_authenticated/mobile-shop/services'
     | '/_authenticated/mobile-shop/sim-sale'
     | '/_authenticated/mobile-shop/wallet'
     | '/_authenticated/settings/account'
@@ -2466,6 +2489,7 @@ export const routeTree = rootRoute
         "/_authenticated/mobile-shop/installments",
         "/_authenticated/mobile-shop/load",
         "/_authenticated/mobile-shop/repair",
+        "/_authenticated/mobile-shop/services",
         "/_authenticated/mobile-shop/sim-sale",
         "/_authenticated/mobile-shop/wallet",
         "/_authenticated/subscription/payment",
@@ -2626,6 +2650,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/repair": {
       "filePath": "_authenticated/mobile-shop/repair.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/services": {
+      "filePath": "_authenticated/mobile-shop/services.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/mobile-shop/sim-sale": {

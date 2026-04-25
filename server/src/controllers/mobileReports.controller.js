@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, RepairJob, CashWithdrawal, SimSale } = require('../models');
+const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, SimSale } = require('../models');
 
 const getRange = (query) => {
   const now = new Date();
@@ -87,7 +87,7 @@ const getLoadReport = catchAsync(async (req, res) => {
 
 const getProfitReport = catchAsync(async (req, res) => {
   const { range, startDate, endDate } = getRange(req.query);
-  const [salesProfit, loadProfit, repairProfit] = await Promise.all([
+  const [salesProfit, loadProfit, repairProfit, serviceProfit] = await Promise.all([
     Invoice.aggregate([
       {
         $match: {
@@ -120,9 +120,22 @@ const getProfitReport = catchAsync(async (req, res) => {
         },
       },
     ]),
+    ServiceInvoice.aggregate([
+      {
+        $match: {
+          ...getScopedMatch(req, startDate, endDate),
+        },
+      },
+      {
+        $group: {
+          _id: getDateGrouping(range, '$date'),
+          amount: { $sum: '$totalAmount' },
+        },
+      },
+    ]),
   ]);
 
-  res.send({ range, salesProfit, loadProfit, repairProfit });
+  res.send({ range, salesProfit, loadProfit, repairProfit, serviceProfit });
 });
 
 const getExpenseReport = catchAsync(async (req, res) => {

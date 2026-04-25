@@ -129,6 +129,16 @@ export interface ProfitLossReport {
     purchaseReturns: number
     purchaseReturnsCount: number
   }
+  services: {
+    totalServiceAmount: number
+    totalServiceProfit: number
+    totalServed: number
+  }
+  simSales: {
+    totalSimSaleAmount: number
+    totalSimSaleProfit: number
+    totalSimSales: number
+  }
   expenses: {
     totalExpenses: number
   }
@@ -340,6 +350,8 @@ export interface ProfitLossFullReport {
   additionalProfits: {
     loadProfit: number
     repairProfit: number
+    serviceProfit: number
+    simSaleProfit: number
     billProfit: number
     withdrawalProfit: number
     depositProfit: number
@@ -370,12 +382,61 @@ export interface RoiBreakdown {
     salesProfit: number
     loadProfit: number
     repairProfit: number
+    serviceProfit: number
+    simSaleProfit: number
     billPaymentProfit: number
     withdrawalProfit: number
     depositProfit: number
     expenseDeduction: number
     salesReturnsImpact: number
   }
+}
+
+// ── Service Report ───────────────────────────────────────────────────────────
+export interface ServiceReportSummary {
+  totalInvoices: number
+  totalAmount: number
+  totalProfit: number
+  avgInvoice: number
+}
+
+export interface ServiceReportByService {
+  _id: string
+  totalQuantity: number
+  totalAmount: number
+  avgUnitPrice: number
+}
+
+export interface ServiceReportByPaymentMethod {
+  _id: string
+  count: number
+  totalAmount: number
+}
+
+export interface ServiceReportDatewise {
+  _id: string
+  invoices: number
+  totalAmount: number
+}
+
+export interface ServiceReportRecent {
+  _id: string
+  invoiceNumber: string
+  customerName?: string
+  customerPhone?: string
+  items: { serviceName: string; quantity: number; total: number }[]
+  totalAmount: number
+  paymentMethod: string
+  date: string
+}
+
+export interface ServiceReport {
+  summary: ServiceReportSummary
+  byService: ServiceReportByService[]
+  byPaymentMethod: ServiceReportByPaymentMethod[]
+  datewise: ServiceReportDatewise[]
+  recentInvoices: ServiceReportRecent[]
+  period: { startDate: string; endDate: string }
 }
 
 export interface RoiReport {
@@ -500,7 +561,7 @@ export interface InstallmentReport {
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -696,6 +757,16 @@ export const reportsApi = createApi({
       },
       providesTags: ['RepairReport'],
     }),
+    getServiceReport: builder.query<ServiceReport, { startDate?: string; endDate?: string; serviceName?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.serviceName) searchParams.set('serviceName', params.serviceName)
+        return `/services?${searchParams.toString()}`
+      },
+      providesTags: ['ServiceReport'],
+    }),
     getRoiReport: builder.query<RoiReport, { from?: string; to?: string }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
@@ -755,6 +826,7 @@ export const {
   useGetLoadReportQuery,
   useGetWalletBalanceStatementQuery,
   useGetRepairReportQuery,
+  useGetServiceReportQuery,
   useGetRoiReportQuery,
   useGetMonthlyRoiQuery,
   useGetSimSaleReportQuery,

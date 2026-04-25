@@ -166,6 +166,56 @@ export interface RepairJobRecord {
   deliveredAt?: string
 }
 
+export interface ServiceCatalogRecord {
+  id: string
+  serviceName: string
+  details?: string
+  price: number
+  isActive: boolean
+}
+
+export interface CreateServiceCatalogInput {
+  serviceName: string
+  details?: string
+  price: number
+  isActive?: boolean
+}
+
+export interface ServiceInvoiceItemInput {
+  serviceId: string
+  quantity: number
+}
+
+export interface ServiceInvoiceItemRecord {
+  serviceId: string
+  serviceName: string
+  unitPrice: number
+  quantity: number
+  total: number
+}
+
+export interface ServiceInvoiceRecord {
+  id: string
+  invoiceNumber: string
+  customerName?: string
+  customerPhone?: string
+  items: ServiceInvoiceItemRecord[]
+  subtotal: number
+  totalAmount: number
+  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
+  date: string
+  notes?: string
+}
+
+export interface CreateServiceInvoiceInput {
+  customerName?: string
+  customerPhone?: string
+  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
+  date?: string
+  notes?: string
+  items: ServiceInvoiceItemInput[]
+}
+
 export const BILL_TYPES = ['electricity', 'gas', 'water', 'internet', 'other'] as const
 export type BillType = (typeof BILL_TYPES)[number]
 
@@ -277,7 +327,7 @@ export interface BillPaymentReceipt {
 export interface CashBookEntryRecord {
   id: string
   type: 'income' | 'expense'
-  source: 'sale' | 'load' | 'repair' | 'purchase' | 'expense' | 'other' | 'opening_balance'
+  source: 'sale' | 'load' | 'repair' | 'service' | 'purchase' | 'expense' | 'other' | 'opening_balance'
   amount: number
   paymentMethod: string
   description?: string
@@ -401,7 +451,7 @@ export interface CreateSimSaleInput {
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -559,6 +609,76 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+    }),
+
+    // ─── Services Catalog ───────────────────────────────────────────────────
+    getServices: builder.query<
+      PaginatedResult<ServiceCatalogRecord>,
+      { page?: number; limit?: number; serviceName?: string; isActive?: boolean } | void
+    >({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 50) })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        if ((params as any)?.serviceName) p.set('serviceName', (params as any).serviceName)
+        if ((params as any)?.isActive !== undefined) p.set('isActive', String((params as any).isActive))
+        return `/services?${p.toString()}`
+      },
+      providesTags: ['Services'],
+    }),
+    createService: builder.mutation<ServiceCatalogRecord, CreateServiceCatalogInput>({
+      query: (body) => ({
+        url: '/services',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Services'],
+    }),
+    updateService: builder.mutation<ServiceCatalogRecord, { id: string; body: Partial<CreateServiceCatalogInput> }>({
+      query: ({ id, body }) => ({
+        url: `/services/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['Services'],
+    }),
+    deleteService: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/services/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Services'],
+    }),
+
+    // ─── Service Invoices ───────────────────────────────────────────────────
+    getServiceInvoices: builder.query<
+      PaginatedResult<ServiceInvoiceRecord>,
+      { page?: number; limit?: number; customerName?: string; invoiceNumber?: string; startDate?: string; endDate?: string } | void
+    >({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 20) })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        if ((params as any)?.customerName) p.set('customerName', (params as any).customerName)
+        if ((params as any)?.invoiceNumber) p.set('invoiceNumber', (params as any).invoiceNumber)
+        if ((params as any)?.startDate) p.set('startDate', (params as any).startDate)
+        if ((params as any)?.endDate) p.set('endDate', (params as any).endDate)
+        return `/services/invoices?${p.toString()}`
+      },
+      providesTags: ['ServiceInvoices'],
+    }),
+    createServiceInvoice: builder.mutation<ServiceInvoiceRecord, CreateServiceInvoiceInput>({
+      query: (body) => ({
+        url: '/services/invoices',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteServiceInvoice: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/services/invoices/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
     }),
 
     // ─── Repair Stock Ledger ─────────────────────────────────────────────────
@@ -824,6 +944,13 @@ export const {
   useGetRepairJobsQuery,
   useCreateRepairJobMutation,
   useUpdateRepairJobMutation,
+  useGetServicesQuery,
+  useCreateServiceMutation,
+  useUpdateServiceMutation,
+  useDeleteServiceMutation,
+  useGetServiceInvoicesQuery,
+  useCreateServiceInvoiceMutation,
+  useDeleteServiceInvoiceMutation,
   useGetCashBookEntriesQuery,
   useGetCashBookSummaryQuery,
   useGetOpeningBalanceQuery,

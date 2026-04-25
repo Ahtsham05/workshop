@@ -72,6 +72,8 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             { Section: '', Category: t('gross_profit'), Amount: data.revenue.grossProfit },
             { Section: 'Additional Profits', Category: 'Load Profit', Amount: data.additionalProfits.loadProfit },
             { Section: '', Category: 'Repair Profit', Amount: data.additionalProfits.repairProfit },
+            { Section: '', Category: 'Service Profit', Amount: data.additionalProfits.serviceProfit },
+            { Section: '', Category: 'Sim Sale Profit', Amount: data.additionalProfits.simSaleProfit },
             { Section: '', Category: 'Bill Payment Profit', Amount: data.additionalProfits.billProfit },
             { Section: '', Category: 'Withdrawal Profit', Amount: data.additionalProfits.withdrawalProfit },
             { Section: '', Category: 'Deposit Profit', Amount: data.additionalProfits.depositProfit },
@@ -213,7 +215,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
         </Card>
 
         {/* Additional profits */}
-        {(isMobileShop || (add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0) > 0) && (
+        {(isMobileShop || (add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.serviceProfit ?? 0) + (add?.simSaleProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0) > 0) && (
         <Card>
           <CardHeader>
             <CardTitle>Additional Profits</CardTitle>
@@ -221,12 +223,14 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
           <CardContent className='space-y-3'>
             {isMobileShop && <Row label='Load Profit' value={fmt(add?.loadProfit ?? 0)} valueClass='text-emerald-600' />}
             {isMobileShop && <Row label='Repair Profit' value={fmt(add?.repairProfit ?? 0)} valueClass='text-teal-600' />}
+            {isMobileShop && <Row label='Service Profit' value={fmt(add?.serviceProfit ?? 0)} valueClass='text-indigo-600' />}
+            {isMobileShop && <Row label='Sim Sale Profit' value={fmt(add?.simSaleProfit ?? 0)} valueClass='text-sky-600' />}
             {isMobileShop && <Row label='Bill Payment Profit' value={fmt(add?.billProfit ?? 0)} valueClass='text-cyan-600' />}
             {isMobileShop && <Row label='Withdrawal Profit' value={fmt(add?.withdrawalProfit ?? 0)} valueClass='text-orange-600' />}
             {isMobileShop && <Row label='Deposit Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />}
             <Row
               label='Total Additional'
-              value={fmt((add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0))}
+              value={fmt((add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.serviceProfit ?? 0) + (add?.simSaleProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0))}
               bold
               border
             />

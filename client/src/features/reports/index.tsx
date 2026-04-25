@@ -29,6 +29,7 @@ import { SalesReturnsReport } from './components/sales-returns-report'
 import { PurchaseReturnsReport } from './components/purchase-returns-report'
 import { LoadReport } from './components/load-report'
 import { RepairReport } from './components/repair-report'
+import { ServiceReport } from './components/service-report'
 import { BillPaymentReport } from './components/bill-payment-report'
 import { RoiReport } from './components/roi-report'
 import { SimSaleReport } from './components/sim-sale-report'
@@ -203,6 +204,9 @@ export default function ReportsPage() {
             {isMobileShop && canAccess('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
             )}
+            {isMobileShop && (
+              <TabsTrigger value='services' className='text-xs sm:text-sm px-2 sm:px-3'>Services</TabsTrigger>
+            )}
             {isMobileShop && canAccess('bill_payment') && (
               <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
             )}
@@ -280,6 +284,12 @@ export default function ReportsPage() {
             {canAccess('repair')
               ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
               : <LockedFeatureCard featureName='Repair Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isMobileShop && (
+          <TabsContent value='services' className='mt-6'>
+            <ServiceReport ref={activeTab === 'services' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
           </TabsContent>
         )}
 

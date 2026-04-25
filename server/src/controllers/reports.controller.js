@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment } = require('../models');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -357,7 +357,7 @@ const getProfitLossReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { start, end } = parseRange(req.query);
 
-  const [revenueData, expenseData, salesReturnsData, purchaseReturnsData] = await Promise.all([
+  const [revenueData, expenseData, salesReturnsData, purchaseReturnsData, serviceData, simSaleData] = await Promise.all([
     Invoice.aggregate([
       { $match: { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } } },
       { $group: { _id: null, totalRevenue: { $sum: '$total' }, totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }, grossProfit: { $sum: { $ifNull: ['$totalProfit', 0] } } } },
@@ -374,15 +374,25 @@ const getProfitLossReport = catchAsync(async (req, res) => {
       { $match: { ...scope, date: { $gte: start, $lte: end }, status: { $ne: 'rejected' } } },
       { $group: { _id: null, totalPurchaseReturns: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
     ]),
+    ServiceInvoice.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, totalServiceAmount: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+    SimSale.aggregate([
+      { $match: { ...scope, date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, totalSimSaleAmount: { $sum: '$saleAmount' }, totalSimCost: { $sum: '$purchaseAmount' }, simSaleProfit: { $sum: { $subtract: ['$saleAmount', '$purchaseAmount'] } }, count: { $sum: 1 } } },
+    ]),
   ]);
 
   const rev = revenueData[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
   const exp = expenseData[0] || { totalExpenses: 0 };
   const sr = salesReturnsData[0] || { totalSalesReturns: 0, count: 0 };
   const pr = purchaseReturnsData[0] || { totalPurchaseReturns: 0, count: 0 };
+  const svc = serviceData[0] || { totalServiceAmount: 0, count: 0 };
+  const sim = simSaleData[0] || { totalSimSaleAmount: 0, simSaleProfit: 0, count: 0 };
 
   const netRevenue = rev.totalRevenue - sr.totalSalesReturns;
-  const grossProfit = (rev.grossProfit || (rev.totalRevenue - rev.totalCost)) - sr.totalSalesReturns;
+  const grossProfit = (rev.grossProfit || (rev.totalRevenue - rev.totalCost)) - sr.totalSalesReturns + svc.totalServiceAmount + sim.simSaleProfit;
   const netProfit = grossProfit - exp.totalExpenses;
 
   res.status(httpStatus.OK).send({
@@ -398,6 +408,16 @@ const getProfitLossReport = catchAsync(async (req, res) => {
     purchases: {
       purchaseReturns: pr.totalPurchaseReturns,
       purchaseReturnsCount: pr.count,
+    },
+    services: {
+      totalServiceAmount: svc.totalServiceAmount,
+      totalServiceProfit: svc.totalServiceAmount,
+      totalServed: svc.count,
+    },
+    simSales: {
+      totalSimSaleAmount: sim.totalSimSaleAmount,
+      totalSimSaleProfit: sim.simSaleProfit,
+      totalSimSales: sim.count,
     },
     expenses: { totalExpenses: exp.totalExpenses },
     netProfit: { amount: netProfit, margin: netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0 },
@@ -532,6 +552,8 @@ const getRoiReport = catchAsync(async (req, res) => {
     salesProfit,
     loadProfit,
     repairProfit,
+    serviceProfit,
+    simSaleProfit,
     billPaymentProfit,
     withdrawalProfit,
     depositProfit,
@@ -551,6 +573,15 @@ const getRoiReport = catchAsync(async (req, res) => {
       const result = await RepairJob.aggregate([
         { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $in: ['completed', 'delivered'] } } },
         { $group: { _id: null, total: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } } } },
+      ]);
+      return result[0]?.total || 0;
+    })(),
+    aggregateSum(ServiceInvoice, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$totalAmount', 0] }),
+    // SimSale profit = saleAmount - purchaseAmount
+    (async () => {
+      const result = await SimSale.aggregate([
+        { $match: { ...scope, date: { $gte: from, $lte: to } } },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$saleAmount', '$purchaseAmount'] } } } },
       ]);
       return result[0]?.total || 0;
     })(),
@@ -576,7 +607,7 @@ const getRoiReport = catchAsync(async (req, res) => {
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + totalExpenses;
-  const grossProfit = salesProfit + loadProfit + repairProfit + billPaymentProfit + withdrawalProfit + depositProfit;
+  const grossProfit = salesProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billPaymentProfit + withdrawalProfit + depositProfit;
   const profit = grossProfit - totalExpenses - salesReturnsImpact;
   const roi = investment > 0 ? parseFloat(((profit / investment) * 100).toFixed(2)) : 0;
 
@@ -597,6 +628,8 @@ const getRoiReport = catchAsync(async (req, res) => {
         salesProfit: parseFloat(salesProfit.toFixed(2)),
         loadProfit: parseFloat(loadProfit.toFixed(2)),
         repairProfit: parseFloat(repairProfit.toFixed(2)),
+        serviceProfit: parseFloat(serviceProfit.toFixed(2)),
+        simSaleProfit: parseFloat(simSaleProfit.toFixed(2)),
         billPaymentProfit: parseFloat(billPaymentProfit.toFixed(2)),
         withdrawalProfit: parseFloat(withdrawalProfit.toFixed(2)),
         depositProfit: parseFloat(depositProfit.toFixed(2)),
@@ -636,6 +669,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     loadProfitByMonth,
     salesReturnsByMonth,
     repairProfitByMonth,
+    serviceProfitByMonth,
+    simSaleProfitByMonth,
     billPaymentProfitByMonth,
     withdrawalProfitByMonth,
     depositProfitByMonth,
@@ -654,6 +689,19 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
           $group: {
             _id: { $dateToString: { format: '%Y-%m', date: '$date' } },
             total: { $sum: { $subtract: ['$charges', { $ifNull: ['$cost', 0] }] } },
+          },
+        },
+      ]);
+      return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+    })(),
+    monthlySum(ServiceInvoice, 'date', { $ifNull: ['$totalAmount', 0] }),
+    (async () => {
+      const results = await SimSale.aggregate([
+        { $match: { ...scope, date: { $gte: from, $lte: to } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$date' } },
+            total: { $sum: { $subtract: ['$saleAmount', '$purchaseAmount'] } },
           },
         },
       ]);
@@ -696,6 +744,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     ...Object.keys(loadProfitByMonth),
     ...Object.keys(salesReturnsByMonth),
     ...Object.keys(repairProfitByMonth),
+    ...Object.keys(serviceProfitByMonth),
+    ...Object.keys(simSaleProfitByMonth),
     ...Object.keys(billPaymentProfitByMonth),
     ...Object.keys(withdrawalProfitByMonth),
     ...Object.keys(depositProfitByMonth),
@@ -710,6 +760,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     const gross = (salesProfitByMonth[month] || 0)
       + (loadProfitByMonth[month] || 0)
       + (repairProfitByMonth[month] || 0)
+      + (serviceProfitByMonth[month] || 0)
+      + (simSaleProfitByMonth[month] || 0)
       + (billPaymentProfitByMonth[month] || 0)
       + (withdrawalProfitByMonth[month] || 0)
       + (depositProfitByMonth[month] || 0);
@@ -733,6 +785,8 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     loadProfitAgg,
     loadPurchaseSavingsAgg,
     repairAgg,
+    serviceAgg,
+    simSaleAgg,
     billPaymentAgg,
     cashWithdrawalProfitAgg,
     cashDepositProfitAgg,
@@ -770,6 +824,16 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     RepairJob.aggregate([
       { $match: { ...scope, date: { $gte: from, $lte: to }, status: { $in: ['completed', 'delivered'] } } },
       { $group: { _id: null, charges: { $sum: '$charges' }, cost: { $sum: { $ifNull: ['$cost', 0] } } } },
+    ]),
+    // Service profit = full amount from service invoices
+    ServiceInvoice.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+    // SimSale profit = saleAmount - purchaseAmount
+    SimSale.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $group: { _id: null, total: { $sum: { $subtract: ['$saleAmount', '$purchaseAmount'] } }, count: { $sum: 1 } } },
     ]),
     // Bill payment profit = service charge
     BillPayment.aggregate([
@@ -814,6 +878,8 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const ld      = loadProfitAgg[0]     || { total: 0 };
   const ldp     = loadPurchaseSavingsAgg[0] || { total: 0 };
   const rep     = repairAgg[0]         || { charges: 0, cost: 0 };
+  const svc     = serviceAgg[0]        || { total: 0, count: 0 };
+  const sim     = simSaleAgg[0]        || { total: 0, count: 0 };
   const bill    = billPaymentAgg[0]    || { total: 0 };
   const cwW     = cashWithdrawalProfitAgg[0] || { total: 0 };
   const cwD     = cashDepositProfitAgg[0] || { total: 0 };
@@ -830,13 +896,15 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
 
   const loadProfit        = ldp.total;
   const repairProfit      = rep.charges - rep.cost;
+  const serviceProfit     = svc.total;
+  const simSaleProfit     = sim.total;
   const billProfit        = bill.total;
   const withdrawalProfit  = cwW.total;
   const depositProfit     = cwD.total;
   const purchaseReturns   = pr.total;
   const expenses          = exp.total;
 
-  const netProfit = grossProfit + loadProfit + repairProfit + billProfit + withdrawalProfit + depositProfit - expenses;
+  const netProfit = grossProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billProfit + withdrawalProfit + depositProfit - expenses;
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + expenses;
@@ -858,6 +926,8 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     additionalProfits: {
       loadProfit:         parseFloat(loadProfit.toFixed(2)),
       repairProfit:       parseFloat(repairProfit.toFixed(2)),
+      serviceProfit:      parseFloat(serviceProfit.toFixed(2)),
+      simSaleProfit:      parseFloat(simSaleProfit.toFixed(2)),
       billProfit:         parseFloat(billProfit.toFixed(2)),
       withdrawalProfit:   parseFloat(withdrawalProfit.toFixed(2)),
       depositProfit:      parseFloat(depositProfit.toFixed(2)),
@@ -1226,6 +1296,81 @@ async function getRepairReport(req, res) {
   });
 }
 
+/* ── Service Report ─────────────────────────────────────────────────────────── */
+async function getServiceReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { serviceName } = req.query;
+
+  const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
+  const invoiceMatch = serviceName ? { ...baseMatch, 'items.serviceName': serviceName } : baseMatch;
+
+  const serviceFilterStages = serviceName
+    ? [{ $match: { 'items.serviceName': serviceName } }]
+    : [];
+
+  const [summary, byService, byPaymentMethod, datewise, recentInvoices] = await Promise.all([
+    ServiceInvoice.aggregate([
+      { $match: invoiceMatch },
+      {
+        $group: {
+          _id: null,
+          totalInvoices: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+          totalProfit: { $sum: '$totalAmount' },
+          avgInvoice: { $avg: '$totalAmount' },
+        },
+      },
+    ]),
+    ServiceInvoice.aggregate([
+      { $match: baseMatch },
+      { $unwind: '$items' },
+      ...serviceFilterStages,
+      {
+        $group: {
+          _id: '$items.serviceName',
+          totalQuantity: { $sum: '$items.quantity' },
+          totalAmount: { $sum: '$items.total' },
+          avgUnitPrice: { $avg: '$items.unitPrice' },
+        },
+      },
+      { $sort: { totalAmount: -1 } },
+    ]),
+    ServiceInvoice.aggregate([
+      { $match: invoiceMatch },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+        },
+      },
+      { $sort: { totalAmount: -1 } },
+    ]),
+    ServiceInvoice.aggregate([
+      { $match: invoiceMatch },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          invoices: { $sum: 1 },
+          totalAmount: { $sum: '$totalAmount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    ServiceInvoice.find(invoiceMatch).sort({ date: -1 }).limit(25).lean(),
+  ]);
+
+  res.status(httpStatus.OK).send({
+    summary: summary[0] || { totalInvoices: 0, totalAmount: 0, totalProfit: 0, avgInvoice: 0 },
+    byService,
+    byPaymentMethod,
+    datewise,
+    recentInvoices,
+    period: { startDate: start, endDate: end },
+  });
+}
+
 /* ── Sim Sale Report ─────────────────────────────────────────────────────────── */
 const getSimSaleReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
@@ -1395,7 +1540,7 @@ module.exports = {
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
-  getLoadReport, getRepairReport,
+  getLoadReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,
   getSimSaleReport, getInstallmentReport,
 };

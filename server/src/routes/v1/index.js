@@ -26,6 +26,7 @@ const loadTransactionRoute = require('./loadTransaction.route');
 const simSaleRoute = require('./simSale.route');
 const cashWithdrawalRoute = require('./cashWithdrawal.route');
 const repairJobRoute = require('./repairJob.route');
+const serviceRoute = require('./service.route');
 const cashBookRoute = require('./cashBook.route');
 const mobileDashboardRoute = require('./mobileDashboard.route');
 const mobileReportsRoute = require('./mobileReports.route');
@@ -182,6 +183,10 @@ const defaultRoutes = [
   {
     path: '/repairs',
     route: repairJobRoute,
+  },
+  {
+    path: '/services',
+    route: serviceRoute,
   },
   {
     path: '/repair-stock',

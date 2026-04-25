@@ -44,6 +44,8 @@ router
 
 router.route('/repair').get(auth('viewReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
 
+router.route('/services').get(auth('viewReports'), reportsController.getServiceReport);
+
 router.route('/roi').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
 
 router.route('/roi/monthly').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
