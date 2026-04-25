@@ -362,11 +362,11 @@ export default function ServicesPage() {
                 </div>
 
                 <SimplePagination
-                  page={catalogData?.page ?? catalogPage}
+                  currentPage={catalogData?.page ?? catalogPage}
                   totalPages={catalogData?.totalPages ?? 1}
                   totalResults={catalogData?.totalResults ?? 0}
                   limit={catalogLimit}
-                  setLimit={(value) => {
+                  onLimitChange={(value: number) => {
                     setCatalogLimit(value)
                     setCatalogPage(1)
                   }}
@@ -614,11 +614,11 @@ export default function ServicesPage() {
                 </div>
 
                 <SimplePagination
-                  page={invoiceData?.page ?? invoicePage}
+                  currentPage={invoiceData?.page ?? invoicePage}
                   totalPages={invoiceData?.totalPages ?? 1}
                   totalResults={invoiceData?.totalResults ?? 0}
                   limit={invoiceLimit}
-                  setLimit={(value) => {
+                  onLimitChange={(value: number) => {
                     setInvoiceLimit(value)
                     setInvoicePage(1)
                   }}
