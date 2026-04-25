@@ -193,7 +193,12 @@ const bulkAddProducts = catchAsync(async (req, res) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
     }
 
-    const result = await productService.bulkAddProducts(products);
+    const result = await productService.bulkAddProducts(products, getBranchContext(req));
+
+    if (!result.success || result.insertedCount === 0) {
+      const firstError = result.errors && result.errors.length > 0 ? result.errors[0].error : 'No products were inserted';
+      throw new ApiError(httpStatus.BAD_REQUEST, `Bulk import failed: ${firstError}`);
+    }
     
     res.status(httpStatus.CREATED).send({
       message: `Successfully imported ${result.insertedCount} products`,

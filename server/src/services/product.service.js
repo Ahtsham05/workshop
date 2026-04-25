@@ -106,9 +106,10 @@ const bulkUpdateProducts = async (productsToUpdate) => {
 /**
  * Bulk add products (import from Excel)
  * @param {Array} productsToAdd - Array of products to create
+ * @param {Object} branchContext - Organization and branch context
  * @returns {Promise<Object>}
  */
-const bulkAddProducts = async (productsToAdd) => {
+const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
   try {
     // Process each product to ensure proper data format
     const processedProducts = productsToAdd.map(product => ({
@@ -124,6 +125,9 @@ const bulkAddProducts = async (productsToAdd) => {
       categories: product.categories || [],
       supplier: product.supplier || null,
       lowStockThreshold: product.lowStockThreshold ? Number(product.lowStockThreshold) : undefined,
+      organizationId: branchContext.organizationId,
+      branchId: branchContext.branchId,
+      createdBy: branchContext.createdBy,
     }));
 
     // Insert products
@@ -146,7 +150,7 @@ const bulkAddProducts = async (productsToAdd) => {
       }));
 
       return {
-        success: true,
+        success: successfulInserts.length > 0,
         insertedCount: successfulInserts.length,
         products: successfulInserts,
         errors: failedInserts
