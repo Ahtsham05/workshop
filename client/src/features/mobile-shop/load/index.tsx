@@ -63,6 +63,7 @@ type PurchaseFormState = {
   walletType: string
   savedSupplierId: string
   amount: string
+  paidAmount: string
   supplierName: string
   paymentMethod: 'cash' | 'bank'
   commissionRate: string
@@ -76,6 +77,7 @@ type LoadSaleFormState = {
   customerId: string
   customerName: string
   amount: string
+  receivedAmount: string
   currentBalance: string
   commissionRate: string
   extraCharge: string
@@ -135,6 +137,7 @@ const initialPurchaseForm: PurchaseFormState = {
   walletType: '',
   savedSupplierId: '',
   amount: '0',
+  paidAmount: '0',
   supplierName: '',
   paymentMethod: 'cash',
   commissionRate: '0',
@@ -148,6 +151,7 @@ const initialSaleForm: LoadSaleFormState = {
   customerId: '',
   customerName: '',
   amount: '0',
+  receivedAmount: '0',
   currentBalance: '',
   commissionRate: '0',
   extraCharge: '0',
@@ -178,6 +182,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchaseForm)
   const [saleForm, setSaleForm] = useState<LoadSaleFormState>(initialSaleForm)
+  const [isPurchasePaidAmountManual, setIsPurchasePaidAmountManual] = useState(false)
+  const [isSaleReceivedAmountManual, setIsSaleReceivedAmountManual] = useState(false)
   const [withdrawalForm, setWithdrawalForm] = useState<WithdrawalFormState>(initialWithdrawalForm)
   const [withdrawalEntryMode, setWithdrawalEntryMode] = useState<'single' | 'bulk'>('single')
   const [bulkWithdrawalForm, setBulkWithdrawalForm] = useState<BulkWithdrawalFormState>(makeInitialBulkWithdrawalForm)
@@ -242,6 +248,29 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     return { commissionProfit, total: commissionProfit + extraCharge }
   }, [purchaseForm.amount, purchaseForm.commissionRate, purchaseForm.extraCharge])
 
+  const purchaseLedgerSummary = useMemo(() => {
+    const amount = Number(purchaseForm.amount) || 0
+    const paidAmount = Number(purchaseForm.paidAmount) || 0
+    const normalizedPaidAmount = Math.max(0, Math.min(paidAmount, amount))
+    return {
+      paidAmount: normalizedPaidAmount,
+      remainingAmount: Math.max(0, amount - normalizedPaidAmount),
+    }
+  }, [purchaseForm.amount, purchaseForm.paidAmount])
+
+  const saleLedgerSummary = useMemo(() => {
+    const amount = Number(saleForm.amount) || 0
+    const receivedAmount = Number(saleForm.receivedAmount) || 0
+    const normalizedReceivedAmount = Math.max(0, Math.min(receivedAmount, amount))
+    return {
+      receivedAmount: normalizedReceivedAmount,
+      remainingAmount: Math.max(0, amount - normalizedReceivedAmount),
+    }
+  }, [saleForm.amount, saleForm.receivedAmount])
+
+  const canEditPurchasePaidAmount = Boolean(purchaseForm.savedSupplierId)
+  const canEditSaleReceivedAmount = Boolean(saleForm.customerId)
+
   const withdrawalProfit = useMemo(() => {
     const amount = Number(withdrawalForm.amount) || 0
     const commissionRate = Number(withdrawalForm.commissionRate) || 0
@@ -275,7 +304,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         ...prev,
         savedSupplierId: normalizedValue,
         supplierName: selectedSupplier?.name || '',
+        paidAmount: normalizedValue ? prev.paidAmount : prev.amount,
       }))
+      setIsPurchasePaidAmountManual(false)
       return
     }
     if (field === 'walletId') {
@@ -287,7 +318,19 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         commissionRate: selectedWallet ? String(selectedWallet.commissionRate ?? 0) : prev.commissionRate,
       }))
     } else {
-      setPurchaseForm(prev => ({ ...prev, [field]: value }))
+      setPurchaseForm(prev => {
+        const next = { ...prev, [field]: value }
+        if (field === 'amount') {
+          const amount = Number(value) || 0
+          if (!isPurchasePaidAmountManual) {
+            next.paidAmount = String(amount)
+          } else {
+            const currentPaid = Number(prev.paidAmount) || 0
+            next.paidAmount = String(Math.max(0, Math.min(currentPaid, amount)))
+          }
+        }
+        return next
+      })
     }
   }
 
@@ -299,7 +342,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         ...prev,
         customerId: normalizedValue,
         customerName: selectedCustomer?.name || '',
+        receivedAmount: normalizedValue ? prev.receivedAmount : prev.amount,
       }))
+      setIsSaleReceivedAmountManual(false)
       return
     }
     if (field === 'walletId') {
@@ -325,7 +370,19 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }))
       return
     }
-    setSaleForm(prev => ({ ...prev, [field]: value }))
+    setSaleForm(prev => {
+      const next = { ...prev, [field]: value }
+      if (field === 'amount') {
+        const amount = Number(value) || 0
+        if (!isSaleReceivedAmountManual) {
+          next.receivedAmount = String(amount)
+        } else {
+          const currentReceived = Number(prev.receivedAmount) || 0
+          next.receivedAmount = String(Math.max(0, Math.min(currentReceived, amount)))
+        }
+      }
+      return next
+    })
   }
 
   const handleWithdrawalChange = (field: keyof WithdrawalFormState, value: string) => {
@@ -368,6 +425,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         walletType: purchaseForm.walletType,
         supplierId: purchaseForm.savedSupplierId || undefined,
         amount: Number(purchaseForm.amount),
+        paidAmount: purchaseLedgerSummary.paidAmount,
         supplierName: purchaseForm.supplierName.trim() || undefined,
         paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
         commissionRate: Number(purchaseForm.commissionRate),
@@ -376,6 +434,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }).unwrap()
       toast.success('Load purchase recorded!')
       setPurchaseForm(initialPurchaseForm)
+      setIsPurchasePaidAmountManual(false)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save load purchase')
     }
@@ -393,6 +452,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         customerId: saleForm.customerId || undefined,
         customerName: saleForm.customerName || undefined,
         amount: Number(saleForm.amount),
+        receivedAmount: saleLedgerSummary.receivedAmount,
         commissionRate: Number(saleForm.commissionRate),
         extraCharge: Number(saleForm.extraCharge),
         mobileNumber: saleForm.mobileNumber || 'N/A',
@@ -403,6 +463,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }).unwrap()
       toast.success('Load sold successfully!')
       setSaleForm(initialSaleForm)
+      setIsSaleReceivedAmountManual(false)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save load transaction')
     }
@@ -589,12 +650,14 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       walletType: p.walletType,
       savedSupplierId: purchaseSupplierId || suppliers.find((s: any) => s.name === p.supplierName)?.id || suppliers.find((s: any) => s.name === p.supplierName)?._id || '',
       amount: String(p.amount),
+      paidAmount: String((p as any).paidAmount ?? p.amount ?? 0),
       supplierName: p.supplierName || '',
       paymentMethod: p.paymentMethod || 'cash',
       commissionRate: String(p.commissionRate || 0),
       extraCharge: String(p.extraCharge || 0),
       date: format(new Date(p.date), 'yyyy-MM-dd'),
     })
+    setIsPurchasePaidAmountManual(true)
     setEditingPurchase(p)
   }
 
@@ -608,6 +671,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           walletType: purchaseForm.walletType,
           supplierId: purchaseForm.savedSupplierId || undefined,
           amount: Number(purchaseForm.amount),
+          paidAmount: purchaseLedgerSummary.paidAmount,
           supplierName: purchaseForm.supplierName.trim() || undefined,
           paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
           commissionRate: Number(purchaseForm.commissionRate),
@@ -617,6 +681,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }).unwrap()
       toast.success('Purchase updated!')
       setPurchaseForm(initialPurchaseForm)
+      setIsPurchasePaidAmountManual(false)
       setEditingPurchase(null)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to update purchase')
@@ -634,12 +699,14 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       customerId: t.customerId?.id || t.customerId?._id || t.customerId || '',
       customerName: t.customerName || t.customerId?.name || '',
       amount: String(t.amount),
+      receivedAmount: String((t as any).receivedAmount ?? t.amount ?? 0),
       currentBalance: '',
       commissionRate: String(t.commissionRate || 0),
       extraCharge: String(t.extraCharge || 0),
       mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
       date: format(new Date(t.date), 'yyyy-MM-dd'),
     })
+    setIsSaleReceivedAmountManual(true)
     setEditingTransaction(t)
   }
 
@@ -655,6 +722,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           customerId: saleForm.customerId || undefined,
           customerName: saleForm.customerName || '',
           amount: Number(saleForm.amount),
+          receivedAmount: saleLedgerSummary.receivedAmount,
           commissionRate: Number(saleForm.commissionRate),
           extraCharge: Number(saleForm.extraCharge),
           mobileNumber: saleForm.mobileNumber || 'N/A',
@@ -663,6 +731,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }).unwrap()
       toast.success('Transaction updated!')
       setSaleForm(initialSaleForm)
+      setIsSaleReceivedAmountManual(false)
       setEditingTransaction(null)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to update transaction')
@@ -811,15 +880,38 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       <Input id='purchase-amount' type='number' min='0' step='0.01' value={purchaseForm.amount} onChange={(e) => handlePurchaseChange('amount', e.target.value)} />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='purchase-payment-method'>Payment Method</Label>
-                      <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank')}>
-                        <SelectTrigger id='purchase-payment-method'><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='cash'>Cash</SelectItem>
-                          <SelectItem value='bank'>Bank Transfer</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor='purchase-paid-amount'>Amount Paid Now (Rs) - Optional</Label>
+                      <Input
+                        id='purchase-paid-amount'
+                        type='number'
+                        min='0'
+                        max={purchaseForm.amount || undefined}
+                        step='0.01'
+                        value={purchaseForm.paidAmount}
+                        disabled={!canEditPurchasePaidAmount}
+                        onChange={(e) => {
+                          if (!canEditPurchasePaidAmount) return
+                          setIsPurchasePaidAmountManual(true)
+                          handlePurchaseChange('paidAmount', e.target.value)
+                        }}
+                      />
+                      <p className='text-xs text-muted-foreground'>
+                        {canEditPurchasePaidAmount
+                          ? 'Remaining amount will be added to supplier ledger automatically.'
+                          : 'Select a saved supplier to enable partial payment. Otherwise full amount is treated as paid.'}
+                      </p>
                     </div>
+                  </div>
+
+                  <div className='space-y-2 md:max-w-xs'>
+                    <Label htmlFor='purchase-payment-method'>Payment Method</Label>
+                    <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank')}>
+                      <SelectTrigger id='purchase-payment-method'><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='cash'>Cash</SelectItem>
+                        <SelectItem value='bank'>Bank Transfer</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
@@ -847,6 +939,21 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </Card>
                   )}
 
+                  <Card className='bg-slate-50 border-slate-200'>
+                    <CardContent className='pt-4 pb-3'>
+                      <div className='grid gap-2 text-sm md:grid-cols-2'>
+                        <div className='flex justify-between'>
+                          <span className='text-muted-foreground'>Paid to Supplier</span>
+                          <span className='font-semibold text-red-600'>Rs {purchaseLedgerSummary.paidAmount.toFixed(2)}</span>
+                        </div>
+                        <div className='flex justify-between'>
+                          <span className='text-muted-foreground'>Remaining in Supplier Ledger</span>
+                          <span className='font-semibold text-orange-600'>Rs {purchaseLedgerSummary.remainingAmount.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   <div className='space-y-2 md:max-w-md'>
                     <Label htmlFor='purchase-date'>Date</Label>
                     <Input id='purchase-date' type='date' value={purchaseForm.date} onChange={(e) => handlePurchaseChange('date', e.target.value)} />
@@ -857,7 +964,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       {isSavingPurchase ? 'Processing...' : editingPurchase ? '✓ Update Purchase' : '✓ Save Load Purchase'}
                     </Button>
                     {editingPurchase && (
-                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingPurchase(null); setPurchaseForm(initialPurchaseForm) }}>
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingPurchase(null); setPurchaseForm(initialPurchaseForm); setIsPurchasePaidAmountManual(false) }}>
                         Cancel
                       </Button>
                     )}
@@ -880,6 +987,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Wallet</TableHead>
                         <TableHead>Supplier</TableHead>
                         <TableHead>Amount</TableHead>
+                        <TableHead>Paid</TableHead>
+                        <TableHead>Remaining</TableHead>
                         <TableHead>Commission %</TableHead>
                         <TableHead className='text-green-600'>Savings</TableHead>
                         <TableHead>Method</TableHead>
@@ -893,6 +1002,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell>{p.walletType}</TableCell>
                           <TableCell className='font-medium'>{p.supplierName || '-'}</TableCell>
                           <TableCell>Rs {Number(p.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell>Rs {Number((p as any).paidAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(p.amount || 0) - Number((p as any).paidAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell>{Number(p.commissionRate || 0).toFixed(2)}%</TableCell>
                           <TableCell className='text-green-600 font-semibold'>Rs {Number(p.profit || 0).toFixed(2)}</TableCell>
                           <TableCell className='text-sm capitalize'>{p.paymentMethod}</TableCell>
@@ -982,16 +1093,42 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
-                      <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} />
+                      <Label htmlFor='sale-received-amount'>Amount Received (Rs) - Optional</Label>
+                      <Input
+                        id='sale-received-amount'
+                        type='number'
+                        min='0'
+                        max={saleForm.amount || undefined}
+                        step='0.01'
+                        placeholder='Amount received from customer'
+                        value={saleForm.receivedAmount}
+                        disabled={!canEditSaleReceivedAmount}
+                        onChange={(e) => {
+                          if (!canEditSaleReceivedAmount) return
+                          setIsSaleReceivedAmountManual(true)
+                          handleSaleChange('receivedAmount', e.target.value)
+                        }}
+                      />
+                      <p className='text-xs text-muted-foreground'>
+                        {canEditSaleReceivedAmount
+                          ? 'Remaining amount will be added to customer ledger automatically.'
+                          : 'Select a saved customer to enable partial receiving. Otherwise full amount is treated as received.'}
+                      </p>
                     </div>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
+                      <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
+                      <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} />
+                    </div>
+                    <div className='space-y-2'>
                       <Label htmlFor='extra'>Extra Charges (Rs) - Optional</Label>
                       <Input id='extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={saleForm.extraCharge} onChange={(e) => handleSaleChange('extraCharge', e.target.value)} />
                     </div>
+                  </div>
+
+                  <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='phone'>Customer Phone Number - Optional</Label>
                       <Input id='phone' type='tel' placeholder='e.g., 03001234567 (if known)' value={saleForm.mobileNumber} onChange={(e) => handleSaleChange('mobileNumber', e.target.value)} />
@@ -1002,12 +1139,27 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                   </div>
 
+                  <Card className='bg-slate-50 border-slate-200'>
+                    <CardContent className='pt-4 pb-3'>
+                      <div className='grid gap-2 text-sm md:grid-cols-2'>
+                        <div className='flex justify-between'>
+                          <span className='text-muted-foreground'>Received from Customer</span>
+                          <span className='font-semibold text-green-600'>Rs {saleLedgerSummary.receivedAmount.toFixed(2)}</span>
+                        </div>
+                        <div className='flex justify-between'>
+                          <span className='text-muted-foreground'>Remaining in Customer Ledger</span>
+                          <span className='font-semibold text-orange-600'>Rs {saleLedgerSummary.remainingAmount.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   <div className='flex gap-2'>
                     <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
                       {isSavingSale ? 'Processing...' : editingTransaction ? '✓ Update Load Sale' : '✓ Confirm & Save Load Sale'}
                     </Button>
                     {editingTransaction && (
-                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingTransaction(null); setSaleForm(initialSaleForm) }}>
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingTransaction(null); setSaleForm(initialSaleForm); setIsSaleReceivedAmountManual(false) }}>
                         Cancel
                       </Button>
                     )}
@@ -1030,6 +1182,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Wallet</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Amount</TableHead>
+                        <TableHead>Received</TableHead>
+                        <TableHead>Remaining</TableHead>
                         <TableHead>Phone</TableHead>
                         <TableHead className='text-green-600 font-bold'>Profit</TableHead>
                         <TableHead>Actions</TableHead>
@@ -1042,6 +1196,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell className='font-medium'>{t.walletType}</TableCell>
                           <TableCell className='font-medium'>{t.customerName || (t as any).customerId?.name || '-'}</TableCell>
                           <TableCell>Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell>Rs {Number((t as any).receivedAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(t.amount || 0) - Number((t as any).receivedAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-sm'>{t.mobileNumber === 'N/A' ? '-' : t.mobileNumber}</TableCell>
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
                           <TableCell>

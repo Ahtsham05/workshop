@@ -25,6 +25,7 @@ export interface LoadPurchaseRecord {
   walletType: string
   supplierId?: string
   amount: number
+  paidAmount?: number
   supplierName?: string
   paymentMethod: 'cash' | 'bank'
   commissionRate: number
@@ -45,6 +46,7 @@ export interface LoadTransactionRecord {
   network: string
   mobileNumber: string
   amount: number
+  receivedAmount?: number
   commissionRate: number
   extraCharge: number
   profit: number
@@ -61,6 +63,7 @@ export interface CreateLoadTransactionInput {
   network: string
   mobileNumber: string
   amount: number
+  receivedAmount?: number
   commissionRate: number
   extraCharge: number
   paymentMethod: 'cash' | 'wallet'

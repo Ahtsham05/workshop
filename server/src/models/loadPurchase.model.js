@@ -30,6 +30,11 @@ const loadPurchaseSchema = new mongoose.Schema(
       required: true,
       min: 0.01,
     },
+    paidAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     supplierName: {
       type: String,
       trim: true,

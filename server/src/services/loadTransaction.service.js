@@ -19,6 +19,15 @@ const sanitizeCustomerId = (value) => {
   return value;
 };
 
+const getNormalizedReceivedAmount = ({ amount, receivedAmount }) => {
+  const totalAmount = Number(amount) || 0;
+  const normalizedReceivedAmount = Number(receivedAmount);
+  if (!Number.isFinite(normalizedReceivedAmount) || normalizedReceivedAmount < 0) {
+    return 0;
+  }
+  return Math.min(normalizedReceivedAmount, totalAmount);
+};
+
 const resolveLinkedCustomer = async ({ customerId, organizationId, branchId }) => {
   const normalizedCustomerId = sanitizeCustomerId(customerId);
   if (!normalizedCustomerId) {
@@ -59,6 +68,26 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     paymentMethod: 'Cash',
     notes: transaction.notes || `Wallet: ${transaction.walletType}`,
   });
+
+  const receivedAmount = Number(transaction.receivedAmount) || 0;
+  if (receivedAmount > 0) {
+    const paymentDate = new Date(transaction.date);
+    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+    await customerLedgerService.createLedgerEntry({
+      organizationId: transaction.organizationId,
+      branchId: transaction.branchId,
+      customer: transaction.customerId,
+      transactionType: 'payment_received',
+      transactionDate: paymentDate,
+      reference: `LOAD-SALE-${String(transaction._id).slice(-6).toUpperCase()}`,
+      referenceId: transaction._id,
+      description: `Payment received for load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
+      debit: 0,
+      credit: receivedAmount,
+      paymentMethod: 'Cash',
+      notes: transaction.notes || `Wallet: ${transaction.walletType}`,
+    });
+  }
 };
 
 const createLoadTransaction = async (transactionBody) => {
@@ -68,10 +97,16 @@ const createLoadTransaction = async (transactionBody) => {
     branchId: transactionBody.branchId,
   });
 
+  const receivedAmount = getNormalizedReceivedAmount({
+    amount: transactionBody.amount,
+    receivedAmount: transactionBody.receivedAmount,
+  });
+
   const transaction = await LoadTransaction.create({
     ...transactionBody,
     customerId: linkedCustomer ? linkedCustomer._id : undefined,
-    customerName: linkedCustomer ? linkedCustomer.name : '',
+    customerName: linkedCustomer ? linkedCustomer.name : (transactionBody.customerName || ''),
+    receivedAmount,
     profit: 0,
   });
 
@@ -84,19 +119,21 @@ const createLoadTransaction = async (transactionBody) => {
     userId: transaction.createdBy,
   });
 
-  await cashBookService.createEntry({
-    organizationId: transaction.organizationId,
-    branchId: transaction.branchId,
-    type: 'income',
-    source: 'load',
-    amount: transaction.amount,
-    paymentMethod: transaction.paymentMethod,
-    referenceId: transaction._id,
-    referenceModel: 'LoadTransaction',
-    description: `${transaction.type} load sale for ${transaction.mobileNumber}`,
-    date: transaction.date,
-    createdBy: transaction.createdBy,
-  });
+  if (receivedAmount > 0) {
+    await cashBookService.createEntry({
+      organizationId: transaction.organizationId,
+      branchId: transaction.branchId,
+      type: 'income',
+      source: 'load',
+      amount: receivedAmount,
+      paymentMethod: transaction.paymentMethod,
+      referenceId: transaction._id,
+      referenceModel: 'LoadTransaction',
+      description: `Payment received for ${transaction.type} load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
+      date: transaction.date,
+      createdBy: transaction.createdBy,
+    });
+  }
 
   await syncCustomerLedgerForLoadTransaction(transaction);
 
@@ -159,7 +196,11 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
 
   Object.assign(transaction, updateBody);
   transaction.customerId = linkedCustomer ? linkedCustomer._id : undefined;
-  transaction.customerName = linkedCustomer ? linkedCustomer.name : '';
+  transaction.customerName = linkedCustomer ? linkedCustomer.name : (transaction.customerName || '');
+  transaction.receivedAmount = getNormalizedReceivedAmount({
+    amount: transaction.amount,
+    receivedAmount: transaction.receivedAmount,
+  });
   transaction.profit = 0;
   await transaction.save();
 
@@ -173,19 +214,21 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
     userId: transaction.createdBy,
   });
 
-  await cashBookService.createEntry({
-    organizationId: transaction.organizationId,
-    branchId: transaction.branchId,
-    type: 'income',
-    source: 'load',
-    amount: transaction.amount,
-    paymentMethod: transaction.paymentMethod,
-    referenceId: transaction._id,
-    referenceModel: 'LoadTransaction',
-    description: `${transaction.type} load sale for ${transaction.mobileNumber}`,
-    date: transaction.date,
-    createdBy: transaction.createdBy,
-  });
+  if ((Number(transaction.receivedAmount) || 0) > 0) {
+    await cashBookService.createEntry({
+      organizationId: transaction.organizationId,
+      branchId: transaction.branchId,
+      type: 'income',
+      source: 'load',
+      amount: Number(transaction.receivedAmount) || 0,
+      paymentMethod: transaction.paymentMethod,
+      referenceId: transaction._id,
+      referenceModel: 'LoadTransaction',
+      description: `Payment received for ${transaction.type} load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
+      date: transaction.date,
+      createdBy: transaction.createdBy,
+    });
+  }
 
   await syncCustomerLedgerForLoadTransaction(transaction);
 

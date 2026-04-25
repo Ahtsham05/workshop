@@ -12,6 +12,15 @@ const sanitizeSupplierId = (value) => {
   return value;
 };
 
+const getNormalizedPaidAmount = ({ amount, paidAmount }) => {
+  const totalAmount = Number(amount) || 0;
+  const normalizedPaidAmount = Number(paidAmount);
+  if (!Number.isFinite(normalizedPaidAmount) || normalizedPaidAmount < 0) {
+    return 0;
+  }
+  return Math.min(normalizedPaidAmount, totalAmount);
+};
+
 const resolveLinkedSupplier = async ({ supplierId, organizationId, branchId }) => {
   const normalizedSupplierId = sanitizeSupplierId(supplierId);
   if (!normalizedSupplierId) {
@@ -52,6 +61,26 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
     paymentMethod: purchase.paymentMethod === 'bank' ? 'Bank Transfer' : 'Cash',
     notes: purchase.notes || `Wallet: ${purchase.walletType}`,
   });
+
+  const paidAmount = Number(purchase.paidAmount) || 0;
+  if (paidAmount > 0) {
+    const paymentDate = new Date(purchase.date);
+    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+    await supplierLedgerService.createLedgerEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      supplier: purchase.supplierId,
+      transactionType: 'payment_made',
+      transactionDate: paymentDate,
+      reference: `LOAD-PURCHASE-${String(purchase._id).slice(-6).toUpperCase()}`,
+      referenceId: purchase._id,
+      description: `Payment for load purchase${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
+      debit: paidAmount,
+      credit: 0,
+      paymentMethod: purchase.paymentMethod === 'bank' ? 'Bank Transfer' : 'Cash',
+      notes: purchase.notes || `Wallet: ${purchase.walletType}`,
+    });
+  }
 };
 
 const createLoadPurchase = async (purchaseBody) => {
@@ -63,10 +92,15 @@ const createLoadPurchase = async (purchaseBody) => {
 
   const commissionProfit = (Number(purchaseBody.amount || 0) * Number(purchaseBody.commissionRate || 0)) / 100;
   const profit = commissionProfit + Number(purchaseBody.extraCharge || 0);
+  const paidAmount = getNormalizedPaidAmount({
+    amount: purchaseBody.amount,
+    paidAmount: purchaseBody.paidAmount,
+  });
   const purchase = await LoadPurchase.create({
     ...purchaseBody,
     supplierId: linkedSupplier ? linkedSupplier._id : undefined,
     supplierName: purchaseBody.supplierName || (linkedSupplier ? linkedSupplier.name : '') || '',
+    paidAmount,
     profit,
   });
   const supplierLabel = purchase.supplierName || 'unknown supplier';
@@ -80,19 +114,21 @@ const createLoadPurchase = async (purchaseBody) => {
     userId: purchase.createdBy,
   });
 
-  await cashBookService.createEntry({
-    organizationId: purchase.organizationId,
-    branchId: purchase.branchId,
-    type: 'expense',
-    source: 'load',
-    amount: purchase.amount,
-    paymentMethod: purchase.paymentMethod,
-    referenceId: purchase._id,
-    referenceModel: 'LoadPurchase',
-    description: `Load purchase from ${supplierLabel}`,
-    date: purchase.date,
-    createdBy: purchase.createdBy,
-  });
+  if (paidAmount > 0) {
+    await cashBookService.createEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: 'expense',
+      source: 'load',
+      amount: paidAmount,
+      paymentMethod: purchase.paymentMethod,
+      referenceId: purchase._id,
+      referenceModel: 'LoadPurchase',
+      description: `Payment for load purchase from ${supplierLabel}`,
+      date: purchase.date,
+      createdBy: purchase.createdBy,
+    });
+  }
 
   await syncSupplierLedgerForLoadPurchase(purchase);
 
@@ -158,6 +194,10 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
   Object.assign(purchase, updateBody);
   purchase.supplierId = linkedSupplier ? linkedSupplier._id : undefined;
   purchase.supplierName = purchase.supplierName || (linkedSupplier ? linkedSupplier.name : '') || '';
+  purchase.paidAmount = getNormalizedPaidAmount({
+    amount: purchase.amount,
+    paidAmount: purchase.paidAmount,
+  });
   const commissionProfit = (Number(purchase.amount || 0) * Number(purchase.commissionRate || 0)) / 100;
   purchase.profit = commissionProfit + Number(purchase.extraCharge || 0);
   await purchase.save();
@@ -173,19 +213,21 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
   });
 
   const supplierLabel = purchase.supplierName || 'unknown supplier';
-  await cashBookService.createEntry({
-    organizationId: purchase.organizationId,
-    branchId: purchase.branchId,
-    type: 'expense',
-    source: 'load',
-    amount: purchase.amount,
-    paymentMethod: purchase.paymentMethod,
-    referenceId: purchase._id,
-    referenceModel: 'LoadPurchase',
-    description: `Load purchase from ${supplierLabel}`,
-    date: purchase.date,
-    createdBy: purchase.createdBy,
-  });
+  if ((Number(purchase.paidAmount) || 0) > 0) {
+    await cashBookService.createEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: 'expense',
+      source: 'load',
+      amount: Number(purchase.paidAmount) || 0,
+      paymentMethod: purchase.paymentMethod,
+      referenceId: purchase._id,
+      referenceModel: 'LoadPurchase',
+      description: `Payment for load purchase from ${supplierLabel}`,
+      date: purchase.date,
+      createdBy: purchase.createdBy,
+    });
+  }
 
   await syncSupplierLedgerForLoadPurchase(purchase);
 
