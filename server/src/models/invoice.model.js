@@ -104,13 +104,59 @@ const InvoiceSchema = new mongoose.Schema({
 InvoiceSchema.plugin(toJSON);
 InvoiceSchema.plugin(paginate);
 
-// Generate invoice number before saving
+// Generate invoice number before saving using an atomic per-month counter
 InvoiceSchema.pre('save', async function(next) {
     if (this.isNew && !this.invoiceNumber) {
-        const count = await mongoose.models.Invoice.countDocuments();
         const year = new Date().getFullYear();
         const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        this.invoiceNumber = `INV-${year}${month}-${String(count + 1).padStart(6, '0')}`;
+        const key = `invoice-${year}${month}`;
+
+        // Counter schema/model (created once per process if missing)
+        const CounterSchema = new mongoose.Schema({
+            _id: { type: String },
+            seq: { type: Number, default: 0 },
+        }, { collection: 'counters' });
+
+        const Counter = mongoose.models.Counter || mongoose.model('Counter', CounterSchema);
+
+        // Find current highest invoice number for this month to initialize counter if needed
+        const lastInvoice = await mongoose.models.Invoice.findOne({ invoiceNumber: { $regex: `^INV-${year}${month}-` } })
+            .sort({ invoiceNumber: -1 })
+            .select('invoiceNumber')
+            .lean();
+
+        let start = 0;
+        if (lastInvoice && lastInvoice.invoiceNumber) {
+            const match = lastInvoice.invoiceNumber.match(/-([0-9]{6})$/);
+            if (match) start = parseInt(match[1], 10);
+        }
+
+        // Step 1: Ensure the counter document exists with initial value `start` (no $inc conflict)
+        await Counter.findOneAndUpdate(
+            { _id: key },
+            { $setOnInsert: { seq: start } },
+            { upsert: true }
+        );
+
+        // Step 2: If counter is behind start, update it to start
+        let counter = await Counter.findById(key).lean();
+        if (counter && counter.seq < start) {
+            counter = await Counter.findOneAndUpdate(
+                { _id: key },
+                { $set: { seq: start } },
+                { new: true }
+            ).lean();
+        }
+
+        // Step 3: Atomically increment counter and get new value
+        counter = await Counter.findOneAndUpdate(
+            { _id: key },
+            { $inc: { seq: 1 } },
+            { new: true }
+        ).lean();
+
+        const uniqueId = String(counter.seq).padStart(6, '0');
+        this.invoiceNumber = `INV-${year}${month}-${uniqueId}`;
     }
     next();
 });
