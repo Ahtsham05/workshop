@@ -291,5 +291,3 @@ InvoiceSchema.statics.getStatistics = async function(dateFrom, dateTo) {
 const Invoice = mongoose.model('Invoice', InvoiceSchema);
 
 module.exports = Invoice;
-
-module.exports = Invoice;

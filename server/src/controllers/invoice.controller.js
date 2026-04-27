@@ -192,11 +192,7 @@ const getOutstandingInvoices = catchAsync(async (req, res) => {
 });
 
 const cancelInvoice = catchAsync(async (req, res) => {
-  const invoice = await invoiceService.updateInvoiceById(
-    req.params.invoiceId, 
-    { status: 'cancelled', allowUpdateFinalized: true }, 
-    req.user.id
-  );
+  const invoice = await invoiceService.cancelInvoice(req.params.invoiceId, req.user.id);
   res.send(invoice);
 });
 

@@ -215,6 +215,7 @@ const getAllCustomersWithBalances = async () => {
 
 /**
  * Update ledger entries by reference ID (invoice ID)
+ * Handles the case where multiple payment_received entries may exist (e.g. from partial payments)
  * @param {ObjectId} referenceId - The invoice ID
  * @param {Object} updateData - New invoice data
  * @returns {Promise<void>}
@@ -222,7 +223,6 @@ const getAllCustomersWithBalances = async () => {
 const updateLedgerEntriesByReference = async (referenceId, updateData) => {
   const { total, paidAmount, invoiceNumber, invoiceDate, paymentMethod } = updateData;
   
-  // Find all entries related to this invoice
   const entries = await CustomerLedger.find({ referenceId }).sort({ transactionDate: 1 });
   
   if (entries.length === 0) {
@@ -232,19 +232,15 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
 
   const customerId = entries[0].customer;
   
-  // Find the sale entry (debit)
   const saleEntry = entries.find(e => e.transactionType === 'sale');
-  // Find the payment entry (credit) if it exists
-  const paymentEntry = entries.find(e => e.transactionType === 'payment_received');
+  // Collect ALL payment entries (there may be more than one from partial payments)
+  const paymentEntries = entries.filter(e => e.transactionType === 'payment_received');
+  const totalPreviousPaid = paymentEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
 
-  // Update sale entry if amount changed
+  // Update sale entry if total changed
   if (saleEntry && saleEntry.debit !== total) {
     console.log(`Updating sale entry: ${saleEntry.debit} -> ${total}`);
-    
-    // Delete old entry
     await deleteLedgerEntry(saleEntry._id);
-    
-    // Create new entry
     await createLedgerEntry({
       customer: customerId,
       transactionType: 'sale',
@@ -259,53 +255,36 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
     });
   }
 
-  // Handle payment entry updates
-  if (paidAmount > 0) {
+  // Reconcile payment entries — delete all existing ones then recreate with correct total
+  if (paidAmount > 0 && paidAmount !== totalPreviousPaid) {
+    console.log(`Reconciling payment entries: previous total ${totalPreviousPaid} -> ${paidAmount}`);
+
+    // Delete all existing payment entries
+    for (const entry of paymentEntries) {
+      await deleteLedgerEntry(entry._id);
+    }
+
+    // Create a single consolidated payment entry reflecting the new paidAmount
     const paymentDate = new Date(invoiceDate || new Date());
     paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-    if (paymentEntry) {
-      // Payment entry exists - check if amount changed
-      if (paymentEntry.credit !== paidAmount) {
-        console.log(`Updating payment entry: ${paymentEntry.credit} -> ${paidAmount}`);
-        
-        // Delete old payment entry
-        await deleteLedgerEntry(paymentEntry._id);
-        
-        // Create new payment entry
-        await createLedgerEntry({
-          customer: customerId,
-          transactionType: 'payment_received',
-          transactionDate: paymentDate,
-          reference: invoiceNumber,
-          referenceId: referenceId,
-          description: `Payment for Invoice #${invoiceNumber} (Updated)`,
-          debit: 0,
-          credit: paidAmount,
-          paymentMethod: paymentMethod || 'Cash',
-          notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
-        });
-      }
-    } else {
-      // Payment entry doesn't exist - create new one
-      console.log(`Creating new payment entry: ${paidAmount}`);
-      await createLedgerEntry({
-        customer: customerId,
-        transactionType: 'payment_received',
-        transactionDate: paymentDate,
-        reference: invoiceNumber,
-        referenceId: referenceId,
-        description: `Payment for Invoice #${invoiceNumber} (Updated)`,
-        debit: 0,
-        credit: paidAmount,
-        paymentMethod: paymentMethod || 'Cash',
-        notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
-      });
+    await createLedgerEntry({
+      customer: customerId,
+      transactionType: 'payment_received',
+      transactionDate: paymentDate,
+      reference: invoiceNumber,
+      referenceId: referenceId,
+      description: `Payment for Invoice #${invoiceNumber} (Updated)${paidAmount < total ? ' (Partial)' : ''}`,
+      debit: 0,
+      credit: paidAmount,
+      paymentMethod: paymentMethod || 'Cash',
+      notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
+    });
+  } else if (paidAmount === 0 && paymentEntries.length > 0) {
+    // Payment removed from invoice — delete all payment entries
+    console.log('Removing all payment entries — invoice has no paid amount');
+    for (const entry of paymentEntries) {
+      await deleteLedgerEntry(entry._id);
     }
-  } else if (paymentEntry) {
-    // No payment in update but entry exists - delete it
-    console.log(`Deleting payment entry - no payment in update`);
-    await deleteLedgerEntry(paymentEntry._id);
   }
 };
 

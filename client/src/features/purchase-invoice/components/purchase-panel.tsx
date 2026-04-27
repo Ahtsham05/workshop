@@ -23,6 +23,7 @@ import { Separator } from '@/components/ui/separator'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
+import { useGetCompanyQuery } from '@/stores/company.api'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -64,6 +65,12 @@ export default function PurchasePanel({
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
+
+  // Company info for printing
+  const { data: companyData } = useGetCompanyQuery(undefined, {
+    refetchOnMountOrArgChange: false,
+    refetchOnFocus: false,
+  })
 
   // Redux state
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
@@ -131,10 +138,18 @@ export default function PurchasePanel({
       try {
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
+          const printOpts = {
+            companyName   : companyData?.name,
+            companyAddress: companyData?.address,
+            companyPhone  : companyData?.phone,
+            companyEmail  : companyData?.email,
+            companyTaxNumber: companyData?.taxNumber,
+            previousBalance: supplierBalance,
+          }
           const html =
             printType === 'receipt'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t)
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t)
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, printOpts)
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, printOpts)
 
           const printWindow = window.open('', '_blank')
           if (printWindow) {
@@ -148,7 +163,7 @@ export default function PurchasePanel({
         toast.error(t('Failed to print'))
       }
     },
-    [purchase.supplier, t]
+    [purchase.supplier, companyData, supplierBalance, t]
   )
 
   // Handle product selection for manual entries

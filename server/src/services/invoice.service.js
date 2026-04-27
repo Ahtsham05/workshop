@@ -292,28 +292,20 @@ const getInvoiceById = async (id) => {
  * @returns {Promise<Invoice>}
  */
 const updateInvoiceById = async (invoiceId, updateBody, userId) => {
-  // Get the actual Mongoose document, not the plain object
   const invoice = await Invoice.findById(invoiceId);
   
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
   
-  // Store original values for ledger update
+  // Capture original state before any changes
   const originalTotal = invoice.total;
   const originalPaidAmount = invoice.paidAmount || 0;
-  const originalCustomerId = invoice.customerId;
-  
-  // Prevent updating finalized invoices unless specifically allowed
-  // if (invoice.status === 'finalized' || invoice.status === 'paid') {
-  //   if (!updateBody.allowUpdateFinalized) {
-  //     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot update finalized or paid invoice');
-  //   }
-  // }
+  const originalCustomerId = invoice.customerId ? invoice.customerId.toString() : null;
+  const originalType = invoice.type;
 
-  // If updating items, validate stock again
+  // If updating items, restore old stock then validate and apply new stock
   if (updateBody.items) {
-    // Restore original stock quantities
     for (const item of invoice.items) {
       await Product.findByIdAndUpdate(
         item.productId,
@@ -322,7 +314,6 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       );
     }
 
-    // Validate new items and stock
     const validatedItems = [];
     for (const item of updateBody.items) {
       if (!item.productId) {
@@ -336,12 +327,12 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
       if (product.stockQuantity < item.quantity) {
         throw new ApiError(
-          httpStatus.BAD_REQUEST, 
+          httpStatus.BAD_REQUEST,
           `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`
         );
       }
 
-      const validatedItem = {
+      validatedItems.push({
         productId: item.productId,
         name: item.name || product.name,
         image: item.image || product.image,
@@ -351,14 +342,11 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         subtotal: item.quantity * item.unitPrice,
         profit: item.quantity * (item.unitPrice - (item.cost || product.cost)),
         isManualEntry: item.isManualEntry || false
-      };
-
-      validatedItems.push(validatedItem);
+      });
     }
 
     updateBody.items = validatedItems;
 
-    // Update stock quantities for new items
     for (const item of validatedItems) {
       await Product.findByIdAndUpdate(
         item.productId,
@@ -368,13 +356,9 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     }
   }
 
-  console.log('Updating invoice:', invoiceId);
-  console.log('Update fields:', Object.keys(updateBody));
-  
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
   
-  // Recalculate totals only if items were updated
   if (updateBody.items) {
     invoice.calculateTotals();
   }
@@ -382,67 +366,95 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   await invoice.save();
   console.log('Invoice updated successfully');
   
-  // Update customer ledger entries if amounts or customer changed
-  const newCustomerId = invoice.customerId;
+  // Determine ledger state before and after the update
+  const newCustomerId = invoice.customerId ? invoice.customerId.toString() : null;
+  const newType = invoice.type;
   const newTotal = invoice.total;
   const newPaidAmount = invoice.paidAmount || 0;
 
-  if (originalCustomerId && originalCustomerId !== 'walk-in' && (
-    originalTotal !== newTotal || 
-    originalPaidAmount !== newPaidAmount ||
-    originalCustomerId !== newCustomerId
-  )) {
-    try {
-      console.log('Updating customer ledger entries for invoice:', {
-        invoiceId: invoice._id,
-        invoiceNumber: invoice.invoiceNumber,
-        originalTotal: originalTotal,
-        newTotal: newTotal,
-        originalPaid: originalPaidAmount,
-        newPaid: newPaidAmount,
-        customerChanged: originalCustomerId !== newCustomerId
+  const originalHadLedger = originalCustomerId && originalCustomerId !== 'walk-in' && originalType !== 'pending';
+  const newShouldHaveLedger = newCustomerId && newCustomerId !== 'walk-in' && newType !== 'pending';
+
+  try {
+    if (originalHadLedger && !newShouldHaveLedger) {
+      // Invoice transitioned out of ledger scope — delete all related entries
+      console.log('Deleting ledger entries: invoice moved out of ledger scope');
+      await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
+
+    } else if (!originalHadLedger && newShouldHaveLedger) {
+      // Invoice transitioned into ledger scope — create new entries
+      console.log('Creating ledger entries: invoice moved into ledger scope');
+      const displayReference = invoice.billNumber ? `Bill #${invoice.billNumber}` : invoice.invoiceNumber;
+
+      await customerLedgerService.createLedgerEntry({
+        customer: newCustomerId,
+        transactionType: 'sale',
+        transactionDate: invoice.invoiceDate || new Date(),
+        reference: displayReference,
+        referenceId: invoice._id,
+        description: `Sale Invoice #${invoice.invoiceNumber}`,
+        debit: newTotal,
+        credit: 0,
+        paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
+        notes: `Invoice created`
       });
 
-      // If customer changed, delete old entries and create new ones
+      if (newPaidAmount > 0) {
+        const paymentDate = new Date(invoice.invoiceDate || new Date());
+        paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+        await customerLedgerService.createLedgerEntry({
+          customer: newCustomerId,
+          transactionType: 'payment_received',
+          transactionDate: paymentDate,
+          reference: invoice.invoiceNumber,
+          referenceId: invoice._id,
+          description: `Payment for Invoice #${invoice.invoiceNumber}${newPaidAmount < newTotal ? ' (Partial)' : ''}`,
+          debit: 0,
+          credit: newPaidAmount,
+          paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+          notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
+        });
+      }
+
+    } else if (originalHadLedger && newShouldHaveLedger) {
+      // Both before and after have ledger — reconcile
       if (originalCustomerId !== newCustomerId) {
-        // Delete old ledger entries for the original customer
+        // Customer changed: delete old entries, create new ones
+        console.log('Customer changed — replacing ledger entries');
         await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
-        
-        // Create new entries for new customer (if not walk-in)
-        if (newCustomerId !== 'walk-in') {
+
+        await customerLedgerService.createLedgerEntry({
+          customer: newCustomerId,
+          transactionType: 'sale',
+          transactionDate: invoice.invoiceDate || new Date(),
+          reference: invoice.invoiceNumber,
+          referenceId: invoice._id,
+          description: `Sale Invoice #${invoice.invoiceNumber} (Updated)`,
+          debit: newTotal,
+          credit: 0,
+          paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
+          notes: `Invoice updated`
+        });
+
+        if (newPaidAmount > 0) {
+          const paymentDate = new Date(invoice.invoiceDate || new Date());
+          paymentDate.setSeconds(paymentDate.getSeconds() + 1);
           await customerLedgerService.createLedgerEntry({
             customer: newCustomerId,
-            transactionType: 'sale',
-            transactionDate: invoice.invoiceDate || new Date(),
+            transactionType: 'payment_received',
+            transactionDate: paymentDate,
             reference: invoice.invoiceNumber,
             referenceId: invoice._id,
-            description: `Sale Invoice #${invoice.invoiceNumber} (Updated)`,
-            debit: newTotal,
-            credit: 0,
-            paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
-            notes: `Invoice updated`
+            description: `Payment for Invoice #${invoice.invoiceNumber} (Updated)`,
+            debit: 0,
+            credit: newPaidAmount,
+            paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+            notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
           });
-
-          if (newPaidAmount > 0) {
-            const paymentDate = new Date(invoice.invoiceDate || new Date());
-            paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-            await customerLedgerService.createLedgerEntry({
-              customer: newCustomerId,
-              transactionType: 'payment_received',
-              transactionDate: paymentDate,
-              reference: invoice.invoiceNumber,
-              referenceId: invoice._id,
-              description: `Payment for Invoice #${invoice.invoiceNumber} (Updated)`,
-              debit: 0,
-              credit: newPaidAmount,
-              paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
-              notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
-            });
-          }
         }
-      } else {
-        // Same customer - update existing entries
+      } else if (originalTotal !== newTotal || originalPaidAmount !== newPaidAmount) {
+        // Same customer, amounts changed — update existing entries
+        console.log('Amounts changed — updating ledger entries');
         await customerLedgerService.updateLedgerEntriesByReference(invoice._id, {
           total: newTotal,
           paidAmount: newPaidAmount,
@@ -451,17 +463,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer'
         });
       }
-
-      console.log('Customer ledger entries updated successfully');
-    } catch (error) {
-      console.error('Failed to update customer ledger entries:', error);
-      console.error('Error details:', error.message);
-      console.error('Error stack:', error.stack);
-      // Don't fail the invoice update if ledger update fails
     }
+
+    console.log('Customer ledger sync completed for invoice:', invoice.invoiceNumber);
+  } catch (error) {
+    console.error('Failed to sync customer ledger entries:', error.message);
   }
   
-  // Return populated invoice with customerName
   return getInvoiceById(invoiceId);
 };
 
@@ -514,7 +522,11 @@ const deleteInvoiceById = async (invoiceId) => {
  * @returns {Promise<Invoice>}
  */
 const finalizeInvoice = async (invoiceId, userId) => {
-  const invoice = await getInvoiceById(invoiceId);
+  const invoice = await Invoice.findById(invoiceId);
+  
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
   
   if (invoice.status !== 'draft') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Only draft invoices can be finalized');
@@ -524,7 +536,7 @@ const finalizeInvoice = async (invoiceId, userId) => {
   invoice.updatedBy = userId;
   await invoice.save();
   
-  return invoice;
+  return getInvoiceById(invoiceId);
 };
 
 /**
@@ -537,21 +549,95 @@ const finalizeInvoice = async (invoiceId, userId) => {
 const processPayment = async (invoiceId, paymentData, userId) => {
   const { amount, method = 'cash', reference } = paymentData;
   
-  const invoice = await getInvoiceById(invoiceId);
+  // Must use findById to get an actual Mongoose document (not a plain object)
+  const invoice = await Invoice.findById(invoiceId);
+  
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
   
   if (amount <= 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Payment amount must be greater than 0');
   }
   
   if (amount > invoice.balance) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Payment amount cannot exceed balance');
+    throw new ApiError(httpStatus.BAD_REQUEST, `Payment amount (Rs${amount}) cannot exceed outstanding balance (Rs${invoice.balance})`);
   }
 
   invoice.markAsPaid(amount, method, reference);
   invoice.updatedBy = userId;
   await invoice.save();
   
-  return invoice;
+  // Create a payment_received entry in the customer ledger
+  if (invoice.customerId && invoice.customerId.toString() !== 'walk-in') {
+    try {
+      const methodMap = { cash: 'Cash', card: 'Card', digital: 'Bank Transfer', check: 'Cheque' };
+      const ledgerMethod = methodMap[method] || 'Cash';
+      const remainingBalance = invoice.balance;
+
+      await customerLedgerService.createLedgerEntry({
+        customer: invoice.customerId,
+        transactionType: 'payment_received',
+        transactionDate: new Date(),
+        reference: invoice.invoiceNumber,
+        referenceId: invoice._id,
+        description: `Payment received for Invoice #${invoice.invoiceNumber}${remainingBalance > 0 ? ' (Partial)' : ' (Full)'}`,
+        debit: 0,
+        credit: amount,
+        paymentMethod: ledgerMethod,
+        notes: `Paid: Rs${amount.toFixed(2)}${remainingBalance > 0 ? ` | Remaining: Rs${remainingBalance.toFixed(2)}` : ' | Fully settled'}`
+      });
+      console.log('Payment ledger entry created — Invoice:', invoice.invoiceNumber, 'Amount:', amount);
+    } catch (error) {
+      console.error('Failed to create payment ledger entry:', error.message);
+    }
+  }
+
+  return getInvoiceById(invoiceId);
+};
+
+/**
+ * Cancel invoice — restores stock and reverses all customer ledger entries
+ * @param {ObjectId} invoiceId
+ * @param {string} userId
+ * @returns {Promise<Invoice>}
+ */
+const cancelInvoice = async (invoiceId, userId) => {
+  const invoice = await Invoice.findById(invoiceId);
+  
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
+  
+  if (invoice.status === 'cancelled') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invoice is already cancelled');
+  }
+
+  // Restore stock quantities for all items
+  for (const item of invoice.items) {
+    await Product.findByIdAndUpdate(
+      item.productId,
+      { $inc: { stockQuantity: item.quantity } },
+      { new: true }
+    );
+    console.log(`Stock restored for product ${item.productId}: +${item.quantity}`);
+  }
+
+  // Reverse all customer ledger entries linked to this invoice
+  if (invoice.customerId && invoice.customerId.toString() !== 'walk-in' && invoice.type !== 'pending') {
+    try {
+      console.log('Reversing customer ledger entries for cancelled invoice:', invoice.invoiceNumber);
+      await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
+    } catch (error) {
+      console.error('Failed to reverse customer ledger entries on cancel:', error.message);
+    }
+  }
+
+  invoice.status = 'cancelled';
+  invoice.updatedBy = userId;
+  await invoice.save();
+
+  return getInvoiceById(invoiceId);
 };
 
 /**
@@ -708,6 +794,7 @@ module.exports = {
   updateInvoiceById,
   deleteInvoiceById,
   finalizeInvoice,
+  cancelInvoice,
   processPayment,
   getInvoiceStatistics,
   getDailySalesReport,

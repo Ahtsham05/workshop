@@ -318,8 +318,8 @@ const deletePurchaseById = async (purchaseId) => {
     }
   }
 
-  // Remove the purchase after adjusting stock quantities
-  await purchase.remove();
+  // Delete the purchase after adjusting stock quantities
+  await purchase.deleteOne();
 
   return purchase;
 };
