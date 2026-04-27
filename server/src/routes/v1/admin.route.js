@@ -22,6 +22,9 @@ router.get('/organizations/:orgId', adminController.getOrganization);
 // DELETE /v1/admin/organizations/:orgId — delete organization and all data
 router.delete('/organizations/:orgId', adminController.deleteOrganization);
 
+// POST /v1/admin/organizations/:orgId/clear-data — wipe business data, keep org/users/subscription
+router.post('/organizations/:orgId/clear-data', adminController.clearOrganizationData);
+
 // GET /v1/admin/users — list all users across organizations
 router.get('/users', adminController.getAllUsers);
 

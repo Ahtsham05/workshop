@@ -421,7 +421,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                     {format(new Date(startDate), 'dd MMM yyyy')} — {format(new Date(endDate), 'dd MMM yyyy')}
                   </span>
                   <div className="text-right">
-                    <p className="text-xs text-muted-foreground">{t('Category Total')}</p>
+                    <p className="text-xs text-muted-foreground">{t('Total Expense')}</p>
                     <p className="font-bold text-lg">{fmt(detailTotal)}</p>
                   </div>
                 </div>

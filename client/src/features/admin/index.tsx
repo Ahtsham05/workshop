@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Shield,
   Trash2,
+  Eraser,
   KeyRound,
   EyeOff,
 } from 'lucide-react'
@@ -72,6 +73,7 @@ import {
   useAdminGetAllUsersQuery,
   useAdminDeleteUserMutation,
   useAdminDeleteOrganizationMutation,
+  useAdminClearOrgDataMutation,
   useAdminChangeUserPasswordMutation,
   type Payment,
 } from '@/stores/subscription.api'
@@ -149,6 +151,10 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
   const [deleteOrganization, { isLoading: isDeleting }] = useAdminDeleteOrganizationMutation()
 
+  const [clearDataDialogOpen, setClearDataDialogOpen] = useState(false)
+  const [clearDataConfirmName, setClearDataConfirmName] = useState('')
+  const [clearOrgData, { isLoading: isClearing }] = useAdminClearOrgDataMutation()
+
   if (isLoading) {
     return (
       <div className='space-y-4'>
@@ -181,6 +187,21 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
     }
   }
 
+  const handleClearOrgData = async () => {
+    if (clearDataConfirmName !== org.name) {
+      toast.error('Organization name does not match. Please type the correct name.')
+      return
+    }
+    try {
+      const result = await clearOrgData(orgId).unwrap()
+      toast.success(result.message ?? `Business data for "${org.name}" cleared successfully.`)
+      setClearDataDialogOpen(false)
+      setClearDataConfirmName('')
+    } catch (err: any) {
+      toast.error(err?.data?.message ?? 'Failed to clear organization data')
+    }
+  }
+
   return (
     <div className='space-y-6'>
       {/* Back button + header + delete button */}
@@ -194,14 +215,24 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
             <p className='text-sm text-muted-foreground capitalize'>{org.businessType}</p>
           </div>
         </div>
-        <Button
-          size='sm'
-          variant='outline'
-          className='text-red-600 border-red-300 hover:bg-red-50'
-          onClick={() => setDeleteDialogOpen(true)}
-        >
-          <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete Organization
-        </Button>
+        <div className='flex items-center gap-2'>
+          <Button
+            size='sm'
+            variant='outline'
+            className='text-amber-600 border-amber-300 hover:bg-amber-50'
+            onClick={() => setClearDataDialogOpen(true)}
+          >
+            <Eraser className='h-3.5 w-3.5 mr-1' /> Clear Org Data
+          </Button>
+          <Button
+            size='sm'
+            variant='outline'
+            className='text-red-600 border-red-300 hover:bg-red-50'
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className='h-3.5 w-3.5 mr-1' /> Delete Organization
+          </Button>
+        </div>
       </div>
 
       {/* Org info + subscription cards */}
@@ -462,6 +493,78 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
           )}
         </CardContent>
       </Card>
+
+      {/* Clear Org Data confirmation dialog */}
+      <Dialog open={clearDataDialogOpen} onOpenChange={setClearDataDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2 text-amber-600'>
+              <Eraser className='h-5 w-5' /> Clear Organization Data
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete all business data. The organization, users, branches, and subscription will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            {/* Warning box */}
+            <div className='flex gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg'>
+              <AlertTriangle className='h-4 w-4 text-amber-600 shrink-0 mt-0.5' />
+              <div className='text-xs text-amber-800'>
+                <p className='font-semibold mb-1'>The following data will be permanently deleted:</p>
+                <ul className='list-disc list-inside space-y-0.5'>
+                  <li>All invoices and sales records</li>
+                  <li>Products and categories</li>
+                  <li>Customers and suppliers</li>
+                  <li>Purchases and expenses</li>
+                  <li>All financial ledgers and vouchers</li>
+                  <li>HR records (employees, attendance, payroll, leaves)</li>
+                </ul>
+                <p className='font-semibold mt-2'>The following will NOT be deleted:</p>
+                <ul className='list-disc list-inside space-y-0.5'>
+                  <li>Organization profile and settings</li>
+                  <li>{organizationBranches.length} branch(es)</li>
+                  <li>{(data?.totalUsers ?? 0)} user account(s)</li>
+                  <li>Subscription and payment history</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Confirmation input */}
+            <div className='space-y-2'>
+              <Label className='text-sm'>
+                To confirm, type the organization name: <span className='font-semibold'>{org.name}</span>
+              </Label>
+              <input
+                type='text'
+                placeholder={org.name}
+                value={clearDataConfirmName}
+                onChange={(e) => setClearDataConfirmName(e.target.value)}
+                className='w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500'
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => { setClearDataDialogOpen(false); setClearDataConfirmName('') }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className='bg-amber-600 hover:bg-amber-700 text-white'
+              onClick={handleClearOrgData}
+              disabled={isClearing || clearDataConfirmName !== org.name}
+            >
+              {isClearing
+                ? <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                : <Eraser className='mr-2 h-4 w-4' />}
+              Clear All Data
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

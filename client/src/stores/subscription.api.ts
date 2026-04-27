@@ -255,6 +255,14 @@ export const subscriptionApi = createApi({
       invalidatesTags: ['AdminPayment', 'AdminOrganization'],
     }),
 
+    adminClearOrgData: builder.mutation<{ success: boolean; message: string }, string>({
+      query: (orgId) => ({
+        url: `/admin/organizations/${orgId}/clear-data`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _err, orgId) => [{ type: 'AdminOrganization', id: orgId }],
+    }),
+
     adminChangeUserPassword: builder.mutation<{ message: string }, { userId: string; newPassword: string }>({
       query: ({ userId, newPassword }) => ({
         url: `/admin/users/${userId}/password`,
@@ -281,5 +289,6 @@ export const {
   useAdminGetAllUsersQuery,
   useAdminDeleteUserMutation,
   useAdminDeleteOrganizationMutation,
+  useAdminClearOrgDataMutation,
   useAdminChangeUserPasswordMutation,
 } = subscriptionApi;

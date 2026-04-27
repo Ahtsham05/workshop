@@ -221,6 +221,53 @@ const deleteOrganization = async (orgId) => {
   };
 };
 
+/**
+ * Clear all business data for an organization without deleting the org itself.
+ * Preserves: Organization, Branches, Users, Memberships, Subscription Payments.
+ * Deletes: Products, Invoices, Customers, Suppliers, Expenses, Purchases,
+ *          Categories, Ledgers, Vouchers, and all HR records.
+ * @param {ObjectId} orgId
+ * @returns {Promise<{success, message}>}
+ */
+const clearOrganizationData = async (orgId) => {
+  const org = await Organization.findById(orgId);
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+
+  await Promise.all([
+    // Core business models
+    Product.deleteMany({ organizationId: orgId }),
+    Invoice.deleteMany({ organizationId: orgId }),
+    Customer.deleteMany({ organizationId: orgId }),
+    Supplier.deleteMany({ organizationId: orgId }),
+    Expense.deleteMany({ organizationId: orgId }),
+    Purchase.deleteMany({ organizationId: orgId }),
+    Category.deleteMany({ organizationId: orgId }),
+
+    // Ledger models
+    CustomerLedger.deleteMany({ organizationId: orgId }),
+    SupplierLedger.deleteMany({ organizationId: orgId }),
+    GeneralLedger.deleteMany({ organizationId: orgId }),
+    Voucher.deleteMany({ organizationId: orgId }),
+
+    // HR models
+    Employee.deleteMany({ organizationId: orgId }),
+    Department.deleteMany({ organizationId: orgId }),
+    Attendance.deleteMany({ organizationId: orgId }),
+    Leave.deleteMany({ organizationId: orgId }),
+    Payroll.deleteMany({ organizationId: orgId }),
+    PerformanceReview.deleteMany({ organizationId: orgId }),
+    Shift.deleteMany({ organizationId: orgId }),
+    Designation.deleteMany({ organizationId: orgId }),
+  ]);
+
+  return {
+    success: true,
+    message: `All business data for "${org.name}" has been cleared. Organization structure, users, and subscription are preserved.`,
+  };
+};
+
 module.exports = {
   setupOrganization,
   getOrganizationById,
@@ -228,6 +275,7 @@ module.exports = {
   getOrganizationForUser,
   updateOrganization,
   deleteOrganization,
+  clearOrganizationData,
   getAllOrganizations,
 };
 

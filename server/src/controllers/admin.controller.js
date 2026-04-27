@@ -141,6 +141,16 @@ const deleteOrganization = catchAsync(async (req, res) => {
 });
 
 /**
+ * POST /v1/admin/organizations/:orgId/clear-data
+ * Clear all business data (invoices, products, customers, HR, ledgers, etc.)
+ * while keeping the organization, branches, users, and subscription intact.
+ */
+const clearOrganizationData = catchAsync(async (req, res) => {
+  const result = await organizationService.clearOrganizationData(req.params.orgId);
+  res.send(result);
+});
+
+/**
  * GET /v1/admin/dashboard
  * High-level platform statistics.
  */
@@ -299,6 +309,7 @@ module.exports = {
   getAllOrganizations,
   getOrganization,
   deleteOrganization,
+  clearOrganizationData,
   getAllUsers,
   deleteUser,
   changeUserPassword,

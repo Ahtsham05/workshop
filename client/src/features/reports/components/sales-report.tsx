@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { useGetSalesReportQuery, useGetSalesInvoiceDetailsQuery, SalesInvoiceDetail } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { TrendingUp, DollarSign, ShoppingCart, Package, ChevronDown, ChevronRight, Eye } from 'lucide-react'
+import { TrendingUp, DollarSign, ShoppingCart, Package, ChevronDown, ChevronRight, Eye, LayoutList } from 'lucide-react'
 import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
@@ -44,6 +44,33 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
     const { data: detailData, isLoading: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
     const [viewInvoice, setViewInvoice] = useState<SalesInvoiceDetail | null>(null)
+    const [showProductsOnly, setShowProductsOnly] = useState(false)
+
+    // Flatten invoices into date-grouped product rows for the Products Only view
+    const productsByDate = useMemo(() => {
+      if (!detailData?.invoices) return []
+      const dateMap = new Map<string, Array<{
+        invoiceNumber: string
+        productName: string
+        quantity: number
+        unitPrice: number
+        subtotal: number
+      }>>()
+      detailData.invoices.forEach((inv) => {
+        const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
+        if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
+        inv.items.forEach((item) => {
+          dateMap.get(dateStr)!.push({
+            invoiceNumber: inv.invoiceNumber,
+            productName: item.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
+          })
+        })
+      })
+      return Array.from(dateMap.entries()).map(([date, items]) => ({ date, items }))
+    }, [detailData])
 
     const toggleRow = useCallback((id: string) => {
       setExpandedRows((prev) => {
@@ -272,28 +299,40 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               </CardDescription>
             </div>
             {detailData?.invoices?.length ? (
-              <Button
-                variant='outline'
-                size='sm'
-                className='shrink-0 mt-1'
-                onClick={() => {
-                  const allIds = detailData.invoices.map((inv) => inv._id)
-                  const allOpen = allIds.every((id) => expandedRows.has(id))
-                  setExpandedRows(allOpen ? new Set() : new Set(allIds))
-                }}
-              >
-                {detailData.invoices.every((inv) => expandedRows.has(inv._id)) ? (
-                  <>
-                    <ChevronDown className='h-4 w-4 mr-1.5' />
-                    Collapse All
-                  </>
-                ) : (
-                  <>
-                    <ChevronRight className='h-4 w-4 mr-1.5' />
-                    Expand All
-                  </>
+              <div className='flex items-center gap-2 shrink-0 mt-1'>
+                <Button
+                  variant={showProductsOnly ? 'default' : 'outline'}
+                  size='sm'
+                  onClick={() => setShowProductsOnly((v) => !v)}
+                >
+                  <LayoutList className='h-4 w-4 mr-1.5' />
+                  {showProductsOnly ? 'Invoice View' : 'Products Only'}
+                </Button>
+
+                {!showProductsOnly && (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => {
+                      const allIds = detailData.invoices.map((inv) => inv._id)
+                      const allOpen = allIds.every((id) => expandedRows.has(id))
+                      setExpandedRows(allOpen ? new Set() : new Set(allIds))
+                    }}
+                  >
+                    {detailData.invoices.every((inv) => expandedRows.has(inv._id)) ? (
+                      <>
+                        <ChevronDown className='h-4 w-4 mr-1.5' />
+                        Collapse All
+                      </>
+                    ) : (
+                      <>
+                        <ChevronRight className='h-4 w-4 mr-1.5' />
+                        Expand All
+                      </>
+                    )}
+                  </Button>
                 )}
-              </Button>
+              </div>
             ) : null}
           </CardHeader>
           <CardContent className='p-0'>
@@ -303,7 +342,76 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               </div>
             ) : !detailData?.invoices?.length ? (
               <p className='text-center text-muted-foreground py-10'>No invoices found</p>
+            ) : showProductsOnly ? (
+              /* ── Products Only View ────────────────────────────────────────── */
+              <div className='overflow-x-auto'>
+                <Table>
+                  <TableHeader>
+                    <TableRow className='bg-muted/50'>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead className='text-right'>Qty</TableHead>
+                      <TableHead className='text-right'>Unit Price</TableHead>
+                      <TableHead className='text-right'>Subtotal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productsByDate.map(({ date, items }) => (
+                      <>
+                        {/* Date group header */}
+                        <TableRow key={`date-${date}`} className='bg-muted/40 border-t'>
+                          <TableCell
+                            colSpan={6}
+                            className='py-2 px-4 font-semibold text-sm text-foreground'
+                          >
+                            {date}
+                          </TableCell>
+                        </TableRow>
+
+                        {/* One row per product */}
+                        {items.map((row, idx) => (
+                          <TableRow
+                            key={`${date}-${idx}`}
+                            className='hover:bg-muted/30 transition-colors'
+                          >
+                            <TableCell className='text-sm text-muted-foreground pl-6' />
+                            <TableCell className='font-mono text-xs text-primary'>
+                              {row.invoiceNumber}
+                            </TableCell>
+                            <TableCell className='font-medium'>{row.productName}</TableCell>
+                            <TableCell className='text-right text-sm'>{row.quantity}</TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {formatCurrency(row.unitPrice)}
+                            </TableCell>
+                            <TableCell className='text-right font-semibold'>
+                              {formatCurrency(row.subtotal)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    ))}
+                  </TableBody>
+
+                  <TableFooter>
+                    <TableRow className='bg-muted font-bold border-t-2'>
+                      <TableCell colSpan={3} className='text-sm uppercase tracking-wide'>
+                        Total — {detailData.summary.totalInvoices} invoice
+                        {detailData.summary.totalInvoices !== 1 ? 's' : ''}
+                      </TableCell>
+                      <TableCell className='text-right'>
+                        {detailData.summary.totalItems} items
+                      </TableCell>
+                      <TableCell />
+                      <TableCell className='text-right text-lg text-primary'>
+                        {formatCurrency(detailData.summary.totalSales)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
             ) : (
+              /* ── Invoice Details View (original) ───────────────────────────── */
               <div className='overflow-x-auto'>
                 <Table>
                   <TableHeader>
