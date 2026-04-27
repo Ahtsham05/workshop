@@ -24,7 +24,7 @@ export function generatePurchaseInvoiceHTML(
   const items        = purchase.items || []
   const totalAmount  = purchase.totalAmount || 0
   const paidAmount   = purchase.paidAmount  || 0
-  const balance      = purchase.balance ?? (totalAmount - paidAmount)
+  // const balance      = purchase.balance ?? (totalAmount - paidAmount)
   const prevBal      = opts.previousBalance ?? 0
   const hasPrev      = opts.previousBalance !== undefined && opts.previousBalance !== null
   const totalOwed    = prevBal + totalAmount
@@ -253,7 +253,7 @@ export function generatePurchaseInvoiceA4HTML(
   const items        = purchase.items || []
   const totalAmount  = purchase.totalAmount || 0
   const paidAmount   = purchase.paidAmount  || 0
-  const balance      = purchase.balance ?? (totalAmount - paidAmount)
+  // const balance      = purchase.balance ?? (totalAmount - paidAmount)
   const prevBal      = opts.previousBalance ?? 0
   const hasPrev      = opts.previousBalance !== undefined && opts.previousBalance !== null
   const totalOwed    = prevBal + totalAmount
