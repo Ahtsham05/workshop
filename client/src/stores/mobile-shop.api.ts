@@ -75,7 +75,9 @@ export interface CashWithdrawalRecord {
   walletId: string
   walletType: string
   amount: number
+  cashAmount?: number
   transactionType: 'withdrawal' | 'deposit'
+  customerId?: string
   customerName?: string
   customerNumber?: string
   commissionRate: number
@@ -89,7 +91,9 @@ export interface CreateCashWithdrawalInput {
   walletId: string
   walletType: string
   amount: number
+  cashAmount?: number
   transactionType: 'withdrawal' | 'deposit'
+  customerId?: string
   customerName?: string
   customerNumber?: string
   commissionRate: number

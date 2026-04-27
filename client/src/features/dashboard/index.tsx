@@ -19,7 +19,6 @@ import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package 
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isSchoolBusiness } from '@/lib/business-types'
-import { isFeatureAllowed } from '@/lib/feature-access'
 import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
@@ -33,7 +32,9 @@ export default function Dashboard() {
   const planType = usageData?.subscription?.planType
   // Use organization's businessType as the source of truth; fall back to user's businessType
   const businessType = orgData?.businessType ?? user?.businessType
-  const showMobileCards = isMobileShopBusiness(businessType) && isFeatureAllowed(planType, 'load')
+  // Show the mobile-shop dashboard section for any mobile_shop organisation.
+  // Individual cards that require a paid feature are further gated inside the section.
+  const showMobileCards = isMobileShopBusiness(businessType)
 
   if (isSchoolBusiness(businessType)) {
     // Teachers must never see the admin school dashboard — redirect them immediately

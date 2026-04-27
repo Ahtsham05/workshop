@@ -80,17 +80,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return false
     }
 
-    // system_admin sees everything
-    if (user?.systemRole === 'system_admin') {
-      if (item.systemRole) {
-        const allowed = item.systemRole as string[]
-        return allowed.includes('system_admin')
-      }
-      if (!item.permission) return true
-      return hasPermission(item.permission as any)
-    }
-
-    // Business-type restrictions apply to all other users (including superAdmin)
+    // Business-type restrictions apply to ALL users — including system_admin.
+    // This ensures mobile-shop (and other typed) items are never shown in an
+    // org that has a different business type, even for platform admins.
     if (item.businessTypes && item.businessTypes.length > 0) {
       if (!item.businessTypes.includes(userBusinessType)) {
         return false
@@ -101,6 +93,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       if (item.excludeBusinessTypes.includes(userBusinessType)) {
         return false
       }
+    }
+
+    // system_admin bypasses permission and feature-access gates (but NOT businessType above).
+    if (user?.systemRole === 'system_admin') {
+      if (item.systemRole) {
+        const allowed = item.systemRole as string[]
+        return allowed.includes('system_admin')
+      }
+      if (!item.permission) return true
+      return hasPermission(item.permission as any)
     }
 
     // superAdmin bypasses feature-access restrictions

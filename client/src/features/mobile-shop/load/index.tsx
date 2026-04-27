@@ -89,7 +89,9 @@ type WithdrawalFormState = {
   walletId: string
   walletType: string
   amount: string
+  cashAmount: string
   transactionType: 'withdrawal' | 'deposit'
+  customerId: string
   customerName: string
   customerNumber: string
   commissionRate: string
@@ -163,7 +165,9 @@ const initialWithdrawalForm: WithdrawalFormState = {
   walletId: '',
   walletType: '',
   amount: '0',
+  cashAmount: '0',
   transactionType: 'withdrawal',
+  customerId: '',
   customerName: '',
   customerNumber: '',
   commissionRate: '0',
@@ -185,6 +189,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
   const [isPurchasePaidAmountManual, setIsPurchasePaidAmountManual] = useState(false)
   const [isSaleReceivedAmountManual, setIsSaleReceivedAmountManual] = useState(false)
   const [withdrawalForm, setWithdrawalForm] = useState<WithdrawalFormState>(initialWithdrawalForm)
+  const [isWithdrawalCashAmountManual, setIsWithdrawalCashAmountManual] = useState(false)
   const [withdrawalEntryMode, setWithdrawalEntryMode] = useState<'single' | 'bulk'>('single')
   const [bulkWithdrawalForm, setBulkWithdrawalForm] = useState<BulkWithdrawalFormState>(makeInitialBulkWithdrawalForm)
 
@@ -273,11 +278,24 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
   const withdrawalProfit = useMemo(() => {
     const amount = Number(withdrawalForm.amount) || 0
+    const cashAmount = Number(withdrawalForm.cashAmount) || 0
     const commissionRate = Number(withdrawalForm.commissionRate) || 0
     const extraCharge = Number(withdrawalForm.extraCharge) || 0
     const commissionProfit = (amount * commissionRate) / 100
-    return { commissionProfit, totalProfit: commissionProfit + extraCharge }
-  }, [withdrawalForm.amount, withdrawalForm.commissionRate, withdrawalForm.extraCharge])
+    const normalizedCashAmount = Math.max(0, cashAmount)
+    const remainingAmount = Math.max(0, amount - normalizedCashAmount)
+    const settlementProfit = withdrawalForm.transactionType === 'withdrawal'
+      ? Math.max(0, amount - normalizedCashAmount)
+      : Math.max(0, normalizedCashAmount - amount)
+    return {
+      commissionProfit,
+      remainingAmount,
+      normalizedCashAmount,
+      settlementProfit,
+      totalProfit: commissionProfit + extraCharge + settlementProfit,
+    }
+  }, [withdrawalForm.amount, withdrawalForm.cashAmount, withdrawalForm.commissionRate, withdrawalForm.extraCharge, withdrawalForm.transactionType])
+  const requiresFullCashSettlement = !withdrawalForm.customerId
 
   const bulkWithdrawalTotals = useMemo(() => {
     const commissionRate = Number(bulkWithdrawalForm.commissionRate) || 0
@@ -386,6 +404,16 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
   }
 
   const handleWithdrawalChange = (field: keyof WithdrawalFormState, value: string) => {
+    if (field === 'customerId') {
+      const normalizedValue = value === '__none__' ? '' : value
+      const selectedCustomer = customers.find((c: any) => c.id === normalizedValue || c._id === normalizedValue)
+      setWithdrawalForm(prev => ({
+        ...prev,
+        customerId: normalizedValue,
+        customerName: selectedCustomer?.name || prev.customerName,
+      }))
+      return
+    }
     if (field === 'walletId') {
       const selectedWallet = wallets.find(w => w.id === value)
       setWithdrawalForm(prev => {
@@ -413,7 +441,19 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }))
       return
     }
-    setWithdrawalForm(prev => ({ ...prev, [field]: value }))
+    setWithdrawalForm(prev => {
+      const next = { ...prev, [field]: value }
+      if (field === 'amount') {
+        const amount = Number(value) || 0
+        if (!isWithdrawalCashAmountManual) {
+          next.cashAmount = String(amount)
+        } else {
+          const currentCash = Number(prev.cashAmount) || 0
+          next.cashAmount = String(Math.max(0, currentCash))
+        }
+      }
+      return next
+    })
   }
 
   const handlePurchaseSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -474,12 +514,18 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     if (!withdrawalForm.walletId) { toast.error('Please select a wallet'); return }
     if (!withdrawalForm.amount || Number(withdrawalForm.amount) <= 0) { toast.error('Please enter a valid amount'); return }
     if (!withdrawalForm.walletType) { toast.error('Selected wallet is invalid'); return }
+    if (withdrawalProfit.normalizedCashAmount > Number(withdrawalForm.amount || 0)) {
+      toast.error('Cash paid/received must be less than or equal to amount')
+      return
+    }
     try {
       await createCashWithdrawal({
         walletId: withdrawalForm.walletId,
         walletType: withdrawalForm.walletType,
         amount: Number(withdrawalForm.amount),
+        cashAmount: withdrawalProfit.normalizedCashAmount,
         transactionType: withdrawalForm.transactionType,
+        customerId: withdrawalForm.customerId || undefined,
         customerName: withdrawalForm.customerName.trim() || undefined,
         customerNumber: withdrawalForm.customerNumber.trim() || undefined,
         commissionRate: Number(withdrawalForm.commissionRate),
@@ -497,7 +543,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         walletId: prevWalletId,
         walletType: prevWalletType,
         amount: '0',
+        cashAmount: '0',
         transactionType: prevType,
+        customerId: '',
         customerName: '',
         customerNumber: '',
         commissionRate: prevCommission,
@@ -505,6 +553,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         notes: '',
         date: prevDate,
       })
+      setIsWithdrawalCashAmountManual(false)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save cash withdrawal')
     }
@@ -747,7 +796,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       walletId: wallets.find(wl => wl.type === w.walletType)?.id || w.walletId || '',
       walletType: w.walletType,
       amount: String(w.amount),
+      cashAmount: String((w as any).cashAmount ?? w.amount ?? 0),
       transactionType: w.transactionType || 'withdrawal',
+      customerId: w.customerId?.id || w.customerId?._id || w.customerId || '',
       customerName: w.customerName || '',
       customerNumber: w.customerNumber || '',
       commissionRate: String(w.commissionRate || 0),
@@ -755,12 +806,17 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       notes: w.notes || '',
       date: format(new Date(w.date), 'yyyy-MM-dd'),
     })
+    setIsWithdrawalCashAmountManual(true)
     setEditingWithdrawal(w)
   }
 
   const handleUpdateWithdrawal = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingWithdrawal) return
+    if (withdrawalProfit.normalizedCashAmount > Number(withdrawalForm.amount || 0)) {
+      toast.error('Cash paid/received must be less than or equal to amount')
+      return
+    }
     try {
       await updateCashWithdrawal({
         id: editingWithdrawal.id,
@@ -768,7 +824,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           walletId: withdrawalForm.walletId,
           walletType: withdrawalForm.walletType,
           amount: Number(withdrawalForm.amount),
+          cashAmount: withdrawalProfit.normalizedCashAmount,
           transactionType: withdrawalForm.transactionType,
+          customerId: withdrawalForm.customerId || undefined,
           customerName: withdrawalForm.customerName.trim() || undefined,
           customerNumber: withdrawalForm.customerNumber.trim() || undefined,
           commissionRate: Number(withdrawalForm.commissionRate),
@@ -779,6 +837,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       }).unwrap()
       toast.success('Withdrawal updated!')
       setWithdrawalForm(initialWithdrawalForm)
+      setIsWithdrawalCashAmountManual(false)
       setEditingWithdrawal(null)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to update withdrawal')
@@ -1507,6 +1566,24 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                   </div>
 
+                  <div className='space-y-2 md:max-w-md'>
+                    <Label htmlFor='withdrawal-saved-customer'>Saved Customer - Optional</Label>
+                    <SearchableSelect
+                      options={customers.map((c: any) => ({
+                        value: c.id || c._id,
+                        label: c.name,
+                        sublabel: c.phone || c.mobile || undefined,
+                      }))}
+                      value={withdrawalForm.customerId}
+                      onValueChange={(v) => handleWithdrawalChange('customerId', v)}
+                      placeholder='Choose customer (optional)'
+                      searchPlaceholder='Search customers...'
+                      clearLabel='No customer'
+                      emptyText='No customers found.'
+                    />
+                    <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
+                  </div>
+
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-name'>Customer Name - Optional</Label>
@@ -1516,6 +1593,27 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       <Label htmlFor='customer-number'>Customer Account / Phone</Label>
                       <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} />
                     </div>
+                  </div>
+
+                  <div className='space-y-2'>
+                    <Label htmlFor='withdrawal-cash-amount'>
+                      {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid (Rs)' : 'Cash Received (Rs)'} - Optional
+                    </Label>
+                    <Input
+                      id='withdrawal-cash-amount'
+                      type='number'
+                      min='0'
+                      max={withdrawalForm.amount || undefined}
+                      step='0.01'
+                      value={withdrawalForm.cashAmount}
+                      onChange={(e) => {
+                        setIsWithdrawalCashAmountManual(true)
+                        handleWithdrawalChange('cashAmount', e.target.value)
+                      }}
+                    />
+                    <p className='text-xs text-muted-foreground'>
+                      {`Cash amount must be less than or equal to amount. Remaining amount is ${withdrawalForm.transactionType === 'withdrawal' ? 'cash payable' : 'cash receivable'} and will be added to customer ledger.`}
+                    </p>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
@@ -1552,6 +1650,26 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                             {withdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(withdrawalForm.amount || 0).toFixed(2)}
                           </span>
                         </div>
+                        <div className='flex justify-between items-center'>
+                          <span className='text-muted-foreground'>
+                            {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid to Customer:' : 'Cash Received from Customer:'}
+                          </span>
+                          <span className={`font-semibold ${withdrawalForm.transactionType === 'withdrawal' ? 'text-red-600' : 'text-green-600'}`}>
+                            {withdrawalForm.transactionType === 'withdrawal' ? '-' : '+'} Rs {withdrawalProfit.normalizedCashAmount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className='flex justify-between items-center'>
+                          <span className='text-muted-foreground'>
+                            Remaining ({withdrawalForm.transactionType === 'withdrawal' ? 'Payable' : 'Receivable'}):
+                          </span>
+                          <span className='text-orange-600 font-semibold'>Rs {withdrawalProfit.remainingAmount.toFixed(2)}</span>
+                        </div>
+                        {withdrawalProfit.settlementProfit > 0 && (
+                          <div className='flex justify-between items-center'>
+                            <span className='text-muted-foreground'>Settlement Profit:</span>
+                            <span className='text-green-600 font-semibold'>+ Rs {withdrawalProfit.settlementProfit.toFixed(2)}</span>
+                          </div>
+                        )}
                         {withdrawalProfit.commissionProfit > 0 && (
                           <div className='flex justify-between items-center'>
                             <span className='text-muted-foreground'>Commission ({withdrawalForm.commissionRate}%):</span>
@@ -1577,7 +1695,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       {isSavingWithdrawal ? 'Processing...' : editingWithdrawal ? '✓ Update Withdrawal' : '✓ Confirm Cash Withdrawal'}
                     </Button>
                     {editingWithdrawal && (
-                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingWithdrawal(null); setWithdrawalForm(initialWithdrawalForm) }}>
+                      <Button size='lg' type='button' variant='outline' onClick={() => { setEditingWithdrawal(null); setWithdrawalForm(initialWithdrawalForm); setIsWithdrawalCashAmountManual(false) }}>
                         Cancel
                       </Button>
                     )}
@@ -1624,6 +1742,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Customer</TableHead>
                         <TableHead>Account / Phone</TableHead>
                         <TableHead>Amount</TableHead>
+                        <TableHead>Cash Settled</TableHead>
+                        <TableHead>Remaining</TableHead>
                         <TableHead>Commission %</TableHead>
                         <TableHead className='text-orange-600 font-bold'>Profit</TableHead>
                         <TableHead>Actions</TableHead>
@@ -1649,6 +1769,12 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell>{w.customerNumber || '-'}</TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}>
                             {w.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(w.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                          </TableCell>
+                          <TableCell className={w.transactionType === 'withdrawal' ? 'text-red-600' : 'text-green-600'}>
+                            {w.transactionType === 'withdrawal' ? '-' : '+'} Rs {Number((w as any).cashAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                          </TableCell>
+                          <TableCell className='text-orange-600 font-semibold'>
+                            Rs {Math.max(0, Number(w.amount || 0) - Number((w as any).cashAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
                           </TableCell>
                           <TableCell>{Number(w.commissionRate || 0).toFixed(2)}%</TableCell>
                           <TableCell className='text-orange-600 font-bold'>Rs {Number(w.profit || 0).toFixed(2)}</TableCell>

@@ -32,6 +32,16 @@ const cashWithdrawalSchema = new mongoose.Schema(
       required: true,
       min: 0.01,
     },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+      index: true,
+    },
+    cashAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // Optional: customer name
     customerName: {
       type: String,

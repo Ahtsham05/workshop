@@ -1,17 +1,165 @@
-const { CashWithdrawal } = require('../models');
+const { CashWithdrawal, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const walletService = require('./wallet.service');
 const cashBookService = require('./cashBook.service');
+const customerLedgerService = require('./customerLedger.service');
 
-const calculateWithdrawalProfit = ({ amount, commissionRate = 0, extraCharge = 0 }) => {
+const sanitizeCustomerId = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  return value;
+};
+
+const resolveLinkedCustomer = async ({ customerId, organizationId, branchId }) => {
+  const normalizedCustomerId = sanitizeCustomerId(customerId);
+  if (!normalizedCustomerId) {
+    return null;
+  }
+
+  const customer = await Customer.findOne({
+    _id: normalizedCustomerId,
+    organizationId,
+    branchId,
+  }).select('name');
+
+  if (!customer) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Selected customer not found in this branch');
+  }
+
+  return customer;
+};
+
+const normalizeCashAmount = ({ amount, cashAmount }) => {
+  const normalizedCashAmount = Number(cashAmount);
+  if (!Number.isFinite(normalizedCashAmount) || normalizedCashAmount < 0) {
+    return 0;
+  }
+  return normalizedCashAmount;
+};
+
+const calculateSettlementProfit = ({ amount, cashAmount, transactionType }) => {
+  const totalAmount = Number(amount) || 0;
+  const settledAmount = Number(cashAmount) || 0;
+  if (transactionType === 'withdrawal') {
+    // Wallet received amount - cash paid amount = margin
+    return Math.max(0, totalAmount - settledAmount);
+  }
+  // Deposit: cash collected - wallet sent amount = margin
+  return Math.max(0, settledAmount - totalAmount);
+};
+
+const calculateWithdrawalProfit = ({ amount, cashAmount, transactionType = 'withdrawal', commissionRate = 0, extraCharge = 0 }) => {
   const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
-  return commissionProfit + Number(extraCharge || 0);
+  const settlementProfit = calculateSettlementProfit({ amount, cashAmount, transactionType });
+  return commissionProfit + Number(extraCharge || 0) + settlementProfit;
+};
+
+const syncCustomerLedgerForCashWithdrawal = async (withdrawal) => {
+  await customerLedgerService.deleteLedgerEntriesByReference(withdrawal._id);
+
+  if (!withdrawal.customerId) {
+    return;
+  }
+
+  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
+  const settlementLabel = isWithdrawal ? 'Withdrawal' : 'Deposit';
+  const reference = `${isWithdrawal ? 'CW-WITH' : 'CW-DEPO'}-${String(withdrawal._id).slice(-6).toUpperCase()}`;
+  const cashAmount = Number(withdrawal.cashAmount) || 0;
+  const settledAgainstPrincipal = Math.min(cashAmount, Number(withdrawal.amount) || 0);
+  const remainingAmount = Math.max(0, (Number(withdrawal.amount) || 0) - cashAmount);
+  if (isWithdrawal) {
+    await customerLedgerService.createLedgerEntry({
+      organizationId: withdrawal.organizationId,
+      branchId: withdrawal.branchId,
+      customer: withdrawal.customerId,
+      transactionType: 'payment_made',
+      transactionDate: withdrawal.date,
+      reference,
+      referenceId: withdrawal._id,
+      description: `${settlementLabel}: cash paid`,
+      debit: cashAmount,
+      credit: 0,
+      paymentMethod: 'Cash',
+      notes: withdrawal.notes || `Wallet: ${withdrawal.walletType}`,
+    });
+
+    if (remainingAmount > 0) {
+      const remainderDate = new Date(withdrawal.date);
+      remainderDate.setSeconds(remainderDate.getSeconds() + 1);
+      await customerLedgerService.createLedgerEntry({
+        organizationId: withdrawal.organizationId,
+        branchId: withdrawal.branchId,
+        customer: withdrawal.customerId,
+        transactionType: 'payment_made',
+        transactionDate: remainderDate,
+        reference,
+        referenceId: withdrawal._id,
+        description: `${settlementLabel}: cash payable remaining`,
+        debit: remainingAmount,
+        credit: 0,
+        paymentMethod: 'Credit',
+        notes: withdrawal.notes || `Wallet: ${withdrawal.walletType}`,
+      });
+    }
+    return;
+  }
+
+  // Deposit: track full receivable then reduce by received cash
+  await customerLedgerService.createLedgerEntry({
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    customer: withdrawal.customerId,
+    transactionType: 'sale',
+    transactionDate: withdrawal.date,
+    reference,
+    referenceId: withdrawal._id,
+    description: `${settlementLabel}: cash receivable`,
+    debit: Number(withdrawal.amount) || 0,
+    credit: 0,
+    paymentMethod: 'Credit',
+    notes: withdrawal.notes || `Wallet: ${withdrawal.walletType}`,
+  });
+
+  if (cashAmount > 0) {
+    const paymentDate = new Date(withdrawal.date);
+    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+    await customerLedgerService.createLedgerEntry({
+      organizationId: withdrawal.organizationId,
+      branchId: withdrawal.branchId,
+      customer: withdrawal.customerId,
+      transactionType: 'payment_received',
+      transactionDate: paymentDate,
+      reference,
+      referenceId: withdrawal._id,
+      description: `${settlementLabel}: cash received`,
+      debit: 0,
+      credit: settledAgainstPrincipal,
+      paymentMethod: 'Cash',
+      notes: withdrawal.notes || `Wallet: ${withdrawal.walletType}`,
+    });
+  }
 };
 
 const createCashWithdrawal = async (body) => {
-  const profit = calculateWithdrawalProfit(body);
-  const withdrawal = await CashWithdrawal.create({ ...body, profit });
+  const linkedCustomer = await resolveLinkedCustomer({
+    customerId: body.customerId,
+    organizationId: body.organizationId,
+    branchId: body.branchId,
+  });
+  const cashAmount = normalizeCashAmount({ amount: body.amount, cashAmount: body.cashAmount ?? body.amount });
+  if (cashAmount > Number(body.amount || 0)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
+  }
+  const profit = calculateWithdrawalProfit({ ...body, cashAmount });
+  const withdrawal = await CashWithdrawal.create({
+    ...body,
+    customerId: linkedCustomer ? linkedCustomer._id : undefined,
+    customerName: linkedCustomer ? linkedCustomer.name : (body.customerName || ''),
+    cashAmount,
+    profit,
+  });
 
   const isWithdrawal = withdrawal.transactionType === 'withdrawal';
 
@@ -46,19 +194,21 @@ const createCashWithdrawal = async (body) => {
       createdBy: withdrawal.createdBy,
     });
     // Withdrawal: we pay cash to customer (expense)
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId,
-      branchId: withdrawal.branchId,
-      type: 'expense',
-      source: 'other',
-      amount: withdrawal.amount,
-      paymentMethod: 'cash',
-      referenceId: withdrawal._id,
-      referenceModel: 'CashWithdrawal',
-      description: `Withdrawal: cash paid to ${customerLabel}`,
-      date: withdrawal.date,
-      createdBy: withdrawal.createdBy,
-    });
+    if (cashAmount > 0) {
+      await cashBookService.createEntry({
+        organizationId: withdrawal.organizationId,
+        branchId: withdrawal.branchId,
+        type: 'expense',
+        source: 'other',
+        amount: cashAmount,
+        paymentMethod: 'cash',
+        referenceId: withdrawal._id,
+        referenceModel: 'CashWithdrawal',
+        description: `Withdrawal: cash paid to ${customerLabel}`,
+        date: withdrawal.date,
+        createdBy: withdrawal.createdBy,
+      });
+    }
   } else {
     // Deposit: we send digital → our wallet decreases (expense)
     await cashBookService.createEntry({
@@ -75,19 +225,21 @@ const createCashWithdrawal = async (body) => {
       createdBy: withdrawal.createdBy,
     });
     // Deposit: we receive cash from customer (income)
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId,
-      branchId: withdrawal.branchId,
-      type: 'income',
-      source: 'other',
-      amount: withdrawal.amount,
-      paymentMethod: 'cash',
-      referenceId: withdrawal._id,
-      referenceModel: 'CashWithdrawal',
-      description: `Deposit: cash received from ${customerLabel}`,
-      date: withdrawal.date,
-      createdBy: withdrawal.createdBy,
-    });
+    if (cashAmount > 0) {
+      await cashBookService.createEntry({
+        organizationId: withdrawal.organizationId,
+        branchId: withdrawal.branchId,
+        type: 'income',
+        source: 'other',
+        amount: cashAmount,
+        paymentMethod: 'cash',
+        referenceId: withdrawal._id,
+        referenceModel: 'CashWithdrawal',
+        description: `Deposit: cash received from ${customerLabel}`,
+        date: withdrawal.date,
+        createdBy: withdrawal.createdBy,
+      });
+    }
   }
 
   // Commission profit recorded as cash income for both types
@@ -106,6 +258,8 @@ const createCashWithdrawal = async (body) => {
       createdBy: withdrawal.createdBy,
     });
   }
+
+  await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
   return withdrawal;
 };
@@ -129,6 +283,7 @@ const queryCashWithdrawals = async (filter, options) => {
   return CashWithdrawal.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
+    populate: 'customerId',
   });
 };
 
@@ -142,6 +297,13 @@ const getCashWithdrawalById = async (withdrawalId) => {
 
 const updateCashWithdrawal = async (withdrawalId, updateBody) => {
   const withdrawal = await getCashWithdrawalById(withdrawalId);
+  const linkedCustomer = await resolveLinkedCustomer({
+    customerId: Object.prototype.hasOwnProperty.call(updateBody, 'customerId')
+      ? updateBody.customerId
+      : withdrawal.customerId,
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+  });
   const oldIsWithdrawal = withdrawal.transactionType === 'withdrawal';
 
   // Reverse old wallet adjustment
@@ -157,6 +319,15 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
   await cashBookService.deleteEntriesByReference(withdrawal._id, 'CashWithdrawal');
 
   Object.assign(withdrawal, updateBody);
+  withdrawal.customerId = linkedCustomer ? linkedCustomer._id : undefined;
+  withdrawal.customerName = linkedCustomer ? linkedCustomer.name : (withdrawal.customerName || '');
+  withdrawal.cashAmount = normalizeCashAmount({
+    amount: withdrawal.amount,
+    cashAmount: withdrawal.cashAmount ?? withdrawal.amount,
+  });
+  if (Number(withdrawal.cashAmount || 0) > Number(withdrawal.amount || 0)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
+  }
   withdrawal.profit = calculateWithdrawalProfit(withdrawal);
   await withdrawal.save();
 
@@ -184,13 +355,15 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
       description: `Withdrawal: digital received from ${customerLabel} via ${withdrawal.walletType}`,
       date: withdrawal.date, createdBy: withdrawal.createdBy,
     });
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-      type: 'expense', source: 'other', amount: withdrawal.amount, paymentMethod: 'cash',
-      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-      description: `Withdrawal: cash paid to ${customerLabel}`,
-      date: withdrawal.date, createdBy: withdrawal.createdBy,
-    });
+    if (Number(withdrawal.cashAmount) > 0) {
+      await cashBookService.createEntry({
+        organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+        type: 'expense', source: 'other', amount: withdrawal.cashAmount, paymentMethod: 'cash',
+        referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+        description: `Withdrawal: cash paid to ${customerLabel}`,
+        date: withdrawal.date, createdBy: withdrawal.createdBy,
+      });
+    }
   } else {
     await cashBookService.createEntry({
       organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
@@ -199,13 +372,15 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
       description: `Deposit: digital sent to ${customerLabel} via ${withdrawal.walletType}`,
       date: withdrawal.date, createdBy: withdrawal.createdBy,
     });
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-      type: 'income', source: 'other', amount: withdrawal.amount, paymentMethod: 'cash',
-      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-      description: `Deposit: cash received from ${customerLabel}`,
-      date: withdrawal.date, createdBy: withdrawal.createdBy,
-    });
+    if (Number(withdrawal.cashAmount) > 0) {
+      await cashBookService.createEntry({
+        organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
+        type: 'income', source: 'other', amount: withdrawal.cashAmount, paymentMethod: 'cash',
+        referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
+        description: `Deposit: cash received from ${customerLabel}`,
+        date: withdrawal.date, createdBy: withdrawal.createdBy,
+      });
+    }
   }
 
   if (withdrawal.profit > 0) {
@@ -217,6 +392,8 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
       date: withdrawal.date, createdBy: withdrawal.createdBy,
     });
   }
+
+  await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
   return withdrawal;
 };
@@ -236,6 +413,7 @@ const deleteCashWithdrawal = async (withdrawalId) => {
   });
 
   await cashBookService.deleteEntriesByReference(withdrawal._id, 'CashWithdrawal');
+  await customerLedgerService.deleteLedgerEntriesByReference(withdrawal._id);
   await withdrawal.deleteOne();
   return withdrawal;
 };
@@ -253,6 +431,8 @@ const createCashWithdrawalsBatch = async (body) => {
       transactionType,
       commissionRate: Number(commissionRate || 0),
       amount: Number(entry.amount),
+      customerId: entry.customerId || undefined,
+      cashAmount: Number(entry.cashAmount ?? entry.amount),
       customerName: entry.customerName || undefined,
       customerNumber: entry.customerNumber || undefined,
       extraCharge: Number(entry.extraCharge || 0),
