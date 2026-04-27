@@ -43,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api';
 
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
@@ -50,10 +51,10 @@ interface ExpenseListProps {
   refreshTrigger?: number;
 }
 
-const expenseCategories = ['All', 'Rent', 'Utilities', 'Salaries', 'Transportation', 'Marketing', 'Supplies', 'Maintenance', 'Insurance', 'Tax', 'Other'];
-
 export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
   const { t } = useLanguage();
+  const { data: categoryData = [] } = useGetExpenseCategoriesQuery();
+  const expenseCategories = ['All', ...categoryData.map((c) => c.name)];
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

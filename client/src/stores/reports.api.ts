@@ -52,6 +52,33 @@ export interface SalesReportSummary {
   minInvoiceValue: number
 }
 
+export interface SalesInvoiceItem {
+  name: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
+export interface SalesInvoiceDetail {
+  _id: string
+  invoiceNumber: string
+  invoiceDate: string
+  type: string
+  status: string
+  total: number
+  paidAmount: number
+  balance: number
+  customerName: string
+  customerPhone: string
+  items: SalesInvoiceItem[]
+}
+
+export interface SalesInvoiceDetailsSummary {
+  totalSales: number
+  totalInvoices: number
+  totalItems: number
+}
+
 export interface PurchaseReportData {
   _id: {
     date: string
@@ -577,6 +604,19 @@ export const reportsApi = createApi({
       },
       providesTags: ['SalesReport'],
     }),
+    getSalesInvoiceDetails: builder.query<{
+      invoices: SalesInvoiceDetail[]
+      summary: SalesInvoiceDetailsSummary
+      period: { startDate: string; endDate: string }
+    }, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/sales/invoices?${searchParams.toString()}`
+      },
+      providesTags: ['SalesReport'],
+    }),
     getPurchaseReport: builder.query<{
       data: PurchaseReportData[]
       summary: any
@@ -650,8 +690,12 @@ export const reportsApi = createApi({
     }),
     getExpenseReport: builder.query<{
       data: ExpenseReportData[]
-      categoryBreakdown: any[]
-      summary: any
+      categoryBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number }[]
+      categoryExpenses: {
+        _id: string; expenseNumber: string; category: string; description: string
+        amount: number; paymentMethod: string; date: string; vendor?: string; reference?: string; notes?: string
+      }[]
+      summary: { totalExpenses: number; expenseCount: number; avgExpense: number }
       period: { startDate: string; endDate: string }
     }, { startDate?: string; endDate?: string; category?: string }>({
       query: (params) => {
@@ -811,12 +855,14 @@ export const reportsApi = createApi({
 
 export const {
   useGetSalesReportQuery,
+  useGetSalesInvoiceDetailsQuery,
   useGetPurchaseReportQuery,
   useGetProductReportQuery,
   useGetProductDetailReportQuery,
   useGetCustomerReportQuery,
   useGetSupplierReportQuery,
   useGetExpenseReportQuery,
+  useLazyGetExpenseReportQuery,
   useGetProfitLossReportQuery,
   useGetProfitLossFullReportQuery,
   useGetInventoryReportQuery,
@@ -827,6 +873,7 @@ export const {
   useGetWalletBalanceStatementQuery,
   useGetRepairReportQuery,
   useGetServiceReportQuery,
+  useLazyGetServiceReportQuery,
   useGetRoiReportQuery,
   useGetMonthlyRoiQuery,
   useGetSimSaleReportQuery,

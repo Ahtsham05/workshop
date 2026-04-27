@@ -28,6 +28,86 @@ const parseRange = (query) => ({
   end: query.endDate ? new Date(query.endDate) : new Date(),
 });
 
+/* ── Sales Invoice Details ──────────────────────────────────────────────────── */
+const getSalesInvoiceDetails = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+
+  const invoices = await Invoice.aggregate([
+    {
+      $match: {
+        ...scope,
+        invoiceDate: { $gte: start, $lte: end },
+        status: { $ne: 'cancelled' },
+      },
+    },
+    {
+      $lookup: {
+        from: 'customers',
+        let: { cid: '$customerId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$_id', '$$cid'] },
+                  { $ne: ['$$cid', null] },
+                ],
+              },
+            },
+          },
+          { $project: { name: 1, phone: 1 } },
+        ],
+        as: 'customerDoc',
+      },
+    },
+    { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        invoiceNumber: 1,
+        invoiceDate: 1,
+        type: 1,
+        status: 1,
+        total: 1,
+        paidAmount: 1,
+        balance: 1,
+        customerName: {
+          $ifNull: [
+            '$walkInCustomerName',
+            { $ifNull: ['$customerDoc.name', { $ifNull: ['$customerName', 'Walk-in'] }] },
+          ],
+        },
+        customerPhone: { $ifNull: ['$customerDoc.phone', ''] },
+        items: {
+          $map: {
+            input: '$items',
+            as: 'item',
+            in: {
+              name: '$$item.name',
+              quantity: '$$item.quantity',
+              unitPrice: '$$item.unitPrice',
+              subtotal: '$$item.subtotal',
+            },
+          },
+        },
+      },
+    },
+    { $sort: { invoiceDate: 1, invoiceNumber: 1 } },
+  ]);
+
+  const totalSales = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
+  const totalItems = invoices.reduce(
+    (s, inv) => s + inv.items.reduce((is, item) => is + (item.quantity || 0), 0),
+    0,
+  );
+
+  res.status(httpStatus.OK).send({
+    invoices,
+    summary: { totalSales, totalInvoices: invoices.length, totalItems },
+    period: { startDate: start, endDate: end },
+  });
+});
+
 /* ── Sales ─────────────────────────────────────────────────────────────────── */
 const getSalesReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
@@ -332,14 +412,14 @@ const getExpenseReport = catchAsync(async (req, res) => {
   const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
   if (category) baseMatch.category = category;
 
-  const [expenseData, categoryBreakdown, summary] = await Promise.all([
+  const [expenseData, categoryBreakdown, summary, categoryExpenses] = await Promise.all([
     Expense.aggregate([
       { $match: baseMatch },
       { $group: { _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, category: '$category' }, totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 } } },
       { $sort: { '_id.date': -1 } },
     ]),
     Expense.aggregate([
-      { $match: baseMatch },
+      { $match: { ...scope, date: { $gte: start, $lte: end } } },
       { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' } } },
       { $sort: { totalAmount: -1 } },
     ]),
@@ -347,9 +427,19 @@ const getExpenseReport = catchAsync(async (req, res) => {
       { $match: baseMatch },
       { $group: { _id: null, totalExpenses: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgExpense: { $avg: '$amount' }, maxExpense: { $max: '$amount' }, minExpense: { $min: '$amount' } } },
     ]),
+    // When a specific category is requested, return individual expense rows for the detail sheet
+    category
+      ? Expense.find(baseMatch).sort({ date: -1 }).lean()
+      : Promise.resolve([]),
   ]);
 
-  res.status(httpStatus.OK).send({ data: expenseData, categoryBreakdown, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+  res.status(httpStatus.OK).send({
+    data: expenseData,
+    categoryBreakdown,
+    summary: summary[0] || {},
+    categoryExpenses,
+    period: { startDate: start, endDate: end },
+  });
 });
 
 /* ── Profit & Loss ─────────────────────────────────────────────────────────── */
@@ -1536,6 +1626,7 @@ const getInstallmentReport = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getSalesInvoiceDetails,
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,

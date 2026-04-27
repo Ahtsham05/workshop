@@ -3,18 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const createExpense = {
   body: Joi.object().keys({
-    category: Joi.string().required().valid(
-      'Rent',
-      'Utilities',
-      'Salaries',
-      'Transportation',
-      'Marketing',
-      'Supplies',
-      'Maintenance',
-      'Insurance',
-      'Tax',
-      'Other'
-    ),
+    category: Joi.string().required(),
     description: Joi.string().required(),
     amount: Joi.number().min(0).required(),
     paymentMethod: Joi.string().valid('Cash', 'Bank Transfer', 'Card', 'Cheque'),
@@ -50,18 +39,7 @@ const updateExpense = {
   }),
   body: Joi.object()
     .keys({
-      category: Joi.string().valid(
-        'Rent',
-        'Utilities',
-        'Salaries',
-        'Transportation',
-        'Marketing',
-        'Supplies',
-        'Maintenance',
-        'Insurance',
-        'Tax',
-        'Other'
-      ),
+      category: Joi.string(),
       description: Joi.string(),
       amount: Joi.number().min(0),
       paymentMethod: Joi.string().valid('Cash', 'Bank Transfer', 'Card', 'Cheque'),
