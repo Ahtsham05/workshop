@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Search,
     //  Plus, 
-     Package, Scan, Image as ImageIcon, List, History } from 'lucide-react'
+     Package, Scan, Image as ImageIcon, List, History, Eye, EyeOff } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Category, Product } from '../index'
@@ -46,6 +46,7 @@ export function ProductCatalog({
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
+  const [showCost, setShowCost] = useState(false)
   const [historyDialog, setHistoryDialog] = useState<{
     open: boolean
     productId: string
@@ -188,6 +189,20 @@ export function ProductCatalog({
                 {showImages ? t('with_images') : t('without_images')}
               </Label>
             </div>
+            {/* Purchase Price Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowCost((v) => !v)}
+              title={showCost ? t('Hide purchase price') : t('Show purchase price')}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
+                showCost
+                  ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                  : 'border-border text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              {showCost ? <Eye className='h-3.5 w-3.5' /> : <EyeOff className='h-3.5 w-3.5' />}
+              {t('Cost')}
+            </button>
           </div>
 
           {isBarcodeMode && (
@@ -331,6 +346,18 @@ export function ProductCatalog({
                               </span>
                             )}
                           </div>
+                          {product.cost != null && (
+                            <div className={`flex ${showImages ? 'justify-center' : ''} text-xs select-none`}>
+                              <span
+                                className={`text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 cursor-pointer hover:blur-none hover:opacity-100 ${
+                                  showCost ? '' : 'blur-sm opacity-60'
+                                }`}
+                                title="Purchase cost"
+                              >
+                                Cost: Rs{product.cost.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* History Button for selected customer */}

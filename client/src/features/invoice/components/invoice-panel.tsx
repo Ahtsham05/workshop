@@ -1152,7 +1152,7 @@ export function InvoicePanel({
           </div>
         </CardHeader>
         <CardContent className='p-4'>
-          <div ref={itemsScrollRef} className='space-y-2 max-h-96 overflow-y-auto'>
+          <div ref={itemsScrollRef} className='space-y-2'>
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
@@ -1248,6 +1248,15 @@ export function InvoicePanel({
                                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                             <span key={`price-${product._id}`}>Rs{product.price}</span>
                                             <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
+                                            {product.cost != null && (
+                                              <span
+                                                key={`cost-${product._id}`}
+                                                className="text-amber-600 dark:text-amber-400 blur-sm hover:blur-none transition-all duration-200 select-none cursor-pointer"
+                                                title="Purchase cost"
+                                              >
+                                                Cost: Rs{product.cost}
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
