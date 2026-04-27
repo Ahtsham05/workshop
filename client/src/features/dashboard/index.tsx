@@ -14,7 +14,7 @@ import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
-import { useGetSubscriptionUsageQuery, useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -26,10 +26,10 @@ import { Navigate } from '@tanstack/react-router'
 export default function Dashboard() {
   const { t } = useLanguage()
   const { data: stats, isLoading, refetch } = useGetDashboardStatsQuery()
-  const { data: usageData } = useGetSubscriptionUsageQuery()
+  // const { data: usageData } = useGetSubscriptionUsageQuery()
   const { data: orgData } = useGetMyOrganizationQuery()
   const user = useSelector((state: RootState) => state.auth.data?.user)
-  const planType = usageData?.subscription?.planType
+  // const planType = usageData?.subscription?.planType
   // Use organization's businessType as the source of truth; fall back to user's businessType
   const businessType = orgData?.businessType ?? user?.businessType
   // Show the mobile-shop dashboard section for any mobile_shop organisation.

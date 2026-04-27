@@ -295,7 +295,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       totalProfit: commissionProfit + extraCharge + settlementProfit,
     }
   }, [withdrawalForm.amount, withdrawalForm.cashAmount, withdrawalForm.commissionRate, withdrawalForm.extraCharge, withdrawalForm.transactionType])
-  const requiresFullCashSettlement = !withdrawalForm.customerId
+  // const requiresFullCashSettlement = !withdrawalForm.customerId
 
   const bulkWithdrawalTotals = useMemo(() => {
     const commissionRate = Number(bulkWithdrawalForm.commissionRate) || 0
