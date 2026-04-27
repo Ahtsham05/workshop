@@ -18,7 +18,6 @@ import {
   TableRow,
   TableFooter,
 } from '@/components/ui/table'
-import { Separator } from '@/components/ui/separator'
 import {
   useGetExpenseReportQuery,
   useLazyGetExpenseReportQuery,
