@@ -107,6 +107,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const loadCash = loadTransactions.reduce((sum, transaction) => {
     return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
   }, 0);
+  const totalLoadPurchased = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
   const loadPurchaseProfit = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.profit || 0), 0);
   const loadProfit = loadPurchaseProfit;
 
@@ -171,6 +172,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   return {
     totalSales,
     totalLoadSold,
+    totalLoadPurchased,
     totalRepairIncome,
     totalBillCollection,
     billPaymentProfit,

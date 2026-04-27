@@ -19,7 +19,7 @@ import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package 
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isSchoolBusiness } from '@/lib/business-types'
-import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle } from 'lucide-react'
+import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle, ShoppingBag } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
 
@@ -89,6 +89,7 @@ export default function Dashboard() {
           <QuickActions />
         </div>
 
+        {/* Mobile Shop — Row 1: Cash / Wallets / Load */}
         {showMobileCards && (
           <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
             <StatCard
@@ -116,6 +117,20 @@ export default function Dashboard() {
               isLoading={isLoading}
             />
             <StatCard
+              title={t('Load Purchased')}
+              value={stats?.totalLoadPurchased || 0}
+              icon={<ShoppingBag className='h-4 w-4 text-blue-500' />}
+              valuePrefix='Rs '
+              description={t('Load bought from distributors')}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+
+        {/* Mobile Shop — Row 2: Repair / Bills */}
+        {showMobileCards && (
+          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
+            <StatCard
               title={t('Repair Income')}
               value={stats?.totalRepairIncome || 0}
               icon={<Wrench className='h-4 w-4' />}
@@ -123,25 +138,12 @@ export default function Dashboard() {
               description={t('Repair charges collected')}
               isLoading={isLoading}
             />
-          </div>
-        )}
-
-        {showMobileCards && (
-          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
             <StatCard
               title={t('Bill Collection')}
               value={stats?.totalBillCollection || 0}
               icon={<Receipt className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Total utility bills collected')}
-              isLoading={isLoading}
-            />
-            <StatCard
-              title={t('Bill Payment Profit')}
-              value={stats?.billPaymentProfit || 0}
-              icon={<DollarSign className='h-4 w-4 text-green-500' />}
-              valuePrefix='Rs '
-              description={t('Service charges earned')}
               isLoading={isLoading}
             />
             <StatCard

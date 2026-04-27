@@ -50,6 +50,7 @@ export interface DashboardStats {
   totalCustomers: number
   totalProducts: number
   totalLoadSold: number
+  totalLoadPurchased: number
   totalRepairIncome: number
   totalProfit: number
   cashInHand: number
