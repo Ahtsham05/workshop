@@ -228,6 +228,32 @@ const summery = {
     method: 'get',
   },
 
+  // personal ledger (wallet)
+  addPersonalLedgerEntry: {
+    url: '/personal-ledger',
+    method: 'post',
+  },
+  updatePersonalLedgerEntry: {
+    url: '/personal-ledger',
+    method: 'patch',
+  },
+  deletePersonalLedgerEntry: {
+    url: '/personal-ledger',
+    method: 'delete',
+  },
+  fetchPersonalLedgerEntries: {
+    url: '/personal-ledger',
+    method: 'get',
+  },
+  fetchPersonalLedgerBalance: {
+    url: '/personal-ledger/balance',
+    method: 'get',
+  },
+  fetchPersonalLedgerSummary: {
+    url: '/personal-ledger/summary',
+    method: 'get',
+  },
+
   // supplier ledger
   addSupplierLedgerEntry: {
     url: '/supplier-ledger',

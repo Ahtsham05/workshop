@@ -13,6 +13,7 @@ module.exports.Expense = require('./expense.model');
 module.exports.ExpenseCategory = require('./expenseCategory.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
+module.exports.PersonalLedger = require('./personalLedger.model');
 module.exports.Company = require('./company.model');
 module.exports.Organization = require('./organization.model');
 module.exports.Branch = require('./branch.model');

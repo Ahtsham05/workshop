@@ -5,12 +5,14 @@ import {
   Receipt, 
   Users, 
   Building2, 
-  BarChart3
+  BarChart3,
+  Wallet
 } from 'lucide-react';
 import { ExpenseManagement } from './components/expense-management';
 import { CustomerLedger } from './components/customer-ledger';
 import { SupplierLedger } from './components/supplier-ledger';
 import { AccountsDashboard } from './components/accounts-dashboard';
+import { PersonalLedger } from './components/personal-ledger';
 import { useLanguage } from '@/context/language-context';
 
 export default function AccountingPage() {
@@ -25,7 +27,7 @@ export default function AccountingPage() {
     ? 'customers' 
     : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId 
     ? 'suppliers'
-    : searchParams?.tab && ['dashboard', 'expenses', 'customers', 'suppliers'].includes(searchParams.tab)
+    : searchParams?.tab && ['dashboard', 'expenses', 'customers', 'suppliers', 'wallet'].includes(searchParams.tab)
     ? searchParams.tab
     : 'dashboard';
 
@@ -68,7 +70,7 @@ export default function AccountingPage() {
 
       {/* Main Content Tabs */}
       <Tabs value={manualTab || activeTab} onValueChange={setManualTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
           <TabsTrigger value="dashboard" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">{t('Dashboard')}</span>
@@ -84,6 +86,10 @@ export default function AccountingPage() {
           <TabsTrigger value="suppliers" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">{t('Suppliers')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="wallet" className="flex items-center gap-2">
+            <Wallet className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('My Wallet')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -105,6 +111,11 @@ export default function AccountingPage() {
         {/* Supplier Ledger Tab */}
         <TabsContent value="suppliers">
           <SupplierLedger initialSupplier={initialSupplier} />
+        </TabsContent>
+
+        {/* Personal Wallet Tab */}
+        <TabsContent value="wallet">
+          <PersonalLedger />
         </TabsContent>
       </Tabs>
     </div>

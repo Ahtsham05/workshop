@@ -14,6 +14,7 @@ const expenseRoute = require('./expense.route');
 const expenseCategoryRoute = require('./expenseCategory.route');
 const customerLedgerRoute = require('./customerLedger.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
+const personalLedgerRoute = require('./personalLedger.route');
 const dashboardRoute = require('./dashboard.route');
 const reportsRoute = require('./reports.route');
 const companyRoute = require('./company.route');
@@ -136,6 +137,10 @@ const defaultRoutes = [
   {
     path: '/supplier-ledger',
     route: supplierLedgerRoute
+  },
+  {
+    path: '/personal-ledger',
+    route: personalLedgerRoute
   },
   {
     path: '/dashboard',
@@ -398,6 +403,7 @@ const protectedPaths = [
   '/expenses',
   '/customer-ledger',
   '/supplier-ledger',
+  '/personal-ledger',
   '/dashboard',
   '/reports',
   '/company',
