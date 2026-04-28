@@ -17,7 +17,8 @@ export interface PurchaseItem {
   unit?: string; // Unit of measurement
   conversionFactor?: number;
   stockQuantity?: number;
-  purchasePrice: number; // price we bought it at
+  purchasePrice: number; // price we bought it at (cost)
+  sellingPrice?: number; // price we will sell it at (retail)
   isManualEntry?: boolean; // flag for manual product selection
 }
 
@@ -189,6 +190,7 @@ const PurchaseInvoicePage = () => {
         conversionFactor: 1,
         stockQuantity: quantity,
         purchasePrice: product.cost || product.price,
+        sellingPrice: product.price || 0,
       };
 
       return { ...prev, items: [...prev.items, newItem] };
@@ -226,6 +228,18 @@ const PurchaseInvoicePage = () => {
       items: prev.items.map((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
         return itemProductId === productId ? { ...item, purchasePrice: price } : item;
+      }),
+    }));
+  }, []);
+
+  // Update selling price
+  const updateSellingPrice = useCallback((productId: string, price: number) => {
+    if (price < 0) return;
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => {
+        const itemProductId = item.product.id || (item.product as any)._id;
+        return itemProductId === productId ? { ...item, sellingPrice: price } : item;
       }),
     }));
   }, []);
@@ -316,6 +330,7 @@ const PurchaseInvoicePage = () => {
       conversionFactor: item.conversionFactor,
       stockQuantity: item.stockQuantity,
       purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
+      sellingPrice: item.sellingPriceAtPurchase || item.product?.price || 0,
     }));
     
     console.log('Transformed items:', transformedItems);
@@ -331,8 +346,44 @@ const PurchaseInvoicePage = () => {
 
   // Handle save success callback
   const handleSaveSuccess = useCallback(() => {
-    handleBackToList();
-  }, [handleBackToList]);
+    // Optimistically update products state with new stock and costs right now
+    // so the catalog shows correct values before the re-fetch completes
+    setProducts(prevProducts => {
+      const updated = prevProducts.map(p => {
+        const productId = p.id || (p as any)._id
+        const purchasedItem = purchase.items.find(item => {
+          const itemProductId = item.product.id || (item.product as any)._id
+          return itemProductId === productId
+        })
+        if (!purchasedItem) return p
+        const addedStock = purchasedItem.quantity * (purchasedItem.conversionFactor || 1)
+        return {
+          ...p,
+          stockQuantity: (p.stockQuantity || 0) + addedStock,
+          cost: purchasedItem.purchasePrice > 0 ? purchasedItem.purchasePrice : p.cost,
+          price: (purchasedItem.sellingPrice ?? 0) > 0 ? purchasedItem.sellingPrice! : p.price,
+        }
+      })
+      return updated
+    })
+
+    // Background re-fetch to get exact values from backend (handles rounding, averaging, etc.)
+    dispatch(fetchAllProducts({}))
+      .then((data: any) => {
+        let productsData: Product[] = []
+        if (data.payload?.results) {
+          productsData = data.payload.results
+        } else if (data.payload) {
+          productsData = Array.isArray(data.payload) ? data.payload : []
+        }
+        if (productsData.length > 0) {
+          setProducts(productsData)
+        }
+      })
+      .catch((err: any) => console.error('Failed to refresh products after purchase:', err))
+
+    handleBackToList()
+  }, [handleBackToList, dispatch, purchase.items]);
 
   return (
     <div className="h-full w-full">
@@ -352,6 +403,7 @@ const PurchaseInvoicePage = () => {
               updateQuantity={updateQuantity}
               removeFromPurchase={removeFromPurchase}
               updatePurchasePrice={updatePurchasePrice}
+              updateSellingPrice={updateSellingPrice}
               calculateTotals={calculateTotals}
               onBackToList={handleBackToList}
               onSaveSuccess={handleSaveSuccess}

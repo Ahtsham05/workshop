@@ -40,6 +40,7 @@ interface PurchasePanelProps {
   updateQuantity: (productId: string, newQuantity: number) => void
   removeFromPurchase: (productId: string) => void
   updatePurchasePrice: (productId: string, price: number) => void
+  updateSellingPrice: (productId: string, price: number) => void
   calculateTotals: () => { subtotal: number; total: number }
   onBackToList?: () => void
   onSaveSuccess?: () => void
@@ -54,6 +55,7 @@ export default function PurchasePanel({
   updateQuantity,
   removeFromPurchase,
   updatePurchasePrice,
+  updateSellingPrice,
   calculateTotals,
   onBackToList,
   onSaveSuccess,
@@ -210,6 +212,7 @@ export default function PurchasePanel({
           conversionFactor: unitOptions[0]?.factor || 1,
           stockQuantity: newItems[itemIndex].quantity || 1,
           purchasePrice: product.cost || 0,
+          sellingPrice: product.price || 0,
           isManualEntry: false
         }
         return { ...prev, items: newItems }
@@ -325,6 +328,7 @@ export default function PurchasePanel({
             conversionFactor: item.conversionFactor,
             stockQuantity: item.stockQuantity,
             priceAtPurchase: item.purchasePrice,
+            sellingPriceAtPurchase: item.sellingPrice || 0,
             total: item.quantity * item.purchasePrice,
           };
         }),
@@ -651,7 +655,7 @@ export default function PurchasePanel({
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div ref={itemsScrollRef} className="space-y-2 max-h-96 overflow-y-auto">
+          <div ref={itemsScrollRef} className="space-y-2">
             {purchase.items.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 {t('No items added yet')}
@@ -663,236 +667,277 @@ export default function PurchasePanel({
                 // Show product selector for manual entries
                 if (item.isManualEntry && !productId) {
                   return (
-                    <div key={`manual-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg border-2 border-dashed border-primary/30">
-                      {/* Product Selector */}
-                      <Popover 
-                        open={productSelectOpen === `manual-${index}`}
-                        onOpenChange={(open) => {
-                          setProductSelectOpen(open ? `manual-${index}` : '')
-                          if (!open) setProductSearchQuery('')
-                        }}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="flex-1 justify-start">
-                            <Plus className="h-4 w-4 mr-2" />
-                            {t('Select Product')}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-0" align="start">
-                          <Command shouldFilter={false}>
-                            <CommandInput
-                              placeholder={t('Search products...')}
-                              value={productSearchQuery}
-                              onValueChange={setProductSearchQuery}
-                            />
-                            <CommandEmpty>{t('No products found')}</CommandEmpty>
-                            <CommandList className="max-h-64 overflow-y-auto">
-                            <CommandGroup>
-                              {products
-                                .filter((product: any) => {
-                                  if (!productSearchQuery) return true
-                                  const query = productSearchQuery.toLowerCase()
-                                  return (
-                                    product.name?.toLowerCase().includes(query) ||
-                                    product.barcode?.toLowerCase().includes(query)
-                                  )
-                                })
-                                .map((product: any) => (
-                                  <CommandItem
-                                    key={product.id || product._id}
-                                    onSelect={() => handleProductSelect(index, product)}
-                                    className="flex items-center gap-2 cursor-pointer"
-                                  >
-                                    {product.image?.url ? (
-                                      <img
-                                        src={product.image.url}
-                                        alt={product.name}
-                                        className="w-10 h-10 object-cover rounded"
-                                      />
-                                    ) : (
-                                      <div className="w-10 h-10 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                                        <Package className="h-5 w-5 text-gray-400" />
-                                      </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="font-medium truncate">{product.name}</div>
-                                      {product.barcode && (
-                                        <div className="text-xs text-muted-foreground">{product.barcode}</div>
-                                      )}
-                                      <div className="text-xs text-muted-foreground">
-                                        Cost: Rs{product.cost?.toFixed(2) || '0.00'}
-                                      </div>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      
-                      {/* Remove Button */}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          setPurchase(prev => ({
-                            ...prev,
-                            items: prev.items.filter((_, i) => i !== index)
-                          }))
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div key={`manual-${index}`} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
+                      <div className='flex items-center gap-3 p-3'>
+                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0'>
+                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                        </div>
+                        <div className='flex-1 min-w-0'>
+                          <Popover
+                            open={productSelectOpen === `manual-${index}`}
+                            onOpenChange={(open) => {
+                              setProductSelectOpen(open ? `manual-${index}` : '')
+                              if (!open) setProductSearchQuery('')
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-start h-8 text-xs border-dashed">
+                                <Search className="h-3 w-3 mr-2 flex-shrink-0" />
+                                {t('Select Product')} *
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[400px] p-0" align="start">
+                              <Command shouldFilter={false}>
+                                <CommandInput
+                                  placeholder={t('Search products...')}
+                                  value={productSearchQuery}
+                                  onValueChange={setProductSearchQuery}
+                                />
+                                <CommandEmpty>{t('No products found')}</CommandEmpty>
+                                <CommandList className="max-h-64 overflow-y-auto">
+                                  <CommandGroup>
+                                    {products
+                                      .filter((product: any) => {
+                                        if (!productSearchQuery) return true
+                                        const query = productSearchQuery.toLowerCase()
+                                        return (
+                                          product.name?.toLowerCase().includes(query) ||
+                                          product.barcode?.toLowerCase().includes(query)
+                                        )
+                                      })
+                                      .map((product: any) => (
+                                        <CommandItem
+                                          key={product.id || product._id}
+                                          onSelect={() => handleProductSelect(index, product)}
+                                          className="flex items-center gap-3 cursor-pointer p-3"
+                                        >
+                                          {product.image?.url ? (
+                                            <img
+                                              src={product.image.url}
+                                              alt={product.name}
+                                              className="w-8 h-8 object-cover rounded-lg flex-shrink-0"
+                                            />
+                                          ) : (
+                                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                                              <Package className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                          )}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-sm truncate">{product.name}</div>
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              {product.barcode && <span>{product.barcode}</span>}
+                                              <span className="text-amber-600">Cost: Rs{product.cost?.toFixed(2) || '0.00'}</span>
+                                              <span className={product.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
+                                                Stock: {product.stockQuantity}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                          onClick={() => setPurchase(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }))}
+                        >
+                          <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+                        </Button>
+                      </div>
                     </div>
                   )
                 }
-                
+
                 return (
-                <div key={`${productId}-${index}`} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
-                  {/* Product Image */}
-                  {item.product.image?.url ? (
-                    <img 
-                      src={item.product.image.url} 
-                      alt={item.product.name}
-                      className="w-12 h-12 object-cover rounded"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <Package className="h-6 w-6 text-gray-400" />
-                    </div>
-                  )}
-                  
-                  {/* Product Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{item.product.name}</div>
-                    {item.product.barcode && (
-                      <div className="text-xs text-muted-foreground">{item.product.barcode}</div>
-                    )}
-                  </div>
-                  
-                  {/* Quantity Controls */}
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-center">{t('Qty')}</Label>
-                    <div className="flex items-center gap-1">
+                  <div key={`${productId}-${index}`} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
+                    {/* Row 1: Image + Info + Delete */}
+                    <div className='flex items-start gap-3 p-3'>
+                      {item.product.image?.url ? (
+                        <img
+                          src={item.product.image.url}
+                          alt={item.product.name}
+                          className='w-10 h-10 object-cover rounded-lg flex-shrink-0 mt-0.5'
+                        />
+                      ) : (
+                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5'>
+                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                        </div>
+                      )}
+
+                      <div className='flex-1 min-w-0'>
+                        <p className='font-semibold text-sm truncate'>{item.product.name}</p>
+                        <div className='flex items-center gap-2 mt-0.5 flex-wrap'>
+                          {item.product.barcode && (
+                            <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
+                          )}
+                          <span className='text-xs text-muted-foreground'>Rs{item.purchasePrice} · {item.unit || item.product.unit || 'pcs'}</span>
+                          {item.product.stockQuantity !== undefined && (
+                            <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+                              item.product.stockQuantity <= 0 ? 'bg-red-100 text-red-700' :
+                              item.product.stockQuantity <= 5 ? 'bg-red-50 text-red-500' :
+                              item.product.stockQuantity <= 20 ? 'bg-amber-50 text-amber-600' :
+                              'bg-green-50 text-green-700'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                item.product.stockQuantity <= 0 ? 'bg-red-500' :
+                                item.product.stockQuantity <= 5 ? 'bg-red-400' :
+                                item.product.stockQuantity <= 20 ? 'bg-amber-400' :
+                                'bg-green-500'
+                              }`} />
+                              {item.product.stockQuantity <= 0 ? 'Out of stock' : `${item.product.stockQuantity} in stock`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1))}
+                        variant="ghost"
+                        className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                        onClick={() => removeFromPurchase(productId)}
                       >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <Input
-                        ref={(el) => { qtyInputRefs.current[productId] = el }}
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
-                        onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
-                        onFocus={(e) => e.target.select()}
-                        className="h-6 w-12 text-center text-xs p-1"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(productId, item.quantity + 1)}
-                      >
-                        <Plus className="h-3 w-3" />
+                        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
                       </Button>
                     </div>
-                    <div className='text-[10px] text-center text-muted-foreground mt-0.5'>
-                      {item.unit || item.product.unit || 'pcs'}
+
+                    {/* Row 2: Controls */}
+                    <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                      {/* Quantity Stepper */}
+                      <div className='flex items-center gap-1.5'>
+                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1))}
+                          >
+                            <Minus className='h-3.5 w-3.5' />
+                          </Button>
+                          <Input
+                            ref={(el) => { qtyInputRefs.current[productId] = el }}
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
+                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
+                            onFocus={(e) => e.target.select()}
+                            className='h-7 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            onClick={() => updateQuantity(productId, item.quantity + 1)}
+                          >
+                            <Plus className='h-3.5 w-3.5' />
+                          </Button>
+                        </div>
+                        <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
+                      </div>
+
+                      {showUnitConversions && (
+                        <div className='flex flex-col gap-1 min-w-[80px]'>
+                          <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
+                          <Select
+                            value={item.unit || item.product.unit || 'pcs'}
+                            onValueChange={(value) => {
+                              const resolved = resolveUnitConversion({
+                                product: item.product,
+                                quantity: item.quantity,
+                                unit: value,
+                              })
+                              const adjustedPurchasePrice = getUnitAdjustedPrice({
+                                product: item.product,
+                                unit: value,
+                                basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
+                                conversionFactor: resolved?.conversionFactor,
+                              })
+                              if (!resolved || adjustedPurchasePrice === null) {
+                                toast.error(`Missing conversion for ${item.product.name}`)
+                                return
+                              }
+                              setPurchase((prev) => ({
+                                ...prev,
+                                items: prev.items.map((purchaseItem, purchaseIndex) =>
+                                  purchaseIndex === index
+                                    ? {
+                                        ...purchaseItem,
+                                        unit: resolved.lineUnit,
+                                        conversionFactor: resolved.conversionFactor,
+                                        stockQuantity: resolved.stockQuantity,
+                                        purchasePrice: adjustedPurchasePrice,
+                                      }
+                                    : purchaseItem
+                                ),
+                              }))
+                            }}
+                          >
+                            <SelectTrigger className='h-6 text-xs px-2'>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getProductUnitOptions(item.product).map((unitOption) => (
+                                <SelectItem key={unitOption.value} value={unitOption.value}>
+                                  {unitOption.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* × separator */}
+                      <span className='text-muted-foreground/60 text-sm select-none'>×</span>
+
+                      {/* Cost Price Input */}
+                      <div className='flex flex-col gap-0.5'>
+                        <span className='text-[10px] text-muted-foreground leading-none'>Cost</span>
+                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.purchasePrice > 0 ? item.purchasePrice : ''}
+                            onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => e.target.select()}
+                            className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                        </div>
+                      </div>
+
+                      {/* → separator */}
+                      <span className='text-muted-foreground/60 text-sm select-none'>→</span>
+
+                      {/* Sell Price Input */}
+                      <div className='flex flex-col gap-0.5'>
+                        <span className='text-[10px] text-blue-500 leading-none font-medium'>Sell</span>
+                        <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden'>
+                          <span className='px-2 h-7 flex items-center text-xs text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={(item.sellingPrice ?? 0) > 0 ? item.sellingPrice : ''}
+                            onChange={(e) => updateSellingPrice(productId, parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => e.target.select()}
+                            placeholder='0'
+                            className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-blue-700 dark:text-blue-300 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                        </div>
+                      </div>
+
+                      {/* = subtotal */}
+                      <div className='flex items-center gap-1.5 ml-auto'>
+                        <span className='text-muted-foreground/60 text-sm select-none'>=</span>
+                        <p className='font-bold text-sm'>Rs{(item.quantity * item.purchasePrice).toFixed(2)}</p>
+                      </div>
                     </div>
                   </div>
-
-                  {showUnitConversions && (
-                    <div className="flex flex-col gap-1 min-w-[110px]">
-                      <Label className="text-xs text-center">{t('unit')}</Label>
-                      <Select
-                        value={item.unit || item.product.unit || 'pcs'}
-                        onValueChange={(value) => {
-                          const resolved = resolveUnitConversion({
-                            product: item.product,
-                            quantity: item.quantity,
-                            unit: value,
-                          })
-
-                          const adjustedPurchasePrice = getUnitAdjustedPrice({
-                            product: item.product,
-                            unit: value,
-                            basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
-                            conversionFactor: resolved?.conversionFactor,
-                          })
-
-                          if (!resolved || adjustedPurchasePrice === null) {
-                            toast.error(`Missing conversion for ${item.product.name}`)
-                            return
-                          }
-
-                          setPurchase((prev) => ({
-                            ...prev,
-                            items: prev.items.map((purchaseItem, purchaseIndex) =>
-                              purchaseIndex === index
-                                ? {
-                                    ...purchaseItem,
-                                    unit: resolved.lineUnit,
-                                    conversionFactor: resolved.conversionFactor,
-                                    stockQuantity: resolved.stockQuantity,
-                                    purchasePrice: adjustedPurchasePrice,
-                                  }
-                                : purchaseItem
-                            ),
-                          }))
-                        }}
-                      >
-                        <SelectTrigger className="h-6 text-xs px-2">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getProductUnitOptions(item.product).map((unitOption) => (
-                            <SelectItem key={unitOption.value} value={unitOption.value}>
-                              {unitOption.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {/* Price Controls */}
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-center">{t('Price')}</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.purchasePrice || 0}
-                      onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
-                      onFocus={(e) => e.target.select()}
-                      className="h-6 w-16 text-center text-xs p-1"
-                    />
-                  </div>
-
-                  {/* Total and Actions */}
-                  <div className="flex flex-col items-end gap-1">
-                    <Label className="text-xs">{t('Total')}</Label>
-                    <div className="font-semibold text-sm">
-                      Rs{(item.quantity * item.purchasePrice).toFixed(2)}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                      onClick={() => removeFromPurchase(productId)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )
+                )
               })
             )}
           </div>
@@ -938,10 +983,9 @@ export default function PurchasePanel({
                 </Label>
                 <Input
                   id="paid-amount"
-                  type="number"
-                  min="0"
-                  max={totals.total}
-                  value={purchase.paidAmount || 0}
+                  type="text"
+                  inputMode="decimal"
+                  value={purchase.paidAmount || ''}
                   disabled={purchase.paymentType === 'Cash'}
                   onChange={(e) => {
                     const value = parseFloat(e.target.value) || 0

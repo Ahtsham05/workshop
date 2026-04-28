@@ -561,7 +561,7 @@ export default function Expenses() {
                 <Label>Amount (PKR) *</Label>
                 <Input
                   type="number"
-                  min="0.01"
+                  min="0"
                   step="0.01"
                   placeholder="0.00"
                   className="mt-1"

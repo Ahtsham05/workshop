@@ -12,6 +12,7 @@ const createPurchase = {
         conversionFactor: Joi.number().positive().optional(),
         stockQuantity: Joi.number().positive().optional(),
         priceAtPurchase: Joi.number().required(),
+        sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number().required(),
       })
     ).required(),
@@ -57,6 +58,7 @@ const updatePurchase = {
         conversionFactor: Joi.number().positive().optional(),
         stockQuantity: Joi.number().positive().optional(),
         priceAtPurchase: Joi.number(),
+        sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number(),
       })
     ),

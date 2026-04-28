@@ -78,6 +78,16 @@ const createPurchase = async (purchaseBody) => {
       // Increase stock in product stock unit (typically pcs)
       product.stockQuantity += conversion.stockQuantity;
 
+      // Update the product's cost price to the latest purchase price
+      if (item.priceAtPurchase > 0) {
+        product.cost = item.priceAtPurchase;
+      }
+
+      // Update the product's selling price if provided
+      if (item.sellingPriceAtPurchase > 0) {
+        product.price = item.sellingPriceAtPurchase;
+      }
+
       // Save the updated product
       await product.save();
     }
@@ -227,10 +237,17 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         updatedItem.conversionFactor = updatedStock.conversionFactor;
         updatedItem.stockQuantity = updatedStock.stockQuantity;
 
-        // Update the product price with the new price
-        product.price = updatedItem.priceAtPurchase;
+        // Update the product's cost price to the latest purchase price
+        if (updatedItem.priceAtPurchase > 0) {
+          product.cost = updatedItem.priceAtPurchase;
+        }
 
-        // Save the product with updated stock and price
+        // Update the product's selling price if provided
+        if (updatedItem.sellingPriceAtPurchase > 0) {
+          product.price = updatedItem.sellingPriceAtPurchase;
+        }
+
+        // Save the product with updated stock, cost, and selling price
         await product.save();
       }
     } else {
@@ -247,10 +264,17 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         updatedItem.conversionFactor = updatedStock.conversionFactor;
         updatedItem.stockQuantity = updatedStock.stockQuantity;
 
-        // Update the product price with the new price
-        product.price = updatedItem.priceAtPurchase;
+        // Update the product's cost price to the latest purchase price
+        if (updatedItem.priceAtPurchase > 0) {
+          product.cost = updatedItem.priceAtPurchase;
+        }
 
-        // Save the product with updated stock and price
+        // Update the product's selling price if provided
+        if (updatedItem.sellingPriceAtPurchase > 0) {
+          product.price = updatedItem.sellingPriceAtPurchase;
+        }
+
+        // Save the product with updated stock, cost, and selling price
         await product.save();
       }
     }

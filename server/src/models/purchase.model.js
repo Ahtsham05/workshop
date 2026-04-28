@@ -37,6 +37,7 @@ const PurchaseSchema = new mongoose.Schema({
         },
       },
       priceAtPurchase: { type: Number, required: true }, // Purchase price of the product
+      sellingPriceAtPurchase: { type: Number, min: 0 }, // Selling price set at purchase time
       total: { type: Number, required: true }, // quantity * priceAtPurchase
     },
   ],

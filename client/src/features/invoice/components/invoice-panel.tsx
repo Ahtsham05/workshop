@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote } from 'lucide-react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice } from '../index'
@@ -97,6 +97,7 @@ export function InvoicePanel({
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(false)
+  const [cashReceivedInput, setCashReceivedInput] = useState('')
 
   // Refs for quantity inputs to focus after product selection
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -1158,361 +1159,389 @@ export function InvoicePanel({
                 {t('no_items_added')}
               </div>
             ) : (
-              invoice.items.map((item) => (
-                <div key={item.id} className='flex items-center gap-2 p-2 bg-muted/30 rounded-lg'>
-                  {/* Product Image */}
-                  {item.image?.url ? (
-                    <img 
-                      src={item.image.url} 
-                      alt={item.name}
-                      className='w-12 h-12 object-cover rounded'
-                    />
-                  ) : (
-                    <div className='w-12 h-12 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
-                      <Package className='h-6 w-6 text-gray-400' />
-                    </div>
-                  )}
-                  
-                  {/* Product Info / Selection */}
-                  <div className='flex-1 min-w-28'>
-                    {item.isManualEntry ? (
-                      <div className='space-y-1'>
-                        <Popover 
-                          open={productSelectOpen === item.id} 
-                          onOpenChange={(open) => setProductSelectOpen(open ? item.id : '')}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={`w-full justify-between h-8 text-xs ${
-                                !item.productId ? 'border-red-500 bg-red-50' : ''
-                              } mt-4`}
+              invoice.items.map((item) => {
+                const currentProduct = products.find(p => (p._id || p.id) === item.productId)
+                const remainingStock = currentProduct?.stockQuantity
+                return (
+                  <div key={item.id} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
+                    {/* Row 1: Image + Name/Selector + Delete */}
+                    <div className='flex items-start gap-3 p-3'>
+                      {item.image?.url ? (
+                        <img
+                          src={item.image.url}
+                          alt={item.name}
+                          className='w-10 h-10 object-cover rounded-lg flex-shrink-0 mt-0.5'
+                        />
+                      ) : (
+                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5'>
+                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                        </div>
+                      )}
+
+                      <div className='flex-1 min-w-0'>
+                        {item.isManualEntry ? (
+                          <div className='space-y-1'>
+                            <Popover
+                              open={productSelectOpen === item.id}
+                              onOpenChange={(open) => setProductSelectOpen(open ? item.id : '')}
                             >
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <Search className="w-3 h-3 flex-shrink-0" />
-                                <span 
-                                  className={getTextClasses(item.name || t('select_product'), `truncate ${
-                                    !item.productId ? 'text-red-500' : 'text-muted-foreground'
-                                  }`)}
-                                  title={item.name || t('select_product')}
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={`w-full justify-between h-8 text-xs ${
+                                    !item.productId ? 'border-red-500 bg-red-50' : ''
+                                  }`}
                                 >
-                                  {item.name || t('select_product')}
-                                  {!item.productId && ' *'}
-                                </span>
-                              </div>
-                              <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
-                            <Command shouldFilter={false}>
-                              <div className="relative">
-                                <CommandInput 
-                                  placeholder={t('search_products')} 
-                                  value={productSearchQuery}
-                                  onValueChange={setProductSearchQuery}
-                                />
-                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                                  <VoiceInputButton 
-                                    onTranscript={setProductSearchQuery}
-                                    language={voiceLanguage}
-                                    size="sm"
-                                  />
-                                </div>
-                              </div>
-                              <CommandEmpty>{t('no_products_found')}</CommandEmpty>
-                              <CommandList className="max-h-[300px] overflow-y-auto">
-                                <CommandGroup>
-                                  {filteredProducts.map((product) => (
-                                    <CommandItem
-                                      key={product._id}
-                                      onSelect={() => handleProductSelect(item.id, product)}
-                                      className="flex items-center gap-2 cursor-pointer p-3"
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Search className="w-3 h-3 flex-shrink-0" />
+                                    <span
+                                      className={getTextClasses(item.name || t('select_product'), `truncate ${
+                                        !item.productId ? 'text-red-500' : 'text-muted-foreground'
+                                      }`)}
+                                      title={item.name || t('select_product')}
                                     >
-                                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        {product.image?.url ? (
-                                          <img 
-                                            src={product.image.url} 
-                                            alt={product.name}
-                                            className="w-8 h-8 object-cover rounded flex-shrink-0"
-                                          />
-                                        ) : (
-                                          <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                                            <Package className="w-4 h-4 text-muted-foreground" />
-                                          </div>
-                                        )}
-                                        <div className="flex flex-col flex-1 min-w-0">
-                                          <span className={getTextClasses(product.name, "text-sm font-medium truncate")} title={product.name}>
-                                            {product.name}
-                                          </span>
-                                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span key={`price-${product._id}`}>Rs{product.price}</span>
-                                            <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
-                                            {product.cost != null && (
-                                              <span
-                                                key={`cost-${product._id}`}
-                                                className="text-amber-600 dark:text-amber-400 blur-sm hover:blur-none transition-all duration-200 select-none cursor-pointer"
-                                                title="Purchase cost"
-                                              >
-                                                Cost: Rs{product.cost}
-                                              </span>
+                                      {item.name || t('select_product')}
+                                      {!item.productId && ' *'}
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
+                                <Command shouldFilter={false}>
+                                  <div className="relative">
+                                    <CommandInput
+                                      placeholder={t('search_products')}
+                                      value={productSearchQuery}
+                                      onValueChange={setProductSearchQuery}
+                                    />
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                                      <VoiceInputButton
+                                        onTranscript={setProductSearchQuery}
+                                        language={voiceLanguage}
+                                        size="sm"
+                                      />
+                                    </div>
+                                  </div>
+                                  <CommandEmpty>{t('no_products_found')}</CommandEmpty>
+                                  <CommandList className="max-h-[300px] overflow-y-auto">
+                                    <CommandGroup>
+                                      {filteredProducts.map((product) => (
+                                        <CommandItem
+                                          key={product._id}
+                                          onSelect={() => handleProductSelect(item.id, product)}
+                                          className="flex items-center gap-2 cursor-pointer p-3"
+                                        >
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            {product.image?.url ? (
+                                              <img
+                                                src={product.image.url}
+                                                alt={product.name}
+                                                className="w-8 h-8 object-cover rounded flex-shrink-0"
+                                              />
+                                            ) : (
+                                              <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                                <Package className="w-4 h-4 text-muted-foreground" />
+                                              </div>
                                             )}
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                              <span className={getTextClasses(product.name, "text-sm font-medium truncate")} title={product.name}>
+                                                {product.name}
+                                              </span>
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span key={`price-${product._id}`}>Rs{product.price}</span>
+                                                <span
+                                                  key={`stock-${product._id}`}
+                                                  className={product.stockQuantity <= 0 ? 'text-red-600 font-medium' : product.stockQuantity <= 5 ? 'text-red-500 font-medium' : product.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
+                                                >
+                                                  Stock: {product.stockQuantity}
+                                                </span>
+                                                {product.cost != null && (
+                                                  <span
+                                                    key={`cost-${product._id}`}
+                                                    className="text-amber-600 dark:text-amber-400 blur-sm hover:blur-none transition-all duration-200 select-none cursor-pointer"
+                                                    title="Purchase cost"
+                                                  >
+                                                    Cost: Rs{product.cost}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
                                           </div>
-                                        </div>
-                                      </div>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        ) : (
+                          <div className='min-w-0 flex-1'>
+                            <p className={getTextClasses(item.name, 'font-semibold text-sm truncate')} title={item.name}>{item.name}</p>
+                            <div className='flex items-center gap-2 mt-0.5 flex-wrap'>
+                              <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
+                              {remainingStock !== undefined && (
+                                <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+                                  remainingStock <= 0 ? 'bg-red-100 text-red-700' :
+                                  remainingStock <= 5 ? 'bg-red-50 text-red-500' :
+                                  remainingStock <= 20 ? 'bg-amber-50 text-amber-600' :
+                                  'bg-green-50 text-green-700'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                    remainingStock <= 0 ? 'bg-red-500' :
+                                    remainingStock <= 5 ? 'bg-red-400' :
+                                    remainingStock <= 20 ? 'bg-amber-400' :
+                                    'bg-green-500'
+                                  }`} />
+                                  {remainingStock <= 0 ? 'Out of stock' : `${remainingStock} left`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="min-w-28">
-                        <p className={getTextClasses(item.name, 'font-medium truncate')} title={item.name}>{item.name}</p>
-                        <p className='text-xs text-muted-foreground'>
-                          Rs{item.unitPrice} × {item.quantity} = Rs{item.subtotal}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Quantity Controls */}
-                  <div className='flex flex-col gap-1'>
-                    <Label className='text-xs text-center'>{t('qty')}</Label>
-                    <div className='flex items-center gap-1'>
+
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className='h-6 w-6 p-0'
+                        variant="ghost"
+                        onClick={() => removeFromInvoice(item.id)}
+                        className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
                       >
-                        <Minus className='h-3 w-3' />
-                      </Button>
-                      <Input
-                        ref={(el) => { qtyInputRefs.current[item.id] = el }}
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const qty = parseInt(e.target.value) || 1
-                          updateQuantity(item.id, qty)
-                        }}
-                        onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
-                        onFocus={(e) => e.target.select()}
-                        className='h-6 w-12 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className='h-6 w-6 p-0'
-                      >
-                        <Plus className='h-3 w-3' />
+                        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
                       </Button>
                     </div>
-                    <div className='text-[10px] text-center text-muted-foreground mt-0.5'>
-                      {item.unit || 'pcs'}
-                    </div>
-                  </div>
 
-                    {showUnitConversions && (
-                      <div className='flex flex-col gap-1 min-w-[110px]'>
-                        <Label className='text-xs text-center'>{t('unit')}</Label>
-                        <Select
-                          value={item.unit || 'pcs'}
-                          onValueChange={(value) => {
-                            const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
-                            if (!selectedProduct) {
-                              toast.error('Product not found for this line')
-                              return
-                            }
+                    {/* Row 2: Controls — only when a product is selected */}
+                    {(item.productId && item.name) && (
+                      <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                        {/* Quantity Stepper */}
+                        <div className='flex items-center gap-1.5'>
+                          <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            >
+                              <Minus className='h-3.5 w-3.5' />
+                            </Button>
+                            <Input
+                              ref={(el) => { qtyInputRefs.current[item.id] = el }}
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const qty = parseInt(e.target.value) || 1
+                                updateQuantity(item.id, qty)
+                              }}
+                              onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
+                              onFocus={(e) => e.target.select()}
+                              className='h-7 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            >
+                              <Plus className='h-3.5 w-3.5' />
+                            </Button>
+                          </div>
+                          <span className='text-xs text-muted-foreground'>{item.unit || 'pcs'}</span>
+                        </div>
 
-                            const adjustedUnitPrice = getUnitAdjustedPrice({
-                              product: selectedProduct,
-                              unit: value,
-                              basePrice: selectedProduct.price || item.unitPrice || 0,
-                            })
+                        {showUnitConversions && (
+                          <div className='flex flex-col gap-1 min-w-[80px]'>
+                            <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
+                            <Select
+                              value={item.unit || 'pcs'}
+                              onValueChange={(value) => {
+                                const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
+                                if (!selectedProduct) {
+                                  toast.error('Product not found for this line')
+                                  return
+                                }
 
-                            if (adjustedUnitPrice === null) {
-                              toast.error(`Missing conversion for ${item.name}`)
-                              return
-                            }
+                                const adjustedUnitPrice = getUnitAdjustedPrice({
+                                  product: selectedProduct,
+                                  unit: value,
+                                  basePrice: selectedProduct.price || item.unitPrice || 0,
+                                })
 
-                            const lineValues = calculateInvoiceLineValues({
-                              product: selectedProduct,
-                              quantity: item.quantity,
-                              unit: value,
-                              unitPrice: adjustedUnitPrice,
-                              cost: item.cost,
-                            })
+                                if (adjustedUnitPrice === null) {
+                                  toast.error(`Missing conversion for ${item.name}`)
+                                  return
+                                }
 
-                            if (!lineValues) {
-                              toast.error(`Missing conversion for ${item.name}`)
-                              return
-                            }
-
-                            const previousStockQuantity = item.stockQuantity || item.quantity
-                            const stockDifference = lineValues.stockQuantity - previousStockQuantity
-
-                            if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
-                              toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
-                              return
-                            }
-
-                            if (stockDifference !== 0) {
-                              setProducts((prevProducts) => prevProducts.map((productRow) =>
-                                (productRow._id || productRow.id) === item.productId
-                                  ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
-                                  : productRow
-                              ))
-                            }
-
-                            const newItems = invoice.items.map((invoiceItem) =>
-                              invoiceItem.id === item.id
-                                ? {
-                                    ...invoiceItem,
-                                    unit: lineValues.lineUnit,
-                                    conversionFactor: lineValues.conversionFactor,
-                                    stockQuantity: lineValues.stockQuantity,
-                                    unitPrice: adjustedUnitPrice,
-                                    subtotal: lineValues.subtotal,
-                                    profit: lineValues.profit,
-                                  }
-                                : invoiceItem
-                            )
-
-                            if (calculateTotals) {
-                              const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-                              setInvoice((prev) => ({
-                                ...prev,
-                                items: newItems,
-                                subtotal: totals.subtotal,
-                                tax: totals.tax,
-                                total: totals.total,
-                                totalProfit: totals.totalProfit,
-                                totalCost: totals.totalCost,
-                                balance: totals.total - prev.paidAmount,
-                              }))
-                            }
-                          }}
-                        >
-                          <SelectTrigger className='h-6 text-xs px-2'>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(products.find((p) => (p._id || p.id) === item.productId)
-                              ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
-                              : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
-                            ).map((unitOption) => (
-                              <SelectItem key={unitOption.value} value={unitOption.value}>
-                                {unitOption.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                  {/* Price Controls */}
-                  <div className='flex flex-col gap-1'>
-                    <Label className='text-xs text-center'>{t('price')}</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.unitPrice}
-                      onChange={(e) => {
-                        const newPrice = parseFloat(e.target.value) || 0.01
-                        const newItems = invoice.items.map(i => 
-                          i.id === item.id 
-                            ? (() => {
-                                const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
                                 const lineValues = calculateInvoiceLineValues({
                                   product: selectedProduct,
-                                  quantity: i.quantity,
-                                  unit: i.unit,
-                                  unitPrice: newPrice,
-                                  cost: i.cost,
-                                  conversionFactor: i.conversionFactor,
+                                  quantity: item.quantity,
+                                  unit: value,
+                                  unitPrice: adjustedUnitPrice,
+                                  cost: item.cost,
                                 })
 
                                 if (!lineValues) {
-                                  return i
+                                  toast.error(`Missing conversion for ${item.name}`)
+                                  return
                                 }
 
-                                return {
-                                  ...i,
-                                  unitPrice: newPrice,
-                                  subtotal: lineValues.subtotal,
-                                  profit: lineValues.profit,
-                                  stockQuantity: lineValues.stockQuantity,
-                                  conversionFactor: lineValues.conversionFactor,
-                                }
-                              })()
-                            : i
-                        )
-                        
-                        if (calculateTotals) {
-                          // Use parent's calculateTotals function
-                          const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-                          setInvoice(prev => ({
-                            ...prev,
-                            items: newItems,
-                            subtotal: totals.subtotal,
-                            tax: totals.tax,
-                            total: totals.total,
-                            totalProfit: totals.totalProfit,
-                            totalCost: totals.totalCost,
-                            balance: totals.total - prev.paidAmount
-                          }))
-                        } else {
-                          // Fallback calculation
-                          const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
-                          const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
-                          const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
-                          const discountAmount = invoice.discount || 0
-                          const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
-                          const total = subtotal - discountAmount + taxAmount
-                          const balance = total - invoice.paidAmount
-                          
-                          setInvoice(prev => ({
-                            ...prev,
-                            items: newItems,
-                            subtotal,
-                            totalCost,
-                            totalProfit,
-                            tax: taxAmount,
-                            total,
-                            balance
-                          }))
-                        }
-                      }}
-                      onFocus={(e) => e.target.select()}
-                      className='h-6 w-16 text-center text-xs p-1 border-0 bg-white focus:ring-0 focus:ring-offset-0 focus:border-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                    />
-                  </div>
+                                const previousStockQuantity = item.stockQuantity || item.quantity
+                                const stockDifference = lineValues.stockQuantity - previousStockQuantity
 
-                  {/* Total and Actions */}
-                  <div className='flex flex-col items-end gap-1'>
-                    <p className='font-medium text-sm'>Rs{item.subtotal}</p>
-                    {showProfitDetails && (
-                      <p className='text-xs text-green-600'>
-                        +Rs{item.profit}
-                      </p>
+                                if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
+                                  toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
+                                  return
+                                }
+
+                                if (stockDifference !== 0) {
+                                  setProducts((prevProducts) => prevProducts.map((productRow) =>
+                                    (productRow._id || productRow.id) === item.productId
+                                      ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
+                                      : productRow
+                                  ))
+                                }
+
+                                const newItems = invoice.items.map((invoiceItem) =>
+                                  invoiceItem.id === item.id
+                                    ? {
+                                        ...invoiceItem,
+                                        unit: lineValues.lineUnit,
+                                        conversionFactor: lineValues.conversionFactor,
+                                        stockQuantity: lineValues.stockQuantity,
+                                        unitPrice: adjustedUnitPrice,
+                                        subtotal: lineValues.subtotal,
+                                        profit: lineValues.profit,
+                                      }
+                                    : invoiceItem
+                                )
+
+                                if (calculateTotals) {
+                                  const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                                  setInvoice((prev) => ({
+                                    ...prev,
+                                    items: newItems,
+                                    subtotal: totals.subtotal,
+                                    tax: totals.tax,
+                                    total: totals.total,
+                                    totalProfit: totals.totalProfit,
+                                    totalCost: totals.totalCost,
+                                    balance: totals.total - prev.paidAmount,
+                                  }))
+                                }
+                              }}
+                            >
+                              <SelectTrigger className='h-6 text-xs px-2'>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(products.find((p) => (p._id || p.id) === item.productId)
+                                  ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
+                                  : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
+                                ).map((unitOption) => (
+                                  <SelectItem key={unitOption.value} value={unitOption.value}>
+                                    {unitOption.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Price Input */}
+                        <span className='text-muted-foreground/60 text-sm select-none'>×</span>
+                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.unitPrice > 0 ? item.unitPrice : ''}
+                            onChange={(e) => {
+                              const newPrice = parseFloat(e.target.value) || 0
+                              const newItems = invoice.items.map(i =>
+                                i.id === item.id
+                                  ? (() => {
+                                      const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
+                                      const lineValues = calculateInvoiceLineValues({
+                                        product: selectedProduct,
+                                        quantity: i.quantity,
+                                        unit: i.unit,
+                                        unitPrice: newPrice,
+                                        cost: i.cost,
+                                        conversionFactor: i.conversionFactor,
+                                      })
+
+                                      if (!lineValues) {
+                                        return i
+                                      }
+
+                                      return {
+                                        ...i,
+                                        unitPrice: newPrice,
+                                        subtotal: lineValues.subtotal,
+                                        profit: lineValues.profit,
+                                        stockQuantity: lineValues.stockQuantity,
+                                        conversionFactor: lineValues.conversionFactor,
+                                      }
+                                    })()
+                                  : i
+                              )
+
+                              if (calculateTotals) {
+                                const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                                setInvoice(prev => ({
+                                  ...prev,
+                                  items: newItems,
+                                  subtotal: totals.subtotal,
+                                  tax: totals.tax,
+                                  total: totals.total,
+                                  totalProfit: totals.totalProfit,
+                                  totalCost: totals.totalCost,
+                                  balance: totals.total - prev.paidAmount
+                                }))
+                              } else {
+                                const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
+                                const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+                                const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
+                                const discountAmount = invoice.discount || 0
+                                const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
+                                const total = subtotal - discountAmount + taxAmount
+                                const balance = total - invoice.paidAmount
+
+                                setInvoice(prev => ({
+                                  ...prev,
+                                  items: newItems,
+                                  subtotal,
+                                  totalCost,
+                                  totalProfit,
+                                  tax: taxAmount,
+                                  total,
+                                  balance
+                                }))
+                              }
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                        </div>
+
+                        {/* Subtotal */}
+                        <div className='flex items-center gap-1.5 ml-auto'>
+                          <span className='text-muted-foreground/60 text-sm select-none'>=</span>
+                          <div className='text-right'>
+                            <p className='font-bold text-sm'>Rs{item.subtotal}</p>
+                            {showProfitDetails && (
+                              <p className='text-xs text-green-600'>+Rs{item.profit}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeFromInvoice(item.id)}
-                      className='h-6 w-6 p-0'
-                    >
-                      <Trash2 className='h-3 w-3 text-red-500' />
-                    </Button>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </CardContent>
@@ -1525,8 +1554,8 @@ export function InvoicePanel({
           <div>
             <Label htmlFor="discount">{t('discount')} (Rs)</Label>
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={discountInput}
               onChange={(e) => handleDiscountChange(e.target.value)}
               placeholder="0.00"
@@ -1594,8 +1623,8 @@ export function InvoicePanel({
                   <div>
                     <Label htmlFor="paidAmount">{t('paid_amount')}</Label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={paidAmountInput}
                       onChange={(e) => handlePaidAmountChange(e.target.value)}
                       placeholder="0.00"
@@ -1603,22 +1632,54 @@ export function InvoicePanel({
                   </div>
                 )}
 
-                {/* <div className='space-y-2'>
-                  <div className='flex justify-between'>
-                    <span>{t('paid')}:</span>
-                    <span className='text-green-600'>
-                      Rs{invoice.paidAmount.toFixed(2)}
-                    </span>
-                  </div>
-                  {invoice.balance > 0 && (
-                    <div className='flex justify-between'>
-                      <span>{t('balance')}:</span>
-                      <span className='text-red-600'>
-                        Rs{invoice.balance.toFixed(2)}
-                      </span>
+                {/* Cash Received & Change Calculator */}
+                {invoice.type === 'cash' && (
+                  <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
+                    <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
+                      <Banknote className='h-4 w-4' />
+                      Cash Received
+                    </h4>
+                    <div>
+                      <Label className='text-xs text-muted-foreground'>Amount Given by Customer (Rs)</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={cashReceivedInput}
+                        onChange={(e) => setCashReceivedInput(e.target.value)}
+                        placeholder={invoice.total.toFixed(2)}
+                        className='mt-1 text-base font-semibold'
+                        onFocus={(e) => e.target.select()}
+                      />
                     </div>
-                  )}
-                </div> */}
+                    {parseFloat(cashReceivedInput) > 0 && (
+                      <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
+                        <div className='flex justify-between text-sm'>
+                          <span className='text-muted-foreground'>Total Bill:</span>
+                          <span className='font-semibold'>Rs{invoice.total.toFixed(2)}</span>
+                        </div>
+                        <div className='flex justify-between text-sm'>
+                          <span className='text-muted-foreground'>Amount Received:</span>
+                          <span className='font-semibold text-emerald-700'>Rs{parseFloat(cashReceivedInput).toFixed(2)}</span>
+                        </div>
+                        {parseFloat(cashReceivedInput) >= invoice.total ? (
+                          <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
+                            <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
+                            <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
+                              Rs{(parseFloat(cashReceivedInput) - invoice.total).toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
+                            <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
+                            <span className='font-bold text-xl text-red-600 dark:text-red-400'>
+                              Rs{(invoice.total - parseFloat(cashReceivedInput)).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
