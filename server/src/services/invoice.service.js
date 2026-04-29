@@ -581,11 +581,6 @@ const deleteInvoiceById = async (invoiceId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
   
-  // Prevent deleting finalized invoices
-  if (invoice.status === 'finalized' || invoice.status === 'paid') {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot delete finalized or paid invoice');
-  }
-
   // Restore stock quantities
   for (const item of invoice.items) {
     await Product.findByIdAndUpdate(

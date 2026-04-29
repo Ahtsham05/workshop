@@ -43,6 +43,7 @@ const createInvoice = {
     totalCost: Joi.number().min(0).required(),
     paidAmount: Joi.number().min(0).default(0),
     balance: Joi.number().default(0),
+    invoiceDate: Joi.date().optional(),
     dueDate: Joi.date().when('type', {
       is: 'credit',
       then: Joi.required(),
@@ -108,6 +109,7 @@ const updateInvoice = {
     totalCost: Joi.number().min(0).optional(),
     paidAmount: Joi.number().min(0).optional(),
     balance: Joi.number().optional(),
+    invoiceDate: Joi.date().optional(),
     dueDate: Joi.date().optional(),
     deliveryCharge: Joi.number().min(0).optional(),
     serviceCharge: Joi.number().min(0).optional(),

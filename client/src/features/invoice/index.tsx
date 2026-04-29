@@ -55,6 +55,7 @@ export interface Invoice {
   totalCost: number
   paidAmount: number
   balance: number
+  invoiceDate?: string
   dueDate?: string
   notes?: string
   // Additional POS features
@@ -788,12 +789,25 @@ export default function InvoicePage() {
       try {
         const date = new Date(formattedDueDate)
         if (!isNaN(date.getTime())) {
-          // Convert to YYYY-MM-DD format for HTML date input
           formattedDueDate = date.toISOString().split('T')[0]
         }
       } catch (error) {
         console.warn('Invalid date format:', formattedDueDate)
         formattedDueDate = undefined
+      }
+    }
+
+    // Format invoice date for HTML date input (YYYY-MM-DD)
+    let formattedInvoiceDate = invoiceData.invoiceDate
+    if (formattedInvoiceDate) {
+      try {
+        const date = new Date(formattedInvoiceDate)
+        if (!isNaN(date.getTime())) {
+          formattedInvoiceDate = date.toISOString().split('T')[0]
+        }
+      } catch (error) {
+        console.warn('Invalid invoice date format:', formattedInvoiceDate)
+        formattedInvoiceDate = undefined
       }
     }
     
@@ -837,6 +851,7 @@ export default function InvoicePage() {
       customerName: invoiceData.customerName,
       walkInCustomerName: invoiceData.walkInCustomerName,
       notes: invoiceData.notes || '',
+      invoiceDate: formattedInvoiceDate,
       dueDate: formattedDueDate,
       couponCode: invoiceData.couponCode,
       returnPolicy: invoiceData.returnPolicy,

@@ -654,6 +654,7 @@ export function InvoicePanel({
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
         notes: invoice.notes,
+        invoiceDate: invoice.invoiceDate,
         language: invoice.language,
         isUrduOnly: invoice.isUrduOnly,
       }
@@ -1070,6 +1071,15 @@ export function InvoicePanel({
                 </div>
               </div>
             )} */}
+          </div>
+
+          <div>
+            <Label htmlFor="invoiceDate">Invoice Date</Label>
+            <Input
+              type="date"
+              value={invoice.invoiceDate || new Date().toISOString().split('T')[0]}
+              onChange={(e) => setInvoice(prev => ({ ...prev, invoiceDate: e.target.value }))}
+            />
           </div>
 
           {(invoice.type === 'credit' || (invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') && (
