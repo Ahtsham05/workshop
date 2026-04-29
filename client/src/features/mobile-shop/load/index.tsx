@@ -1253,7 +1253,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableRow key={t.id}>
                           <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell className='font-medium'>{t.walletType}</TableCell>
-                          <TableCell className='font-medium'>{t.customerName || (t as any).customerId?.name || '-'}</TableCell>
+                          <TableCell className='font-medium'>
+                            {t.customerName?.trim() || (t as any).customerId?.name || 'Walk-in Customer'}
+                          </TableCell>
                           <TableCell>Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell>Rs {Number((t as any).receivedAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(t.amount || 0) - Number((t as any).receivedAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
@@ -1569,16 +1571,18 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='space-y-2 md:max-w-md'>
                     <Label htmlFor='withdrawal-saved-customer'>Saved Customer - Optional</Label>
                     <SearchableSelect
-                      options={customers.map((c: any) => ({
-                        value: c.id || c._id,
-                        label: c.name,
-                        sublabel: c.phone || c.mobile || undefined,
-                      }))}
+                      options={[
+                        { value: '', label: 'Walk-in Customer' },
+                        ...customers.map((c: any) => ({
+                          value: c.id || c._id,
+                          label: c.name,
+                          sublabel: c.phone || c.mobile || undefined,
+                        })),
+                      ]}
                       value={withdrawalForm.customerId}
                       onValueChange={(v) => handleWithdrawalChange('customerId', v)}
-                      placeholder='Choose customer (optional)'
+                      placeholder='Walk-in Customer'
                       searchPlaceholder='Search customers...'
-                      clearLabel='No customer'
                       emptyText='No customers found.'
                     />
                     <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
@@ -1620,7 +1624,17 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-commission'>Commission Rate (%) - Optional</Label>
                       <Input id='withdrawal-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5, 2' value={withdrawalForm.commissionRate} onChange={(e) => handleWithdrawalChange('commissionRate', e.target.value)} />
-                      <p className='text-xs text-muted-foreground'>Commission Profit: Rs {withdrawalProfit.commissionProfit.toFixed(2)}</p>
+                      {(Number(withdrawalForm.commissionRate) > 0 || Number(withdrawalForm.extraCharge) > 0) && (
+                        <p className='text-xs text-muted-foreground'>
+                          {Number(withdrawalForm.commissionRate) > 0 && (
+                            <>Commission Profit: Rs {withdrawalProfit.commissionProfit.toFixed(2)}</>
+                          )}
+                          {Number(withdrawalForm.commissionRate) > 0 && Number(withdrawalForm.extraCharge) > 0 && ' · '}
+                          {Number(withdrawalForm.extraCharge) > 0 && (
+                            <>Extra: Rs {Number(withdrawalForm.extraCharge).toFixed(2)}</>
+                          )}
+                        </p>
+                      )}
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-extra'>Extra Charges (Rs) - Optional</Label>
@@ -1682,10 +1696,12 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                             <span className='text-green-600 font-semibold'>+ Rs {Number(withdrawalForm.extraCharge).toFixed(2)}</span>
                           </div>
                         )}
+                        {withdrawalProfit.totalProfit > 0 && (
                         <div className='border-t-2 border-orange-200 pt-3 flex justify-between items-center'>
                           <span className='text-lg font-bold'>Your Profit:</span>
                           <span className='text-2xl font-bold text-orange-700'>Rs {withdrawalProfit.totalProfit.toFixed(2)}</span>
                         </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1765,7 +1781,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                             </span>
                           </TableCell>
                           <TableCell className='font-medium'>{w.walletType}</TableCell>
-                          <TableCell>{w.customerName || '-'}</TableCell>
+                          <TableCell>{w.customerName?.trim() ? w.customerName : 'Walk-in Customer'}</TableCell>
                           <TableCell>{w.customerNumber || '-'}</TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}>
                             {w.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(w.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
-const { mobileDashboardService } = require('../services');
+const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
 /**
@@ -131,10 +131,18 @@ const getDashboardStats = catchAsync(async (req, res) => {
   };
 
   if (normalizeBusinessType(req.user.businessType) === 'mobile_shop') {
-    mobileSummary = await mobileDashboardService.getMobileDashboardSummary({
-      organizationId: req.organizationId || req.user.organizationId,
-      branchId: req.branchId,
-    });
+    const organizationId = req.organizationId || req.user.organizationId;
+    const { branchId } = req;
+
+    const [summary, cashBookSummary] = await Promise.all([
+      mobileDashboardService.getMobileDashboardSummary({ organizationId, branchId }),
+      cashBookService.getSummary({ organizationId, branchId }),
+    ]);
+
+    mobileSummary = {
+      ...summary,
+      cashInHand: cashBookSummary.closingBalance,
+    };
   }
 
   // Return metrics – use buildAggregateScope so ObjectId fields cast correctly

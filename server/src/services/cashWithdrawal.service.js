@@ -56,6 +56,10 @@ const calculateWithdrawalProfit = ({ amount, cashAmount, transactionType = 'with
   return commissionProfit + Number(extraCharge || 0) + settlementProfit;
 };
 
+/** Cash book “commission/profit” line only when user entered commission % or extra charges */
+const hasExplicitCommissionOrExtra = ({ commissionRate, extraCharge }) =>
+  Number(commissionRate || 0) > 0 || Number(extraCharge || 0) > 0;
+
 const syncCustomerLedgerForCashWithdrawal = async (withdrawal) => {
   await customerLedgerService.deleteLedgerEntriesByReference(withdrawal._id);
 
@@ -242,8 +246,8 @@ const createCashWithdrawal = async (body) => {
     }
   }
 
-  // Commission profit recorded as cash income for both types
-  if (profit > 0) {
+  // Commission / extra-charge profit as cash income (omit when both are zero — no phantom profit line)
+  if (hasExplicitCommissionOrExtra(withdrawal) && profit > 0) {
     await cashBookService.createEntry({
       organizationId: withdrawal.organizationId,
       branchId: withdrawal.branchId,
@@ -383,7 +387,7 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
     }
   }
 
-  if (withdrawal.profit > 0) {
+  if (hasExplicitCommissionOrExtra(withdrawal) && withdrawal.profit > 0) {
     await cashBookService.createEntry({
       organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
       type: 'income', source: 'other', amount: withdrawal.profit, paymentMethod: 'cash',

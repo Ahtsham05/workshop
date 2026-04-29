@@ -43,8 +43,12 @@ import {
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
+
+/** Toggle to show Payment Method + wallet fields on invoice checkout (hidden temporarily per product request). */
+const SHOW_INVOICE_PAYMENT_METHOD_UI = false
 
 interface InvoicePanelProps {
   invoice: Invoice
@@ -87,6 +91,8 @@ export function InvoicePanel({
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
+  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
+  const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
   const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
@@ -1627,6 +1633,57 @@ export function InvoicePanel({
               </Badge>
             </div>
 
+            {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
+            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && (
+              <div className='space-y-3'>
+                <div>
+                  <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
+                  <Select
+                    value={invoice.paymentMethod || 'cash'}
+                    onValueChange={(val: 'cash' | 'wallet' | 'bank' | 'card') =>
+                      setInvoice(prev => ({ ...prev, paymentMethod: val, walletType: val !== 'wallet' ? undefined : prev.walletType }))
+                    }
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">{t('cash') || 'Cash'}</SelectItem>
+                      <SelectItem value="wallet">{t('wallet') || 'Wallet'}</SelectItem>
+                      <SelectItem value="bank">{t('bank_transfer') || 'Bank Transfer'}</SelectItem>
+                      <SelectItem value="card">{t('card') || 'Card'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Wallet selector — shown when payment method is wallet */}
+                {invoice.paymentMethod === 'wallet' && (
+                  <div>
+                    <Label className='mb-2 block'>{t('select_wallet') || 'Select Wallet'}</Label>
+                    {wallets.length > 0 ? (
+                      <Select
+                        value={invoice.walletType || ''}
+                        onValueChange={(val) => setInvoice(prev => ({ ...prev, walletType: val }))}
+                      >
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder={t('select_wallet') || 'Select wallet...'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {wallets.map(w => (
+                            <SelectItem key={w.id} value={w.type}>
+                              {w.type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className='text-xs text-muted-foreground'>{t('no_wallets_configured') || 'No wallets configured. Add wallets in Mobile Shop → Wallet.'}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {invoice.type !== 'pending' && (
               <>
                 {invoice.type === 'credit' && (
@@ -1642,8 +1699,8 @@ export function InvoicePanel({
                   </div>
                 )}
 
-                {/* Cash Received & Change Calculator */}
-                {invoice.type === 'cash' && (
+                {/* Cash Received & Change Calculator — only for cash payments */}
+                {invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && (
                   <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
                     <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
                       <Banknote className='h-4 w-4' />

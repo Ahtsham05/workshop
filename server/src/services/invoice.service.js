@@ -3,6 +3,7 @@ const { Invoice, Product, Customer, CustomerLedger, Organization } = require('..
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
+const walletService = require('./wallet.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -15,35 +16,120 @@ const getOrganizationBusinessType = async (organizationId) => {
   return normalizeBusinessType(organization?.businessType);
 };
 
-const syncWalkInInvoiceCashEntry = async (invoice) => {
-  const isWalkIn = !invoice.customerId || invoice.customerId === 'walk-in';
-  if (!isWalkIn) {
-    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
-    return null;
+/**
+ * Resolve the cash-book paymentMethod string from an invoice.
+ * Wallet payments use the walletType (e.g. 'jazzcash', 'easypaisa').
+ * Bank/card payments use 'bank'/'card'.
+ * Cash payments use 'cash'.
+ */
+const resolveInvoicePaymentMethod = (invoice) => {
+  const method = (invoice.paymentMethod || 'cash').toLowerCase();
+  if (method === 'wallet') {
+    return (invoice.walletType || '').trim().toLowerCase() || 'wallet';
   }
-
-  const paidAmount = Number(invoice.paidAmount || 0);
-  if (paidAmount <= 0) {
-    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
-    return null;
-  }
-
-  const paymentMethod = invoice.type === 'cash' ? 'cash' : 'bank';
-
-  return cashBookService.upsertReferenceEntry({
-    organizationId: invoice.organizationId,
-    branchId: invoice.branchId,
-    type: 'income',
-    source: 'sale',
-    amount: paidAmount,
-    paymentMethod,
-    referenceId: invoice._id,
-    referenceModel: 'Invoice',
-    description: `Walk-in sale payment for Invoice #${invoice.invoiceNumber}`,
-    date: invoice.invoiceDate || invoice.createdAt || new Date(),
-    createdBy: invoice.createdBy,
-  });
+  if (method === 'bank') return 'bank';
+  if (method === 'card') return 'card';
+  return 'cash';
 };
+
+const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, previousWalletType, previousPaidAmount) => {
+  const paidAmount = Number(invoice.paidAmount || 0);
+  const isWalkIn = !invoice.customerId || invoice.customerId === 'walk-in';
+  const method = (invoice.paymentMethod || 'cash').toLowerCase();
+  const isWalletPayment = method === 'wallet' && invoice.walletType;
+
+  // Cash book: physical / bank / card sales only — wallet payments stay in Wallet module only (no ledger double-count)
+  const shouldCreateCashBookEntry =
+    paidAmount > 0 &&
+    !isWalletPayment &&
+    (isWalkIn || method === 'bank' || method === 'card');
+
+  if (!shouldCreateCashBookEntry || paidAmount <= 0) {
+    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+  } else {
+    const cashBookPaymentMethod = resolveInvoicePaymentMethod(invoice);
+    await cashBookService.upsertReferenceEntry({
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+      type: 'income',
+      source: 'sale',
+      amount: paidAmount,
+      paymentMethod: cashBookPaymentMethod,
+      referenceId: invoice._id,
+      referenceModel: 'Invoice',
+      description: `Sale payment for Invoice #${invoice.invoiceNumber}`,
+      date: invoice.invoiceDate || invoice.createdAt || new Date(),
+      createdBy: invoice.createdBy,
+    });
+  }
+
+  // --- Wallet balance adjustment ---
+  if (isWalletPayment) {
+    const walletTypeName = invoice.walletType.trim();
+    const prevMethod = (previousPaymentMethod || 'cash').toLowerCase();
+    const prevPaid = Number(previousPaidAmount || 0);
+
+    // Reverse previous wallet credit if the invoice had a different wallet payment before
+    if (prevMethod === 'wallet' && previousWalletType && prevPaid > 0) {
+      const prevWalletName = previousWalletType.trim();
+      if (prevWalletName !== walletTypeName || prevPaid !== paidAmount) {
+        // Deduct the old amount from the old wallet (if same wallet, we'll net below)
+        if (prevWalletName !== walletTypeName) {
+          await walletService.adjustWalletBalance({
+            organizationId: invoice.organizationId,
+            branchId: invoice.branchId,
+            type: prevWalletName,
+            amount: prevPaid,
+            operation: 'deduct',
+            userId: invoice.updatedBy || invoice.createdBy,
+          });
+        } else {
+          // Same wallet, different amount — adjust the delta
+          const delta = paidAmount - prevPaid;
+          if (delta !== 0) {
+            await walletService.adjustWalletBalance({
+              organizationId: invoice.organizationId,
+              branchId: invoice.branchId,
+              type: walletTypeName,
+              amount: Math.abs(delta),
+              operation: delta > 0 ? 'add' : 'deduct',
+              userId: invoice.updatedBy || invoice.createdBy,
+            });
+          }
+          return; // Done
+        }
+      } else {
+        return; // No change
+      }
+    }
+
+    // Credit the new wallet with the paid amount
+    if (paidAmount > 0) {
+      await walletService.adjustWalletBalance({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+        type: walletTypeName,
+        amount: paidAmount,
+        operation: 'add',
+        userId: invoice.updatedBy || invoice.createdBy,
+      });
+    }
+  } else if (previousPaymentMethod === 'wallet' && previousWalletType && Number(previousPaidAmount || 0) > 0) {
+    // Payment method changed away from wallet — deduct from old wallet
+    await walletService.adjustWalletBalance({
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+      type: previousWalletType.trim(),
+      amount: Number(previousPaidAmount),
+      operation: 'deduct',
+      userId: invoice.updatedBy || invoice.createdBy,
+    });
+  }
+};
+
+// Legacy wrapper for the create path (no previous payment info)
+const syncWalkInInvoiceCashEntry = (invoice) =>
+  syncInvoiceCashAndWalletEntries(invoice, null, null, 0);
 
 /**
  * Create an invoice
@@ -382,11 +468,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
   
-  // Store original values for ledger update
+  // Store original values for ledger and wallet update
   const originalTotal = invoice.total;
   const originalPaidAmount = invoice.paidAmount || 0;
   const originalCustomerId = invoice.customerId;
   const originalType = invoice.type;
+  const originalPaymentMethod = invoice.paymentMethod || 'cash';
+  const originalWalletType = invoice.walletType || null;
   const businessType = await getOrganizationBusinessType(invoice.organizationId);
   
   // Prevent updating finalized invoices unless specifically allowed
@@ -471,7 +559,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   
   await invoice.save();
   console.log('Invoice updated successfully');
-  await syncWalkInInvoiceCashEntry(invoice);
+  await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
   
   // Update customer ledger entries if amounts or customer changed
   const newCustomerId = invoice.customerId;
@@ -602,6 +690,22 @@ const deleteInvoiceById = async (invoiceId) => {
   }
 
   await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+
+  // Reverse wallet balance if invoice was paid via wallet
+  if (invoice.paymentMethod === 'wallet' && invoice.walletType && Number(invoice.paidAmount || 0) > 0) {
+    try {
+      await walletService.adjustWalletBalance({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+        type: invoice.walletType.trim(),
+        amount: Number(invoice.paidAmount),
+        operation: 'deduct',
+        userId: invoice.updatedBy || invoice.createdBy,
+      });
+    } catch (err) {
+      console.error('Failed to reverse wallet balance on invoice delete:', err);
+    }
+  }
 
   await invoice.deleteOne();
   return invoice;

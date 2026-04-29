@@ -1,7 +1,8 @@
-import { useLanguage } from "@/context/language-context"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useLanguage } from '@/context/language-context'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/i18n'
+import { cn } from '@/lib/utils'
+import { Check } from 'lucide-react'
 
 export function LanguageSettings() {
   const { language, setLanguage } = useLanguage()
@@ -9,36 +10,74 @@ export function LanguageSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Language / زبان</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <span>Language</span>
+          <span className="text-muted-foreground font-normal text-sm">/ زبان / اللغة / भाषा</span>
+        </CardTitle>
         <CardDescription>
-          Choose your preferred language / اپنی پسندیدہ زبان کا انتخاب کریں
+          Choose your preferred display language for the entire application.
         </CardDescription>
       </CardHeader>
       <CardContent className="pb-6">
-        <RadioGroup
-          defaultValue={language}
-          onValueChange={(value) => setLanguage(value as 'en' | 'ur')}
-          className="grid grid-cols-2 gap-4"
-        >
-          <div>
-            <RadioGroupItem value="en" id="en" className="peer sr-only" />
-            <Label
-              htmlFor="en"
-              className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-            >
-              <span>English</span>
-            </Label>
-          </div>
-          <div>
-            <RadioGroupItem value="ur" id="ur" className="peer sr-only" />
-            <Label
-              htmlFor="ur"
-              className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary font-urdu"
-            >
-              <span>اردو</span>
-            </Label>
-          </div>
-        </RadioGroup>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {SUPPORTED_LANGUAGES.map((lang) => {
+            const isActive = language === lang.code
+            return (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setLanguage(lang.code as SupportedLanguage)}
+                className={cn(
+                  'relative flex flex-col items-center gap-2 rounded-xl border-2 bg-popover p-4 text-center transition-all hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  isActive
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : 'border-muted'
+                )}
+              >
+                {/* Active checkmark */}
+                {isActive && (
+                  <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-3 w-3" />
+                  </span>
+                )}
+
+                {/* Flag */}
+                <span className="text-3xl leading-none">{lang.flag}</span>
+
+                {/* Native name */}
+                <span
+                  className={cn(
+                    'text-base font-semibold leading-snug',
+                    isActive && 'text-primary'
+                  )}
+                >
+                  {lang.nativeName}
+                </span>
+
+                {/* English name */}
+                <span className="text-xs text-muted-foreground">{lang.name}</span>
+
+                {/* Direction badge */}
+                {lang.dir === 'rtl' && (
+                  <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                    RTL
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Current language info */}
+        <p className="mt-4 text-xs text-muted-foreground">
+          Currently selected:{' '}
+          <span className="font-medium text-foreground">
+            {SUPPORTED_LANGUAGES.find((l) => l.code === language)?.name}
+          </span>
+          {SUPPORTED_LANGUAGES.find((l) => l.code === language)?.dir === 'rtl' && (
+            <> — Right-to-left layout is active.</>
+          )}
+        </p>
       </CardContent>
     </Card>
   )

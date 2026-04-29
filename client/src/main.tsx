@@ -12,6 +12,9 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
 import { LanguageProvider } from './context/language-context'
+// Apply stored language to <html> before first render to avoid layout flash
+import { getStoredLanguage, applyLanguageToDocument } from './i18n'
+applyLanguageToDocument(getStoredLanguage())
 import { AuthProvider } from './context/auth-context'
 import { PermissionWrapper } from './context/permission-wrapper'
 import { AuthErrorBoundary } from './components/auth-error-boundary'

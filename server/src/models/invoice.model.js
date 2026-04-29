@@ -76,6 +76,15 @@ const InvoiceSchema = new mongoose.Schema({
     serviceCharge: { type: Number, default: 0, min: 0 },
     roundingAdjustment: { type: Number, default: 0 },
     
+    // Payment method (how the customer paid)
+    paymentMethod: {
+        type: String,
+        enum: ['cash', 'wallet', 'bank', 'card'],
+        default: 'cash',
+    },
+    // Wallet name when paymentMethod is 'wallet' (e.g. 'JazzCash', 'EasyPaisa')
+    walletType: { type: String },
+
     // POS features
     splitPayment: [splitPaymentSchema],
     loyaltyPoints: { type: Number, default: 0, min: 0 },

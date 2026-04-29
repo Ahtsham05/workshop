@@ -58,6 +58,9 @@ export interface Invoice {
   invoiceDate?: string
   dueDate?: string
   notes?: string
+  // Payment method (how customer paid)
+  paymentMethod?: 'cash' | 'wallet' | 'bank' | 'card'
+  walletType?: string
   // Additional POS features
   splitPayment?: SplitPayment[]
   loyaltyPoints?: number
@@ -119,7 +122,8 @@ export default function InvoicePage() {
     items: [],
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
-    type: 'credit',
+    customerId: 'walk-in',
+    type: 'cash',
     subtotal: 0,
     tax: 0,
     discount: 0,
@@ -128,6 +132,8 @@ export default function InvoicePage() {
     totalCost: 0,
     paidAmount: 0,
     balance: 0,
+    paymentMethod: 'cash',
+    walletType: undefined,
     splitPayment: [],
     loyaltyPoints: 0,
     deliveryCharge: 0,
@@ -748,7 +754,8 @@ export default function InvoicePage() {
       items: [],
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
-      type: 'credit',
+      customerId: 'walk-in',
+      type: 'cash',
       subtotal: 0,
       tax: 0,
       discount: 0,
@@ -757,6 +764,8 @@ export default function InvoicePage() {
       totalCost: 0,
       paidAmount: 0,
       balance: 0,
+      paymentMethod: 'cash',
+      walletType: undefined,
       splitPayment: [],
       loyaltyPoints: 0,
       deliveryCharge: 0,
@@ -842,6 +851,8 @@ export default function InvoicePage() {
       totalCost: invoiceData.totalCost || 0,
       paidAmount: invoiceData.paidAmount || 0,
       balance: invoiceData.balance || 0,
+      paymentMethod: invoiceData.paymentMethod || 'cash',
+      walletType: invoiceData.walletType || undefined,
       splitPayment: invoiceData.splitPayment || [],
       loyaltyPoints: invoiceData.loyaltyPoints || 0,
       deliveryCharge: invoiceData.deliveryCharge || 0,
@@ -907,7 +918,8 @@ export default function InvoicePage() {
       items: [],
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
-      type: 'credit',
+      customerId: 'walk-in',
+      type: 'cash',
       subtotal: 0,
       tax: 0,
       discount: 0,
@@ -916,6 +928,8 @@ export default function InvoicePage() {
       totalCost: 0,
       paidAmount: 0,
       balance: 0,
+      paymentMethod: 'cash',
+      walletType: undefined,
       splitPayment: [],
       loyaltyPoints: 0,
       deliveryCharge: 0,

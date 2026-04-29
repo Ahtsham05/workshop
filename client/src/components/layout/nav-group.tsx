@@ -27,12 +27,12 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
-// import { useLanguage } from '@/context/language-context'
+import { useLanguage } from '@/context/language-context'
 import { NoTranslate } from '@/components/no-translate'
 
 export function NavGroup({ title, items, collapsible }: NavGroup) {
   const { state } = useSidebar()
-  // const { t } = useLanguage()
+  const { t } = useLanguage()
   const href = useLocation({ select: (location) => location.href })
 
   // Determine whether any child is currently active (for defaultOpen)
@@ -79,7 +79,7 @@ export function NavGroup({ title, items, collapsible }: NavGroup) {
         <Collapsible defaultOpen={isAnyChildActive} className='group/collapsible-group'>
           <SidebarGroupLabel asChild>
             <CollapsibleTrigger className='flex w-full items-center'>
-              <NoTranslate>{title}</NoTranslate>
+              <NoTranslate>{t(title)}</NoTranslate>
               <ChevronRight className='ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/collapsible-group:rotate-90' />
             </CollapsibleTrigger>
           </SidebarGroupLabel>
@@ -92,7 +92,7 @@ export function NavGroup({ title, items, collapsible }: NavGroup) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>
-        <NoTranslate>{title}</NoTranslate>
+        <NoTranslate>{t(title)}</NoTranslate>
       </SidebarGroupLabel>
       {menuItems}
     </SidebarGroup>
@@ -105,17 +105,18 @@ const NavBadge = ({ children }: { children: ReactNode }) => (
 
 const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
   const { setOpenMobile } = useSidebar()
+  const { t } = useLanguage()
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         asChild
         isActive={checkIsActive(href, item)}
-        tooltip={item.title}
+        tooltip={t(item.title)}
       >
         <Link className='h-12' to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
           <NoTranslate>
-            <span className='h-10 flex items-center'>{item.title}</span>
+            <span className='h-10 flex items-center'>{t(item.title)}</span>
           </NoTranslate>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
         </Link>
@@ -132,7 +133,7 @@ const SidebarMenuCollapsible = ({
   href: string
 }) => {
   const { setOpenMobile } = useSidebar()
-  // const { t } = useLanguage()
+  const { t } = useLanguage()
   return (
     <Collapsible
       asChild
@@ -141,10 +142,10 @@ const SidebarMenuCollapsible = ({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton className='h-12' tooltip={item.title}>
+          <SidebarMenuButton className='h-12' tooltip={t(item.title)}>
             {item.icon && <item.icon />}
             <NoTranslate>
-              <span className='h-10 flex items-center'>{item.title}</span>
+              <span className='h-10 flex items-center'>{t(item.title)}</span>
             </NoTranslate>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
@@ -163,7 +164,7 @@ const SidebarMenuCollapsible = ({
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                       {subItem.icon && <subItem.icon />}
                       <NoTranslate>
-                        <span className='h-10 flex items-center'>{subItem.title}</span>
+                        <span className='h-10 flex items-center'>{t(subItem.title)}</span>
                       </NoTranslate>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
                     </Link>
@@ -185,18 +186,18 @@ const SidebarMenuCollapsedDropdown = ({
   item: NavCollapsible
   href: string
 }) => {
-  // const { t } = useLanguage()
+  const { t } = useLanguage()
   return (
     <SidebarMenuItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
-            tooltip={item.title}
+            tooltip={t(item.title)}
             isActive={checkIsActive(href, item)}
           >
             {item.icon && <item.icon />}
             <NoTranslate>
-              <span className='h-10 flex items-center'>{item.title}</span>
+              <span className='h-10 flex items-center'>{t(item.title)}</span>
             </NoTranslate>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
@@ -204,7 +205,7 @@ const SidebarMenuCollapsedDropdown = ({
         </DropdownMenuTrigger>
         <DropdownMenuContent side='right' align='start' sideOffset={4}>
           <DropdownMenuLabel>
-            {item.title} {item.badge ? `(${item.badge})` : ''}
+            {t(item.title)} {item.badge ? `(${item.badge})` : ''}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {item.items.map((sub) => {
@@ -216,7 +217,7 @@ const SidebarMenuCollapsedDropdown = ({
                 >
                   {sub.icon && <sub.icon />}
                   <NoTranslate>
-                    <span className='h-10 flex items-center max-w-52 text-wrap'>{sub.title}</span>
+                    <span className='h-10 flex items-center max-w-52 text-wrap'>{t(sub.title)}</span>
                   </NoTranslate>
                   {sub.badge && (
                     <span className='ml-auto text-xs'>{sub.badge}</span>

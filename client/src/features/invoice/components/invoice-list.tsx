@@ -454,6 +454,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead>{t('customer')}</TableHead>
                   <TableHead>{t('phone')}</TableHead>
                   <TableHead>{t('type')}</TableHead>
+                  <TableHead>{t('payment_method') || 'Payment'}</TableHead>
                   <TableHead>{t('bill_number')}</TableHead>
                   <TableHead>{t('date')}</TableHead>
                   <TableHead>{t('amount')}</TableHead>
@@ -483,6 +484,21 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           ? t('converted_pending')
                           : t(invoice.type || 'cash')}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {invoice.paymentMethod && invoice.paymentMethod !== 'cash' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                          {invoice.paymentMethod === 'wallet' && invoice.walletType
+                            ? invoice.walletType
+                            : invoice.paymentMethod === 'bank'
+                              ? 'Bank'
+                              : invoice.paymentMethod === 'card'
+                                ? 'Card'
+                                : invoice.paymentMethod}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Cash</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {invoice.billNumber ? (
@@ -787,6 +803,26 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
           <Label className="text-xs">{t('total')} {t('amount')}</Label>
           <p className="font-bold text-green-600">Rs{invoice.total?.toFixed(2) || '0.00'}</p>
         </div>
+        <div>
+          <Label className="text-xs">{t('payment_method') || 'Payment Method'}</Label>
+          <p className="font-medium capitalize">
+            {invoice.paymentMethod === 'wallet' && invoice.walletType
+              ? invoice.walletType
+              : invoice.paymentMethod || 'Cash'}
+          </p>
+        </div>
+        {invoice.paidAmount > 0 && (
+          <div>
+            <Label className="text-xs">{t('paid_amount')}</Label>
+            <p className="font-bold text-blue-600">Rs{invoice.paidAmount?.toFixed(2) || '0.00'}</p>
+          </div>
+        )}
+        {invoice.balance > 0 && (
+          <div>
+            <Label className="text-xs">{t('balance')}</Label>
+            <p className="font-bold text-red-600">Rs{invoice.balance?.toFixed(2) || '0.00'}</p>
+          </div>
+        )}
       </div>
 
       {/* Notes */}

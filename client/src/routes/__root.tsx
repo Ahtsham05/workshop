@@ -28,7 +28,7 @@ function RootComponent() {
       <NavigationProgress />
       <TokenRefreshInitializer />
       <Outlet />
-      <Toaster duration={50000} />
+      <Toaster position='top-right' duration={3500} />
       {import.meta.env.MODE === 'development' && (
         <>
           {/* <ReactQueryDevtools buttonPosition='bottom-left' /> */}
