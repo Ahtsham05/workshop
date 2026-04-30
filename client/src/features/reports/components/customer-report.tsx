@@ -29,10 +29,10 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
           const excelData = data.data.map((customer) => ({
             [t('customer')]: customer.customerName,
             [t('phone')]: customer.phone || 'N/A',
-            [t('purchases')]: customer.totalPurchases,
+            Sales: customer.totalPurchases,
             [t('total_spent')]: customer.totalSpent,
-            [t('avg_purchase')]: customer.avgPurchaseValue,
-            [t('last_purchase')]: format(new Date(customer.lastPurchase), 'yyyy-MM-dd'),
+            'Avg Sale': customer.avgPurchaseValue,
+            'Last Sale': format(new Date(customer.lastPurchase), 'yyyy-MM-dd'),
           }))
 
           const ws = XLSX.utils.json_to_sheet(excelData)
@@ -91,10 +91,10 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
               <TableRow>
                 <TableHead>{t('customer')}</TableHead>
                 <TableHead>{t('phone')}</TableHead>
-                <TableHead className='text-right'>{t('purchases')}</TableHead>
+                <TableHead className='text-right'>Sales</TableHead>
                 <TableHead className='text-right'>{t('total_spent')}</TableHead>
-                <TableHead className='text-right'>{t('avg_purchase')}</TableHead>
-                <TableHead className='text-right'>{t('last_purchase')}</TableHead>
+                <TableHead className='text-right'>Avg Sale</TableHead>
+                <TableHead className='text-right'>Last Sale</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

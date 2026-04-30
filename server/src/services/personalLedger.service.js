@@ -54,11 +54,15 @@ const queryEntries = async (filter, options) => {
   if (options.startDate || options.endDate) {
     filter.transactionDate = {};
     if (options.startDate) {
-      filter.transactionDate.$gte = new Date(options.startDate);
+      const startDate = new Date(options.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      filter.transactionDate.$gte = startDate;
       delete options.startDate;
     }
     if (options.endDate) {
-      filter.transactionDate.$lte = new Date(options.endDate);
+      const endDate = new Date(options.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      filter.transactionDate.$lte = endDate;
       delete options.endDate;
     }
   }

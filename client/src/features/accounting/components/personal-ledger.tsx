@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,6 +69,12 @@ const CATEGORIES = {
   opening_balance: ['Opening Balance'],
   adjustment: ['Correction', 'Other'],
 };
+
+const formatCurrency = (value: number) =>
+  `Rs ${Number(value || 0).toLocaleString('en-PK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 function EntryForm({
   editingEntry,
@@ -277,7 +283,9 @@ function EntryForm({
 export function PersonalLedger() {
   const { t } = useLanguage();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [reportEntries, setReportEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
   const [summary, setSummary] = useState({ totalCredit: 0, totalDebit: 0, netBalance: 0, transactionCount: 0 });
@@ -287,11 +295,28 @@ export function PersonalLedger() {
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [startDate, setStartDate] = useState(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [openingBalanceValue, setOpeningBalanceValue] = useState(0);
 
   useEffect(() => {
     fetchEntries();
+    fetchReportEntries();
+  }, [currentPage, pageSize, filterType, startDate, endDate]);
+
+  useEffect(() => {
+    fetchOpeningBalance();
+  }, [startDate]);
+
+  useEffect(() => {
     fetchSummary();
-  }, [currentPage, pageSize, filterType]);
+  }, [reportEntries]);
+
+  const getPreviousDateString = (dateStr: string) => {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() - 1);
+    return format(d, 'yyyy-MM-dd');
+  };
 
   const fetchEntries = async () => {
     try {
@@ -303,6 +328,8 @@ export function PersonalLedger() {
       };
       if (filterType !== 'all') params.transactionType = filterType;
       if (search.trim()) params.search = search.trim();
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
 
       const response = await Axios.get(summery.fetchPersonalLedgerEntries.url, { params });
       setEntries(response.data.results || []);
@@ -315,13 +342,63 @@ export function PersonalLedger() {
     }
   };
 
-  const fetchSummary = async () => {
+  const fetchReportEntries = async () => {
     try {
-      const response = await Axios.get(summery.fetchPersonalLedgerSummary.url);
-      setSummary(response.data);
+      setReportLoading(true);
+      const params: any = {
+        sortBy: 'transactionDate:asc',
+        page: 1,
+        limit: 5000,
+      };
+      if (filterType !== 'all') params.transactionType = filterType;
+      if (search.trim()) params.search = search.trim();
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+
+      const response = await Axios.get(summery.fetchPersonalLedgerEntries.url, { params });
+      setReportEntries(response.data.results || []);
     } catch {
-      // silently fail
+      toast.error(t('Failed to load report data'));
+    } finally {
+      setReportLoading(false);
     }
+  };
+
+  const fetchOpeningBalance = async () => {
+    if (!startDate) {
+      setOpeningBalanceValue(0);
+      return;
+    }
+    try {
+      const previousDate = getPreviousDateString(startDate);
+      const response = await Axios.get(summery.fetchPersonalLedgerEntries.url, {
+        params: {
+          sortBy: 'transactionDate:desc',
+          page: 1,
+          limit: 1,
+          endDate: previousDate,
+        },
+      });
+      const lastBeforePeriod = response.data?.results?.[0];
+      setOpeningBalanceValue(Number(lastBeforePeriod?.balance || 0));
+    } catch {
+      setOpeningBalanceValue(0);
+    }
+  };
+
+  const fetchSummary = async () => {
+    if (!reportEntries.length) {
+      setSummary({ totalCredit: 0, totalDebit: 0, netBalance: 0, transactionCount: 0 });
+      return;
+    }
+    const totalCredit = reportEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
+    const totalDebit = reportEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+    setSummary({
+      totalCredit,
+      totalDebit,
+      netBalance: totalCredit - totalDebit,
+      transactionCount: reportEntries.length,
+    });
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -337,6 +414,8 @@ export function PersonalLedger() {
       await Axios.delete(`${summery.deletePersonalLedgerEntry.url}/${id}`);
       toast.success(t('Entry deleted successfully'));
       fetchEntries();
+      fetchReportEntries();
+      fetchOpeningBalance();
       fetchSummary();
     } catch (error: any) {
       toast.error(error.response?.data?.message || t('Failed to delete entry'));
@@ -348,12 +427,40 @@ export function PersonalLedger() {
     setEditingEntry(null);
     setCurrentPage(1);
     fetchEntries();
+    fetchReportEntries();
+    fetchOpeningBalance();
     fetchSummary();
   };
 
+  const reportAnalytics = useMemo(() => {
+    if (!reportEntries.length) {
+      return {
+        openingBalance: openingBalanceValue,
+        closingBalance: openingBalanceValue,
+        netChange: 0,
+        avgTxn: 0,
+        largestIn: 0,
+        largestOut: 0,
+      };
+    }
+    const last = reportEntries[reportEntries.length - 1];
+    const openingBalance = openingBalanceValue;
+    const closingBalance = last.balance || 0;
+    const largestIn = reportEntries.reduce((max, e) => Math.max(max, e.credit || 0), 0);
+    const largestOut = reportEntries.reduce((max, e) => Math.max(max, e.debit || 0), 0);
+    return {
+      openingBalance,
+      closingBalance,
+      netChange: closingBalance - openingBalance,
+      avgTxn: summary.transactionCount ? (summary.totalCredit + summary.totalDebit) / summary.transactionCount : 0,
+      largestIn,
+      largestOut,
+    };
+  }, [openingBalanceValue, reportEntries, summary.totalCredit, summary.totalDebit, summary.transactionCount]);
+
   const exportToExcel = () => {
     try {
-      const data = entries.map(entry => ({
+      const detailData = reportEntries.map(entry => ({
         Date: format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
         Type: getTypeLabel(entry.transactionType),
         Description: entry.description,
@@ -365,9 +472,20 @@ export function PersonalLedger() {
         'Payment Method': entry.paymentMethod || '-',
         Notes: entry.notes || '-',
       }));
-      const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Personal Ledger');
+      const summaryData = [
+        { Metric: 'Period Start', Value: startDate || '-' },
+        { Metric: 'Period End', Value: endDate || '-' },
+        { Metric: 'Opening Balance', Value: reportAnalytics.openingBalance.toFixed(2) },
+        { Metric: 'Total Money In', Value: summary.totalCredit.toFixed(2) },
+        { Metric: 'Total Money Out', Value: summary.totalDebit.toFixed(2) },
+        { Metric: 'Net Change', Value: reportAnalytics.netChange.toFixed(2) },
+        { Metric: 'Closing Balance', Value: reportAnalytics.closingBalance.toFixed(2) },
+        { Metric: 'Transactions', Value: summary.transactionCount },
+        { Metric: 'Average Transaction', Value: reportAnalytics.avgTxn.toFixed(2) },
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'Transaction Details');
       XLSX.writeFile(wb, `personal-ledger-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
       toast.success(t('Exported successfully'));
     } catch {
@@ -396,13 +514,13 @@ export function PersonalLedger() {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
         <Card>
-          <CardContent className="pt-5 pb-5">
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{t('Total Money In')}</p>
-                <p className="text-2xl font-bold text-green-600">Rs{summary.totalCredit.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalCredit)}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
                 <ArrowDownLeft className="h-5 w-5 text-green-600" />
@@ -412,11 +530,11 @@ export function PersonalLedger() {
         </Card>
 
         <Card>
-          <CardContent className="pt-5 pb-5">
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{t('Total Money Out')}</p>
-                <p className="text-2xl font-bold text-red-600">Rs{summary.totalDebit.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalDebit)}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
                 <ArrowUpRight className="h-5 w-5 text-red-600" />
@@ -426,12 +544,12 @@ export function PersonalLedger() {
         </Card>
 
         <Card>
-          <CardContent className="pt-5 pb-5">
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{t('Net Balance')}</p>
                 <p className={`text-2xl font-bold ${balanceColor}`}>
-                  Rs{Math.abs(summary.netBalance).toFixed(2)}
+                  {formatCurrency(summary.netBalance)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {summary.netBalance >= 0 ? t('Positive') : t('Negative')}
@@ -443,23 +561,72 @@ export function PersonalLedger() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Opening Balance</p>
+                <p className="text-xl font-bold">{formatCurrency(reportAnalytics.openingBalance)}</p>
+              </div>
+              <TrendingUp className="h-5 w-5 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Closing Balance</p>
+                <p className="text-xl font-bold text-purple-600">{formatCurrency(reportAnalytics.closingBalance)}</p>
+              </div>
+              <Wallet className="h-5 w-5 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-5 pb-5 min-h-[110px]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Transaction</p>
+                <p className="text-xl font-bold">{formatCurrency(reportAnalytics.avgTxn)}</p>
+              </div>
+              <Search className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('Search entries...')}
-                className="pl-8 w-48"
+                className="pl-8 w-52"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
             <Button type="submit" variant="outline" size="sm">{t('Search')}</Button>
           </form>
+
+          <Input
+            type="date"
+            value={startDate}
+            onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+            className="w-[150px]"
+          />
+          <Input
+            type="date"
+            value={endDate}
+            onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+            className="w-[150px]"
+          />
 
           <Select value={filterType} onValueChange={(v) => { setFilterType(v); setCurrentPage(1); }}>
             <SelectTrigger className="w-36">
@@ -488,7 +655,7 @@ export function PersonalLedger() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 xl:justify-end">
           <Button variant="outline" size="sm" onClick={exportToExcel}>
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
@@ -525,7 +692,7 @@ export function PersonalLedger() {
           <CardTitle className="text-base">{t('Transaction History')} ({totalResults})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {loading ? (
+          {loading || reportLoading ? (
             <div className="text-center py-12 text-muted-foreground">{t('Loading...')}</div>
           ) : entries.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground space-y-2">
@@ -566,13 +733,13 @@ export function PersonalLedger() {
                         {entry.category || '-'}
                       </TableCell>
                       <TableCell className="text-right text-green-600 font-medium">
-                        {entry.credit > 0 ? `Rs${entry.credit.toFixed(2)}` : '-'}
+                        {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
                       </TableCell>
                       <TableCell className="text-right text-red-600 font-medium">
-                        {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '-'}
+                        {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
                       </TableCell>
                       <TableCell className={`text-right font-semibold ${entry.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        Rs{entry.balance.toFixed(2)}
+                        {formatCurrency(entry.balance)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">

@@ -355,20 +355,50 @@ const getCustomerReport = catchAsync(async (req, res) => {
   const { start, end } = parseRange(req.query);
   const top = parseInt(req.query.top) || 20;
 
-  const baseMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
+  const baseMatch = { ...scope, status: { $ne: 'cancelled' } };
+  const dateMatch = {
+    $or: [
+      { invoiceDate: { $gte: start, $lte: end } },
+      { invoiceDate: null, createdAt: { $gte: start, $lte: end } },
+      { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+    ],
+  };
+  const customerGroupExpr = {
+    $cond: [
+      {
+        $and: [
+          { $ne: ['$customerId', null] },
+          { $ne: [{ $type: '$customerId' }, 'missing'] },
+        ],
+      },
+      { $concat: ['id:', { $toString: '$customerId' }] },
+      { $concat: ['walkin:', { $ifNull: ['$walkInCustomerName', 'Walk-in Customer'] }] },
+    ],
+  };
 
   const [customerData, summary] = await Promise.all([
     Invoice.aggregate([
-      { $match: baseMatch },
+      { $match: { ...baseMatch, ...dateMatch } },
       { $lookup: {
         from: 'customers',
         let: { cid: '$customerId' },
-        pipeline: [{ $match: { $expr: { $eq: ['$_id', { $cond: [{ $eq: [{ $type: '$$cid' }, 'objectId'] }, '$$cid', { $cond: [{ $regexMatch: { input: { $ifNull: ['$$cid', ''] }, regex: '^[0-9a-fA-F]{24}$' } }, { $toObjectId: '$$cid' }, null] }] }] } } }],
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$cid', null] },
+                  { $eq: [{ $toString: '$_id' }, { $toString: '$$cid' }] },
+                ],
+              },
+            },
+          },
+        ],
         as: 'customer',
       } },
       { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
       { $group: {
-        _id: '$customerId',
+        _id: customerGroupExpr,
         customerName: { $first: { $ifNull: ['$customer.name', '$walkInCustomerName', 'Walk-in Customer'] } },
         phone: { $first: '$customer.phone' },
         email: { $first: '$customer.email' },
@@ -383,8 +413,8 @@ const getCustomerReport = catchAsync(async (req, res) => {
       { $limit: top },
     ]),
     Invoice.aggregate([
-      { $match: baseMatch },
-      { $group: { _id: null, uniqueCustomers: { $addToSet: '$customerId' }, totalTransactions: { $sum: 1 }, totalRevenue: { $sum: '$total' } } },
+      { $match: { ...baseMatch, ...dateMatch } },
+      { $group: { _id: null, uniqueCustomers: { $addToSet: customerGroupExpr }, totalTransactions: { $sum: 1 }, totalRevenue: { $sum: '$total' } } },
       { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
     ]),
   ]);

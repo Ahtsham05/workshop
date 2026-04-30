@@ -484,7 +484,8 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       walletImpact: -Number(item.loadAmount || 0),
       cashAmount: Number(item.saleAmount || 0),
       extraCharge: 0,
-      profit: Number(item.commission || 0),
+      // SIM sale commission is excluded from wallet balance statement profit.
+      profit: 0,
       paymentMethod: 'cash',
       notes: item.notes || item.productName || '',
     });
@@ -583,7 +584,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       totalSimSaleLoad: ssTotalSimSaleLoad,
       totalWithdrawals: cwTotalWithdrawals,
       totalDeposits: cwTotalDeposits,
-      totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + (ss ? ss.simSaleCommission : 0) + lpTotalPurchaseProfit,
+      totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + lpTotalPurchaseProfit,
       transactions: (ld ? ld.loadTransactions : 0) + (cw ? cw.cashTransactions : 0) + (ss ? ss.simSaleTransactions : 0) + (lp ? lp.purchaseTransactions : 0),
       detailItems: (detailMap[key] || []).sort((a, b) => {
         const aDate = new Date(a.date).getTime();

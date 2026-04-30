@@ -34,6 +34,7 @@ import { BillPaymentReport } from './components/bill-payment-report'
 import { RoiReport } from './components/roi-report'
 import { SimSaleReport } from './components/sim-sale-report'
 import { InstallmentReport } from './components/installment-report'
+import { MyWalletReport } from './components/my-wallet-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -209,6 +210,9 @@ export default function ReportsPage() {
             {isMobileShop && canAccess('load') && (
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
+            {isMobileShop && canAccess('wallet') && (
+              <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>My Wallet</TabsTrigger>
+            )}
             {isMobileShop && canAccess('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
             )}
@@ -284,6 +288,14 @@ export default function ReportsPage() {
             {canAccess('load')
               ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
               : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isMobileShop && (
+          <TabsContent value='my-wallet' className='mt-6'>
+            {canAccess('wallet')
+              ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+              : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
           </TabsContent>
         )}
 

@@ -45,6 +45,8 @@ const getFlowBadgeStyles = (impact: number) =>
   impact >= 0 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'
 
 const getFlowLabel = (impact: number) => (impact >= 0 ? 'IN' : 'OUT')
+const getPurchaseAmount = (amount: number, walletImpact: number) => (walletImpact >= 0 ? amount : 0)
+const getSellAmount = (amount: number, walletImpact: number) => (walletImpact < 0 ? amount : 0)
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -161,8 +163,14 @@ export function WalletBalanceStatement({
     return result
   }, [data])
   const numberWiseDetailRows = numberWiseRows.filter((r) => !r.isNoDetails && r.item)
-  const numberWiseTotalAmount = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.amount || 0), 0)
-  const numberWiseWalletImpact = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.walletImpact || 0), 0)
+  const numberWisePurchaseAmount = numberWiseDetailRows.reduce(
+    (sum, row) => sum + (row.item ? getPurchaseAmount(row.item.amount, row.item.walletImpact) : 0),
+    0
+  )
+  const numberWiseSellAmount = numberWiseDetailRows.reduce(
+    (sum, row) => sum + (row.item ? getSellAmount(row.item.amount, row.item.walletImpact) : 0),
+    0
+  )
   const numberWiseTotalProfit = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.profit || 0), 0)
   const salesDays = data?.rows.filter((r) => r.hasSales).length ?? 0
   const noSaleDays = data?.rows.filter((r) => !r.hasSales).length ?? 0
@@ -311,8 +319,8 @@ export function WalletBalanceStatement({
                         <TableHead>Flow</TableHead>
                         <TableHead>Number / Account</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead className='text-right'>Amount</TableHead>
-                        <TableHead className='text-right'>Wallet Impact</TableHead>
+                        <TableHead className='text-right'>Purchase</TableHead>
+                        <TableHead className='text-right'>Sell</TableHead>
                         <TableHead className='text-right'>Profit</TableHead>
                         <TableHead>Balance</TableHead>
                       </>
@@ -440,7 +448,6 @@ export function WalletBalanceStatement({
                     numberWiseRows.map((entry, idx) => {
                       const showDate =
                         idx === 0 || numberWiseRows[idx - 1].date !== entry.date
-                      const isFirstRowOfDate = showDate
                       if (entry.isNoDetails || !entry.item) {
                         return (
                           <TableRow key={`no-detail-${entry.date}-${idx}`}>
@@ -454,8 +461,8 @@ export function WalletBalanceStatement({
                             <TableCell />
                             <TableCell />
                             <TableCell />
-                            <TableCell className='text-xs text-muted-foreground'>
-                              Before: {fmt(entry.beforeBalance)}
+                            <TableCell className='text-right text-xs text-muted-foreground'>
+                              {fmt(entry.afterBalance)}
                             </TableCell>
                           </TableRow>
                         )
@@ -474,28 +481,24 @@ export function WalletBalanceStatement({
                           </TableCell>
                           <TableCell>{entry.item.accountNumber || '—'}</TableCell>
                           <TableCell>{entry.item.customerName || '—'}</TableCell>
-                          <TableCell className='text-right'>{fmt(entry.item.amount)}</TableCell>
-                          <TableCell
-                            className={`text-right font-semibold ${
-                              entry.item.walletImpact >= 0
-                                ? 'text-green-600'
-                                : 'text-orange-600'
-                            }`}
-                          >
-                            {entry.item.walletImpact >= 0 ? '+' : ''}
-                            {fmt(entry.item.walletImpact)}
+                          <TableCell className='text-right'>
+                            {entry.item.walletImpact >= 0 ? (
+                              <span className='font-medium text-green-600'>+{fmt(entry.item.amount)}</span>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            {entry.item.walletImpact < 0 ? (
+                              <span className='font-medium text-red-600'>-{fmt(entry.item.amount)}</span>
+                            ) : (
+                              '—'
+                            )}
                           </TableCell>
                           <TableCell className='text-right text-green-600 font-semibold'>
                             {fmt(entry.item.profit)}
                           </TableCell>
-                          <TableCell>
-                            <div className='text-xs leading-tight'>
-                              {isFirstRowOfDate && (
-                                <p className='text-muted-foreground'>Before: {fmt(entry.beforeBalance)}</p>
-                              )}
-                              <p className='font-semibold'>After Txn: {fmt(entry.afterBalance)}</p>
-                            </div>
-                          </TableCell>
+                          <TableCell className='text-right font-semibold'>{fmt(entry.afterBalance)}</TableCell>
                         </TableRow>
                       )
                     })}
@@ -521,24 +524,23 @@ export function WalletBalanceStatement({
                       <TableCell />
                       <TableCell />
                       <TableCell />
-                      <TableCell className='text-right text-blue-600'>{fmt(numberWiseTotalAmount)}</TableCell>
-                      <TableCell
-                        className={`text-right ${
-                          numberWiseWalletImpact >= 0 ? 'text-green-600' : 'text-orange-600'
-                        }`}
-                      >
-                        {numberWiseWalletImpact >= 0 ? '+' : ''}
-                        {fmt(numberWiseWalletImpact)}
-                      </TableCell>
+                      <TableCell className='text-right text-green-600'>+{fmt(numberWisePurchaseAmount)}</TableCell>
+                      <TableCell className='text-right text-red-600'>-{fmt(numberWiseSellAmount)}</TableCell>
                       <TableCell className='text-right text-green-600'>{fmt(numberWiseTotalProfit)}</TableCell>
-                      <TableCell className='text-xs text-muted-foreground'>
-                        End Balance: {fmt(data.periodClosingBalance)}
+                      <TableCell className='text-right text-xs text-muted-foreground'>
+                        {fmt(data.periodClosingBalance)}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
+            {viewMode === 'number-wise' && (
+              <p className='text-xs text-muted-foreground'>
+                Note: Purchase/Sell totals are based on wallet flow direction.
+                Positive flow appears in Purchase and negative flow appears in Sell.
+              </p>
+            )}
           </div>
         )}
       </DialogContent>
