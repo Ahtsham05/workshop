@@ -45,7 +45,6 @@ interface SupplierLedgerDetailsProps {
 // Purchase dialog content component
 function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: string; supplierName: string }) {
   const { t } = useLanguage();
-  const dispatch = useDispatch<AppDispatch>();
 
   if (!purchaseId) {
     return <div className="text-center py-8 text-gray-500">{t('No purchase selected')}</div>;
@@ -132,6 +131,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
 
 export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
+  const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
   const user = useSelector((state: RootState) => state.auth.data?.user);

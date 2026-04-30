@@ -45,7 +45,6 @@ interface CustomerLedgerDetailsProps {
 // Invoice dialog content component
 function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string; customerName: string }) {
   const { t } = useLanguage();
-  const dispatch = useDispatch<AppDispatch>();
 
   if (!invoiceId) {
     return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
@@ -140,6 +139,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
 
 export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetailsProps) {
   const { t } = useLanguage();
+  const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
   const user = useSelector((state: RootState) => state.auth.data?.user);

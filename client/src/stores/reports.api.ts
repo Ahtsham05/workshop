@@ -544,6 +544,7 @@ export interface SimSaleRecentRecord {
   productName: string
   customerName?: string
   customerMobile?: string
+  customerCNIC?: string
   simAmount: number
   loadAmount: number
   saleAmount: number
