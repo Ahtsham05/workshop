@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Invoice, Product, Customer, CustomerLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
@@ -15,6 +16,11 @@ const getOrganizationBusinessType = async (organizationId) => {
 
   const organization = await Organization.findById(organizationId).select('businessType').lean();
   return normalizeBusinessType(organization?.businessType);
+};
+
+const isValidCustomerObjectId = (value) => {
+  if (!value) return false;
+  return mongoose.Types.ObjectId.isValid(String(value).trim());
 };
 
 /**
@@ -360,7 +366,7 @@ const createInvoice = async (invoiceBody, userId) => {
   ];
 
   // Only populate customer if it's not a walk-in customer
-  if (invoice.customerId && invoice.customerId !== 'walk-in') {
+  if (isValidCustomerObjectId(invoice.customerId)) {
     populateOptions.unshift({ path: 'customerId', select: 'name phone email' });
   }
 
@@ -370,13 +376,13 @@ const createInvoice = async (invoiceBody, userId) => {
   const invoiceObj = invoice.toObject();
   console.log("invoiceObj.customerId after population:", invoiceObj.customerId);
   
-  if (invoice.customerId && invoice.customerId !== 'walk-in') {
+  if (isValidCustomerObjectId(invoice.customerId)) {
     // Get the customer data directly from the database if population didn't work
     if (invoiceObj.customerId && typeof invoiceObj.customerId === 'object' && invoiceObj.customerId.name) {
       invoiceObj.customerName = invoiceObj.customerId.name;
     } else {
       // Fallback: fetch customer directly
-      const customer = await Customer.findById(invoice.customerId).select('name');
+      const customer = await Customer.findById(String(invoice.customerId).trim()).select('name');
       if (customer) {
         invoiceObj.customerName = customer.name;
         invoiceObj.customerId = customer; // Also set the populated customer object
@@ -407,8 +413,8 @@ const queryInvoices = async (filter, options) => {
   // Manually populate customer data for each invoice
   if (invoices.results && invoices.results.length > 0) {
     const customerIds = invoices.results
-      .filter(invoice => invoice.customerId && invoice.customerId !== 'walk-in')
-      .map(invoice => invoice.customerId);
+      .map((invoice) => String(invoice.customerId || '').trim())
+      .filter((id) => isValidCustomerObjectId(id));
 
     if (customerIds.length > 0) {
       // Fetch all customers in one query
@@ -422,8 +428,8 @@ const queryInvoices = async (filter, options) => {
       invoices.results = invoices.results.map(invoice => {
         const invoiceObj = invoice.toObject ? invoice.toObject() : invoice;
         
-        if (invoiceObj.customerId && invoiceObj.customerId !== 'walk-in') {
-          const customer = customerMap.get(invoiceObj.customerId.toString());
+        if (isValidCustomerObjectId(invoiceObj.customerId)) {
+          const customer = customerMap.get(String(invoiceObj.customerId).trim());
           if (customer) {
             invoiceObj.customer = customer;
             invoiceObj.customerName = customer.name;
