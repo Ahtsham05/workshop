@@ -300,6 +300,25 @@ export interface WalletBalanceRow {
   transactions: number
   openingBalance: number
   closingBalance: number
+  detailItems: WalletBalanceDetailItem[]
+}
+
+export interface WalletBalanceDetailItem {
+  id: string
+  date: string
+  source: 'load' | 'cash_withdrawal' | 'sim_sale'
+  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load'
+  title: string
+  accountNumber: string
+  customerName: string
+  network: string
+  amount: number
+  walletImpact: number
+  cashAmount: number
+  extraCharge: number
+  profit: number
+  paymentMethod: string
+  notes: string
 }
 
 export interface WalletBalanceStatement {

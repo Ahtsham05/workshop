@@ -227,7 +227,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const closingAtEnd = currentBalance + totalLoadAfter + totalSimSaleLoadAfter - totalWithdrawalsAfter + totalDepositsAfter;
 
   // ── 3. Daily aggregation within range ──
-  const [dailyLoad, dailyCash, dailySimSale] = await Promise.all([
+  const [dailyLoad, dailyCash, dailySimSale, loadDetails, cashDetails, simSaleDetails] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
@@ -265,6 +265,18 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       },
       { $sort: { _id: 1 } },
     ]),
+    LoadTransaction.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
+      .sort({ date: 1, createdAt: 1 })
+      .select('date mobileNumber customerName network amount receivedAmount extraCharge profit paymentMethod notes type')
+      .lean(),
+    CashWithdrawal.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
+      .sort({ date: 1, createdAt: 1 })
+      .select('date transactionType customerNumber customerName amount cashAmount extraCharge profit notes')
+      .lean(),
+    SimSale.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
+      .sort({ date: 1, createdAt: 1 })
+      .select('date customerMobile customerName productName loadAmount simAmount saleAmount commission notes')
+      .lean(),
   ]);
 
   const loadMap = dailyLoad.reduce((acc, d) => {
@@ -279,6 +291,75 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     acc[d._id] = d;
     return acc;
   }, {});
+  const detailMap = {};
+  const ensureBucket = (key) => {
+    if (!detailMap[key]) detailMap[key] = [];
+    return detailMap[key];
+  };
+
+  loadDetails.forEach((item) => {
+    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    ensureBucket(dateKey).push({
+      id: String(item._id),
+      date: item.date,
+      source: 'load',
+      transactionType: 'load_sale',
+      title: item.type === 'package' ? 'Package Load Sale' : 'Load Sale',
+      accountNumber: item.mobileNumber || '',
+      customerName: item.customerName || '',
+      network: item.network || '',
+      amount: Number(item.amount || 0),
+      walletImpact: -Number(item.amount || 0),
+      cashAmount: Number(item.receivedAmount || 0),
+      extraCharge: Number(item.extraCharge || 0),
+      profit: Number(item.profit || 0),
+      paymentMethod: item.paymentMethod || '',
+      notes: item.notes || '',
+    });
+  });
+
+  cashDetails.forEach((item) => {
+    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    const isWithdrawal = item.transactionType === 'withdrawal';
+    ensureBucket(dateKey).push({
+      id: String(item._id),
+      date: item.date,
+      source: 'cash_withdrawal',
+      transactionType: item.transactionType,
+      title: isWithdrawal ? 'Cash Withdrawal' : 'Cash Deposit',
+      accountNumber: item.customerNumber || '',
+      customerName: item.customerName || '',
+      network: '',
+      amount: Number(item.amount || 0),
+      walletImpact: isWithdrawal ? Number(item.amount || 0) : -Number(item.amount || 0),
+      cashAmount: Number(item.cashAmount || 0),
+      extraCharge: Number(item.extraCharge || 0),
+      profit: Number(item.profit || 0),
+      paymentMethod: 'cash',
+      notes: item.notes || '',
+    });
+  });
+
+  simSaleDetails.forEach((item) => {
+    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    ensureBucket(dateKey).push({
+      id: String(item._id),
+      date: item.date,
+      source: 'sim_sale',
+      transactionType: 'sim_sale_load',
+      title: 'SIM Sale Load',
+      accountNumber: item.customerMobile || '',
+      customerName: item.customerName || '',
+      network: '',
+      amount: Number(item.loadAmount || 0),
+      walletImpact: -Number(item.loadAmount || 0),
+      cashAmount: Number(item.saleAmount || 0),
+      extraCharge: 0,
+      profit: Number(item.commission || 0),
+      paymentMethod: 'cash',
+      notes: item.notes || item.productName || '',
+    });
+  });
 
   // ── 4. Build every calendar date in range ──
   const rows = [];
@@ -301,6 +382,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       totalDeposits: cwTotalDeposits,
       totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + (ss ? ss.simSaleCommission : 0),
       transactions: (ld ? ld.loadTransactions : 0) + (cw ? cw.cashTransactions : 0) + (ss ? ss.simSaleTransactions : 0),
+      detailItems: (detailMap[key] || []).sort((a, b) => new Date(a.date) - new Date(b.date)),
     });
     cursor.setDate(cursor.getDate() + 1);
   }
