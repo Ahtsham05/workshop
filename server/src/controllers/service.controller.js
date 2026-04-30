@@ -50,6 +50,11 @@ const getServiceInvoices = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const updateServiceInvoice = catchAsync(async (req, res) => {
+  const invoice = await serviceManagementService.updateServiceInvoiceById(req.params.invoiceId, req.body, req.user.id);
+  res.send(invoice);
+});
+
 const deleteServiceInvoice = catchAsync(async (req, res) => {
   await serviceManagementService.deleteServiceInvoiceById(req.params.invoiceId);
   res.status(httpStatus.NO_CONTENT).send();
@@ -62,5 +67,6 @@ module.exports = {
   deleteService,
   createServiceInvoice,
   getServiceInvoices,
+  updateServiceInvoice,
   deleteServiceInvoice,
 };

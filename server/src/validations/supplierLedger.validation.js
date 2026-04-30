@@ -21,7 +21,7 @@ const createLedgerEntry = {
     description: Joi.string().required(),
     debit: Joi.number().min(0).default(0),
     credit: Joi.number().min(0).default(0),
-    paymentMethod: Joi.string().valid('Cash', 'Bank Transfer', 'Card', 'Cheque', 'Credit'),
+    paymentMethod: Joi.string().trim(),
     notes: Joi.string().allow(''),
   }),
 };
@@ -60,7 +60,7 @@ const updateLedgerEntry = {
       transactionDate: Joi.date(),
       reference: Joi.string(),
       description: Joi.string(),
-      paymentMethod: Joi.string().valid('Cash', 'Bank Transfer', 'Card', 'Cheque', 'Credit'),
+      paymentMethod: Joi.string().trim(),
       notes: Joi.string().allow(''),
     })
     .min(1),

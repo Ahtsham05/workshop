@@ -298,6 +298,7 @@ export interface WalletBalanceRow {
   totalDeposits: number
   totalProfit: number
   transactions: number
+  netWalletImpact?: number
   openingBalance: number
   closingBalance: number
   detailItems: WalletBalanceDetailItem[]
@@ -307,8 +308,8 @@ export interface WalletBalanceDetailItem {
   id: string
   date: string
   createdAt?: string
-  source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase'
-  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase'
+  source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase' | 'wallet_entry'
+  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase' | 'wallet_in' | 'wallet_out'
   title: string
   accountNumber: string
   customerName: string

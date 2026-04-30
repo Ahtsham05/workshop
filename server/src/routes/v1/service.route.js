@@ -26,6 +26,7 @@ router
 
 router
   .route('/invoices/:invoiceId')
+  .patch(validate(serviceValidation.updateServiceInvoice), serviceController.updateServiceInvoice)
   .delete(validate(serviceValidation.deleteServiceInvoice), serviceController.deleteServiceInvoice);
 
 module.exports = router;

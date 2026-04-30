@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/context/language-context';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
+import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
@@ -20,6 +21,7 @@ import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
 import { useGetInvoiceByIdQuery } from '@/stores/invoice.api';
 import { PaymentReceipt } from './payment-receipt';
+import { mobileShopApi } from '@/stores/mobile-shop.api';
 
 interface LedgerEntry {
   _id?: string;
@@ -43,6 +45,7 @@ interface CustomerLedgerDetailsProps {
 // Invoice dialog content component
 function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string; customerName: string }) {
   const { t } = useLanguage();
+  const dispatch = useDispatch<AppDispatch>();
 
   if (!invoiceId) {
     return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
@@ -239,6 +242,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     try {
       const entryId = entry.id || entry._id;
       await Axios.delete(`${summery.deleteCustomerLedgerEntry.url}/${entryId}`);
+      dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
       toast.success(t('Ledger entry deleted successfully'));
       fetchLedgerEntries();
       fetchCustomerBalance();
@@ -466,6 +470,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                       <TableHead>{t('Type')}</TableHead>
                       <TableHead>{t('Description')}</TableHead>
                       <TableHead>{t('Reference')}</TableHead>
+                      <TableHead>{t('Payment Method')}</TableHead>
                       <TableHead className="text-right">{t('Debit')}</TableHead>
                       <TableHead className="text-right">{t('Credit')}</TableHead>
                       <TableHead className="text-right">{t('Balance')}</TableHead>
@@ -496,6 +501,13 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                           ) : (
                             entry.reference || '-'
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {entry.paymentMethod ? (
+                            <Badge variant="outline" className="text-xs">
+                              {entry.paymentMethod}
+                            </Badge>
+                          ) : '-'}
                         </TableCell>
                         <TableCell className="text-right text-red-600">
                           {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '-'}

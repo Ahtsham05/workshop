@@ -55,7 +55,7 @@ const supplierLedgerSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Cash', 'Bank Transfer', 'Card', 'Cheque', 'Credit'],
+    trim: true,
   },
   notes: {
     type: String,

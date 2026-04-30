@@ -46,6 +46,8 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
   const [activeTab, setActiveTab] = useState('sales')
   const exportRef = useRef<{ exportToExcel: () => void }>(null)
+  const queryStartDate = format(startDate, 'yyyy-MM-dd')
+  const queryEndDate = format(endDate, 'yyyy-MM-dd')
 
   const handleRefresh = () => {
     window.location.reload()
@@ -106,7 +108,10 @@ export default function ReportsPage() {
                   <Calendar
                     mode='single'
                     selected={startDate}
-                    onSelect={(date) => date && setStartDate(date)}
+                    onSelect={(date) => {
+                      if (!date) return
+                      setStartDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0))
+                    }}
                     initialFocus
                   />
                 </PopoverContent>
@@ -132,7 +137,10 @@ export default function ReportsPage() {
                   <Calendar
                     mode='single'
                     selected={endDate}
-                    onSelect={(date) => date && setEndDate(date)}
+                    onSelect={(date) => {
+                      if (!date) return
+                      setEndDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999))
+                    }}
                     initialFocus
                   />
                 </PopoverContent>
@@ -226,32 +234,32 @@ export default function ReportsPage() {
         </div>
 
         <TabsContent value='sales' className='mt-6'>
-          <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='purchases' className='mt-6'>
-          <PurchaseReport ref={activeTab === 'purchases' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <PurchaseReport ref={activeTab === 'purchases' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='products' className='mt-6'>
-          <ProductReport ref={activeTab === 'products' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <ProductReport ref={activeTab === 'products' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='customers' className='mt-6'>
-          <CustomerReport ref={activeTab === 'customers' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <CustomerReport ref={activeTab === 'customers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='suppliers' className='mt-6'>
-          <SupplierReport ref={activeTab === 'suppliers' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <SupplierReport ref={activeTab === 'suppliers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='expenses' className='mt-6'>
-          <ExpenseReport ref={activeTab === 'expenses' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <ExpenseReport ref={activeTab === 'expenses' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='profit-loss' className='mt-6'>
           {canAccess('profit_loss')
-            ? <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            ? <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
             : <LockedFeatureCard featureName='Profit & Loss Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
@@ -260,21 +268,21 @@ export default function ReportsPage() {
         </TabsContent>
 
         <TabsContent value='tax' className='mt-6'>
-          <TaxReport ref={activeTab === 'tax' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <TaxReport ref={activeTab === 'tax' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='sales-returns' className='mt-6'>
-          <SalesReturnsReport ref={activeTab === 'sales-returns' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <SalesReturnsReport ref={activeTab === 'sales-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='purchase-returns' className='mt-6'>
-          <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+          <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         {isMobileShop && (
           <TabsContent value='load' className='mt-6'>
             {canAccess('load')
-              ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
               : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
           </TabsContent>
         )}
@@ -282,40 +290,40 @@ export default function ReportsPage() {
         {isMobileShop && (
           <TabsContent value='repair' className='mt-6'>
             {canAccess('repair')
-              ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
               : <LockedFeatureCard featureName='Repair Report' currentPlan={getPlanLabel(planType)} />}
           </TabsContent>
         )}
 
         {isMobileShop && (
           <TabsContent value='services' className='mt-6'>
-            <ServiceReport ref={activeTab === 'services' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            <ServiceReport ref={activeTab === 'services' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
         {isMobileShop && (
           <TabsContent value='bill-payments' className='mt-6'>
             {canAccess('bill_payment')
-              ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+              ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
               : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
           </TabsContent>
         )}
 
         <TabsContent value='roi' className='mt-6'>
           {canAccess('roi')
-            ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
             : <LockedFeatureCard featureName='ROI Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         {isMobileShop && (
           <TabsContent value='sim-sale' className='mt-6'>
-            <SimSaleReport ref={activeTab === 'sim-sale' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            <SimSaleReport ref={activeTab === 'sim-sale' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
         {isMobileShop && (
           <TabsContent value='installments' className='mt-6'>
-            <InstallmentReport ref={activeTab === 'installments' ? exportRef : null} startDate={startDate.toISOString()} endDate={endDate.toISOString()} />
+            <InstallmentReport ref={activeTab === 'installments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
       </Tabs>

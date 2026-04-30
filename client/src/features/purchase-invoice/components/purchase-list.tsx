@@ -64,6 +64,9 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const { data: purchasesResponse, isLoading, error } = useGetPurchasesQuery(queryParams)
 
   const getPurchasePaymentType = useCallback((purchase: any) => {
+    if (purchase?.paymentType === 'Wallet' && purchase?.walletType) {
+      return purchase.walletType
+    }
     if (purchase?.paymentType) return purchase.paymentType
     return Number(purchase?.balance || 0) > 0 ? 'Credit' : 'Cash'
   }, [])

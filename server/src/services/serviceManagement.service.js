@@ -174,6 +174,43 @@ const createServiceInvoice = async (invoiceBody) => {
   return invoice;
 };
 
+const buildServiceInvoiceItems = async (invoiceBody, currentInvoice) => {
+  if (!Array.isArray(invoiceBody.items) || invoiceBody.items.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'At least one service is required');
+  }
+
+  const uniqueServiceIds = [...new Set(invoiceBody.items.map((i) => String(i.serviceId)))];
+  const services = await Service.find({
+    organizationId: currentInvoice.organizationId,
+    branchId: currentInvoice.branchId,
+    _id: { $in: uniqueServiceIds },
+  }).lean();
+
+  if (services.length !== uniqueServiceIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'One or more selected services do not exist');
+  }
+
+  const serviceMap = new Map(services.map((s) => [String(s._id), s]));
+  return invoiceBody.items.map((item) => {
+    const service = serviceMap.get(String(item.serviceId));
+    const quantity = Number(item.quantity || 0);
+    if (!service || quantity <= 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid service item data');
+    }
+    const requestedUnitPrice = Number(item.unitPrice);
+    const unitPrice = Number.isFinite(requestedUnitPrice) && requestedUnitPrice >= 0
+      ? requestedUnitPrice
+      : Number(service.price || 0);
+    return {
+      serviceId: service._id,
+      serviceName: service.serviceName,
+      unitPrice,
+      quantity,
+      total: unitPrice * quantity,
+    };
+  });
+};
+
 const queryServiceInvoices = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
@@ -208,6 +245,29 @@ const getServiceInvoiceById = async (invoiceId) => {
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Service invoice not found');
   }
+  return invoice;
+};
+
+const updateServiceInvoiceById = async (invoiceId, updateBody, userId) => {
+  const invoice = await getServiceInvoiceById(invoiceId);
+
+  if (updateBody.items) {
+    const items = await buildServiceInvoiceItems(updateBody, invoice);
+    const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    invoice.items = items;
+    invoice.subtotal = subtotal;
+    invoice.totalAmount = subtotal;
+  }
+
+  if (updateBody.customerName !== undefined) invoice.customerName = updateBody.customerName || '';
+  if (updateBody.customerPhone !== undefined) invoice.customerPhone = updateBody.customerPhone || '';
+  if (updateBody.paymentMethod !== undefined) invoice.paymentMethod = updateBody.paymentMethod || 'cash';
+  if (updateBody.date !== undefined) invoice.date = updateBody.date || new Date();
+  if (updateBody.notes !== undefined) invoice.notes = updateBody.notes || '';
+  invoice.updatedBy = userId;
+
+  await invoice.save();
+  await syncServiceInvoiceCashEntry(invoice);
   return invoice;
 };
 
@@ -296,6 +356,7 @@ module.exports = {
   updateServiceDefinitionById,
   deleteServiceDefinitionById,
   createServiceInvoice,
+  updateServiceInvoiceById,
   queryServiceInvoices,
   getServiceInvoiceById,
   deleteServiceInvoiceById,

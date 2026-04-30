@@ -63,6 +63,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
               Product: r.productName,
               Customer: r.customerName ?? '',
               Mobile: r.customerMobile ?? '',
+              CNIC: r.customerCNIC ?? '',
               'SIM Amount': r.simAmount,
               'Load Amount': r.loadAmount,
               'Sale Amount': r.saleAmount,
@@ -270,6 +271,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                   <TableRow>
                     <TableHead>Product</TableHead>
                     <TableHead>Customer</TableHead>
+                    <TableHead>Number</TableHead>
+                    <TableHead>CNIC</TableHead>
                     <TableHead className='text-right'>SIM Amt</TableHead>
                     <TableHead className='text-right'>Load Amt</TableHead>
                     <TableHead className='text-right'>Sale Amt</TableHead>
@@ -283,6 +286,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                     <TableRow key={row._id}>
                       <TableCell className='font-medium'>{row.productName}</TableCell>
                       <TableCell>{row.customerName ?? '—'}</TableCell>
+                      <TableCell>{row.customerMobile ?? '—'}</TableCell>
+                      <TableCell>{row.customerCNIC ?? '—'}</TableCell>
                       <TableCell className='text-right'>{fmt(row.simAmount)}</TableCell>
                       <TableCell className='text-right'>{fmt(row.loadAmount)}</TableCell>
                       <TableCell className='text-right'>{fmt(row.saleAmount)}</TableCell>

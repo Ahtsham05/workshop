@@ -23,10 +23,37 @@ const buildScope = (req) => {
   return scope;
 };
 
-const parseRange = (query) => ({
-  start: query.startDate ? new Date(query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-  end: query.endDate ? new Date(query.endDate) : new Date(),
-});
+const parseDateBoundary = (value, isEnd = false) => {
+  if (!value) return null;
+  const raw = String(value);
+  const datePart = raw.slice(0, 10);
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+
+  // Prefer calendar-date boundaries to avoid timezone drift from ISO strings.
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return isEnd
+      ? new Date(Date.UTC(year, month, day, 23, 59, 59, 999))
+      : new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (isEnd) parsed.setUTCHours(23, 59, 59, 999);
+  else parsed.setUTCHours(0, 0, 0, 0);
+  return parsed;
+};
+
+const parseRange = (query) => {
+  const end = parseDateBoundary(query.endDate, true) || new Date();
+  const start =
+    parseDateBoundary(query.startDate, false) ||
+    new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  return { start, end };
+};
 
 /* ── Sales Invoice Details ──────────────────────────────────────────────────── */
 const getSalesInvoiceDetails = catchAsync(async (req, res) => {

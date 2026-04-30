@@ -27,12 +27,14 @@ import { RootState } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import type { Purchase, PurchaseItem, Supplier } from '../index'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { isMobileShopBusiness } from '@/lib/business-types'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -92,6 +94,9 @@ export default function PurchasePanel({
   const suppliers: Supplier[] = suppliersData?.results || []
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
+  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !isMobileShop })
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
 
   // Filter suppliers by search query
@@ -301,11 +306,15 @@ export default function PurchasePanel({
       console.log('Totals:', totals)
 
       // Validate and normalize paymentType
-      const validPaymentTypes = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'];
+      const validPaymentTypes = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet'];
       let paymentType = purchase.paymentType || 'Cash';
       if (!validPaymentTypes.includes(paymentType)) {
         console.warn(`Invalid paymentType: ${paymentType}, defaulting to 'Cash'`);
         paymentType = 'Cash';
+      }
+      if (paymentType === 'Wallet' && !purchase.walletType) {
+        toast.error(t('Please select a wallet for wallet payment'))
+        return
       }
 
       // Map to backend format
@@ -336,6 +345,7 @@ export default function PurchasePanel({
         paidAmount: purchase.paidAmount || 0,
         balance: totals.total - (purchase.paidAmount || 0),
         paymentType: paymentType,
+        walletType: paymentType === 'Wallet' ? purchase.walletType : undefined,
         purchaseDate: purchase.date || new Date().toISOString(),
         notes: purchase.notes?.trim() || undefined,
       }
@@ -586,18 +596,20 @@ export default function PurchasePanel({
               <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
               <Select
                 value={purchase.paymentType || 'Cash'}
-                onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit') => {
+                onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet') => {
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
                     const switchingCashToCredit = prev.paymentType === 'Cash' && value === 'Credit'
+                    const switchingCashToWallet = prev.paymentType === 'Cash' && value === 'Wallet'
                     const nextPaid = value === 'Cash'
                       ? currentTotal
-                      : switchingCashToCredit
+                      : (switchingCashToCredit || switchingCashToWallet)
                         ? 0
                         : (prev.paidAmount || 0)
                     return {
                       ...prev,
                       paymentType: value,
+                      walletType: value === 'Wallet' ? prev.walletType : undefined,
                       paidAmount: nextPaid,
                       balance: currentTotal - nextPaid,
                     }
@@ -610,12 +622,39 @@ export default function PurchasePanel({
                 <SelectContent>
                   <SelectItem value='Cash'>{t('cash')}</SelectItem>
                   <SelectItem value='Credit'>{t('credit')}</SelectItem>
-                  {/* <SelectItem value='Card'>{t('Card')}</SelectItem>
-                  <SelectItem value='Bank Transfer'>{t('Bank Transfer')}</SelectItem>
-                  <SelectItem value='Cheque'>{t('Cheque')}</SelectItem> */}
+                  {isMobileShop && <SelectItem value='Wallet'>{t('wallet') || 'Wallet'}</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
+
+            {isMobileShop && purchase.paymentType === 'Wallet' && (
+              <div>
+                <Label className="mb-2 block">{t('Select Wallet') || 'Select Wallet'}</Label>
+                {wallets.length > 0 ? (
+                  <Select
+                    value={purchase.walletType || ''}
+                    onValueChange={(value) => {
+                      setPurchase((prev) => ({ ...prev, walletType: value }))
+                    }}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder={t('Select wallet') || 'Select wallet...'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wallets.map((wallet) => (
+                        <SelectItem key={wallet.id} value={wallet.type}>
+                          {wallet.type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className='text-xs text-muted-foreground'>
+                    {t('No wallets configured. Add wallets in Mobile Shop -> Wallet.') || 'No wallets configured. Add wallets in Mobile Shop -> Wallet.'}
+                  </p>
+                )}
+              </div>
+            )}
         </CardContent>
       </Card>
 

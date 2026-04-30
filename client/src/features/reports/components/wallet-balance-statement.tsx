@@ -41,6 +41,11 @@ const fmt = (v: number) =>
     minimumFractionDigits: 0,
   }).format(v)
 
+const getFlowBadgeStyles = (impact: number) =>
+  impact >= 0 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'
+
+const getFlowLabel = (impact: number) => (impact >= 0 ? 'IN' : 'OUT')
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WalletBalanceStatement({
@@ -303,6 +308,7 @@ export function WalletBalanceStatement({
                     {viewMode === 'number-wise' && (
                       <>
                         <TableHead>Type</TableHead>
+                        <TableHead>Flow</TableHead>
                         <TableHead>Number / Account</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead className='text-right'>Amount</TableHead>
@@ -447,6 +453,7 @@ export function WalletBalanceStatement({
                             <TableCell />
                             <TableCell />
                             <TableCell />
+                            <TableCell />
                             <TableCell className='text-xs text-muted-foreground'>
                               Before: {fmt(entry.beforeBalance)}
                             </TableCell>
@@ -460,6 +467,11 @@ export function WalletBalanceStatement({
                             {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
                           </TableCell>
                           <TableCell>{entry.item.title}</TableCell>
+                          <TableCell>
+                            <Badge variant='outline' className={getFlowBadgeStyles(entry.item.walletImpact)}>
+                              {getFlowLabel(entry.item.walletImpact)}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{entry.item.accountNumber || '—'}</TableCell>
                           <TableCell>{entry.item.customerName || '—'}</TableCell>
                           <TableCell className='text-right'>{fmt(entry.item.amount)}</TableCell>
@@ -506,6 +518,7 @@ export function WalletBalanceStatement({
                     <TableRow className='border-t-2 font-bold bg-muted/50'>
                       <TableCell>Total</TableCell>
                       <TableCell>{numberWiseDetailRows.length} entries</TableCell>
+                      <TableCell />
                       <TableCell />
                       <TableCell />
                       <TableCell className='text-right text-blue-600'>{fmt(numberWiseTotalAmount)}</TableCell>

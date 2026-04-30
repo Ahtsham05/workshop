@@ -20,6 +20,7 @@ module.exports.Branch = require('./branch.model');
 module.exports.Membership = require('./membership.model');
 module.exports.Payment = require('./payment.model');
 module.exports.Wallet = require('./wallet.model');
+module.exports.WalletEntry = require('./walletEntry.model');
 module.exports.LoadPurchase = require('./loadPurchase.model');
 module.exports.LoadTransaction = require('./loadTransaction.model');
 module.exports.SimSale = require('./simSale.model');

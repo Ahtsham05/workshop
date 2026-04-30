@@ -2,6 +2,83 @@ const httpStatus = require('http-status');
 const { CustomerLedger, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
+
+const isWalletLedgerMethod = (paymentMethod) => {
+  const method = String(paymentMethod || '').trim().toLowerCase();
+  return method.includes('wallet') || method.includes('jazzcash') || method.includes('easypaisa');
+};
+
+const parseWalletType = (paymentMethod) => {
+  const original = String(paymentMethod || '').trim();
+  const normalized = original.toLowerCase();
+  const walletMatch = original.match(/wallet\s*\((.+)\)/i);
+  if (walletMatch && walletMatch[1]) {
+    return walletMatch[1].trim();
+  }
+  if (normalized.includes('jazzcash')) return 'JazzCash';
+  if (normalized.includes('easypaisa')) return 'EasyPaisa';
+  return null;
+};
+
+const resolvePaymentSnapshot = (entryLike) => {
+  const transactionType = String(entryLike?.transactionType || '').toLowerCase();
+  if (transactionType !== 'payment_received' && transactionType !== 'payment_made') {
+    return { isPayment: false, amount: 0, direction: null, walletType: null };
+  }
+  const isReceived = transactionType === 'payment_received';
+  const amount = Number(isReceived ? entryLike?.credit : entryLike?.debit) || 0;
+  const walletType = parseWalletType(entryLike?.paymentMethod);
+  return {
+    isPayment: amount > 0,
+    amount,
+    direction: isReceived ? 'in' : 'out',
+    walletType,
+  };
+};
+
+const syncWalletFromCustomerLedger = async (entry, previousSnapshot) => {
+  const currentSnapshot = resolvePaymentSnapshot(entry);
+
+  if (previousSnapshot?.isPayment && previousSnapshot.walletType) {
+    await walletService.adjustWalletBalance({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      type: previousSnapshot.walletType,
+      amount: previousSnapshot.amount,
+      operation: previousSnapshot.direction === 'in' ? 'deduct' : 'add',
+      userId: entry.updatedBy || entry.createdBy,
+    });
+  }
+
+  if (currentSnapshot.isPayment && currentSnapshot.walletType) {
+    await walletService.adjustWalletBalance({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      type: currentSnapshot.walletType,
+      amount: currentSnapshot.amount,
+      operation: currentSnapshot.direction === 'in' ? 'add' : 'deduct',
+      userId: entry.updatedBy || entry.createdBy,
+    });
+
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      walletType: currentSnapshot.walletType,
+      type: currentSnapshot.direction === 'in' ? 'in' : 'out',
+      amount: currentSnapshot.amount,
+      referenceId: entry._id,
+      referenceModel: 'CustomerLedger',
+      description: entry.description || 'Customer ledger wallet payment',
+      date: entry.transactionDate || new Date(),
+      createdBy: entry.createdBy,
+      updatedBy: entry.updatedBy || entry.createdBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+  }
+};
 
 const syncCashBookFromCustomerLedger = async (entry) => {
   if (!entry) {
@@ -18,7 +95,7 @@ const syncCashBookFromCustomerLedger = async (entry) => {
   const isPaymentReceived = transactionType === 'payment_received';
   const amount = Number(isPaymentReceived ? entry.credit : entry.debit) || 0;
 
-  if (amount <= 0) {
+  if (amount <= 0 || isWalletLedgerMethod(entry.paymentMethod)) {
     await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
     return null;
   }
@@ -91,6 +168,7 @@ const createLedgerEntry = async (ledgerBody) => {
 
   // Fetch, sync cashbook and return the updated entry
   const updatedEntry = await CustomerLedger.findById(entry._id);
+  await syncWalletFromCustomerLedger(updatedEntry, null);
   await syncCashBookFromCustomerLedger(updatedEntry);
   return updatedEntry;
 };
@@ -190,6 +268,8 @@ const updateLedgerEntry = async (id, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
 
+  const previousSnapshot = resolvePaymentSnapshot(entry);
+
   // Don't allow changing customer or amounts after creation for audit trail
   delete updateBody.customer;
   delete updateBody.debit;
@@ -198,6 +278,7 @@ const updateLedgerEntry = async (id, updateBody) => {
 
   Object.assign(entry, updateBody);
   await entry.save();
+  await syncWalletFromCustomerLedger(entry, previousSnapshot);
   await syncCashBookFromCustomerLedger(entry);
   return entry;
 };
@@ -215,6 +296,18 @@ const deleteLedgerEntry = async (id) => {
 
   const customerId = entry.customer;
   const transactionDate = entry.transactionDate;
+  const previousSnapshot = resolvePaymentSnapshot(entry);
+  if (previousSnapshot.isPayment && previousSnapshot.walletType) {
+    await walletService.adjustWalletBalance({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      type: previousSnapshot.walletType,
+      amount: previousSnapshot.amount,
+      operation: previousSnapshot.direction === 'in' ? 'deduct' : 'add',
+      userId: entry.updatedBy || entry.createdBy,
+    });
+  }
+  await walletEntryService.deleteEntriesByReference(entry._id, 'CustomerLedger');
   await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
 
   await entry.deleteOne();

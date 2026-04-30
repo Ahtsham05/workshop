@@ -18,6 +18,14 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/stores/store';
+import { AppDispatch } from '@/stores/store';
+import { useGetMyOrganizationQuery } from '@/stores/organization.api';
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api';
+import { isMobileShopBusiness } from '@/lib/business-types';
+import { useDispatch } from 'react-redux';
+import { mobileShopApi } from '@/stores/mobile-shop.api';
 
 interface LedgerEntryFormProps {
   ledgerType: 'customer' | 'supplier';
@@ -37,6 +45,12 @@ export function LedgerEntryForm({
   onCancel,
 }: LedgerEntryFormProps) {
   const { t } = useLanguage();
+  const dispatch = useDispatch<AppDispatch>();
+  const user = useSelector((state: RootState) => state.auth.data?.user);
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType);
+  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !isMobileShop });
+  const wallets = walletsData?.results?.filter((wallet) => wallet.isActive) ?? [];
   const [loading, setLoading] = useState(false);
   const [date, setDate] = useState<Date>(editingEntry ? new Date(editingEntry.transactionDate) : new Date());
   
@@ -44,13 +58,26 @@ export function LedgerEntryForm({
   // Note: Backend returns 'id' not '_id'
   const [entryId] = useState(editingEntry?.id || editingEntry?._id);
   
+  const getWalletTypeFromPaymentMethod = (paymentMethod?: string) => {
+    const method = String(paymentMethod || '').trim();
+    const match = method.match(/wallet\s*\((.+)\)/i);
+    if (match && match[1]) return match[1].trim();
+    return '';
+  };
+
+  const isWalletPaymentMethod = (paymentMethod?: string) => {
+    const method = String(paymentMethod || '').toLowerCase();
+    return method.includes('wallet');
+  };
+
   const [formData, setFormData] = useState({
     transactionType: editingEntry?.transactionType || (ledgerType === 'customer' ? 'payment_received' : 'payment_made'),
     description: editingEntry?.description || '',
     reference: editingEntry?.reference || '',
     debit: editingEntry?.debit ? editingEntry.debit.toString() : '',
     credit: editingEntry?.credit ? editingEntry.credit.toString() : '',
-    paymentMethod: editingEntry?.paymentMethod || 'Cash',
+    paymentMethod: isWalletPaymentMethod(editingEntry?.paymentMethod) ? 'Wallet' : (editingEntry?.paymentMethod || 'Cash'),
+    walletType: getWalletTypeFromPaymentMethod(editingEntry?.paymentMethod) || '',
     notes: editingEntry?.notes || '',
   });
 
@@ -81,6 +108,7 @@ export function LedgerEntryForm({
     { value: 'Cheque', label: t('Cheque') },
     { value: 'Card', label: t('Card') },
     { value: 'Credit', label: t('Credit') },
+    ...(isMobileShop ? [{ value: 'Wallet', label: t('Wallet') || 'Wallet' }] : []),
   ];
 
   const transactionTypes = ledgerType === 'customer' ? customerTransactionTypes : supplierTransactionTypes;
@@ -137,6 +165,10 @@ export function LedgerEntryForm({
       newErrors.credit = t('Cannot have both debit and credit in same entry');
     }
 
+    if (formData.paymentMethod === 'Wallet' && !formData.walletType) {
+      newErrors.walletType = t('Please select wallet');
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -153,11 +185,15 @@ export function LedgerEntryForm({
         // Update existing entry - only send allowed fields
         console.log('Editing entry ID:', entryId);
         
+        const resolvedPaymentMethod = formData.paymentMethod === 'Wallet'
+          ? `Wallet (${formData.walletType})`
+          : formData.paymentMethod;
+
         const updatePayload = {
           transactionDate: date.toISOString(),
           description: formData.description,
           reference: formData.reference || undefined,
-          paymentMethod: formData.paymentMethod || undefined,
+          paymentMethod: resolvedPaymentMethod || undefined,
           notes: formData.notes || undefined,
         };
 
@@ -169,11 +205,16 @@ export function LedgerEntryForm({
         console.log('Update payload:', updatePayload);
 
         await Axios.patch(url, updatePayload);
+        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
         toast.success(t('Ledger entry updated successfully'));
         
         if (onSuccess) onSuccess();
       } else {
         // Create new entry - send full payload
+        const resolvedPaymentMethod = formData.paymentMethod === 'Wallet'
+          ? `Wallet (${formData.walletType})`
+          : formData.paymentMethod;
+
         const createPayload = {
           [ledgerType]: entityId,
           transactionType: formData.transactionType,
@@ -182,7 +223,7 @@ export function LedgerEntryForm({
           reference: formData.reference || undefined,
           debit: parseFloat(formData.debit) || 0,
           credit: parseFloat(formData.credit) || 0,
-          paymentMethod: formData.paymentMethod || undefined,
+          paymentMethod: resolvedPaymentMethod || undefined,
           notes: formData.notes || undefined,
         };
 
@@ -191,6 +232,7 @@ export function LedgerEntryForm({
           : summery.addSupplierLedgerEntry.url;
 
         const response = await Axios.post(url, createPayload);
+        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
         toast.success(t('Ledger entry added successfully'));
         
         // Pass the created entry back if it's a payment received/made
@@ -289,7 +331,7 @@ export function LedgerEntryForm({
               <Select
                 value={formData.paymentMethod}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, paymentMethod: value })
+                  setFormData({ ...formData, paymentMethod: value, walletType: value === 'Wallet' ? formData.walletType : '' })
                 }
               >
                 <SelectTrigger className='w-full'>
@@ -305,6 +347,34 @@ export function LedgerEntryForm({
               </Select>
             </div>
           </div>
+
+          {isMobileShop && formData.paymentMethod === 'Wallet' && (
+            <div className="space-y-2">
+              <Label htmlFor="walletType">{t('Select Wallet')} *</Label>
+              <Select
+                value={formData.walletType}
+                onValueChange={(value) => setFormData({ ...formData, walletType: value })}
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder={t('Select wallet')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {wallets.map((wallet) => (
+                    <SelectItem key={wallet.id} value={wallet.type}>
+                      {wallet.type} (Rs{Number(wallet.balance || 0).toFixed(2)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.walletType && <p className="text-sm text-red-600">{errors.walletType}</p>}
+              {formData.walletType && (
+                <p className="text-xs text-muted-foreground">
+                  {t('Current wallet balance')}: Rs
+                  {Number(wallets.find((wallet) => wallet.type === formData.walletType)?.balance || 0).toFixed(2)}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

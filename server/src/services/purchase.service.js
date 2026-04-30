@@ -3,6 +3,8 @@ const { Purchase, Product, SupplierLedger, Organization } = require('../models')
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
+const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -27,32 +29,108 @@ const getPurchaseProductId = (item) => {
   return '';
 };
 
-const syncDirectPurchaseCashEntry = async (purchase) => {
-  const hasSupplier = !!purchase.supplier;
-  if (hasSupplier) {
-    await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
-    return null;
+const resolvePurchaseLedgerPaymentMethod = (purchase) => {
+  const type = String(purchase.paymentType || 'Cash');
+  if (type === 'Wallet') {
+    const walletName = String(purchase.walletType || '').trim();
+    return walletName ? `Wallet (${walletName})` : 'Wallet';
   }
+  return type;
+};
 
+const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, previousWalletType, previousPaidAmount) => {
   const paidAmount = Number(purchase.paidAmount || 0);
-  if (paidAmount <= 0) {
+  const paymentType = String(purchase.paymentType || 'Cash');
+  const isWalletPayment = paymentType === 'Wallet' && purchase.walletType;
+
+  if (paidAmount > 0 && !isWalletPayment) {
+    await cashBookService.upsertReferenceEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: 'expense',
+      source: 'purchase',
+      amount: paidAmount,
+      paymentMethod: purchase.paymentType || 'cash',
+      referenceId: purchase._id,
+      referenceModel: 'Purchase',
+      description: `Payment made for Purchase #${purchase.invoiceNumber}`,
+      date: purchase.purchaseDate || purchase.createdAt || new Date(),
+      createdBy: purchase.createdBy,
+    });
+  } else {
     await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
-    return null;
   }
 
-  return cashBookService.upsertReferenceEntry({
-    organizationId: purchase.organizationId,
-    branchId: purchase.branchId,
-    type: 'expense',
-    source: 'purchase',
-    amount: paidAmount,
-    paymentMethod: purchase.paymentType || 'cash',
-    referenceId: purchase._id,
-    referenceModel: 'Purchase',
-    description: `Direct purchase payment for Invoice #${purchase.invoiceNumber}`,
-    date: purchase.purchaseDate || purchase.createdAt || new Date(),
-    createdBy: purchase.createdBy,
-  });
+  if (isWalletPayment && paidAmount > 0) {
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      walletType: purchase.walletType.trim(),
+      type: 'out',
+      amount: paidAmount,
+      referenceId: purchase._id,
+      referenceModel: 'Purchase',
+      description: `Wallet payment sent for Purchase #${purchase.invoiceNumber}`,
+      date: purchase.purchaseDate || purchase.createdAt || new Date(),
+      createdBy: purchase.createdBy,
+      updatedBy: purchase.updatedBy || purchase.createdBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(purchase._id, 'Purchase');
+  }
+
+  if (isWalletPayment) {
+    const walletType = purchase.walletType.trim();
+    const prevType = String(previousPaymentType || 'Cash');
+    const prevPaid = Number(previousPaidAmount || 0);
+
+    if (prevType === 'Wallet' && previousWalletType && prevPaid > 0) {
+      const previousWallet = previousWalletType.trim();
+      if (previousWallet === walletType) {
+        const delta = paidAmount - prevPaid;
+        if (delta !== 0) {
+          await walletService.adjustWalletBalance({
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
+            type: walletType,
+            amount: Math.abs(delta),
+            operation: delta > 0 ? 'deduct' : 'add',
+            userId: purchase.updatedBy || purchase.createdBy,
+          });
+        }
+        return;
+      }
+
+      await walletService.adjustWalletBalance({
+        organizationId: purchase.organizationId,
+        branchId: purchase.branchId,
+        type: previousWallet,
+        amount: prevPaid,
+        operation: 'add',
+        userId: purchase.updatedBy || purchase.createdBy,
+      });
+    }
+
+    if (paidAmount > 0) {
+      await walletService.adjustWalletBalance({
+        organizationId: purchase.organizationId,
+        branchId: purchase.branchId,
+        type: walletType,
+        amount: paidAmount,
+        operation: 'deduct',
+        userId: purchase.updatedBy || purchase.createdBy,
+      });
+    }
+  } else if (String(previousPaymentType || 'Cash') === 'Wallet' && previousWalletType && Number(previousPaidAmount || 0) > 0) {
+    await walletService.adjustWalletBalance({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: previousWalletType.trim(),
+      amount: Number(previousPaidAmount),
+      operation: 'add',
+      userId: purchase.updatedBy || purchase.createdBy,
+    });
+  }
 };
 
 /**
@@ -61,9 +139,13 @@ const syncDirectPurchaseCashEntry = async (purchase) => {
  * @returns {Promise<Purchase>}
  */
 const createPurchase = async (purchaseBody) => {
+  const businessType = await getOrganizationBusinessType(purchaseBody.organizationId);
+  if (purchaseBody.paymentType === 'Wallet' && businessType !== 'mobile_shop') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Wallet payment is only available for mobile shop businesses');
+  }
+
   // First, create the purchase
   const purchase = await Purchase.create(purchaseBody);
-  const businessType = await getOrganizationBusinessType(purchase.organizationId);
 
   // Now, update the stock quantity of each product in the purchase
   for (const item of purchase.items) {
@@ -100,11 +182,12 @@ const createPurchase = async (purchaseBody) => {
 
   // Save the purchase with balance calculated
   await purchase.save();
-  await syncDirectPurchaseCashEntry(purchase);
+  await syncPurchaseCashAndWalletEntries(purchase, null, null, 0);
 
   // Create supplier ledger entry if supplier is provided
   if (purchase.supplier) {
     try {
+      const ledgerPaymentMethod = resolvePurchaseLedgerPaymentMethod(purchase);
       console.log('Creating supplier ledger entry for purchase:', {
         supplier: purchase.supplier,
         invoiceNumber: purchase.invoiceNumber,
@@ -125,7 +208,7 @@ const createPurchase = async (purchaseBody) => {
         description: `Purchase Invoice #${purchase.invoiceNumber}`,
         debit: 0,
         credit: purchase.totalAmount,
-        paymentMethod: purchase.paymentType,
+        paymentMethod: ledgerPaymentMethod,
         notes: `Purchase of ${purchase.items.length} items`
       });
       console.log('Supplier ledger entry created for purchase:', purchase.invoiceNumber, 'Entry ID:', purchaseEntry._id);
@@ -147,7 +230,7 @@ const createPurchase = async (purchaseBody) => {
           description: `Payment made for Purchase #${purchase.invoiceNumber}${purchase.paidAmount < purchase.totalAmount ? ' (Partial)' : ''}`,
           debit: purchase.paidAmount,
           credit: 0,
-          paymentMethod: purchase.paymentType,
+          paymentMethod: ledgerPaymentMethod,
           notes: `Amount paid: Rs${purchase.paidAmount.toFixed(2)}${purchase.balance > 0 ? `, Balance: Rs${purchase.balance.toFixed(2)}` : ''}`
         });
         console.log('Payment ledger entry created for purchase:', purchase.invoiceNumber, 'Amount:', purchase.paidAmount, 'Entry ID:', paymentEntry._id);
@@ -159,8 +242,6 @@ const createPurchase = async (purchaseBody) => {
       // Don't fail the purchase creation if ledger entry fails
     }
   }
-
-  await syncDirectPurchaseCashEntry(purchase);
 
   return purchase;
 };
@@ -211,7 +292,12 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalPaidAmount = purchase.paidAmount || 0;
   const originalSupplier = purchase.supplier?._id || purchase.supplier;
   const originalPaymentType = purchase.paymentType;
+  const originalWalletType = purchase.walletType || null;
   const businessType = await getOrganizationBusinessType(purchase.organizationId);
+
+  if (updateBody.paymentType === 'Wallet' && businessType !== 'mobile_shop') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Wallet payment is only available for mobile shop businesses');
+  }
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
@@ -302,6 +388,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   // Now update the purchase itself
   Object.assign(purchase, updateBody); // Merge the new values into the purchase document
   await purchase.save(); // Save the updated purchase document
+  await syncPurchaseCashAndWalletEntries(purchase, originalPaymentType, originalWalletType, originalPaidAmount);
 
   // Update supplier ledger entries if amounts or supplier changed
   const newSupplier = purchase.supplier?._id || purchase.supplier;
@@ -317,6 +404,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
     !hasLedgerEntries
   )) {
     try {
+      const ledgerPaymentMethod = resolvePurchaseLedgerPaymentMethod(purchase);
       console.log('Updating supplier ledger entries for purchase:', {
         purchaseId: purchase._id,
         invoiceNumber: purchase.invoiceNumber,
@@ -344,7 +432,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           description: `Purchase Invoice #${purchase.invoiceNumber} (Updated)`,
           debit: 0,
           credit: newTotalAmount,
-          paymentMethod: purchase.paymentType,
+          paymentMethod: ledgerPaymentMethod,
           notes: `Purchase of ${purchase.items.length} items (Updated)`
         });
 
@@ -363,7 +451,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             description: `Payment for Purchase #${purchase.invoiceNumber} (Updated)`,
             debit: newPaidAmount,
             credit: 0,
-            paymentMethod: purchase.paymentType,
+            paymentMethod: ledgerPaymentMethod,
             notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
           });
         }
@@ -377,7 +465,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           paidAmount: newPaidAmount,
           invoiceNumber: purchase.invoiceNumber,
           purchaseDate: purchase.purchaseDate,
-          paymentMethod: purchase.paymentType,
+          paymentMethod: ledgerPaymentMethod,
           itemsCount: purchase.items.length,
         });
       }
@@ -433,6 +521,18 @@ const deletePurchaseById = async (purchaseId) => {
   }
 
   await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
+  await walletEntryService.deleteEntriesByReference(purchase._id, 'Purchase');
+
+  if (purchase.paymentType === 'Wallet' && purchase.walletType && Number(purchase.paidAmount || 0) > 0) {
+    await walletService.adjustWalletBalance({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: purchase.walletType.trim(),
+      amount: Number(purchase.paidAmount),
+      operation: 'add',
+      userId: purchase.updatedBy || purchase.createdBy,
+    });
+  }
 
   // Remove the purchase after adjusting stock quantities
   await purchase.deleteOne();

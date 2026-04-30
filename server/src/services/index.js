@@ -22,6 +22,7 @@ module.exports.membershipService = require('./membership.service.js');
 module.exports.paymentService = require('./payment.service.js');
 module.exports.cashBookService = require('./cashBook.service.js');
 module.exports.walletService = require('./wallet.service.js');
+module.exports.walletEntryService = require('./walletEntry.service.js');
 module.exports.loadPurchaseService = require('./loadPurchase.service.js');
 module.exports.loadTransactionService = require('./loadTransaction.service.js');
 module.exports.simSaleService = require('./simSale.service.js');

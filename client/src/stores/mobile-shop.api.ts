@@ -224,6 +224,8 @@ export interface CreateServiceInvoiceInput {
   items: ServiceInvoiceItemInput[]
 }
 
+export type UpdateServiceInvoiceInput = Partial<CreateServiceInvoiceInput>
+
 export const BILL_TYPES = ['electricity', 'gas', 'water', 'internet', 'other'] as const
 export type BillType = (typeof BILL_TYPES)[number]
 
@@ -688,6 +690,14 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
     }),
+    updateServiceInvoice: builder.mutation<ServiceInvoiceRecord, { id: string; body: UpdateServiceInvoiceInput }>({
+      query: ({ id, body }) => ({
+        url: `/services/invoices/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
+    }),
     deleteServiceInvoice: builder.mutation<void, string>({
       query: (id) => ({
         url: `/services/invoices/${id}`,
@@ -966,6 +976,7 @@ export const {
   useDeleteServiceMutation,
   useGetServiceInvoicesQuery,
   useCreateServiceInvoiceMutation,
+  useUpdateServiceInvoiceMutation,
   useDeleteServiceInvoiceMutation,
   useGetCashBookEntriesQuery,
   useGetCashBookSummaryQuery,

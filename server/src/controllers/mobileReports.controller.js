@@ -1,6 +1,29 @@
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, SimSale } = require('../models');
+const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, RepairJob, ServiceInvoice, CashWithdrawal, SimSale, Purchase } = require('../models');
+const { isValidObjectId } = mongoose;
+
+const parseDateBoundary = (value, isEnd = false) => {
+  if (!value) return null;
+  const raw = String(value);
+  const datePart = raw.slice(0, 10);
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return isEnd
+      ? new Date(Date.UTC(year, month, day, 23, 59, 59, 999))
+      : new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (isEnd) parsed.setUTCHours(23, 59, 59, 999);
+  else parsed.setUTCHours(0, 0, 0, 0);
+  return parsed;
+};
 
 const getRange = (query) => {
   const now = new Date();
@@ -180,10 +203,10 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const organizationId = new mongoose.Types.ObjectId(String(req.organizationId));
   const branchId = req.branchId ? new mongoose.Types.ObjectId(String(req.branchId)) : null;
 
-  const start = rawStart ? new Date(rawStart) : new Date(new Date().setDate(new Date().getDate() - 30));
-  const end = rawEnd ? new Date(rawEnd) : new Date();
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
+  const end = parseDateBoundary(rawEnd, true) || new Date();
+  const start =
+    parseDateBoundary(rawStart, false) ||
+    new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   // ── 1. Current wallet balance ──
   const walletMatch = { organizationId, type: walletType };
@@ -196,7 +219,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
 
   // ── 2. Net change AFTER end date (to back-calculate closing balance at end) ──
   // Load sales DECREASE balance; SimSale load DECREASES balance; cash withdrawals INCREASE balance; cash deposits DECREASE balance
-  const [loadAfterRes, cashAfterRes, simSaleAfterRes] = await Promise.all([
+  const [loadAfterRes, cashAfterRes, simSaleAfterRes, loadPurchaseAfterRes, walletEntryAfterRes] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gt: end } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
@@ -215,19 +238,50 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       { $match: { ...txBaseMatch, date: { $gt: end } } },
       { $group: { _id: null, total: { $sum: '$loadAmount' } } },
     ]),
+    LoadPurchase.aggregate([
+      { $match: { ...txBaseMatch, date: { $gt: end } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    WalletEntry.aggregate([
+      {
+        $match: {
+          organizationId,
+          ...(branchId ? { branchId } : {}),
+          walletType,
+          date: { $gt: end },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalIn: { $sum: { $cond: [{ $eq: ['$type', 'in'] }, '$amount', 0] } },
+          totalOut: { $sum: { $cond: [{ $eq: ['$type', 'out'] }, '$amount', 0] } },
+        },
+      },
+    ]),
   ]);
 
   const totalLoadAfter = loadAfterRes[0] ? loadAfterRes[0].total : 0;
   const totalWithdrawalsAfter = cashAfterRes[0] ? cashAfterRes[0].totalWithdrawals : 0;
   const totalDepositsAfter = cashAfterRes[0] ? cashAfterRes[0].totalDeposits : 0;
   const totalSimSaleLoadAfter = simSaleAfterRes[0] ? simSaleAfterRes[0].total : 0;
+  const totalLoadPurchaseAfter = loadPurchaseAfterRes[0] ? loadPurchaseAfterRes[0].total : 0;
+  const totalWalletInAfter = walletEntryAfterRes[0] ? walletEntryAfterRes[0].totalIn : 0;
+  const totalWalletOutAfter = walletEntryAfterRes[0] ? walletEntryAfterRes[0].totalOut : 0;
 
-  // currentBalance = closingAtEnd - loadSold - simSaleLoad + withdrawals - deposits  (all events after end)
-  // => closingAtEnd = currentBalance + loadSold + simSaleLoad - withdrawals + deposits
-  const closingAtEnd = currentBalance + totalLoadAfter + totalSimSaleLoadAfter - totalWithdrawalsAfter + totalDepositsAfter;
+  // closingAtEnd = currentBalance - (all wallet impacts after end)
+  const totalImpactAfterEnd =
+    -totalLoadAfter +
+    totalWithdrawalsAfter -
+    totalDepositsAfter -
+    totalSimSaleLoadAfter +
+    totalLoadPurchaseAfter +
+    totalWalletInAfter -
+    totalWalletOutAfter;
+  const closingAtEnd = currentBalance - totalImpactAfterEnd;
 
   // ── 3. Daily aggregation within range ──
-  const [dailyLoad, dailyCash, dailySimSale, dailyLoadPurchase, loadDetails, cashDetails, simSaleDetails, loadPurchaseDetails] = await Promise.all([
+  const [dailyLoad, dailyCash, dailySimSale, dailyLoadPurchase, loadDetails, cashDetails, simSaleDetails, loadPurchaseDetails, walletEntriesInRange] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
@@ -293,7 +347,59 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       .sort({ date: 1, createdAt: 1 })
       .select('date createdAt supplierName amount profit paymentMethod notes')
       .lean(),
+    WalletEntry.find({
+      organizationId,
+      ...(branchId ? { branchId } : {}),
+      walletType,
+      date: { $gte: start, $lte: end },
+    })
+      .sort({ date: 1, createdAt: 1 })
+      .select('date createdAt type amount referenceId referenceModel description')
+      .lean(),
   ]);
+
+  const invoiceRefIds = walletEntriesInRange
+    .filter((entry) => entry.referenceModel === 'Invoice' && entry.referenceId)
+    .map((entry) => entry.referenceId);
+  const purchaseRefIds = walletEntriesInRange
+    .filter((entry) => entry.referenceModel === 'Purchase' && entry.referenceId)
+    .map((entry) => entry.referenceId);
+
+  const [invoiceRefs, purchaseRefs] = await Promise.all([
+    invoiceRefIds.length > 0
+      ? Invoice.find({ _id: { $in: invoiceRefIds } })
+        .select('invoiceNumber customerName walkInCustomerName customerId')
+        .lean()
+      : Promise.resolve([]),
+    purchaseRefIds.length > 0
+      ? Purchase.find({ _id: { $in: purchaseRefIds } })
+        .select('invoiceNumber supplier')
+        .populate('supplier', 'name')
+        .lean()
+      : Promise.resolve([]),
+  ]);
+
+  const invoiceRefMap = {};
+  invoiceRefs.forEach((inv) => {
+    invoiceRefMap[String(inv._id)] = inv;
+  });
+  const purchaseRefMap = {};
+  purchaseRefs.forEach((pur) => {
+    purchaseRefMap[String(pur._id)] = pur;
+  });
+
+  const customerObjectIds = invoiceRefs
+    .map((inv) => inv.customerId)
+    .filter((id) => typeof id === 'string' ? isValidObjectId(id) : id && isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  const customerDocs = customerObjectIds.length > 0
+    ? await mongoose.model('Customer').find({ _id: { $in: customerObjectIds } }).select('name').lean()
+    : [];
+  const customerMap = {};
+  customerDocs.forEach((customer) => {
+    customerMap[String(customer._id)] = customer;
+  });
 
   const loadMap = dailyLoad.reduce((acc, d) => {
     acc[d._id] = d;
@@ -396,12 +502,62 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       customerName: item.supplierName || '',
       network: '',
       amount: Number(item.amount || 0),
-      walletImpact: Number(item.amount || 0) + Number(item.profit || 0),
+      walletImpact: Number(item.amount || 0),
       cashAmount: Number(item.amount || 0),
       extraCharge: 0,
       profit: Number(item.profit || 0),
       paymentMethod: item.paymentMethod || '',
       notes: item.notes || '',
+    });
+  });
+
+  walletEntriesInRange.forEach((entry) => {
+    const dateKey = new Date(entry.date).toISOString().slice(0, 10);
+    const impact = entry.type === 'in' ? Number(entry.amount || 0) : -Number(entry.amount || 0);
+    let title = entry.type === 'in' ? 'Wallet Inflow' : 'Wallet Outflow';
+    let accountNumber = '';
+    let customerName = '';
+    let notes = entry.description || '';
+
+    if (entry.referenceModel === 'Invoice') {
+      const inv = invoiceRefMap[String(entry.referenceId)];
+      title = entry.type === 'in' ? 'Invoice Wallet Payment Received' : 'Invoice Wallet Payment Sent';
+      accountNumber = inv?.invoiceNumber || '';
+      customerName =
+        inv?.customerName ||
+        inv?.walkInCustomerName ||
+        (inv?.customerId && customerMap[String(inv.customerId)] ? customerMap[String(inv.customerId)].name : '') ||
+        '';
+      notes = `${entry.description || ''}`.trim();
+    } else if (entry.referenceModel === 'Purchase') {
+      const pur = purchaseRefMap[String(entry.referenceId)];
+      title = entry.type === 'out' ? 'Purchase Wallet Payment Sent' : 'Purchase Wallet Payment Received';
+      accountNumber = pur?.invoiceNumber || '';
+      customerName = pur?.supplier?.name || '';
+      notes = `${entry.description || ''}`.trim();
+    } else if (entry.referenceModel === 'CustomerLedger') {
+      title = entry.type === 'in' ? 'Customer Wallet Receipt' : 'Customer Wallet Payment';
+    } else if (entry.referenceModel === 'SupplierLedger') {
+      title = entry.type === 'out' ? 'Supplier Wallet Payment' : 'Supplier Wallet Receipt';
+    }
+
+    ensureBucket(dateKey).push({
+      id: String(entry._id),
+      date: entry.date,
+      createdAt: entry.createdAt,
+      source: 'wallet_entry',
+      transactionType: entry.type === 'in' ? 'wallet_in' : 'wallet_out',
+      title,
+      accountNumber,
+      customerName,
+      network: '',
+      amount: Number(entry.amount || 0),
+      walletImpact: impact,
+      cashAmount: 0,
+      extraCharge: 0,
+      profit: 0,
+      paymentMethod: `wallet (${walletType})`,
+      notes,
     });
   });
 
@@ -436,21 +592,19 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
         return new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime();
       }),
     });
+    rows[rows.length - 1].netWalletImpact = rows[rows.length - 1].detailItems.reduce((sum, item) => sum + Number(item.walletImpact || 0), 0);
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  // ── 5. Walk backwards to assign running balances ──
-  // Each day: closing = opening - loadSold - simSaleLoad + withdrawals - deposits
-  // => opening = closing + loadSold + simSaleLoad - withdrawals + deposits
+  // ── 5. Walk backwards to assign running balances from detailed net impact ──
   let runningClose = closingAtEnd;
   rows
     .slice()
     .reverse()
     .forEach((row, idx) => {
       const actualIdx = rows.length - 1 - idx;
-      const netDecrease = row.totalSold + row.totalSimSaleLoad - row.totalWithdrawals + row.totalDeposits;
       rows[actualIdx].closingBalance = runningClose;
-      rows[actualIdx].openingBalance = runningClose + netDecrease;
+      rows[actualIdx].openingBalance = runningClose - Number(row.netWalletImpact || 0);
       runningClose = rows[actualIdx].openingBalance;
     });
 

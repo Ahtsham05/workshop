@@ -47,8 +47,8 @@ import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
-/** Toggle to show Payment Method + wallet fields on invoice checkout (hidden temporarily per product request). */
-const SHOW_INVOICE_PAYMENT_METHOD_UI = false
+/** Toggle to show payment source fields on invoice checkout. */
+const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
 interface InvoicePanelProps {
   invoice: Invoice
@@ -612,6 +612,11 @@ export function InvoicePanel({
     setSavingType(printType)
 
     try {
+      if (SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.paymentMethod === 'wallet' && !invoice.walletType) {
+        toast.error('Please select a wallet for wallet payment')
+        return
+      }
+
       // Prepare invoice data for API
       const validItems = invoice.items.filter(item => {
         // Include items that have productId and name (completed items)
@@ -656,6 +661,8 @@ export function InvoicePanel({
         serviceCharge: invoice.serviceCharge,
         roundingAdjustment: invoice.roundingAdjustment,
         splitPayment: invoice.splitPayment,
+        paymentMethod: invoice.paymentMethod || 'cash',
+        walletType: invoice.paymentMethod === 'wallet' ? (invoice.walletType || '') : undefined,
         loyaltyPoints: invoice.loyaltyPoints,
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
@@ -1000,7 +1007,8 @@ export function InvoicePanel({
                                 setInvoice(prev => ({ 
                                   ...prev, 
                                   customerId,
-                                  customerName: customer.name // Set customer name for editing
+                                  customerName: customer.name, // Set customer name for editing
+                                  type: 'credit',
                                 }))
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')

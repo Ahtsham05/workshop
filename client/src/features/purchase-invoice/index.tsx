@@ -42,7 +42,8 @@ export interface Purchase {
   total: number;
   paidAmount?: number;
   balance?: number;
-  paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit';
+  paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet';
+  walletType?: string;
   notes?: string;
   date: string;
   createdAt?: string;
@@ -65,6 +66,7 @@ const PurchaseInvoicePage = () => {
     paidAmount: 0,
     balance: 0,
     paymentType: 'Cash',
+    walletType: undefined,
     notes: '',
     date: new Date().toISOString(),
   });
@@ -285,6 +287,7 @@ const PurchaseInvoicePage = () => {
       paidAmount: 0,
       balance: 0,
       paymentType: 'Cash',
+      walletType: undefined,
       notes: '',
       date: new Date().toISOString(),
     });
@@ -304,6 +307,7 @@ const PurchaseInvoicePage = () => {
       paidAmount: 0,
       balance: 0,
       paymentType: 'Cash',
+      walletType: undefined,
       notes: '',
       date: new Date().toISOString(),
     });
@@ -341,6 +345,7 @@ const PurchaseInvoicePage = () => {
       supplier: purchaseToEdit.supplier || ({} as Supplier),
       date: purchaseToEdit.purchaseDate || purchaseToEdit.date || new Date().toISOString(),
       paymentType: purchaseToEdit.paymentType || 'Cash', // Ensure paymentType has valid default
+      walletType: purchaseToEdit.walletType || undefined,
     });
   }, []);
 

@@ -30,6 +30,7 @@ import {
   useDeleteServiceMutation,
   useGetServiceInvoicesQuery,
   useCreateServiceInvoiceMutation,
+  useUpdateServiceInvoiceMutation,
   useDeleteServiceInvoiceMutation,
   type ServiceCatalogRecord,
 } from '@/stores/mobile-shop.api'
@@ -85,6 +86,7 @@ export default function ServicesPage() {
   const [catalogForm, setCatalogForm] = useState<CatalogForm>(initialCatalogForm)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceForm>(initialInvoiceForm)
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([])
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [serviceSearch, setServiceSearch] = useState('')
 
   const [catalogPage, setCatalogPage] = useState(1)
@@ -100,6 +102,7 @@ export default function ServicesPage() {
   const [deleteService] = useDeleteServiceMutation()
 
   const [createInvoice, { isLoading: isCreatingInvoice }] = useCreateServiceInvoiceMutation()
+  const [updateInvoice, { isLoading: isUpdatingInvoice }] = useUpdateServiceInvoiceMutation()
   const [deleteInvoice] = useDeleteServiceInvoiceMutation()
 
   const services = catalogData?.results ?? []
@@ -231,7 +234,7 @@ export default function ServicesPage() {
     }
 
     try {
-      await createInvoice({
+      const payload = {
         customerName: invoiceForm.customerName.trim(),
         customerPhone: invoiceForm.customerPhone.trim(),
         paymentMethod: invoiceForm.paymentMethod,
@@ -242,14 +245,50 @@ export default function ServicesPage() {
           unitPrice: line.unitPrice,
           quantity: line.quantity,
         })),
-      }).unwrap()
+      }
 
-      toast.success('Service invoice saved successfully')
+      if (editingInvoiceId) {
+        await updateInvoice({ id: editingInvoiceId, body: payload }).unwrap()
+        toast.success('Service invoice updated successfully')
+      } else {
+        await createInvoice(payload).unwrap()
+        toast.success('Service invoice saved successfully')
+      }
+
       setInvoiceLines([])
       setInvoiceForm(initialInvoiceForm())
+      setEditingInvoiceId(null)
     } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to save invoice')
+      toast.error(error?.data?.message || (editingInvoiceId ? 'Failed to update invoice' : 'Failed to save invoice'))
     }
+  }
+
+  const handleEditInvoice = (invoice: any) => {
+    setEditingInvoiceId(invoice.id)
+    setInvoiceForm({
+      customerName: invoice.customerName || '',
+      customerPhone: invoice.customerPhone || '',
+      paymentMethod: invoice.paymentMethod || 'cash',
+      notes: invoice.notes || '',
+      date: invoice.date ? toDateTimeLocal(new Date(invoice.date)) : toDateTimeLocal(new Date()),
+    })
+    setInvoiceLines(
+      (invoice.items || []).map((item: any) => ({
+        serviceId: item.serviceId,
+        serviceName: item.serviceName,
+        unitPrice: Number(item.unitPrice || 0),
+        quantity: Number(item.quantity || 1),
+        total: Number(item.total || (item.unitPrice || 0) * (item.quantity || 1)),
+      }))
+    )
+    setServiceSearch('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const cancelEditInvoice = () => {
+    setEditingInvoiceId(null)
+    setInvoiceForm(initialInvoiceForm())
+    setInvoiceLines([])
   }
 
   const handleDeleteInvoice = async (id: string) => {
@@ -395,7 +434,7 @@ export default function ServicesPage() {
             {/* Invoice Header Form */}
             <Card>
               <CardHeader>
-                <CardTitle>Create Service Invoice</CardTitle>
+                <CardTitle>{editingInvoiceId ? 'Edit Service Invoice' : 'Create Service Invoice'}</CardTitle>
               </CardHeader>
               <CardContent className='space-y-4'>
                 <div className='grid gap-3 md:grid-cols-2'>
@@ -538,12 +577,24 @@ export default function ServicesPage() {
 
                     <Button
                       onClick={saveInvoice}
-                      disabled={isCreatingInvoice || invoiceLines.length === 0}
+                      disabled={isCreatingInvoice || isUpdatingInvoice || invoiceLines.length === 0}
                       className='w-full mt-4'
                       size='lg'
                     >
-                      {isCreatingInvoice ? 'Saving Invoice...' : 'Save Service Invoice'}
+                      {isCreatingInvoice || isUpdatingInvoice
+                        ? (editingInvoiceId ? 'Updating Invoice...' : 'Saving Invoice...')
+                        : (editingInvoiceId ? 'Update Service Invoice' : 'Save Service Invoice')}
                     </Button>
+                    {editingInvoiceId && (
+                      <Button
+                        type='button'
+                        variant='outline'
+                        onClick={cancelEditInvoice}
+                        className='w-full mt-2'
+                      >
+                        Cancel Edit
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -625,9 +676,14 @@ export default function ServicesPage() {
                           <TableCell className='text-right font-semibold'>{fmtAmt(invoice.totalAmount)}</TableCell>
                           <TableCell className='capitalize'>{invoice.paymentMethod}</TableCell>
                           <TableCell className='text-right'>
-                            <Button variant='destructive' size='sm' onClick={() => handleDeleteInvoice(invoice.id)}>
-                              Delete
-                            </Button>
+                            <div className='flex justify-end gap-2'>
+                              <Button variant='outline' size='sm' onClick={() => handleEditInvoice(invoice)}>
+                                Edit
+                              </Button>
+                              <Button variant='destructive' size='sm' onClick={() => handleDeleteInvoice(invoice.id)}>
+                                Delete
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

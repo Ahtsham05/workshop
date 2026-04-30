@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -30,6 +31,17 @@ const resolveInvoicePaymentMethod = (invoice) => {
   if (method === 'bank') return 'bank';
   if (method === 'card') return 'card';
   return 'cash';
+};
+
+const resolveInvoiceLedgerPaymentMethod = (invoice) => {
+  const method = (invoice.paymentMethod || 'cash').toLowerCase();
+  if (method === 'wallet') {
+    const walletName = (invoice.walletType || '').trim();
+    return walletName ? `Wallet (${walletName})` : 'Wallet';
+  }
+  if (method === 'bank') return 'Bank Transfer';
+  if (method === 'card') return 'Card';
+  return 'Cash';
 };
 
 const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, previousWalletType, previousPaidAmount) => {
@@ -61,6 +73,25 @@ const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, p
       date: invoice.invoiceDate || invoice.createdAt || new Date(),
       createdBy: invoice.createdBy,
     });
+  }
+
+  // Wallet ledger: invoice wallet receipts should live in Wallet entries, not CashBook.
+  if (isWalletPayment && paidAmount > 0) {
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+      walletType: invoice.walletType.trim(),
+      type: 'in',
+      amount: paidAmount,
+      referenceId: invoice._id,
+      referenceModel: 'Invoice',
+      description: `Wallet payment received for Invoice #${invoice.invoiceNumber}`,
+      date: invoice.invoiceDate || invoice.createdAt || new Date(),
+      createdBy: invoice.createdBy,
+      updatedBy: invoice.updatedBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(invoice._id, 'Invoice');
   }
 
   // --- Wallet balance adjustment ---
@@ -244,6 +275,7 @@ const createInvoice = async (invoiceBody, userId) => {
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
     try {
+      const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
       const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
       const hasExistingLedger = await CustomerLedger.exists({ customer: invoice.customerId });
 
@@ -277,7 +309,7 @@ const createInvoice = async (invoiceBody, userId) => {
         description: description,
         debit: invoice.total,
         credit: 0,
-        paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
+        paymentMethod: ledgerPaymentMethod,
         notes: invoice.notes || `Invoice for ${validatedItems.length} items`
       });
       console.log('Customer ledger entry created for invoice:', displayReference);
@@ -299,7 +331,7 @@ const createInvoice = async (invoiceBody, userId) => {
           description: `Payment received for Invoice #${invoice.invoiceNumber}${invoice.paidAmount < invoice.total ? ' (Partial)' : ''}`,
           debit: 0,
           credit: invoice.paidAmount,
-          paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+          paymentMethod: ledgerPaymentMethod,
           notes: `Amount paid: $${invoice.paidAmount.toFixed(2)}${invoice.balance > 0 ? `, Balance: $${invoice.balance.toFixed(2)}` : ''}`
         });
         console.log('Payment ledger entry created for invoice:', invoice.invoiceNumber, 'Amount:', invoice.paidAmount);
@@ -575,6 +607,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     !hasLedgerEntries
   )) {
     try {
+      const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
       console.log('Updating customer ledger entries for invoice:', {
         invoiceId: invoice._id,
         invoiceNumber: invoice.invoiceNumber,
@@ -603,7 +636,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
             description: `Sale Invoice #${invoice.invoiceNumber} (Updated)`,
             debit: newTotal,
             credit: 0,
-            paymentMethod: invoice.type === 'cash' ? 'Cash' : undefined,
+            paymentMethod: ledgerPaymentMethod,
             notes: `Invoice updated`
           });
 
@@ -622,7 +655,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
               description: `Payment for Invoice #${invoice.invoiceNumber} (Updated)`,
               debit: 0,
               credit: newPaidAmount,
-              paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+              paymentMethod: ledgerPaymentMethod,
               notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
             });
           }
@@ -637,7 +670,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           paidAmount: newPaidAmount,
           invoiceNumber: invoice.invoiceNumber,
           invoiceDate: invoice.invoiceDate,
-          paymentMethod: invoice.type === 'cash' ? 'Cash' : 'Bank Transfer',
+          paymentMethod: ledgerPaymentMethod,
           invoiceType: invoice.type,
           notes: invoice.notes,
         });
@@ -690,6 +723,7 @@ const deleteInvoiceById = async (invoiceId) => {
   }
 
   await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
+  await walletEntryService.deleteEntriesByReference(invoice._id, 'Invoice');
 
   // Reverse wallet balance if invoice was paid via wallet
   if (invoice.paymentMethod === 'wallet' && invoice.walletType && Number(invoice.paidAmount || 0) > 0) {

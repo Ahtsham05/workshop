@@ -73,6 +73,30 @@ const getServiceInvoices = {
   }),
 };
 
+const updateServiceInvoice = {
+  params: Joi.object().keys({
+    invoiceId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object()
+    .keys({
+      customerName: Joi.string().allow(''),
+      customerPhone: Joi.string().allow(''),
+      paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank', 'card'),
+      date: Joi.date(),
+      notes: Joi.string().allow(''),
+      items: Joi.array()
+        .items(
+          Joi.object().keys({
+            serviceId: Joi.string().custom(objectId).required(),
+            unitPrice: Joi.number().min(0),
+            quantity: Joi.number().integer().min(1).required(),
+          })
+        )
+        .min(1),
+    })
+    .min(1),
+};
+
 const deleteServiceInvoice = {
   params: Joi.object().keys({
     invoiceId: Joi.string().custom(objectId).required(),
@@ -86,5 +110,6 @@ module.exports = {
   deleteService,
   createServiceInvoice,
   getServiceInvoices,
+  updateServiceInvoice,
   deleteServiceInvoice,
 };
