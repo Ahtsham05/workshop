@@ -227,7 +227,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const closingAtEnd = currentBalance + totalLoadAfter + totalSimSaleLoadAfter - totalWithdrawalsAfter + totalDepositsAfter;
 
   // ── 3. Daily aggregation within range ──
-  const [dailyLoad, dailyCash, dailySimSale, loadDetails, cashDetails, simSaleDetails] = await Promise.all([
+  const [dailyLoad, dailyCash, dailySimSale, dailyLoadPurchase, loadDetails, cashDetails, simSaleDetails, loadPurchaseDetails] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
@@ -265,17 +265,33 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       },
       { $sort: { _id: 1 } },
     ]),
+    LoadPurchase.aggregate([
+      { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          totalPurchased: { $sum: '$amount' },
+          totalPurchaseProfit: { $sum: '$profit' },
+          purchaseTransactions: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
     LoadTransaction.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date mobileNumber customerName network amount receivedAmount extraCharge profit paymentMethod notes type')
+      .select('date createdAt mobileNumber customerName network amount receivedAmount extraCharge profit paymentMethod notes type')
       .lean(),
     CashWithdrawal.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date transactionType customerNumber customerName amount cashAmount extraCharge profit notes')
+      .select('date createdAt transactionType customerNumber customerName amount cashAmount extraCharge profit notes')
       .lean(),
     SimSale.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date customerMobile customerName productName loadAmount simAmount saleAmount commission notes')
+      .select('date createdAt customerMobile customerName productName loadAmount simAmount saleAmount commission notes')
+      .lean(),
+    LoadPurchase.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
+      .sort({ date: 1, createdAt: 1 })
+      .select('date createdAt supplierName amount profit paymentMethod notes')
       .lean(),
   ]);
 
@@ -291,6 +307,10 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     acc[d._id] = d;
     return acc;
   }, {});
+  const loadPurchaseMap = dailyLoadPurchase.reduce((acc, d) => {
+    acc[d._id] = d;
+    return acc;
+  }, {});
   const detailMap = {};
   const ensureBucket = (key) => {
     if (!detailMap[key]) detailMap[key] = [];
@@ -302,6 +322,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
+      createdAt: item.createdAt,
       source: 'load',
       transactionType: 'load_sale',
       title: item.type === 'package' ? 'Package Load Sale' : 'Load Sale',
@@ -324,6 +345,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
+      createdAt: item.createdAt,
       source: 'cash_withdrawal',
       transactionType: item.transactionType,
       title: isWithdrawal ? 'Cash Withdrawal' : 'Cash Deposit',
@@ -345,6 +367,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
+      createdAt: item.createdAt,
       source: 'sim_sale',
       transactionType: 'sim_sale_load',
       title: 'SIM Sale Load',
@@ -360,6 +383,27 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       notes: item.notes || item.productName || '',
     });
   });
+  loadPurchaseDetails.forEach((item) => {
+    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    ensureBucket(dateKey).push({
+      id: String(item._id),
+      date: item.date,
+      createdAt: item.createdAt,
+      source: 'load_purchase',
+      transactionType: 'load_purchase',
+      title: 'Load Purchase',
+      accountNumber: item.supplierName || '',
+      customerName: item.supplierName || '',
+      network: '',
+      amount: Number(item.amount || 0),
+      walletImpact: Number(item.amount || 0) + Number(item.profit || 0),
+      cashAmount: Number(item.amount || 0),
+      extraCharge: 0,
+      profit: Number(item.profit || 0),
+      paymentMethod: item.paymentMethod || '',
+      notes: item.notes || '',
+    });
+  });
 
   // ── 4. Build every calendar date in range ──
   const rows = [];
@@ -369,20 +413,28 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     const ld = loadMap[key];
     const cw = cashMap[key];
     const ss = simSaleMap[key];
+    const lp = loadPurchaseMap[key];
     const ldTotalSold = ld ? ld.totalSold : 0;
     const cwTotalWithdrawals = cw ? cw.totalWithdrawals : 0;
     const cwTotalDeposits = cw ? cw.totalDeposits : 0;
     const ssTotalSimSaleLoad = ss ? ss.totalSimSaleLoad : 0;
+    const lpTotalPurchased = lp ? lp.totalPurchased : 0;
+    const lpTotalPurchaseProfit = lp ? lp.totalPurchaseProfit : 0;
     rows.push({
       date: key,
-      hasSales: !!(ld || cw || ss),
+      hasSales: !!(ld || cw || ss || lp),
       totalSold: ldTotalSold,
       totalSimSaleLoad: ssTotalSimSaleLoad,
       totalWithdrawals: cwTotalWithdrawals,
       totalDeposits: cwTotalDeposits,
-      totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + (ss ? ss.simSaleCommission : 0),
-      transactions: (ld ? ld.loadTransactions : 0) + (cw ? cw.cashTransactions : 0) + (ss ? ss.simSaleTransactions : 0),
-      detailItems: (detailMap[key] || []).sort((a, b) => new Date(a.date) - new Date(b.date)),
+      totalProfit: (ld ? ld.loadProfit : 0) + (cw ? cw.cashProfit : 0) + (ss ? ss.simSaleCommission : 0) + lpTotalPurchaseProfit,
+      transactions: (ld ? ld.loadTransactions : 0) + (cw ? cw.cashTransactions : 0) + (ss ? ss.simSaleTransactions : 0) + (lp ? lp.purchaseTransactions : 0),
+      detailItems: (detailMap[key] || []).sort((a, b) => {
+        const aDate = new Date(a.date).getTime();
+        const bDate = new Date(b.date).getTime();
+        if (aDate !== bDate) return aDate - bDate;
+        return new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime();
+      }),
     });
     cursor.setDate(cursor.getDate() + 1);
   }

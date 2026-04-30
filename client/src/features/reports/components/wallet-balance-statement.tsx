@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
@@ -117,10 +117,48 @@ export function WalletBalanceStatement({
   const totalWithdrawals = data?.rows.reduce((s, r) => s + r.totalWithdrawals, 0) ?? 0
   const totalDeposits = data?.rows.reduce((s, r) => s + r.totalDeposits, 0) ?? 0
   const totalProfit = data?.rows.reduce((s, r) => s + r.totalProfit, 0) ?? 0
-  const allDetailItems = data?.rows.flatMap((r) => r.detailItems) ?? []
-  const numberWiseTotalAmount = allDetailItems.reduce((sum, item) => sum + item.amount, 0)
-  const numberWiseWalletImpact = allDetailItems.reduce((sum, item) => sum + item.walletImpact, 0)
-  const numberWiseTotalProfit = allDetailItems.reduce((sum, item) => sum + item.profit, 0)
+  const numberWiseRows = useMemo(() => {
+    if (!data) return []
+    let runningBalance = data.rows.length > 0 ? data.rows[0].openingBalance : data.periodOpeningBalance
+    const result: Array<{
+      date: string
+      isNoDetails: boolean
+      item?: (typeof data.rows)[number]['detailItems'][number]
+      beforeBalance: number
+      afterBalance: number
+    }> = []
+
+    data.rows.forEach((row) => {
+      if (row.detailItems.length === 0) {
+        result.push({
+          date: row.date,
+          isNoDetails: true,
+          beforeBalance: runningBalance,
+          afterBalance: runningBalance,
+        })
+        return
+      }
+
+      row.detailItems.forEach((item) => {
+        const beforeBalance = runningBalance
+        const afterBalance = beforeBalance + item.walletImpact
+        result.push({
+          date: row.date,
+          isNoDetails: false,
+          item,
+          beforeBalance,
+          afterBalance,
+        })
+        runningBalance = afterBalance
+      })
+    })
+
+    return result
+  }, [data])
+  const numberWiseDetailRows = numberWiseRows.filter((r) => !r.isNoDetails && r.item)
+  const numberWiseTotalAmount = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.amount || 0), 0)
+  const numberWiseWalletImpact = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.walletImpact || 0), 0)
+  const numberWiseTotalProfit = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.profit || 0), 0)
   const salesDays = data?.rows.filter((r) => r.hasSales).length ?? 0
   const noSaleDays = data?.rows.filter((r) => !r.hasSales).length ?? 0
   const toggleRow = (date: string) => {
@@ -270,170 +308,185 @@ export function WalletBalanceStatement({
                         <TableHead className='text-right'>Amount</TableHead>
                         <TableHead className='text-right'>Wallet Impact</TableHead>
                         <TableHead className='text-right'>Profit</TableHead>
-                        <TableHead>Notes</TableHead>
+                        <TableHead>Balance</TableHead>
                       </>
                     )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.rows.map((row) => (
-                    <Fragment key={row.date}>
-                      {viewMode === 'summary' && (
-                        <>
-                          <TableRow className={!row.hasSales ? 'bg-muted/30 text-muted-foreground' : ''}>
-                            <TableCell className='font-medium'>
-                              <button
-                                type='button'
-                                className='inline-flex items-center gap-1.5 hover:text-foreground'
-                                onClick={() => toggleRow(row.date)}
-                                disabled={row.detailItems.length === 0}
-                              >
-                                {row.detailItems.length > 0 ? (
-                                  expandedRows[row.date] ? (
-                                    <ChevronDown className='h-4 w-4' />
-                                  ) : (
-                                    <ChevronRight className='h-4 w-4' />
-                                  )
+                  {viewMode === 'summary' &&
+                    data.rows.map((row) => (
+                      <Fragment key={row.date}>
+                        <TableRow className={!row.hasSales ? 'bg-muted/30 text-muted-foreground' : ''}>
+                          <TableCell className='font-medium'>
+                            <button
+                              type='button'
+                              className='inline-flex items-center gap-1.5 hover:text-foreground'
+                              onClick={() => toggleRow(row.date)}
+                              disabled={row.detailItems.length === 0}
+                            >
+                              {row.detailItems.length > 0 ? (
+                                expandedRows[row.date] ? (
+                                  <ChevronDown className='h-4 w-4' />
                                 ) : (
-                                  <span className='w-4' />
-                                )}
-                                {format(new Date(row.date), 'dd MMM yyyy')}
-                              </button>
-                            </TableCell>
-                            <TableCell className='text-right'>{fmt(row.openingBalance)}</TableCell>
-                            <TableCell className='text-right'>
-                              {row.totalSold > 0 ? (
-                                <span className='font-medium text-blue-600'>{fmt(row.totalSold)}</span>
+                                  <ChevronRight className='h-4 w-4' />
+                                )
                               ) : (
-                                <span className='text-muted-foreground'>—</span>
+                                <span className='w-4' />
                               )}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              {row.totalWithdrawals > 0 ? (
-                                <span className='font-medium text-green-600'>+{fmt(row.totalWithdrawals)}</span>
-                              ) : (
-                                <span className='text-muted-foreground'>—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              {row.totalDeposits > 0 ? (
-                                <span className='font-medium text-orange-600'>−{fmt(row.totalDeposits)}</span>
-                              ) : (
-                                <span className='text-muted-foreground'>—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              {row.hasSales ? (
-                                <span className='font-medium text-green-600'>{fmt(row.totalProfit)}</span>
-                              ) : (
-                                <span className='text-muted-foreground'>—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              {row.hasSales ? (
-                                <Badge variant='secondary'>{row.transactions}</Badge>
-                              ) : (
-                                <span className='text-muted-foreground'>—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right font-semibold'>
-                              {fmt(row.closingBalance)}
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              {row.hasSales ? (
-                                <Badge variant='default' className='bg-green-600 hover:bg-green-700 text-xs'>Active</Badge>
-                              ) : (
-                                <Badge variant='outline' className='text-xs text-muted-foreground'>No Sale</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                          {expandedRows[row.date] && row.detailItems.length > 0 && (
-                            <TableRow className='bg-muted/20'>
-                              <TableCell colSpan={9} className='py-2'>
-                                <div className='space-y-2'>
-                                  {row.detailItems.map((item) => (
-                                    <div
-                                      key={item.id}
-                                      className='grid grid-cols-1 gap-2 rounded-md border bg-background p-3 text-xs sm:grid-cols-6'
-                                    >
-                                      <div>
-                                        <p className='text-muted-foreground'>Type</p>
-                                        <p className='font-semibold'>{item.title}</p>
-                                      </div>
-                                      <div>
-                                        <p className='text-muted-foreground'>Number / Account</p>
-                                        <p className='font-semibold'>{item.accountNumber || '—'}</p>
-                                      </div>
-                                      <div>
-                                        <p className='text-muted-foreground'>Customer</p>
-                                        <p className='font-semibold'>{item.customerName || '—'}</p>
-                                      </div>
-                                      <div>
-                                        <p className='text-muted-foreground'>Amount / Profit</p>
-                                        <p className='font-semibold'>
-                                          {fmt(item.amount)} · <span className='text-green-600'>{fmt(item.profit)}</span>
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className='text-muted-foreground'>Wallet Impact</p>
-                                        <p className={item.walletImpact >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-orange-600'}>
-                                          {item.walletImpact >= 0 ? '+' : ''}
-                                          {fmt(item.walletImpact)}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className='text-muted-foreground'>Notes</p>
-                                        <p className='font-semibold'>{item.notes || item.network || '—'}</p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </>
-                      )}
-                      {viewMode === 'number-wise' &&
-                        (row.detailItems.length > 0 ? (
-                          row.detailItems.map((item, idx) => (
-                            <TableRow key={`${row.date}-${item.id}-${idx}`}>
-                              <TableCell className='font-medium'>
-                                {idx === 0
-                                  ? format(new Date(row.date), 'dd MMM yyyy')
-                                  : ''}
-                              </TableCell>
-                              <TableCell>{item.title}</TableCell>
-                              <TableCell>{item.accountNumber || '—'}</TableCell>
-                              <TableCell>{item.customerName || '—'}</TableCell>
-                              <TableCell className='text-right'>{fmt(item.amount)}</TableCell>
-                              <TableCell
-                                className={`text-right font-semibold ${
-                                  item.walletImpact >= 0
-                                    ? 'text-green-600'
-                                    : 'text-orange-600'
-                                }`}
-                              >
-                                {item.walletImpact >= 0 ? '+' : ''}
-                                {fmt(item.walletImpact)}
-                              </TableCell>
-                              <TableCell className='text-right text-green-600 font-semibold'>
-                                {fmt(item.profit)}
-                              </TableCell>
-                              <TableCell>{item.notes || item.network || '—'}</TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell className='font-medium'>
                               {format(new Date(row.date), 'dd MMM yyyy')}
-                            </TableCell>
-                            <TableCell colSpan={7} className='text-muted-foreground'>
-                              No details
+                            </button>
+                          </TableCell>
+                          <TableCell className='text-right'>{fmt(row.openingBalance)}</TableCell>
+                          <TableCell className='text-right'>
+                            {row.totalSold > 0 ? (
+                              <span className='font-medium text-blue-600'>{fmt(row.totalSold)}</span>
+                            ) : (
+                              <span className='text-muted-foreground'>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            {row.totalWithdrawals > 0 ? (
+                              <span className='font-medium text-green-600'>+{fmt(row.totalWithdrawals)}</span>
+                            ) : (
+                              <span className='text-muted-foreground'>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            {row.totalDeposits > 0 ? (
+                              <span className='font-medium text-orange-600'>−{fmt(row.totalDeposits)}</span>
+                            ) : (
+                              <span className='text-muted-foreground'>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            {row.hasSales ? (
+                              <span className='font-medium text-green-600'>{fmt(row.totalProfit)}</span>
+                            ) : (
+                              <span className='text-muted-foreground'>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            {row.hasSales ? (
+                              <Badge variant='secondary'>{row.transactions}</Badge>
+                            ) : (
+                              <span className='text-muted-foreground'>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right font-semibold'>
+                            {fmt(row.closingBalance)}
+                          </TableCell>
+                          <TableCell className='text-center'>
+                            {row.hasSales ? (
+                              <Badge variant='default' className='bg-green-600 hover:bg-green-700 text-xs'>Active</Badge>
+                            ) : (
+                              <Badge variant='outline' className='text-xs text-muted-foreground'>No Sale</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        {expandedRows[row.date] && row.detailItems.length > 0 && (
+                          <TableRow className='bg-muted/20'>
+                            <TableCell colSpan={9} className='py-2'>
+                              <div className='space-y-2'>
+                                {row.detailItems.map((item) => (
+                                  <div
+                                    key={item.id}
+                                    className='grid grid-cols-1 gap-2 rounded-md border bg-background p-3 text-xs sm:grid-cols-6'
+                                  >
+                                    <div>
+                                      <p className='text-muted-foreground'>Type</p>
+                                      <p className='font-semibold'>{item.title}</p>
+                                    </div>
+                                    <div>
+                                      <p className='text-muted-foreground'>Number / Account</p>
+                                      <p className='font-semibold'>{item.accountNumber || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <p className='text-muted-foreground'>Customer</p>
+                                      <p className='font-semibold'>{item.customerName || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <p className='text-muted-foreground'>Amount / Profit</p>
+                                      <p className='font-semibold'>
+                                        {fmt(item.amount)} · <span className='text-green-600'>{fmt(item.profit)}</span>
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className='text-muted-foreground'>Wallet Impact</p>
+                                      <p className={item.walletImpact >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-orange-600'}>
+                                        {item.walletImpact >= 0 ? '+' : ''}
+                                        {fmt(item.walletImpact)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className='text-muted-foreground'>Notes</p>
+                                      <p className='font-semibold'>{item.notes || item.network || '—'}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </TableCell>
                           </TableRow>
-                        ))}
-                    </Fragment>
-                  ))}
+                        )}
+                      </Fragment>
+                    ))}
+                  {viewMode === 'number-wise' &&
+                    numberWiseRows.map((entry, idx) => {
+                      const showDate =
+                        idx === 0 || numberWiseRows[idx - 1].date !== entry.date
+                      const isFirstRowOfDate = showDate
+                      if (entry.isNoDetails || !entry.item) {
+                        return (
+                          <TableRow key={`no-detail-${entry.date}-${idx}`}>
+                            <TableCell className='font-medium'>
+                              {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
+                            </TableCell>
+                            <TableCell className='text-muted-foreground'>No details</TableCell>
+                            <TableCell />
+                            <TableCell />
+                            <TableCell />
+                            <TableCell />
+                            <TableCell />
+                            <TableCell className='text-xs text-muted-foreground'>
+                              Before: {fmt(entry.beforeBalance)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+
+                      return (
+                        <TableRow key={`${entry.date}-${entry.item.id}-${idx}`}>
+                          <TableCell className='font-medium'>
+                            {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
+                          </TableCell>
+                          <TableCell>{entry.item.title}</TableCell>
+                          <TableCell>{entry.item.accountNumber || '—'}</TableCell>
+                          <TableCell>{entry.item.customerName || '—'}</TableCell>
+                          <TableCell className='text-right'>{fmt(entry.item.amount)}</TableCell>
+                          <TableCell
+                            className={`text-right font-semibold ${
+                              entry.item.walletImpact >= 0
+                                ? 'text-green-600'
+                                : 'text-orange-600'
+                            }`}
+                          >
+                            {entry.item.walletImpact >= 0 ? '+' : ''}
+                            {fmt(entry.item.walletImpact)}
+                          </TableCell>
+                          <TableCell className='text-right text-green-600 font-semibold'>
+                            {fmt(entry.item.profit)}
+                          </TableCell>
+                          <TableCell>
+                            <div className='text-xs leading-tight'>
+                              {isFirstRowOfDate && (
+                                <p className='text-muted-foreground'>Before: {fmt(entry.beforeBalance)}</p>
+                              )}
+                              <p className='font-semibold'>After Txn: {fmt(entry.afterBalance)}</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   {viewMode === 'summary' && (
                     <TableRow className='border-t-2 font-bold bg-muted/50'>
                       <TableCell>Total</TableCell>
@@ -452,7 +505,7 @@ export function WalletBalanceStatement({
                   {viewMode === 'number-wise' && (
                     <TableRow className='border-t-2 font-bold bg-muted/50'>
                       <TableCell>Total</TableCell>
-                      <TableCell>{allDetailItems.length} entries</TableCell>
+                      <TableCell>{numberWiseDetailRows.length} entries</TableCell>
                       <TableCell />
                       <TableCell />
                       <TableCell className='text-right text-blue-600'>{fmt(numberWiseTotalAmount)}</TableCell>
@@ -465,7 +518,9 @@ export function WalletBalanceStatement({
                         {fmt(numberWiseWalletImpact)}
                       </TableCell>
                       <TableCell className='text-right text-green-600'>{fmt(numberWiseTotalProfit)}</TableCell>
-                      <TableCell />
+                      <TableCell className='text-xs text-muted-foreground'>
+                        End Balance: {fmt(data.periodClosingBalance)}
+                      </TableCell>
                     </TableRow>
                   )}
                 </TableBody>

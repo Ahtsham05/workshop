@@ -306,8 +306,9 @@ export interface WalletBalanceRow {
 export interface WalletBalanceDetailItem {
   id: string
   date: string
-  source: 'load' | 'cash_withdrawal' | 'sim_sale'
-  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load'
+  createdAt?: string
+  source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase'
+  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase'
   title: string
   accountNumber: string
   customerName: string
