@@ -59,9 +59,11 @@ type PlanFormState = {
   guarantorName: string
   guarantorPhone: string
   itemDescription: string
+  quantity: string
   totalAmount: string
   downPayment: string
   totalInstallments: string
+  installmentFrequency: 'weekly' | 'biweekly' | 'monthly'
   installmentAmount: string
   paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
   startDate: string
@@ -83,9 +85,11 @@ const initialPlanForm = (): PlanFormState => ({
   guarantorName: '',
   guarantorPhone: '',
   itemDescription: '',
+  quantity: '1',
   totalAmount: '',
   downPayment: '0',
   totalInstallments: '',
+  installmentFrequency: 'monthly',
   installmentAmount: '',
   paymentMethod: 'cash',
   startDate: format(new Date(), 'yyyy-MM-dd'),
@@ -204,8 +208,8 @@ export default function InstallmentsPage() {
   const calculatedInstallmentAmount = useMemo(() => {
     const total = Number(planForm.totalAmount) || 0
     const down = Number(planForm.downPayment) || 0
-    const months = Number(planForm.totalInstallments) || 0
-    if (total > 0 && months > 0) return ((total - down) / months).toFixed(2)
+    const periods = Number(planForm.totalInstallments) || 0
+    if (total > 0 && periods > 0) return ((total - down) / periods).toFixed(2)
     return ''
   }, [planForm.totalAmount, planForm.downPayment, planForm.totalInstallments])
 
@@ -231,9 +235,11 @@ export default function InstallmentsPage() {
       guarantorName: plan.guarantorName || '',
       guarantorPhone: plan.guarantorPhone || '',
       itemDescription: plan.itemDescription,
+      quantity: String(plan.quantity || 1),
       totalAmount: String(plan.totalAmount),
       downPayment: String(plan.downPayment),
       totalInstallments: String(plan.totalInstallments),
+      installmentFrequency: plan.installmentFrequency || 'monthly',
       installmentAmount: String(plan.installmentAmount),
       paymentMethod: 'cash',
       startDate: format(new Date(plan.startDate), 'yyyy-MM-dd'),
@@ -260,11 +266,13 @@ export default function InstallmentsPage() {
     setProductPopoverOpen(false)
     const salePrice = product.salePrice ?? product.sellingPrice ?? product.price ?? 0
     setPlanForm(prev => {
-      const totalAmount = String(salePrice)
+      const quantity = Number(prev.quantity) || 1
+      const totalAmountValue = salePrice * quantity
+      const totalAmount = String(totalAmountValue)
       const down = Number(prev.downPayment) || 0
-      const months = Number(prev.totalInstallments) || 0
-      const installmentAmount = salePrice > 0 && months > 0
-        ? ((salePrice - down) / months).toFixed(2)
+      const periods = Number(prev.totalInstallments) || 0
+      const installmentAmount = totalAmountValue > 0 && periods > 0
+        ? ((totalAmountValue - down) / periods).toFixed(2)
         : prev.installmentAmount
       return {
         ...prev,
@@ -279,11 +287,17 @@ export default function InstallmentsPage() {
     setPlanForm(prev => {
       const next = { ...prev, [field]: value }
       // Auto-calculate installment amount unless user manually set it
-      if (['totalAmount', 'downPayment', 'totalInstallments'].includes(field)) {
-        const total = Number(field === 'totalAmount' ? value : prev.totalAmount) || 0
+      if (['totalAmount', 'downPayment', 'totalInstallments', 'quantity'].includes(field)) {
+        let total = Number(field === 'totalAmount' ? value : prev.totalAmount) || 0
+        const quantity = Number(field === 'quantity' ? value : prev.quantity) || 1
         const down = Number(field === 'downPayment' ? value : prev.downPayment) || 0
-        const months = Number(field === 'totalInstallments' ? value : prev.totalInstallments) || 0
-        if (total > 0 && months > 0) next.installmentAmount = ((total - down) / months).toFixed(2)
+        const periods = Number(field === 'totalInstallments' ? value : prev.totalInstallments) || 0
+        if (field === 'quantity' && selectedProduct) {
+          const unitPrice = selectedProduct.salePrice ?? selectedProduct.sellingPrice ?? selectedProduct.price ?? 0
+          total = unitPrice * quantity
+          next.totalAmount = String(total)
+        }
+        if (total > 0 && periods > 0) next.installmentAmount = ((total - down) / periods).toFixed(2)
       }
       return next
     })
@@ -293,6 +307,12 @@ export default function InstallmentsPage() {
     e.preventDefault()
     if (!planForm.customerName.trim()) { toast.error('Customer name is required'); return }
     if (!planForm.itemDescription.trim()) { toast.error('Item description is required'); return }
+    if (!editingPlan && !selectedProduct) { toast.error('Please select a product from stock'); return }
+    if (!planForm.quantity || Number(planForm.quantity) < 1) { toast.error('Quantity must be at least 1'); return }
+    if (!editingPlan && selectedProduct && Number(planForm.quantity) > Number(selectedProduct.stockQuantity ?? 0)) {
+      toast.error(`Only ${selectedProduct.stockQuantity ?? 0} item(s) available in stock`)
+      return
+    }
     if (!planForm.totalAmount || Number(planForm.totalAmount) <= 0) { toast.error('Valid total amount required'); return }
     if (!planForm.totalInstallments || Number(planForm.totalInstallments) < 1) { toast.error('Number of installments required'); return }
     if (!planForm.installmentAmount || Number(planForm.installmentAmount) <= 0) { toast.error('Installment amount required'); return }
@@ -309,6 +329,10 @@ export default function InstallmentsPage() {
             guarantorName: planForm.guarantorName.trim(),
             guarantorPhone: planForm.guarantorPhone.trim(),
             itemDescription: planForm.itemDescription.trim(),
+            quantity: Number(planForm.quantity) || 1,
+            totalInstallments: Number(planForm.totalInstallments),
+            installmentFrequency: planForm.installmentFrequency,
+            installmentAmount: Number(planForm.installmentAmount),
             notes: planForm.notes.trim(),
           },
         }).unwrap()
@@ -322,9 +346,12 @@ export default function InstallmentsPage() {
           guarantorName: planForm.guarantorName.trim() || undefined,
           guarantorPhone: planForm.guarantorPhone.trim() || undefined,
           itemDescription: planForm.itemDescription.trim(),
+          productId: String(selectedProduct?._id || selectedProduct?.id),
+          quantity: Number(planForm.quantity) || 1,
           totalAmount: Number(planForm.totalAmount),
           downPayment: Number(planForm.downPayment) || 0,
           totalInstallments: Number(planForm.totalInstallments),
+          installmentFrequency: planForm.installmentFrequency,
           installmentAmount: Number(planForm.installmentAmount),
           paymentMethod: planForm.paymentMethod,
           startDate: planForm.startDate ? new Date(planForm.startDate).toISOString() : new Date().toISOString(),
@@ -585,7 +612,7 @@ export default function InstallmentsPage() {
 
       {/* ── Create / Edit Plan Dialog ── */}
       <Dialog open={planDialogOpen} onOpenChange={open => { if (!open) { setPlanDialogOpen(false); setEditingPlan(null) } }}>
-        <DialogContent className='max-w-2xl max-h-[90vh] overflow-y-auto'>
+        <DialogContent className='w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Edit Installment Plan' : 'New Installment Plan'}</DialogTitle>
           </DialogHeader>
@@ -661,7 +688,7 @@ export default function InstallmentsPage() {
                         <ChevronDown className='h-4 w-4 opacity-50 flex-shrink-0' />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className='w-[460px] p-0' align='start'>
+                  <PopoverContent className='w-[var(--radix-popover-trigger-width)] max-w-[90vw] p-0' align='start'>
                       <Command>
                         <CommandInput
                           placeholder='Search by name, barcode, SKU...'
@@ -713,7 +740,14 @@ export default function InstallmentsPage() {
                     placeholder='e.g. Samsung Galaxy A54 – IMEI: 123456789, Color: Black'
                   />
                 </div>
-                <div className='grid gap-3 sm:grid-cols-3'>
+                <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
+                  <div className='space-y-1'>
+                    <Label>Quantity *</Label>
+                    <Input type='number' min='1' step='1' value={planForm.quantity} onChange={e => handlePlanFormChange('quantity', e.target.value)} placeholder='1' disabled={!!editingPlan} />
+                    {selectedProduct && !editingPlan && (
+                      <p className='text-xs text-muted-foreground'>In stock: {selectedProduct.stockQuantity ?? 0}</p>
+                    )}
+                  </div>
                   <div className='space-y-1'>
                     <Label>Total Sale Price (Rs) *</Label>
                     <Input type='number' min='0' step='0.01' value={planForm.totalAmount} onChange={e => handlePlanFormChange('totalAmount', e.target.value)} placeholder='0' />
@@ -731,13 +765,13 @@ export default function InstallmentsPage() {
                     />
                   </div>
                 </div>
-                <div className='grid gap-3 sm:grid-cols-3'>
+                <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                   <div className='space-y-1'>
-                    <Label>No. of Installments *</Label>
+                    <Label className='min-h-5 inline-flex items-center'>No. of Installments *</Label>
                     <Input type='number' min='1' step='1' value={planForm.totalInstallments} onChange={e => handlePlanFormChange('totalInstallments', e.target.value)} placeholder='e.g. 12' />
                   </div>
                   <div className='space-y-1'>
-                    <Label>Monthly Installment (Rs) *</Label>
+                    <Label className='min-h-5 inline-flex items-center'>Installment Amount *</Label>
                     <Input
                       type='number' min='0' step='0.01'
                       value={planForm.installmentAmount}
@@ -751,24 +785,37 @@ export default function InstallmentsPage() {
                     )}
                   </div>
                   <div className='space-y-1'>
-                    <Label>Start Date</Label>
+                    <Label className='min-h-5 inline-flex items-center'>Start Date</Label>
                     <Input type='date' value={planForm.startDate} onChange={e => handlePlanFormChange('startDate', e.target.value)} />
                   </div>
                 </div>
-                {!editingPlan && (
+                <div className='grid gap-3 sm:grid-cols-2'>
                   <div className='space-y-1'>
-                    <Label>Down Payment Method</Label>
-                    <Select value={planForm.paymentMethod} onValueChange={v => handlePlanFormChange('paymentMethod', v)}>
+                    <Label>Installment Frequency</Label>
+                    <Select value={planForm.installmentFrequency} onValueChange={v => handlePlanFormChange('installmentFrequency', v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='cash'>Cash</SelectItem>
-                        <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                        <SelectItem value='easypaisa'>Easypaisa</SelectItem>
-                        <SelectItem value='bank'>Bank</SelectItem>
+                        <SelectItem value='weekly'>Weekly (7 days)</SelectItem>
+                        <SelectItem value='biweekly'>Every 15 days</SelectItem>
+                        <SelectItem value='monthly'>Monthly</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                  {!editingPlan && (
+                    <div className='space-y-1'>
+                      <Label>Down Payment Method</Label>
+                      <Select value={planForm.paymentMethod} onValueChange={v => handlePlanFormChange('paymentMethod', v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='cash'>Cash</SelectItem>
+                          <SelectItem value='jazzcash'>JazzCash</SelectItem>
+                          <SelectItem value='easypaisa'>Easypaisa</SelectItem>
+                          <SelectItem value='bank'>Bank</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
                 <div className='space-y-1'>
                   <Label>Notes</Label>
                   <Textarea value={planForm.notes} onChange={e => handlePlanFormChange('notes', e.target.value)} placeholder='Any additional notes...' rows={2} />
@@ -784,8 +831,9 @@ export default function InstallmentsPage() {
                   <span>Total Amount:</span><span className='font-medium'>{fmt(Number(planForm.totalAmount) || 0)}</span>
                   <span>Down Payment:</span><span className='font-medium'>{fmt(Number(planForm.downPayment) || 0)}</span>
                   <span>Remaining:</span><span className='font-medium'>{fmt(Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)))}</span>
-                  <span>Monthly:</span><span className='font-medium'>{fmt(Number(planForm.installmentAmount) || 0)}</span>
-                  <span>Duration:</span><span className='font-medium'>{planForm.totalInstallments} months</span>
+                  <span>Per Installment:</span><span className='font-medium'>{fmt(Number(planForm.installmentAmount) || 0)}</span>
+                  <span>Frequency:</span><span className='font-medium'>{planForm.installmentFrequency === 'biweekly' ? 'Every 15 days' : planForm.installmentFrequency === 'weekly' ? 'Weekly' : 'Monthly'}</span>
+                  <span>Duration:</span><span className='font-medium'>{planForm.totalInstallments} installments</span>
                 </div>
               </div>
             )}
@@ -895,7 +943,7 @@ export default function InstallmentsPage() {
                 <div className='space-y-3'>
                   <DetailRow label='Total Amount' value={fmt(detailPlan.totalAmount)} highlight />
                   <DetailRow label='Down Payment' value={fmt(detailPlan.downPayment)} />
-                  <DetailRow label='Installment' value={`${fmt(detailPlan.installmentAmount)} × ${detailPlan.totalInstallments} months`} />
+                  <DetailRow label='Installment' value={`${fmt(detailPlan.installmentAmount)} × ${detailPlan.totalInstallments} (${detailPlan.installmentFrequency === 'biweekly' ? 'Every 15 days' : detailPlan.installmentFrequency})`} />
                   <DetailRow label='Paid' value={`${fmt(detailPlan.totalPaid)} (${detailPlan.paidInstallments}/${detailPlan.totalInstallments})`} />
                   <DetailRow label='Outstanding' value={fmt(detailPlan.totalOutstanding)} highlight danger={detailPlan.totalOutstanding > 0} />
                   {detailPlan.nextDueDate && detailPlan.status === 'active' && (

@@ -379,6 +379,8 @@ export interface MobileDashboardSummary {
 export interface InstallmentPlanRecord {
   id: string
   planNumber: string
+  productId: string
+  quantity: number
   customerName: string
   customerPhone?: string
   customerCNIC?: string
@@ -390,6 +392,7 @@ export interface InstallmentPlanRecord {
   downPayment: number
   remainingAmount: number
   totalInstallments: number
+  installmentFrequency: 'weekly' | 'biweekly' | 'monthly'
   installmentAmount: number
   paidInstallments: number
   totalPaid: number

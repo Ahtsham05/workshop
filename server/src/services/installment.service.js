@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { InstallmentPlan, InstallmentPayment } = require('../models');
+const { InstallmentPlan, InstallmentPayment, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 
@@ -20,33 +20,80 @@ const generatePlanNumber = () => {
   return `INS-${ts}-${rand}`;
 };
 
-const computeNextDueDate = (fromDate, paidInstallments) => {
+const computeNextDueDate = (fromDate, paidInstallments, installmentFrequency = 'monthly') => {
   const d = new Date(fromDate);
-  d.setMonth(d.getMonth() + paidInstallments + 1);
+  const periods = paidInstallments + 1;
+  if (installmentFrequency === 'weekly') {
+    d.setDate(d.getDate() + (periods * 7));
+    return d;
+  }
+  if (installmentFrequency === 'biweekly') {
+    d.setDate(d.getDate() + (periods * 15));
+    return d;
+  }
+  d.setMonth(d.getMonth() + periods);
   return d;
 };
 
 // ── Plans ─────────────────────────────────────────────────────────────────────
 
 const createInstallmentPlan = async (body) => {
+  const product = await Product.findById(body.productId);
+  if (!product) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Selected product not found');
+  }
+
+  const quantity = Number(body.quantity || 1);
+  if (quantity < 1) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Quantity must be at least 1');
+  }
+
+  if (product.stockQuantity < quantity) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${quantity}`
+    );
+  }
+
   const downPayment = Number(body.downPayment || 0);
   const totalAmount = Number(body.totalAmount);
   const remainingAmount = totalAmount - downPayment;
   const totalOutstanding = remainingAmount;
+  const installmentFrequency = body.installmentFrequency || 'monthly';
 
   const startDate = body.startDate ? new Date(body.startDate) : new Date();
-  const nextDueDate = body.nextDueDate || computeNextDueDate(startDate, 0);
+  const nextDueDate = body.nextDueDate || computeNextDueDate(startDate, 0, installmentFrequency);
 
-  const plan = await InstallmentPlan.create({
-    ...body,
-    planNumber: generatePlanNumber(),
-    downPayment,
-    remainingAmount,
-    totalOutstanding,
-    totalPaid: downPayment,
-    startDate,
-    nextDueDate,
-  });
+  const stockReserved = await Product.findOneAndUpdate(
+    { _id: body.productId, stockQuantity: { $gte: quantity } },
+    { $inc: { stockQuantity: -quantity } },
+    { new: true }
+  );
+  if (!stockReserved) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${quantity}`
+    );
+  }
+
+  let plan;
+  try {
+    plan = await InstallmentPlan.create({
+      ...body,
+      quantity,
+      installmentFrequency,
+      planNumber: generatePlanNumber(),
+      downPayment,
+      remainingAmount,
+      totalOutstanding,
+      totalPaid: downPayment,
+      startDate,
+      nextDueDate,
+    });
+  } catch (error) {
+    await Product.findByIdAndUpdate(body.productId, { $inc: { stockQuantity: quantity } }, { new: true });
+    throw error;
+  }
 
   // Record down payment in cash book if > 0
   if (downPayment > 0) {
@@ -117,13 +164,38 @@ const getInstallmentPlanById = async (planId) => {
 
 const updateInstallmentPlan = async (planId, updateBody, userId) => {
   const plan = await getInstallmentPlanById(planId);
-  Object.assign(plan, updateBody, { updatedBy: userId });
+
+  const nextFrequency = updateBody.installmentFrequency || plan.installmentFrequency || 'monthly';
+  const nextStartDate = updateBody.startDate ? new Date(updateBody.startDate) : plan.startDate;
+  const statusChangingToActive = updateBody.status === 'active' && plan.status !== 'active';
+  const frequencyChanged = Boolean(updateBody.installmentFrequency) && updateBody.installmentFrequency !== plan.installmentFrequency;
+  const startDateChanged = Boolean(updateBody.startDate);
+
+  Object.assign(plan, updateBody, { updatedBy: userId, installmentFrequency: nextFrequency, startDate: nextStartDate });
+
+  // Keep due schedule consistent whenever the frequency/start date changes or plan is re-activated.
+  if (plan.status === 'active' && (statusChangingToActive || frequencyChanged || startDateChanged)) {
+    if (plan.totalOutstanding > 0) {
+      plan.nextDueDate = computeNextDueDate(nextStartDate, plan.paidInstallments, nextFrequency);
+    } else {
+      plan.nextDueDate = null;
+      plan.status = 'completed';
+    }
+  }
+
   await plan.save();
   return plan;
 };
 
 const deleteInstallmentPlan = async (planId) => {
   const plan = await getInstallmentPlanById(planId);
+  if (plan.productId && Number(plan.quantity || 0) > 0) {
+    await Product.findByIdAndUpdate(
+      plan.productId,
+      { $inc: { stockQuantity: Number(plan.quantity) } },
+      { new: true }
+    );
+  }
   // Delete all payments and cash book entries
   await InstallmentPayment.deleteMany({ installmentPlanId: plan._id });
   await cashBookService.deleteEntriesByReference(plan._id, 'InstallmentPlan');
@@ -172,7 +244,7 @@ const recordPayment = async (planId, paymentBody, userId) => {
     plan.status = 'completed';
     plan.nextDueDate = null;
   } else {
-    plan.nextDueDate = computeNextDueDate(plan.startDate, plan.paidInstallments);
+    plan.nextDueDate = computeNextDueDate(plan.startDate, plan.paidInstallments, plan.installmentFrequency);
   }
   plan.updatedBy = userId;
   await plan.save();
@@ -214,7 +286,7 @@ const deletePayment = async (planId, paymentId, userId) => {
   plan.totalPaid = Math.max(0, plan.totalPaid - payment.amount);
   plan.totalOutstanding += payment.amount;
   if (plan.status === 'completed') plan.status = 'active';
-  plan.nextDueDate = computeNextDueDate(plan.startDate, plan.paidInstallments);
+  plan.nextDueDate = computeNextDueDate(plan.startDate, plan.paidInstallments, plan.installmentFrequency);
   plan.updatedBy = userId;
   await plan.save();
 
