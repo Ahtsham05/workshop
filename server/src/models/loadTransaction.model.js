@@ -69,8 +69,13 @@ const loadTransactionSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'wallet'],
+      enum: ['cash', 'bank', 'wallet'],
       default: 'cash',
+    },
+    paymentWalletType: {
+      type: String,
+      trim: true,
+      default: '',
     },
     notes: {
       type: String,

@@ -82,6 +82,8 @@ type LoadSaleFormState = {
   currentBalance: string
   commissionRate: string
   extraCharge: string
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  paymentWalletType: string
   mobileNumber: string
   date: string
 }
@@ -159,6 +161,8 @@ const initialSaleForm: LoadSaleFormState = {
   currentBalance: '',
   commissionRate: '0',
   extraCharge: '0',
+  paymentMethod: 'cash',
+  paymentWalletType: '',
   mobileNumber: '',
   date: format(new Date(), 'yyyy-MM-dd'),
 }
@@ -277,6 +281,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
   const canEditPurchasePaidAmount = Boolean(purchaseForm.savedSupplierId)
   const canEditSaleReceivedAmount = Boolean(saleForm.customerId)
+  const selectedSalePaymentWallet = wallets.find((w) => w.type === saleForm.paymentWalletType)
 
   const withdrawalProfit = useMemo(() => {
     const amount = Number(withdrawalForm.amount) || 0
@@ -379,6 +384,19 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         commissionRate: selectedWallet ? String(selectedWallet.commissionRate ?? 0) : prev.commissionRate,
         currentBalance: '',
       }))
+      return
+    }
+    if (field === 'paymentMethod') {
+      setSaleForm((prev) => ({
+        ...prev,
+        paymentMethod: value as LoadSaleFormState['paymentMethod'],
+        paymentWalletType: value === 'wallet' ? prev.paymentWalletType : '',
+      }))
+      return
+    }
+    if (field === 'paymentWalletType') {
+      const normalizedValue = value === '__none__' ? '' : value
+      setSaleForm((prev) => ({ ...prev, paymentWalletType: normalizedValue }))
       return
     }
     if (field === 'currentBalance') {
@@ -492,6 +510,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     if (!saleForm.walletId) { toast.error('Please select a wallet'); return }
     if (!saleForm.amount || Number(saleForm.amount) <= 0) { toast.error('Please enter a valid amount'); return }
     if (!saleForm.walletType) { toast.error('Selected wallet is invalid'); return }
+    if (saleForm.paymentMethod === 'wallet' && !saleForm.paymentWalletType) { toast.error('Please select payment wallet'); return }
     try {
       await createLoadTransaction({
         walletId: saleForm.walletId,
@@ -506,7 +525,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         date: saleForm.date ? new Date(saleForm.date).toISOString() : new Date().toISOString(),
         type: 'normal',
         network: 'none',
-        paymentMethod: 'cash',
+        paymentMethod: saleForm.paymentMethod,
+        paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
       }).unwrap()
       toast.success('Load sold successfully!')
       setSaleForm(initialSaleForm)
@@ -761,6 +781,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       currentBalance: '',
       commissionRate: String(t.commissionRate || 0),
       extraCharge: String(t.extraCharge || 0),
+      paymentMethod: t.paymentMethod || 'cash',
+      paymentWalletType: t.paymentWalletType || '',
       mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
       date: format(new Date(t.date), 'yyyy-MM-dd'),
     })
@@ -771,6 +793,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
   const handleUpdateTransaction = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingTransaction) return
+    if (saleForm.paymentMethod === 'wallet' && !saleForm.paymentWalletType) { toast.error('Please select payment wallet'); return }
     try {
       await updateLoadTransaction({
         id: editingTransaction.id,
@@ -784,6 +807,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           commissionRate: Number(saleForm.commissionRate),
           extraCharge: Number(saleForm.extraCharge),
           mobileNumber: saleForm.mobileNumber || 'N/A',
+          paymentMethod: saleForm.paymentMethod,
+          paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
           date: saleForm.date ? new Date(saleForm.date).toISOString() : new Date().toISOString(),
         },
       }).unwrap()
@@ -1216,6 +1241,42 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                   </div>
 
+                  <div className='space-y-2 md:max-w-xs'>
+                    <Label htmlFor='sale-payment-method'>Payment Method</Label>
+                    <Select value={saleForm.paymentMethod} onValueChange={(v) => handleSaleChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
+                      <SelectTrigger id='sale-payment-method'><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='cash'>Cash</SelectItem>
+                        <SelectItem value='bank'>Bank Transfer</SelectItem>
+                        <SelectItem value='wallet'>Wallet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {saleForm.paymentMethod === 'wallet' && (
+                    <div className='space-y-2 md:max-w-xs'>
+                      <Label htmlFor='sale-payment-wallet'>
+                        Payment Wallet
+                        {selectedSalePaymentWallet && (
+                          <span className='ml-2 text-xs text-muted-foreground'>
+                            Balance: {Number(selectedSalePaymentWallet.balance ?? 0).toFixed(2)}
+                          </span>
+                        )}
+                      </Label>
+                      <Select value={saleForm.paymentWalletType || '__none__'} onValueChange={(v) => handleSaleChange('paymentWalletType', v === '__none__' ? '' : v)}>
+                        <SelectTrigger id='sale-payment-wallet'><SelectValue placeholder='Select wallet...' /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='__none__'>-- None --</SelectItem>
+                          {wallets.filter((w) => w.isActive).map((wallet) => (
+                            <SelectItem key={wallet.id} value={wallet.type}>
+                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='phone'>Customer Phone Number - Optional</Label>
@@ -1273,6 +1334,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Received</TableHead>
                         <TableHead>Remaining</TableHead>
                         <TableHead>Phone</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Payment Wallet</TableHead>
                         <TableHead className='text-green-600 font-bold'>Profit</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -1289,6 +1352,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell>Rs {Number((t as any).receivedAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(t.amount || 0) - Number((t as any).receivedAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
                           <TableCell className='text-sm'>{t.mobileNumber === 'N/A' ? '-' : t.mobileNumber}</TableCell>
+                          <TableCell className='text-sm capitalize'>{t.paymentMethod || 'cash'}</TableCell>
+                          <TableCell>{(t as any).paymentWalletType || '—'}</TableCell>
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>

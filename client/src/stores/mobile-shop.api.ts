@@ -51,7 +51,8 @@ export interface LoadTransactionRecord {
   commissionRate: number
   extraCharge: number
   profit: number
-  paymentMethod: 'cash' | 'wallet'
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  paymentWalletType?: string
   date: string
 }
 
@@ -67,7 +68,8 @@ export interface CreateLoadTransactionInput {
   receivedAmount?: number
   commissionRate: number
   extraCharge: number
-  paymentMethod: 'cash' | 'wallet'
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  paymentWalletType?: string
   date: string
 }
 

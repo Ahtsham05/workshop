@@ -340,7 +340,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     ]),
     LoadTransaction.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date createdAt mobileNumber customerName network amount receivedAmount extraCharge profit paymentMethod notes type')
+      .select('date createdAt mobileNumber customerName network amount receivedAmount extraCharge profit paymentMethod paymentWalletType notes type')
       .lean(),
     CashWithdrawal.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
@@ -447,7 +447,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       cashAmount: Number(item.receivedAmount || 0),
       extraCharge: Number(item.extraCharge || 0),
       profit: Number(item.profit || 0),
-      paymentMethod: item.paymentMethod || '',
+      paymentMethod: formatPaymentMethodLabel(item.paymentMethod, item.paymentWalletType),
       notes: item.notes || '',
     });
   });
@@ -547,6 +547,8 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       title = entry.type === 'in' ? 'SIM Sale Wallet Payment Received' : 'SIM Sale Wallet Payment Sent';
     } else if (entry.referenceModel === 'LoadPurchase') {
       title = entry.type === 'out' ? 'Load Purchase Wallet Payment Sent' : 'Load Purchase Wallet Payment Received';
+    } else if (entry.referenceModel === 'LoadTransaction') {
+      title = entry.type === 'in' ? 'Load Sale Wallet Payment Received' : 'Load Sale Wallet Payment Sent';
     } else if (entry.referenceModel === 'CustomerLedger') {
       title = entry.type === 'in' ? 'Customer Wallet Receipt' : 'Customer Wallet Payment';
     } else if (entry.referenceModel === 'SupplierLedger') {
