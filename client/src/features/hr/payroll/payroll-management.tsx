@@ -527,7 +527,7 @@ export default function PayrollManagement() {
                       (employeeLedgerData?.results || []).map((entry: any) => (
                         <TableRow key={entry.id}>
                           <TableCell>{new Date(entry.transactionDate).toLocaleDateString()}</TableCell>
-                          <TableCell className="capitalize">{String(entry.transactionType || '').replaceAll('_', ' ')}</TableCell>
+                          <TableCell className="capitalize">{String(entry.transactionType || '').replace(/_/g, ' ')}</TableCell>
                           <TableCell>{entry.reference || '-'}</TableCell>
                           <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
                           <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>

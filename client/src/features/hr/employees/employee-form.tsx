@@ -77,7 +77,6 @@ interface EmployeeFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   departments: any[];
-  designations: any[];
   shifts: any[];
   employees: any[];
 }
@@ -88,7 +87,6 @@ export default function EmployeeForm({
   onCancel,
   isLoading,
   departments,
-  designations,
   shifts,
   employees,
 }: EmployeeFormProps) {

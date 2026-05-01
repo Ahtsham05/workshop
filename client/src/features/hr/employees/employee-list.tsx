@@ -168,7 +168,9 @@ export default function EmployeeList() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
-                                navigate({ to: '/hr/employees/$id/edit', params: { id: employee.id } } as NavigateOptions)
+                                navigate(
+                                  { to: '/hr/employees/$id/edit', params: { id: String(employee.id) } } as unknown as NavigateOptions
+                                )
                               }
                             >
                               <Edit className="h-4 w-4 mr-2" />
