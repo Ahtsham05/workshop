@@ -642,10 +642,10 @@ const getTaxReport = catchAsync(async (req, res) => {
  * Defaults to last 12 months when not provided.
  */
 const parseRoiRange = (query) => {
-  const to = query.to ? new Date(query.to) : new Date();
-  const from = query.from
-    ? new Date(query.from)
-    : new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
+  const to = parseDateBoundary(query.to, true) || new Date();
+  const from =
+    parseDateBoundary(query.from, false) ||
+    new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
   return { from, to };
 };
 
