@@ -18,6 +18,7 @@ const getAttendances = {
   query: Joi.object().keys({
     employee: Joi.string().custom(objectId),
     status: Joi.string().valid('Present', 'Absent', 'Late', 'Half-Day', 'On Leave', 'Holiday'),
+    search: Joi.string().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),
     sortBy: Joi.string(),

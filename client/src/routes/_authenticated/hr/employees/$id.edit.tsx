@@ -59,7 +59,7 @@ function EmployeeEditPage() {
 
   const handleSubmit = async (data: any) => {
     try {
-      await updateEmployee({ id, data }).unwrap();
+      await updateEmployee({ id, ...data }).unwrap();
       toast.success('Employee updated successfully');
       navigate({ to: '/hr/employees/$id', params: { id } } as any);
     } catch (error: any) {
@@ -97,53 +97,51 @@ function EmployeeEditPage() {
     lastName: employee.lastName,
     email: employee.email,
     phone: employee.phone,
-    dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth) : undefined,
+    dateOfBirth: employee.dateOfBirth
+      ? new Date(employee.dateOfBirth).toISOString().split('T')[0]
+      : '',
     gender: employee.gender,
     maritalStatus: employee.maritalStatus,
-    address: employee.address,
-    city: employee.city,
-    state: employee.state,
-    country: employee.country,
-    postalCode: employee.postalCode,
+    address: {
+      street: employee.address?.street || '',
+      city: employee.address?.city || '',
+      state: employee.address?.state || '',
+      country: employee.address?.country || '',
+      postalCode: employee.address?.postalCode || '',
+    },
 
     // Professional Information
     employeeId: employee.employeeId,
     department: employee.department?._id || employee.department,
     designation: employee.designation?._id || employee.designation,
-    manager: employee.manager?._id || employee.manager,
-    dateOfJoining: employee.dateOfJoining ? new Date(employee.dateOfJoining) : undefined,
+    reportingManager: employee.reportingManager?._id || employee.reportingManager || '',
+    joiningDate: employee.joiningDate
+      ? new Date(employee.joiningDate).toISOString().split('T')[0]
+      : '',
     employmentType: employee.employmentType,
-    workLocation: employee.workLocation,
+    employmentStatus: employee.employmentStatus || 'Active',
     shift: employee.shift?._id || employee.shift,
-    probationEndDate: employee.probationEndDate
-      ? new Date(employee.probationEndDate)
-      : undefined,
-    confirmationDate: employee.confirmationDate
-      ? new Date(employee.confirmationDate)
-      : undefined,
-    status: employee.status,
     skills: employee.skills || [],
-    qualification: employee.qualification,
-    experience: employee.experience,
 
     // Salary Information
-    basicSalary: employee.salary?.basic || 0,
-    allowances: employee.salary?.allowances || 0,
-    deductions: employee.salary?.deductions || 0,
-    currency: employee.salary?.currency || 'PKR',
-    paymentMode: employee.salary?.paymentMode || 'bank_transfer',
-    bankName: employee.salary?.bankDetails?.bankName,
-    accountNumber: employee.salary?.bankDetails?.accountNumber,
-    ifscCode: employee.salary?.bankDetails?.ifscCode,
-    accountHolderName: employee.salary?.bankDetails?.accountHolderName,
+    salary: {
+      basicSalary: Number(employee.salary?.basicSalary || 0),
+      allowances: Number(employee.salary?.allowances || 0),
+      deductions: Number(employee.salary?.deductions || 0),
+    },
+    bankDetails: {
+      bankName: employee.bankDetails?.bankName || '',
+      accountNumber: employee.bankDetails?.accountNumber || '',
+      accountTitle: employee.bankDetails?.accountTitle || '',
+      branchCode: employee.bankDetails?.branchCode || '',
+    },
 
     // Other Information
-    emergencyContactName: employee.emergencyContact?.name,
-    emergencyContactRelation: employee.emergencyContact?.relation,
-    emergencyContactPhone: employee.emergencyContact?.phone,
-    bloodGroup: employee.bloodGroup,
-    profileImage: employee.profileImage,
-    documents: employee.documents || [],
+    emergencyContact: {
+      name: employee.emergencyContact?.name || '',
+      relationship: employee.emergencyContact?.relationship || '',
+      phone: employee.emergencyContact?.phone || '',
+    },
   };
 
   const departments = departmentsData?.results || [];

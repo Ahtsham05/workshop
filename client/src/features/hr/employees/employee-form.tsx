@@ -37,9 +37,7 @@ const employeeSchema = z.object({
   }).optional(),
   
   // Professional Information
-  employeeId: z.string().min(1, 'Employee ID is required'),
   department: z.string().min(1, 'Department is required'),
-  designation: z.string().optional(),
   shift: z.string().optional(),
   joiningDate: z.string().min(1, 'Joining date is required'),
   employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Intern']),
@@ -149,7 +147,6 @@ export default function EmployeeForm({
       onSubmit={handleSubmit(async (values) => {
         const payload: any = {
           ...values,
-          designation: sanitizeObjectId(values.designation),
           shift: sanitizeObjectId(values.shift),
           reportingManager: sanitizeObjectId(values.reportingManager),
         };
@@ -161,9 +158,6 @@ export default function EmployeeForm({
           payload.employmentStatus = 'On Leave';
         }
 
-        if (!payload.designation) {
-          delete payload.designation;
-        }
         if (!payload.shift) {
           delete payload.shift;
         }
@@ -282,14 +276,7 @@ export default function EmployeeForm({
               <CardTitle>{t('Professional Information')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="employeeId">{t('Employee ID')} *</Label>
-                  <Input id="employeeId" {...register('employeeId')} />
-                  {errors.employeeId && (
-                    <p className="text-sm text-red-600">{errors.employeeId.message}</p>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="joiningDate">{t('Joining Date')} *</Label>
                   <Input id="joiningDate" type="date" {...register('joiningDate')} />
@@ -299,7 +286,7 @@ export default function EmployeeForm({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="department">{t('Department')} *</Label>
                   <Select
@@ -319,27 +306,6 @@ export default function EmployeeForm({
                   </Select>
                   {errors.department && (
                     <p className="text-sm text-red-600">{errors.department.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="designation">{t('Designation')} *</Label>
-                  <Select
-                    value={watch('designation')}
-                    onValueChange={(value) => setValue('designation', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('Select designation')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {designations.map((desig) => (
-                        <SelectItem key={desig.id} value={desig.id}>
-                          {desig.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.designation && (
-                    <p className="text-sm text-red-600">{errors.designation.message}</p>
                   )}
                 </div>
               </div>

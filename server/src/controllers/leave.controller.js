@@ -3,6 +3,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { leaveService } = require('../services');
+const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createLeave = catchAsync(async (req, res) => {
@@ -13,6 +14,20 @@ const createLeave = catchAsync(async (req, res) => {
 const getLeaves = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'leaveType', 'status', 'startDate', 'endDate']);
   applyBranchFilter(filter, req);
+  if (req.query.search) {
+    const regex = new RegExp(req.query.search, 'i');
+    const tenantFilter = {};
+    if (filter.organizationId) tenantFilter.organizationId = filter.organizationId;
+    if (filter.branchId) tenantFilter.branchId = filter.branchId;
+    const employees = await Employee.find({
+      ...tenantFilter,
+      $or: [{ firstName: regex }, { lastName: regex }, { employeeId: regex }, { email: regex }],
+    }).select('_id');
+    const employeeIds = employees.map((emp) => emp._id);
+    filter.employee = filter.employee
+      ? { $in: employeeIds.filter((id) => String(id) === String(filter.employee)) }
+      : { $in: employeeIds };
+  }
   if (filter.startDate || filter.endDate) {
     const dateFilter = {};
     if (filter.startDate) dateFilter.$gte = new Date(filter.startDate);

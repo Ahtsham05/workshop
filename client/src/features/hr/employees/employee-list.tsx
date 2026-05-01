@@ -167,7 +167,9 @@ export default function EmployeeList() {
                               {t('View Details')}
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => navigate({ to: `/hr/employees/${employee.id}/edit` } as NavigateOptions)}
+                              onClick={() =>
+                                navigate({ to: '/hr/employees/$id/edit', params: { id: employee.id } } as NavigateOptions)
+                              }
                             >
                               <Edit className="h-4 w-4 mr-2" />
                               {t('Edit')}

@@ -41,6 +41,7 @@ const getPayrolls = {
     month: Joi.number().min(1).max(12),
     year: Joi.number().min(2020).max(2100),
     status: Joi.string().valid('Pending', 'Processed', 'Paid', 'On Hold'),
+    search: Joi.string().allow(''),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
@@ -111,6 +112,7 @@ const markPayrollPaid = {
   body: Joi.object().keys({
     paymentDate: Joi.date().required(),
     paymentMethod: Joi.string().required().valid('Cash', 'Bank Transfer', 'Cheque'),
+    amount: Joi.number().min(0.01).required(),
   }),
 };
 

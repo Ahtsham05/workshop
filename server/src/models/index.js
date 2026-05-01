@@ -79,3 +79,4 @@ module.exports.Attendance = require('./attendance.model');
 module.exports.Leave = require('./leave.model');
 module.exports.Payroll = require('./payroll.model');
 module.exports.PerformanceReview = require('./performanceReview.model');
+module.exports.EmployeeLedger = require('./employeeLedger.model');

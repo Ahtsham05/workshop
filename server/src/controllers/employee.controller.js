@@ -24,6 +24,15 @@ const createEmployee = catchAsync(async (req, res) => {
 const getEmployees = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employeeId', 'firstName', 'lastName', 'email', 'department', 'designation', 'employmentStatus']);
   applyBranchFilter(filter, req);
+  if (req.query.search) {
+    const regex = new RegExp(req.query.search, 'i');
+    filter.$or = [
+      { firstName: regex },
+      { lastName: regex },
+      { email: regex },
+      { employeeId: regex },
+    ];
+  }
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   options.populate = 'department,designation,shift,reportingManager';
   const result = await employeeService.queryEmployees(filter, options);

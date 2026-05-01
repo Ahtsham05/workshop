@@ -7,7 +7,7 @@ const createLeave = {
     leaveType: Joi.string().required().valid('Casual', 'Sick', 'Annual', 'Maternity', 'Paternity', 'Unpaid', 'Emergency'),
     startDate: Joi.date().required(),
     endDate: Joi.date().required(),
-    reason: Joi.string().required(),
+    reason: Joi.string().trim().min(1).required(),
     isHalfDay: Joi.boolean(),
     notes: Joi.string().allow(''),
   }),
@@ -18,6 +18,7 @@ const getLeaves = {
     employee: Joi.string().custom(objectId),
     leaveType: Joi.string().valid('Casual', 'Sick', 'Annual', 'Maternity', 'Paternity', 'Unpaid', 'Emergency'),
     status: Joi.string().valid('Pending', 'Approved', 'Rejected', 'Cancelled'),
+    search: Joi.string().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),
     sortBy: Joi.string(),
@@ -41,7 +42,7 @@ const updateLeave = {
       leaveType: Joi.string().valid('Casual', 'Sick', 'Annual', 'Maternity', 'Paternity', 'Unpaid', 'Emergency'),
       startDate: Joi.date(),
       endDate: Joi.date(),
-      reason: Joi.string(),
+      reason: Joi.string().trim().min(1),
       isHalfDay: Joi.boolean(),
       notes: Joi.string().allow(''),
     })
@@ -65,7 +66,7 @@ const rejectLeave = {
     leaveId: Joi.string().custom(objectId).required(),
   }),
   body: Joi.object().keys({
-    rejectionReason: Joi.string().required(),
+    rejectionReason: Joi.string().trim().min(1).required(),
   }),
 };
 

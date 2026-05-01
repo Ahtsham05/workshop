@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Payroll, Employee, Attendance, Leave } = require('../models');
 const ApiError = require('../utils/ApiError');
+const employeeLedgerService = require('./employeeLedger.service');
 
 const createPayroll = async (payrollBody) => {
   const employee = await Employee.findById(payrollBody.employee);
@@ -76,7 +77,7 @@ const deletePayrollById = async (payrollId) => {
   return payroll;
 };
 
-const generatePayroll = async (employeeId, month, year, processedBy) => {
+const generatePayroll = async (employeeId, month, year, processedBy, scope = {}) => {
   const employee = await Employee.findById(employeeId);
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
@@ -123,8 +124,15 @@ const generatePayroll = async (employeeId, month, year, processedBy) => {
   const basicSalary = employee.salary.basicSalary;
   const perDaySalary = basicSalary / daysInMonth;
   const absentDeduction = perDaySalary * absentDays;
+  const currentLedgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, {
+    organizationId: scope.organizationId || employee.organizationId,
+    branchId: scope.branchId || employee.branchId,
+  });
+  const carryForwardAdvance = Math.max(0, -Number(currentLedgerSummary.currentBalance || 0));
   
   const payrollData = {
+    organizationId: scope.organizationId || employee.organizationId,
+    branchId: scope.branchId || employee.branchId,
     employee: employeeId,
     month,
     year,
@@ -135,6 +143,7 @@ const generatePayroll = async (employeeId, month, year, processedBy) => {
     },
     deductions: {
       absent: absentDeduction,
+      advance: carryForwardAdvance,
     },
     workingDays: daysInMonth,
     presentDays,
@@ -152,9 +161,11 @@ const generatePayroll = async (employeeId, month, year, processedBy) => {
   payrollData.totalAllowances = totalAllowances;
   payrollData.totalDeductions = totalDeductions;
   payrollData.grossSalary = basicSalary + totalAllowances;
-  payrollData.netSalary = payrollData.grossSalary - totalDeductions;
+  payrollData.netSalary = Math.max(0, payrollData.grossSalary - totalDeductions);
   
-  return Payroll.create(payrollData);
+  const payroll = await Payroll.create(payrollData);
+  await employeeLedgerService.upsertSalaryPayableFromPayroll(payroll, processedBy);
+  return payroll;
 };
 
 const processPayroll = async (payrollId, processedBy) => {
@@ -173,16 +184,39 @@ const processPayroll = async (payrollId, processedBy) => {
   return payroll;
 };
 
-const markPayrollPaid = async (payrollId, paymentDate, paymentMethod) => {
+const markPayrollPaid = async (payrollId, paymentDate, paymentMethod, amount) => {
   const payroll = await getPayrollById(payrollId);
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
-  
-  payroll.status = 'Paid';
+
+  const paidAmount = Number(amount || 0);
+  if (paidAmount <= 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Payment amount must be greater than 0');
+  }
+
+  const payableAmount = Number(payroll.netSalary || 0);
+  const salaryPaymentAmount = Math.min(paidAmount, payableAmount);
+  const advanceAmount = Math.max(0, paidAmount - payableAmount);
+
+  payroll.status = salaryPaymentAmount >= payableAmount ? 'Paid' : 'Processed';
   payroll.paymentDate = paymentDate;
   payroll.paymentMethod = paymentMethod;
   await payroll.save();
+  await employeeLedgerService.upsertSalaryPaymentFromPayroll(
+    payroll,
+    paymentDate,
+    paymentMethod,
+    payroll.processedBy || payroll.updatedBy || payroll.createdBy,
+    salaryPaymentAmount
+  );
+  await employeeLedgerService.upsertAdvancePaymentFromPayroll(
+    payroll,
+    paymentDate,
+    paymentMethod,
+    payroll.processedBy || payroll.updatedBy || payroll.createdBy,
+    advanceAmount
+  );
   return payroll;
 };
 

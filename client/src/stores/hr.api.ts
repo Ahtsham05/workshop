@@ -38,7 +38,7 @@ const baseQueryWithAuth: BaseQueryFn<
 export const hrApi = createApi({
   reducerPath: 'hrApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Employee', 'Department', 'Attendance', 'Leave', 'Payroll'],
+  tagTypes: ['Employee', 'Department', 'Attendance', 'Leave', 'Payroll', 'EmployeeLedger'],
   endpoints: (builder) => ({
     // Employees
     getEmployees: builder.query({
@@ -179,19 +179,41 @@ export const hrApi = createApi({
     }),
     generatePayroll: builder.mutation({
       query: (data) => ({ url: '/payroll/generate', method: 'POST', body: data }),
-      invalidatesTags: ['Payroll'],
+      invalidatesTags: ['Payroll', 'EmployeeLedger'],
     }),
     processPayroll: builder.mutation({
       query: ({ id }) => ({ url: `/payroll/${id}/process`, method: 'PATCH' }),
       invalidatesTags: ['Payroll'],
     }),
     markPayrollPaid: builder.mutation({
-      query: ({ id, paymentDate, paymentMethod }) => ({ 
+      query: ({ id, paymentDate, paymentMethod, amount }) => ({ 
         url: `/payroll/${id}/paid`, 
         method: 'PATCH',
-        body: { paymentDate, paymentMethod }
+        body: { paymentDate, paymentMethod, amount }
       }),
-      invalidatesTags: ['Payroll'],
+      invalidatesTags: ['Payroll', 'EmployeeLedger'],
+    }),
+
+    // Employee Ledger
+    getEmployeeLedgerEntries: builder.query({
+      query: (params) => ({ url: '/employee-ledger', params }),
+      providesTags: ['EmployeeLedger'],
+    }),
+    getEmployeesWithLedgerBalances: builder.query({
+      query: () => ({ url: '/employee-ledger/employees-with-balances' }),
+      providesTags: ['EmployeeLedger'],
+    }),
+    getEmployeeLedgerSummary: builder.query({
+      query: (employeeId) => `/employee-ledger/employee/${employeeId}/summary`,
+      providesTags: ['EmployeeLedger'],
+    }),
+    createEmployeeAdvancePayment: builder.mutation({
+      query: (data) => ({ url: '/employee-ledger/advance', method: 'POST', body: data }),
+      invalidatesTags: ['EmployeeLedger'],
+    }),
+    createEmployeePayment: builder.mutation({
+      query: (data) => ({ url: '/employee-ledger/pay', method: 'POST', body: data }),
+      invalidatesTags: ['EmployeeLedger', 'Payroll'],
     }),
   }),
 });
@@ -231,4 +253,9 @@ export const {
   useGeneratePayrollMutation,
   useProcessPayrollMutation,
   useMarkPayrollPaidMutation,
+  useGetEmployeeLedgerEntriesQuery,
+  useGetEmployeesWithLedgerBalancesQuery,
+  useGetEmployeeLedgerSummaryQuery,
+  useCreateEmployeeAdvancePaymentMutation,
+  useCreateEmployeePaymentMutation,
 } = hrApi;

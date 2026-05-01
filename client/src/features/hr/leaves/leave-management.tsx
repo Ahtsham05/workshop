@@ -54,6 +54,7 @@ export default function LeaveManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [showApplyDialog, setShowApplyDialog] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<any>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const { data, isLoading, refetch } = useGetLeavesQuery({
     page,
@@ -82,7 +83,7 @@ export default function LeaveManagement() {
 
   const handleApplyLeave = async () => {
     try {
-      await createLeave(formData).unwrap();
+      await createLeave({ ...formData, reason: formData.reason.trim() }).unwrap();
       toast.success(t('Leave application submitted'));
       setShowApplyDialog(false);
       setFormData({
@@ -111,9 +112,10 @@ export default function LeaveManagement() {
 
   const handleReject = async (leaveId: string, reason: string) => {
     try {
-      await rejectLeave({ id: leaveId, rejectionReason: reason }).unwrap();
+      await rejectLeave({ id: leaveId, rejectionReason: reason.trim() }).unwrap();
       toast.success(t('Leave rejected'));
       setSelectedLeave(null);
+      setRejectionReason('');
       refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to reject leave'));
@@ -313,7 +315,10 @@ export default function LeaveManagement() {
                               size="sm"
                               variant="outline"
                               className="text-red-600"
-                              onClick={() => setSelectedLeave(leave)}
+                              onClick={() => {
+                                setSelectedLeave(leave);
+                                setRejectionReason('');
+                              }}
                               disabled={isRejecting}
                             >
                               <X className="h-4 w-4 mr-1" />
@@ -440,7 +445,13 @@ export default function LeaveManagement() {
             </Button>
             <Button 
               onClick={handleApplyLeave} 
-              disabled={isCreating || !formData.employee || !formData.startDate || !formData.endDate}
+              disabled={
+                isCreating ||
+                !formData.employee ||
+                !formData.startDate ||
+                !formData.endDate ||
+                !formData.reason.trim()
+              }
             >
               {isCreating ? t('Submitting...') : t('Submit')}
             </Button>
@@ -462,7 +473,8 @@ export default function LeaveManagement() {
               <Label>{t('Rejection Reason')}</Label>
               <Textarea
                 placeholder={t('Reason for rejection...')}
-                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
               />
             </div>
           </div>
@@ -472,11 +484,8 @@ export default function LeaveManagement() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                const reason = (document.getElementById('rejectionReason') as HTMLTextAreaElement)?.value;
-                handleReject(selectedLeave.id, reason);
-              }}
-              disabled={isRejecting}
+              onClick={() => selectedLeave && handleReject(selectedLeave.id, rejectionReason)}
+              disabled={isRejecting || !rejectionReason.trim()}
             >
               {isRejecting ? t('Rejecting...') : t('Reject')}
             </Button>

@@ -2,22 +2,38 @@ const httpStatus = require('http-status');
 const { Attendance, Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
 
+const normalizeDateOnly = (inputDate) => {
+  const date = new Date(inputDate);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
 const createAttendance = async (attendanceBody) => {
-  const employee = await Employee.findById(attendanceBody.employee);
+  const employee = await Employee.findOne({
+    _id: attendanceBody.employee,
+    organizationId: attendanceBody.organizationId,
+    branchId: attendanceBody.branchId,
+  });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
-  
+
+  const attendanceDate = normalizeDateOnly(attendanceBody.date);
+
   // Check if attendance already exists for this date
   const existingAttendance = await Attendance.findOne({
+    organizationId: attendanceBody.organizationId,
+    branchId: attendanceBody.branchId,
     employee: attendanceBody.employee,
-    date: attendanceBody.date,
+    date: attendanceDate,
   });
-  
+
   if (existingAttendance) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Attendance already marked for this date');
   }
-  
+
+  attendanceBody.date = attendanceDate;
+
   // Calculate working hours if checkIn and checkOut exist
   if (attendanceBody.checkIn && attendanceBody.checkOut) {
     const checkIn = new Date(attendanceBody.checkIn);
@@ -68,7 +84,10 @@ const deleteAttendanceById = async (attendanceId) => {
 };
 
 const markCheckIn = async (employeeId, locationData = {}) => {
-  const employee = await Employee.findById(employeeId);
+  const employeeFilter = { _id: employeeId };
+  if (locationData.organizationId) employeeFilter.organizationId = locationData.organizationId;
+  if (locationData.branchId) employeeFilter.branchId = locationData.branchId;
+  const employee = await Employee.findOne(employeeFilter);
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
@@ -77,6 +96,8 @@ const markCheckIn = async (employeeId, locationData = {}) => {
   today.setHours(0, 0, 0, 0);
   
   const existingAttendance = await Attendance.findOne({
+    organizationId: locationData.organizationId || employee.organizationId,
+    branchId: locationData.branchId || employee.branchId,
     employee: employeeId,
     date: today,
   });
@@ -86,6 +107,8 @@ const markCheckIn = async (employeeId, locationData = {}) => {
   }
   
   const attendanceData = {
+    organizationId: locationData.organizationId || employee.organizationId,
+    branchId: locationData.branchId || employee.branchId,
     employee: employeeId,
     date: today,
     checkIn: new Date(),

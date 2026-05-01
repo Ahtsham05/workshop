@@ -77,3 +77,4 @@ module.exports.attendanceService = require('./attendance.service.js');
 module.exports.leaveService = require('./leave.service.js');
 module.exports.payrollService = require('./payroll.service.js');
 module.exports.performanceReviewService = require('./performanceReview.service.js');
+module.exports.employeeLedgerService = require('./employeeLedger.service.js');

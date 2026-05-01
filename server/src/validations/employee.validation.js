@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const createEmployee = {
   body: Joi.object().keys({
-    employeeId: Joi.string().required(),
+    employeeId: Joi.string(),
     firstName: Joi.string().required(),
     lastName: Joi.string().required(),
     email: Joi.string().required().email(),
@@ -20,7 +20,6 @@ const createEmployee = {
       country: Joi.string().allow(''),
     }),
     department: Joi.string().custom(objectId).required(),
-    designation: Joi.string().allow(''),
     shift: Joi.string().custom(objectId),
     joiningDate: Joi.date().required(),
     employmentType: Joi.string().valid('Full-Time', 'Part-Time', 'Contract', 'Intern'),
@@ -93,7 +92,6 @@ const updateEmployee = {
         country: Joi.string().allow(''),
       }),
       department: Joi.string().custom(objectId),
-      designation: Joi.string().allow(''),
       shift: Joi.string().custom(objectId),
       joiningDate: Joi.date(),
       employmentType: Joi.string().valid('Full-Time', 'Part-Time', 'Contract', 'Intern'),

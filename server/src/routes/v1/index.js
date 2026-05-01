@@ -46,6 +46,7 @@ const departmentRoute = require('./department.route');
 const attendanceRoute = require('./attendance.route');
 const leaveRoute = require('./leave.route');
 const payrollRoute = require('./payroll.route');
+const employeeLedgerRoute = require('./employeeLedger.route');
 
 // School Routes
 const schoolClassRoute = require('./schoolClass.route');
@@ -256,6 +257,10 @@ const defaultRoutes = [
     path: '/payroll',
     route: payrollRoute
   },
+  {
+    path: '/employee-ledger',
+    route: employeeLedgerRoute
+  },
   // School Routes
   {
     path: '/school-classes',
@@ -429,6 +434,7 @@ const protectedPaths = [
   '/attendance',
   '/leaves',
   '/payroll',
+  '/employee-ledger',
   '/school-classes',
   '/sections',
   '/subjects',

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 import { useLanguage } from '@/context/language-context';
 import { useGetEmployeeQuery } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +15,14 @@ export const Route = createFileRoute('/_authenticated/hr/employees/$id')({
 function EmployeeDetails() {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = Route.useParams();
+  const isEditRoute = location.pathname.endsWith('/edit');
+
+  // Render child edit route instead of details when in edit path.
+  if (isEditRoute) {
+    return <Outlet />;
+  }
 
   const { data: employee, isLoading } = useGetEmployeeQuery(id);
 
@@ -69,7 +76,7 @@ function EmployeeDetails() {
             {employee.employmentStatus}
           </Badge>
           <Button
-            onClick={() => navigate({ to: `/hr/employees/${id}/edit` as any })}
+            onClick={() => navigate({ to: '/hr/employees/$id/edit', params: { id } } as any)}
           >
             {t('Edit')}
           </Button>

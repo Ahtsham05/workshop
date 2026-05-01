@@ -1,22 +1,106 @@
 const httpStatus = require('http-status');
-const { Leave, Employee } = require('../models');
+const { Leave, Employee, Attendance } = require('../models');
 const ApiError = require('../utils/ApiError');
 
+const AUTO_LEAVE_SYNC_NOTE = '[AUTO_LEAVE_SYNC]';
+
+const normalizeDateOnly = (value) => {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const eachDateInRange = (startDate, endDate) => {
+  const dates = [];
+  const cursor = normalizeDateOnly(startDate);
+  const end = normalizeDateOnly(endDate);
+  while (cursor <= end) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+};
+
+const syncAttendanceForApprovedLeave = async (leave) => {
+  const dates = eachDateInRange(leave.startDate, leave.endDate);
+  for (const date of dates) {
+    const existing = await Attendance.findOne({
+      organizationId: leave.organizationId,
+      branchId: leave.branchId,
+      employee: leave.employee,
+      date,
+    });
+
+    if (!existing) {
+      await Attendance.create({
+        organizationId: leave.organizationId,
+        branchId: leave.branchId,
+        employee: leave.employee,
+        date,
+        status: 'On Leave',
+        notes: AUTO_LEAVE_SYNC_NOTE,
+      });
+      continue;
+    }
+
+    // Do not overwrite manually marked check in/out records.
+    if (existing.checkIn || existing.checkOut) continue;
+    existing.status = 'On Leave';
+    existing.notes = existing.notes ? `${existing.notes} ${AUTO_LEAVE_SYNC_NOTE}` : AUTO_LEAVE_SYNC_NOTE;
+    await existing.save();
+  }
+};
+
+const cleanupAttendanceForLeave = async (leave) => {
+  const dates = eachDateInRange(leave.startDate, leave.endDate);
+  for (const date of dates) {
+    const existing = await Attendance.findOne({
+      organizationId: leave.organizationId,
+      branchId: leave.branchId,
+      employee: leave.employee,
+      date,
+    });
+    if (!existing || existing.checkIn || existing.checkOut) continue;
+    if (!String(existing.notes || '').includes(AUTO_LEAVE_SYNC_NOTE)) continue;
+
+    const cleanedNotes = String(existing.notes || '').replace(AUTO_LEAVE_SYNC_NOTE, '').trim();
+    if (cleanedNotes.length === 0) {
+      await existing.deleteOne();
+    } else {
+      existing.notes = cleanedNotes;
+      existing.status = 'Absent';
+      await existing.save();
+    }
+  }
+};
+
 const createLeave = async (leaveBody) => {
-  const employee = await Employee.findById(leaveBody.employee);
+  const employee = await Employee.findOne({
+    _id: leaveBody.employee,
+    organizationId: leaveBody.organizationId,
+    branchId: leaveBody.branchId,
+  });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
   
   // Calculate total days
-  const startDate = new Date(leaveBody.startDate);
-  const endDate = new Date(leaveBody.endDate);
+  const startDate = normalizeDateOnly(leaveBody.startDate);
+  const endDate = normalizeDateOnly(leaveBody.endDate);
+  if (endDate < startDate) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'End date must be after start date');
+  }
   const diffTime = Math.abs(endDate - startDate);
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  leaveBody.startDate = startDate;
+  leaveBody.endDate = endDate;
+  leaveBody.reason = String(leaveBody.reason || '').trim();
   leaveBody.totalDays = leaveBody.isHalfDay ? 0.5 : diffDays;
   
   // Check for overlapping leaves
   const overlappingLeave = await Leave.findOne({
+    organizationId: leaveBody.organizationId,
+    branchId: leaveBody.branchId,
     employee: leaveBody.employee,
     status: { $in: ['Pending', 'Approved'] },
     $or: [
@@ -48,16 +132,34 @@ const updateLeaveById = async (leaveId, updateBody) => {
   }
   
   // Recalculate total days if dates are updated
-  if (updateBody.startDate || updateBody.endDate) {
-    const startDate = new Date(updateBody.startDate || leave.startDate);
-    const endDate = new Date(updateBody.endDate || leave.endDate);
+  if (updateBody.startDate || updateBody.endDate || typeof updateBody.isHalfDay === 'boolean') {
+    const startDate = normalizeDateOnly(updateBody.startDate || leave.startDate);
+    const endDate = normalizeDateOnly(updateBody.endDate || leave.endDate);
+    if (endDate < startDate) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'End date must be after start date');
+    }
     const diffTime = Math.abs(endDate - startDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-    updateBody.totalDays = updateBody.isHalfDay ? 0.5 : diffDays;
+    updateBody.startDate = startDate;
+    updateBody.endDate = endDate;
+    updateBody.totalDays = (typeof updateBody.isHalfDay === 'boolean' ? updateBody.isHalfDay : leave.isHalfDay) ? 0.5 : diffDays;
+  }
+
+  if (typeof updateBody.reason === 'string') {
+    updateBody.reason = updateBody.reason.trim();
+    if (!updateBody.reason) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Reason is required');
+    }
   }
   
+  const wasApproved = leave.status === 'Approved';
+  const oldLeaveRange = { startDate: leave.startDate, endDate: leave.endDate };
   Object.assign(leave, updateBody);
   await leave.save();
+  if (wasApproved && (updateBody.startDate || updateBody.endDate || typeof updateBody.isHalfDay === 'boolean')) {
+    await cleanupAttendanceForLeave({ ...leave.toObject(), ...oldLeaveRange });
+    await syncAttendanceForApprovedLeave(leave);
+  }
   return leave;
 };
 
@@ -84,6 +186,7 @@ const approveLeave = async (leaveId, approvedBy) => {
   leave.approvedBy = approvedBy;
   leave.approvalDate = new Date();
   await leave.save();
+  await syncAttendanceForApprovedLeave(leave);
   return leave;
 };
 
@@ -97,11 +200,15 @@ const rejectLeave = async (leaveId, rejectionReason, approvedBy) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Leave is not in pending status');
   }
   
+  const wasApproved = leave.status === 'Approved';
   leave.status = 'Rejected';
   leave.rejectionReason = rejectionReason;
   leave.approvedBy = approvedBy;
   leave.approvalDate = new Date();
   await leave.save();
+  if (wasApproved) {
+    await cleanupAttendanceForLeave(leave);
+  }
   return leave;
 };
 
@@ -111,12 +218,16 @@ const cancelLeave = async (leaveId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
   
+  const wasApproved = leave.status === 'Approved';
   if (leave.status === 'Cancelled') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Leave is already cancelled');
   }
   
   leave.status = 'Cancelled';
   await leave.save();
+  if (wasApproved) {
+    await cleanupAttendanceForLeave(leave);
+  }
   return leave;
 };
 

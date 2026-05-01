@@ -13,6 +13,33 @@ const getTenantFilter = (data = {}) => {
   return filter;
 };
 
+const generateEmployeeId = async (tenantFilter) => {
+  const prefix = 'EMP-';
+  const latestEmployee = await Employee.findOne({
+    ...tenantFilter,
+    employeeId: { $regex: `^${prefix}\\d+$` },
+  })
+    .sort({ createdAt: -1 })
+    .select('employeeId')
+    .lean();
+
+  let nextNumber = 1;
+  if (latestEmployee?.employeeId) {
+    const numericPart = Number(latestEmployee.employeeId.replace(prefix, ''));
+    if (!Number.isNaN(numericPart) && numericPart > 0) {
+      nextNumber = numericPart + 1;
+    }
+  }
+
+  // Resolve rare collisions (parallel creates) with incremental probing.
+  while (true) {
+    const candidate = `${prefix}${String(nextNumber).padStart(4, '0')}`;
+    const exists = await Employee.exists({ ...tenantFilter, employeeId: candidate });
+    if (!exists) return candidate;
+    nextNumber += 1;
+  }
+};
+
 /**
  * Create an employee
  * @param {Object} employeeBody
@@ -21,11 +48,10 @@ const getTenantFilter = (data = {}) => {
 const createEmployee = async (employeeBody) => {
   const tenantFilter = getTenantFilter(employeeBody);
 
+  const employeeId = await generateEmployeeId(tenantFilter);
+
   if (await Employee.findOne({ ...tenantFilter, email: employeeBody.email })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
-  }
-  if (await Employee.findOne({ ...tenantFilter, employeeId: employeeBody.employeeId })) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID already exists');
   }
   if (employeeBody.cnic && await Employee.findOne({ ...tenantFilter, cnic: employeeBody.cnic })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
@@ -33,11 +59,6 @@ const createEmployee = async (employeeBody) => {
   
   // Clean up invalid ObjectIds (for mock data compatibility)
   const cleanedBody = { ...employeeBody };
-  
-  // If designation is not a valid ObjectId (e.g., mock data), remove it
-  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
-    delete cleanedBody.designation;
-  }
   
   // If shift is not a valid ObjectId, remove it
   if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
@@ -49,6 +70,9 @@ const createEmployee = async (employeeBody) => {
     delete cleanedBody.reportingManager;
   }
   
+  cleanedBody.employeeId = employeeId;
+  delete cleanedBody.designation;
+
   return Employee.create(cleanedBody);
 };
 
@@ -118,12 +142,6 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
   if (
-    updateBody.employeeId
-    && (await Employee.findOne({ ...tenantFilter, employeeId: updateBody.employeeId, _id: { $ne: employeeId } }))
-  ) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID already exists');
-  }
-  if (
     updateBody.cnic
     && (await Employee.findOne({ ...tenantFilter, cnic: updateBody.cnic, _id: { $ne: employeeId } }))
   ) {
@@ -132,11 +150,6 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
   
   // Clean up invalid ObjectIds (for mock data compatibility)
   const cleanedBody = { ...updateBody };
-  
-  // If designation is not a valid ObjectId (e.g., mock data), remove it
-  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
-    delete cleanedBody.designation;
-  }
   
   // If shift is not a valid ObjectId, remove it
   if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
@@ -148,6 +161,10 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
     delete cleanedBody.reportingManager;
   }
   
+  // Keep employeeId system-managed and designation hidden in HR form workflow.
+  delete cleanedBody.employeeId;
+  delete cleanedBody.designation;
+
   Object.assign(employee, cleanedBody);
   await employee.save();
   return employee;
