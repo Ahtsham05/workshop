@@ -68,6 +68,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
               'Load Amount': r.loadAmount,
               'Sale Amount': r.saleAmount,
               Commission: r.commission,
+              'Payment Method': r.paymentMethod ?? '',
+              'Payment Wallet': r.paymentWalletType ?? '',
               Wallet: r.walletType ?? '',
               Date: r.date,
             }))
@@ -277,6 +279,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                     <TableHead className='text-right'>Load Amt</TableHead>
                     <TableHead className='text-right'>Sale Amt</TableHead>
                     <TableHead className='text-right'>Commission</TableHead>
+                    <TableHead>Payment Method</TableHead>
+                    <TableHead>Payment Wallet</TableHead>
                     <TableHead>Wallet</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
@@ -292,6 +296,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                       <TableCell className='text-right'>{fmt(row.loadAmount)}</TableCell>
                       <TableCell className='text-right'>{fmt(row.saleAmount)}</TableCell>
                       <TableCell className='text-right text-green-600'>{fmt(row.commission)}</TableCell>
+                      <TableCell className='capitalize'>{row.paymentMethod || 'cash'}</TableCell>
+                      <TableCell>{row.paymentWalletType || '—'}</TableCell>
                       <TableCell>{row.walletType ?? '—'}</TableCell>
                       <TableCell>{row.date ? format(new Date(row.date), 'dd MMM yyyy') : '—'}</TableCell>
                     </TableRow>

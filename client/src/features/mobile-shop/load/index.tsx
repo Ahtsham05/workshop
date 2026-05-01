@@ -65,7 +65,8 @@ type PurchaseFormState = {
   amount: string
   paidAmount: string
   supplierName: string
-  paymentMethod: 'cash' | 'bank'
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  paymentWalletType: string
   commissionRate: string
   extraCharge: string
   date: string
@@ -142,6 +143,7 @@ const initialPurchaseForm: PurchaseFormState = {
   paidAmount: '0',
   supplierName: '',
   paymentMethod: 'cash',
+  paymentWalletType: '',
   commissionRate: '0',
   extraCharge: '0',
   date: format(new Date(), 'yyyy-MM-dd'),
@@ -338,6 +340,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     } else {
       setPurchaseForm(prev => {
         const next = { ...prev, [field]: value }
+        if (field === 'paymentMethod' && value !== 'wallet') {
+          next.paymentWalletType = ''
+        }
         if (field === 'amount') {
           const amount = Number(value) || 0
           if (!isPurchasePaidAmountManual) {
@@ -460,6 +465,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     event.preventDefault()
     if (!purchaseForm.walletId) { toast.error('Please select a wallet'); return }
     if (!purchaseForm.amount || Number(purchaseForm.amount) <= 0) { toast.error('Please enter a valid amount'); return }
+    if (purchaseForm.paymentMethod === 'wallet' && !purchaseForm.paymentWalletType) { toast.error('Please select payment wallet'); return }
     try {
       await createLoadPurchase({
         walletType: purchaseForm.walletType,
@@ -467,7 +473,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         amount: Number(purchaseForm.amount),
         paidAmount: purchaseLedgerSummary.paidAmount,
         supplierName: purchaseForm.supplierName.trim() || undefined,
-        paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
+        paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank' | 'wallet',
+        paymentWalletType: purchaseForm.paymentMethod === 'wallet' ? purchaseForm.paymentWalletType : undefined,
         commissionRate: Number(purchaseForm.commissionRate),
         extraCharge: Number(purchaseForm.extraCharge),
         date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
@@ -702,6 +709,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       paidAmount: String((p as any).paidAmount ?? p.amount ?? 0),
       supplierName: p.supplierName || '',
       paymentMethod: p.paymentMethod || 'cash',
+      paymentWalletType: p.paymentWalletType || '',
       commissionRate: String(p.commissionRate || 0),
       extraCharge: String(p.extraCharge || 0),
       date: format(new Date(p.date), 'yyyy-MM-dd'),
@@ -722,7 +730,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           amount: Number(purchaseForm.amount),
           paidAmount: purchaseLedgerSummary.paidAmount,
           supplierName: purchaseForm.supplierName.trim() || undefined,
-          paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank',
+          paymentMethod: purchaseForm.paymentMethod as 'cash' | 'bank' | 'wallet',
+          paymentWalletType: purchaseForm.paymentMethod === 'wallet' ? purchaseForm.paymentWalletType : undefined,
           commissionRate: Number(purchaseForm.commissionRate),
           extraCharge: Number(purchaseForm.extraCharge),
           date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
@@ -964,14 +973,32 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
                   <div className='space-y-2 md:max-w-xs'>
                     <Label htmlFor='purchase-payment-method'>Payment Method</Label>
-                    <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank')}>
+                    <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
                       <SelectTrigger id='purchase-payment-method'><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value='cash'>Cash</SelectItem>
                         <SelectItem value='bank'>Bank Transfer</SelectItem>
+                        <SelectItem value='wallet'>Wallet</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {purchaseForm.paymentMethod === 'wallet' && (
+                    <div className='space-y-2 md:max-w-xs'>
+                      <Label htmlFor='purchase-payment-wallet'>Payment Wallet</Label>
+                      <Select value={purchaseForm.paymentWalletType || '__none__'} onValueChange={(v) => handlePurchaseChange('paymentWalletType', v === '__none__' ? '' : v)}>
+                        <SelectTrigger id='purchase-payment-wallet'><SelectValue placeholder='Select wallet...' /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='__none__'>-- None --</SelectItem>
+                          {wallets.filter((w) => w.isActive).map((wallet) => (
+                            <SelectItem key={wallet.id} value={wallet.type}>
+                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
@@ -1051,6 +1078,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Commission %</TableHead>
                         <TableHead className='text-green-600'>Savings</TableHead>
                         <TableHead>Method</TableHead>
+                        <TableHead>Payment Wallet</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1066,6 +1094,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell>{Number(p.commissionRate || 0).toFixed(2)}%</TableCell>
                           <TableCell className='text-green-600 font-semibold'>Rs {Number(p.profit || 0).toFixed(2)}</TableCell>
                           <TableCell className='text-sm capitalize'>{p.paymentMethod}</TableCell>
+                          <TableCell>{(p as any).paymentWalletType || '—'}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditPurchase(p)}><Pencil className='h-4 w-4' /></Button>

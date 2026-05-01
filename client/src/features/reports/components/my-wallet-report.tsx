@@ -34,7 +34,11 @@ const fmt = (v: number) =>
 
 export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWalletReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery()
+    const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery(undefined, {
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: true,
+    })
     const wallets = walletsData?.results ?? []
     const [selectedWallet, setSelectedWallet] = useState<string>('')
 
@@ -50,7 +54,12 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
         startDate,
         endDate,
       },
-      { skip: !selectedWallet }
+      {
+        skip: !selectedWallet,
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+        refetchOnMountOrArgChange: true,
+      }
     )
 
     const selectedWalletInfo = useMemo(
@@ -144,7 +153,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
       <div className='space-y-6'>
         <Card>
           <CardHeader>
-            <CardTitle>My Wallet Report</CardTitle>
+            <CardTitle>Wallet Report</CardTitle>
           </CardHeader>
           <CardContent className='grid gap-4 md:grid-cols-3'>
             <div className='space-y-2'>

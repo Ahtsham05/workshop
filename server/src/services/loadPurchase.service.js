@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { LoadPurchase, Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
 const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const supplierLedgerService = require('./supplierLedger.service');
 
@@ -10,6 +11,102 @@ const sanitizeSupplierId = (value) => {
     return null;
   }
   return value;
+};
+
+const getLedgerPaymentMethodLabel = (paymentMethod) => {
+  const normalized = String(paymentMethod || 'cash').toLowerCase();
+  if (normalized === 'bank') return 'Bank Transfer';
+  if (normalized === 'wallet') return 'Wallet';
+  return 'Cash';
+};
+
+const getEffectivePaymentWalletType = (purchase) => String(purchase.paymentWalletType || '').trim();
+
+const syncLoadPurchasePaymentRecords = async (purchase, previousPayment = null) => {
+  const paidAmount = Number(purchase.paidAmount || 0);
+  const paymentMethod = String(purchase.paymentMethod || 'cash').toLowerCase();
+  const paymentWalletType = getEffectivePaymentWalletType(purchase);
+  const isWalletPayment = paymentMethod === 'wallet';
+
+  if (isWalletPayment && !paymentWalletType) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Please select payment wallet for wallet payment method');
+  }
+
+  const prevMethod = String(previousPayment?.method || '').toLowerCase();
+  const prevWalletType = String(previousPayment?.walletType || '').trim();
+  const prevPaidAmount = Number(previousPayment?.amount || 0);
+
+  if (prevMethod === 'wallet' && prevWalletType && prevPaidAmount > 0) {
+    if (isWalletPayment && prevWalletType === paymentWalletType) {
+      const delta = paidAmount - prevPaidAmount;
+      if (delta !== 0) {
+        await walletService.adjustWalletBalance({
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
+          type: paymentWalletType,
+          amount: Math.abs(delta),
+          operation: delta > 0 ? 'deduct' : 'add',
+          userId: purchase.updatedBy || purchase.createdBy,
+        });
+      }
+    } else {
+      await walletService.adjustWalletBalance({
+        organizationId: purchase.organizationId,
+        branchId: purchase.branchId,
+        type: prevWalletType,
+        amount: prevPaidAmount,
+        operation: 'add',
+        userId: purchase.updatedBy || purchase.createdBy,
+      });
+    }
+  }
+
+  if (isWalletPayment && paidAmount > 0 && !(prevMethod === 'wallet' && prevWalletType === paymentWalletType)) {
+    await walletService.adjustWalletBalance({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: paymentWalletType,
+      amount: paidAmount,
+      operation: 'deduct',
+      userId: purchase.updatedBy || purchase.createdBy,
+    });
+  }
+
+  await cashBookService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
+  if (!isWalletPayment && paidAmount > 0) {
+    const supplierLabel = purchase.supplierName || 'unknown supplier';
+    await cashBookService.createEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: 'expense',
+      source: 'load',
+      amount: paidAmount,
+      paymentMethod: purchase.paymentMethod,
+      referenceId: purchase._id,
+      referenceModel: 'LoadPurchase',
+      description: `Payment for load purchase from ${supplierLabel}`,
+      date: purchase.date,
+      createdBy: purchase.createdBy,
+    });
+  }
+
+  if (isWalletPayment && paidAmount > 0) {
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      walletType: paymentWalletType,
+      type: 'out',
+      amount: paidAmount,
+      referenceId: purchase._id,
+      referenceModel: 'LoadPurchase',
+      description: `Wallet payment sent for load purchase${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
+      date: purchase.date,
+      createdBy: purchase.createdBy,
+      updatedBy: purchase.updatedBy || purchase.createdBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
+  }
 };
 
 const getNormalizedPaidAmount = ({ amount, paidAmount }) => {
@@ -58,7 +155,7 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
     description: `Load purchase entry${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
     debit: 0,
     credit: Number(purchase.amount) || 0,
-    paymentMethod: purchase.paymentMethod === 'bank' ? 'Bank Transfer' : 'Cash',
+    paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
     notes: purchase.notes || `Wallet: ${purchase.walletType}`,
   });
 
@@ -77,7 +174,7 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
       description: `Payment for load purchase${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
       debit: paidAmount,
       credit: 0,
-      paymentMethod: purchase.paymentMethod === 'bank' ? 'Bank Transfer' : 'Cash',
+      paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
       notes: purchase.notes || `Wallet: ${purchase.walletType}`,
     });
   }
@@ -100,10 +197,10 @@ const createLoadPurchase = async (purchaseBody) => {
     ...purchaseBody,
     supplierId: linkedSupplier ? linkedSupplier._id : undefined,
     supplierName: purchaseBody.supplierName || (linkedSupplier ? linkedSupplier.name : '') || '',
+    paymentWalletType: purchaseBody.paymentWalletType || '',
     paidAmount,
     profit,
   });
-  const supplierLabel = purchase.supplierName || 'unknown supplier';
 
   await walletService.adjustWalletBalance({
     organizationId: purchase.organizationId,
@@ -114,21 +211,7 @@ const createLoadPurchase = async (purchaseBody) => {
     userId: purchase.createdBy,
   });
 
-  if (paidAmount > 0) {
-    await cashBookService.createEntry({
-      organizationId: purchase.organizationId,
-      branchId: purchase.branchId,
-      type: 'expense',
-      source: 'load',
-      amount: paidAmount,
-      paymentMethod: purchase.paymentMethod,
-      referenceId: purchase._id,
-      referenceModel: 'LoadPurchase',
-      description: `Payment for load purchase from ${supplierLabel}`,
-      date: purchase.date,
-      createdBy: purchase.createdBy,
-    });
-  }
+  await syncLoadPurchasePaymentRecords(purchase);
 
   await syncSupplierLedgerForLoadPurchase(purchase);
 
@@ -169,6 +252,11 @@ const getLoadPurchaseById = async (loadPurchaseId) => {
 
 const updateLoadPurchase = async (purchaseId, updateBody) => {
   const purchase = await getLoadPurchaseById(purchaseId);
+  const previousPayment = {
+    method: purchase.paymentMethod,
+    walletType: purchase.paymentWalletType,
+    amount: purchase.paidAmount,
+  };
 
   const linkedSupplier = await resolveLinkedSupplier({
     supplierId: Object.prototype.hasOwnProperty.call(updateBody, 'supplierId') ? updateBody.supplierId : purchase.supplierId,
@@ -187,13 +275,13 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
     userId: purchase.createdBy,
   });
 
-  // Delete old cash book entries
-  await cashBookService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
-
   // Update fields
   Object.assign(purchase, updateBody);
   purchase.supplierId = linkedSupplier ? linkedSupplier._id : undefined;
   purchase.supplierName = purchase.supplierName || (linkedSupplier ? linkedSupplier.name : '') || '';
+  if (purchase.paymentMethod !== 'wallet') {
+    purchase.paymentWalletType = '';
+  }
   purchase.paidAmount = getNormalizedPaidAmount({
     amount: purchase.amount,
     paidAmount: purchase.paidAmount,
@@ -212,22 +300,7 @@ const updateLoadPurchase = async (purchaseId, updateBody) => {
     userId: purchase.createdBy,
   });
 
-  const supplierLabel = purchase.supplierName || 'unknown supplier';
-  if ((Number(purchase.paidAmount) || 0) > 0) {
-    await cashBookService.createEntry({
-      organizationId: purchase.organizationId,
-      branchId: purchase.branchId,
-      type: 'expense',
-      source: 'load',
-      amount: Number(purchase.paidAmount) || 0,
-      paymentMethod: purchase.paymentMethod,
-      referenceId: purchase._id,
-      referenceModel: 'LoadPurchase',
-      description: `Payment for load purchase from ${supplierLabel}`,
-      date: purchase.date,
-      createdBy: purchase.createdBy,
-    });
-  }
+  await syncLoadPurchasePaymentRecords(purchase, previousPayment);
 
   await syncSupplierLedgerForLoadPurchase(purchase);
 
@@ -249,7 +322,19 @@ const deleteLoadPurchase = async (purchaseId) => {
 
   // Delete cash book entries
   await cashBookService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
+  await walletEntryService.deleteEntriesByReference(purchase._id, 'LoadPurchase');
   await supplierLedgerService.deleteLedgerEntriesByReference(purchase._id);
+
+  if (purchase.paymentMethod === 'wallet' && purchase.paymentWalletType && Number(purchase.paidAmount || 0) > 0) {
+    await walletService.adjustWalletBalance({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: purchase.paymentWalletType,
+      amount: Number(purchase.paidAmount),
+      operation: 'add',
+      userId: purchase.createdBy,
+    });
+  }
 
   await purchase.deleteOne();
   return purchase;

@@ -2,12 +2,110 @@ const httpStatus = require('http-status');
 const { SimSale, Customer, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
   return value;
+};
+
+const getLedgerPaymentMethodLabel = (paymentMethod) => {
+  const normalized = String(paymentMethod || 'cash').toLowerCase();
+  if (normalized === 'bank') return 'Bank Transfer';
+  if (normalized === 'wallet') return 'Wallet';
+  if (normalized === 'jazzcash') return 'JazzCash';
+  if (normalized === 'easypaisa') return 'EasyPaisa';
+  return 'Cash';
+};
+
+const getEffectivePaymentWalletType = (sale) => String(sale.paymentWalletType || '').trim();
+
+const syncSimSalePaymentRecords = async (sale, previousPayment = null) => {
+  const saleAmount = Number(sale.saleAmount || 0);
+  const paymentMethod = String(sale.paymentMethod || 'cash').toLowerCase();
+  const currentPaymentWalletType = getEffectivePaymentWalletType(sale);
+  const isWalletPayment = paymentMethod === 'wallet';
+
+  if (isWalletPayment && !currentPaymentWalletType) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Please select payment wallet for wallet payment method');
+  }
+
+  const prevMethod = String(previousPayment?.method || '').toLowerCase();
+  const prevWalletType = String(previousPayment?.walletType || '').trim();
+  const prevAmount = Number(previousPayment?.amount || 0);
+
+  if (prevMethod === 'wallet' && prevWalletType && prevAmount > 0) {
+    if (isWalletPayment && prevWalletType === currentPaymentWalletType) {
+      const delta = saleAmount - prevAmount;
+      if (delta !== 0) {
+        await walletService.adjustWalletBalance({
+          organizationId: sale.organizationId,
+          branchId: sale.branchId,
+          type: currentPaymentWalletType,
+          amount: Math.abs(delta),
+          operation: delta > 0 ? 'add' : 'deduct',
+          userId: sale.updatedBy || sale.createdBy,
+        });
+      }
+    } else {
+      await walletService.adjustWalletBalance({
+        organizationId: sale.organizationId,
+        branchId: sale.branchId,
+        type: prevWalletType,
+        amount: prevAmount,
+        operation: 'deduct',
+        userId: sale.updatedBy || sale.createdBy,
+      });
+    }
+  }
+
+  if (isWalletPayment && saleAmount > 0 && !(prevMethod === 'wallet' && prevWalletType === currentPaymentWalletType)) {
+    await walletService.adjustWalletBalance({
+      organizationId: sale.organizationId,
+      branchId: sale.branchId,
+      type: currentPaymentWalletType,
+      amount: saleAmount,
+      operation: 'add',
+      userId: sale.updatedBy || sale.createdBy,
+    });
+  }
+
+  await cashBookService.deleteEntriesByReference(sale._id, 'SimSale');
+  if (!isWalletPayment && saleAmount > 0) {
+    await cashBookService.createEntry({
+      organizationId: sale.organizationId,
+      branchId: sale.branchId,
+      type: 'income',
+      source: 'sale',
+      amount: saleAmount,
+      paymentMethod: sale.paymentMethod,
+      referenceId: sale._id,
+      referenceModel: 'SimSale',
+      description: `Sim sale #${sale.jobNumber}${sale.productName ? ` - ${sale.productName}` : ''}`,
+      date: sale.date,
+      createdBy: sale.createdBy,
+    });
+  }
+
+  if (isWalletPayment && saleAmount > 0) {
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: sale.organizationId,
+      branchId: sale.branchId,
+      walletType: currentPaymentWalletType,
+      type: 'in',
+      amount: saleAmount,
+      referenceId: sale._id,
+      referenceModel: 'SimSale',
+      description: `Wallet payment received for Sim Sale #${sale.jobNumber}`,
+      date: sale.date,
+      createdBy: sale.createdBy,
+      updatedBy: sale.updatedBy || sale.createdBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(sale._id, 'SimSale');
+  }
 };
 
 const getNextJobNumber = async (organizationId, branchId) => {
@@ -53,7 +151,7 @@ const syncCustomerLedgerForSimSale = async (sale) => {
     description: `Sim sale #${sale.jobNumber}${sale.productName ? ` (${sale.productName})` : ''}`,
     debit: Number(sale.saleAmount) || 0,
     credit: 0,
-    paymentMethod: sale.paymentMethod === 'bank' ? 'Bank Transfer' : 'Cash',
+    paymentMethod: getLedgerPaymentMethodLabel(sale.paymentMethod),
     notes: sale.notes || '',
   });
 };
@@ -85,6 +183,7 @@ const createSimSale = async (body) => {
     purchaseAmount,
     saleAmount,
     commission,
+    paymentWalletType: body.paymentWalletType || '',
   });
 
   // Deduct load amount from wallet if a wallet/load-account is selected
@@ -99,20 +198,7 @@ const createSimSale = async (body) => {
     });
   }
 
-  // Record in CashBook as income
-  await cashBookService.createEntry({
-    organizationId: sale.organizationId,
-    branchId: sale.branchId,
-    type: 'income',
-    source: 'sale',
-    amount: saleAmount,
-    paymentMethod: sale.paymentMethod,
-    referenceId: sale._id,
-    referenceModel: 'SimSale',
-    description: `Sim sale #${sale.jobNumber}${sale.productName ? ` - ${sale.productName}` : ''}`,
-    date: sale.date,
-    createdBy: sale.createdBy,
-  });
+  await syncSimSalePaymentRecords(sale);
 
   // Sync customer ledger if customer selected
   await syncCustomerLedgerForSimSale(sale);
@@ -158,6 +244,11 @@ const updateSimSale = async (saleId, updateBody) => {
 
   const oldLoadAmount = Number(sale.loadAmount || 0);
   const oldWalletType = sale.walletType;
+  const previousPayment = {
+    method: sale.paymentMethod,
+    walletType: sale.paymentWalletType,
+    amount: sale.saleAmount,
+  };
 
   const linkedCustomer = await resolveLinkedCustomer({
     customerId: sanitizeId(updateBody.customerId) !== undefined ? updateBody.customerId : sale.customerId,
@@ -199,6 +290,9 @@ const updateSimSale = async (saleId, updateBody) => {
     saleAmount,
     commission,
     walletType: newWalletType,
+    paymentWalletType: updateBody.paymentMethod === 'wallet'
+      ? (updateBody.paymentWalletType !== undefined ? updateBody.paymentWalletType : sale.paymentWalletType)
+      : (updateBody.paymentMethod ? '' : sale.paymentWalletType),
   });
 
   await sale.save();
@@ -225,21 +319,7 @@ const updateSimSale = async (saleId, updateBody) => {
     });
   }
 
-  // Update cashbook entry
-  await cashBookService.deleteEntriesByReference(sale._id, 'SimSale');
-  await cashBookService.createEntry({
-    organizationId: sale.organizationId,
-    branchId: sale.branchId,
-    type: 'income',
-    source: 'sale',
-    amount: saleAmount,
-    paymentMethod: sale.paymentMethod,
-    referenceId: sale._id,
-    referenceModel: 'SimSale',
-    description: `Sim sale #${sale.jobNumber}${sale.productName ? ` - ${sale.productName}` : ''}`,
-    date: sale.date,
-    createdBy: sale.createdBy,
-  });
+  await syncSimSalePaymentRecords(sale, previousPayment);
 
   await syncCustomerLedgerForSimSale(sale);
 
@@ -266,7 +346,19 @@ const deleteSimSale = async (saleId) => {
 
   // Clean up cashbook and ledger
   await cashBookService.deleteEntriesByReference(sale._id, 'SimSale');
+  await walletEntryService.deleteEntriesByReference(sale._id, 'SimSale');
   await customerLedgerService.deleteLedgerEntriesByReference(sale._id);
+
+  if (sale.paymentMethod === 'wallet' && sale.paymentWalletType && Number(sale.saleAmount || 0) > 0) {
+    await walletService.adjustWalletBalance({
+      organizationId: sale.organizationId,
+      branchId: sale.branchId,
+      type: sale.paymentWalletType,
+      amount: sale.saleAmount,
+      operation: 'deduct',
+      userId: sale.createdBy,
+    });
+  }
 
   await sale.deleteOne();
 };

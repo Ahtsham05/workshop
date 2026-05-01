@@ -549,6 +549,8 @@ export interface SimSaleRecentRecord {
   loadAmount: number
   saleAmount: number
   commission: number
+  paymentMethod: string
+  paymentWalletType?: string
   walletType?: string
   date: string
 }

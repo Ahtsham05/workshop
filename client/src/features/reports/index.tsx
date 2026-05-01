@@ -211,7 +211,7 @@ export default function ReportsPage() {
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
             {isMobileShop && canAccess('wallet') && (
-              <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>My Wallet</TabsTrigger>
+              <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>Wallets</TabsTrigger>
             )}
             {isMobileShop && canAccess('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>

@@ -415,10 +415,11 @@ const queryInvoices = async (filter, options) => {
     const customerIds = invoices.results
       .map((invoice) => String(invoice.customerId || '').trim())
       .filter((id) => isValidCustomerObjectId(id));
+    const customerObjectIds = customerIds.map((id) => new mongoose.Types.ObjectId(id));
 
-    if (customerIds.length > 0) {
+    if (customerObjectIds.length > 0) {
       // Fetch all customers in one query
-      const customers = await Customer.find({ _id: { $in: customerIds } }).select('name phone email');
+      const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select('name phone email');
       const customerMap = new Map();
       customers.forEach(customer => {
         customerMap.set(customer._id.toString(), customer);

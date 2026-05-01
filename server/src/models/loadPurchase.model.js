@@ -42,8 +42,13 @@ const loadPurchaseSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'bank'],
+      enum: ['cash', 'bank', 'wallet'],
       default: 'cash',
+    },
+    paymentWalletType: {
+      type: String,
+      trim: true,
+      default: '',
     },
     commissionRate: {
       type: Number,

@@ -59,7 +59,8 @@ type SimSaleFormState = {
   customerMobile: string
   customerCNIC: string
   customerLocation: string
-  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa'
+  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
+  paymentWalletType: string
 }
 
 const makeEmptyForm = (): SimSaleFormState => ({
@@ -76,6 +77,7 @@ const makeEmptyForm = (): SimSaleFormState => ({
   customerCNIC: '',
   customerLocation: '',
   paymentMethod: 'cash',
+  paymentWalletType: '',
 })
 
 export default function SimSalePage() {
@@ -117,6 +119,7 @@ export default function SimSalePage() {
   const commission = saleAmount - purchaseAmount
 
   const selectedWallet = wallets.find(w => w.type === form.walletType)
+  const selectedPaymentWallet = wallets.find(w => w.type === form.paymentWalletType)
 
   const handleChange = (field: keyof SimSaleFormState, value: string) => {
     if (field === 'productId') {
@@ -130,6 +133,19 @@ export default function SimSalePage() {
         productName: selectedProduct?.name || '',
         simAmount: selectedProduct ? String(selectedProduct.price ?? selectedProduct.cost ?? '') : prev.simAmount,
       }))
+      return
+    }
+    if (field === 'paymentMethod') {
+      setForm(prev => ({
+        ...prev,
+        paymentMethod: value as SimSaleFormState['paymentMethod'],
+        paymentWalletType: value === 'wallet' ? prev.paymentWalletType : '',
+      }))
+      return
+    }
+    if (field === 'paymentWalletType') {
+      const normalizedValue = value === '__none__' ? '' : value
+      setForm(prev => ({ ...prev, paymentWalletType: normalizedValue }))
       return
     }
     if (field === 'walletType') {
@@ -167,6 +183,10 @@ export default function SimSalePage() {
       toast.error('Please enter sale amount')
       return
     }
+    if (form.paymentMethod === 'wallet' && !form.paymentWalletType) {
+      toast.error('Please select payment wallet')
+      return
+    }
 
     const payload = {
       date: form.date,
@@ -182,6 +202,7 @@ export default function SimSalePage() {
       customerCNIC: form.customerCNIC || undefined,
       customerLocation: form.customerLocation || undefined,
       paymentMethod: form.paymentMethod,
+      paymentWalletType: form.paymentMethod === 'wallet' ? (form.paymentWalletType || undefined) : undefined,
     }
 
     try {
@@ -213,6 +234,7 @@ export default function SimSalePage() {
       customerCNIC: sale.customerCNIC || '',
       customerLocation: sale.customerLocation || '',
       paymentMethod: sale.paymentMethod || 'cash',
+      paymentWalletType: sale.paymentWalletType || '',
     })
     setEditingId(sale.id)
     setShowForm(true)
@@ -366,9 +388,39 @@ export default function SimSalePage() {
                       <SelectItem value='bank'>Bank</SelectItem>
                       <SelectItem value='jazzcash'>JazzCash</SelectItem>
                       <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
+                      <SelectItem value='wallet'>Wallet</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {form.paymentMethod === 'wallet' && (
+                  <div className='space-y-2'>
+                    <Label>
+                      Payment Wallet
+                      {selectedPaymentWallet && (
+                        <span className='ml-2 text-xs text-muted-foreground'>
+                          Balance: {selectedPaymentWallet.balance?.toFixed(2)}
+                        </span>
+                      )}
+                    </Label>
+                    <Select
+                      value={form.paymentWalletType || '__none__'}
+                      onValueChange={v => handleChange('paymentWalletType', v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder='Select payment wallet' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='__none__'>-- None --</SelectItem>
+                        {wallets.filter(w => w.isActive).map(w => (
+                          <SelectItem key={w.id} value={w.type}>
+                            {w.type} — {w.balance?.toFixed(2)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               {/* Right-side amounts */}
@@ -470,6 +522,8 @@ export default function SimSalePage() {
                         <TableHead>Purchase Amt</TableHead>
                         <TableHead>Sale Amt</TableHead>
                         <TableHead>Commission</TableHead>
+                        <TableHead>Payment Method</TableHead>
+                        <TableHead>Payment Wallet</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -488,6 +542,8 @@ export default function SimSalePage() {
                           <TableCell className={sale.commission < 0 ? 'text-red-500' : 'text-green-600'}>
                             {Number(sale.commission).toFixed(2)}
                           </TableCell>
+                          <TableCell className='capitalize'>{sale.paymentMethod || 'cash'}</TableCell>
+                          <TableCell>{sale.paymentWalletType || '—'}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
                               <Button size='icon' variant='ghost' onClick={() => handleEdit(sale)}>

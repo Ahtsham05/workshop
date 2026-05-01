@@ -27,7 +27,8 @@ export interface LoadPurchaseRecord {
   amount: number
   paidAmount?: number
   supplierName?: string
-  paymentMethod: 'cash' | 'bank'
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  paymentWalletType?: string
   commissionRate: number
   extraCharge: number
   profit: number
@@ -436,7 +437,8 @@ export interface SimSaleRecord {
   customerMobile?: string
   customerCNIC?: string
   customerLocation?: string
-  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa'
+  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
+  paymentWalletType?: string
   notes?: string
   createdAt?: string
 }
@@ -454,7 +456,8 @@ export interface CreateSimSaleInput {
   customerMobile?: string
   customerCNIC?: string
   customerLocation?: string
-  paymentMethod?: 'cash' | 'bank' | 'jazzcash' | 'easypaisa'
+  paymentMethod?: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
+  paymentWalletType?: string
   notes?: string
 }
 

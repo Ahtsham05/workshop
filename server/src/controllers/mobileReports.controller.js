@@ -202,6 +202,13 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
 
   const organizationId = new mongoose.Types.ObjectId(String(req.organizationId));
   const branchId = req.branchId ? new mongoose.Types.ObjectId(String(req.branchId)) : null;
+  const formatPaymentMethodLabel = (paymentMethod, paymentWalletType) => {
+    const method = String(paymentMethod || '').toLowerCase();
+    if (method === 'wallet') {
+      return paymentWalletType ? `wallet (${paymentWalletType})` : 'wallet';
+    }
+    return paymentMethod || '';
+  };
 
   const end = parseDateBoundary(rawEnd, true) || new Date();
   const start =
@@ -341,11 +348,11 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       .lean(),
     SimSale.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date createdAt customerMobile customerName productName loadAmount simAmount saleAmount commission notes')
+      .select('date createdAt customerMobile customerName productName loadAmount simAmount saleAmount commission paymentMethod paymentWalletType notes')
       .lean(),
     LoadPurchase.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date createdAt supplierName amount profit paymentMethod notes')
+      .select('date createdAt supplierName amount profit paymentMethod paymentWalletType notes')
       .lean(),
     WalletEntry.find({
       organizationId,
@@ -463,7 +470,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       cashAmount: Number(item.cashAmount || 0),
       extraCharge: Number(item.extraCharge || 0),
       profit: Number(item.profit || 0),
-      paymentMethod: 'cash',
+      paymentMethod: item.paymentMethod || 'cash',
       notes: item.notes || '',
     });
   });
@@ -486,7 +493,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       extraCharge: 0,
       // SIM sale commission is excluded from wallet balance statement profit.
       profit: 0,
-      paymentMethod: 'cash',
+      paymentMethod: formatPaymentMethodLabel(item.paymentMethod, item.paymentWalletType),
       notes: item.notes || item.productName || '',
     });
   });
@@ -507,7 +514,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       cashAmount: Number(item.amount || 0),
       extraCharge: 0,
       profit: Number(item.profit || 0),
-      paymentMethod: item.paymentMethod || '',
+      paymentMethod: formatPaymentMethodLabel(item.paymentMethod, item.paymentWalletType),
       notes: item.notes || '',
     });
   });
@@ -536,6 +543,10 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       accountNumber = pur?.invoiceNumber || '';
       customerName = pur?.supplier?.name || '';
       notes = `${entry.description || ''}`.trim();
+    } else if (entry.referenceModel === 'SimSale') {
+      title = entry.type === 'in' ? 'SIM Sale Wallet Payment Received' : 'SIM Sale Wallet Payment Sent';
+    } else if (entry.referenceModel === 'LoadPurchase') {
+      title = entry.type === 'out' ? 'Load Purchase Wallet Payment Sent' : 'Load Purchase Wallet Payment Received';
     } else if (entry.referenceModel === 'CustomerLedger') {
       title = entry.type === 'in' ? 'Customer Wallet Receipt' : 'Customer Wallet Payment';
     } else if (entry.referenceModel === 'SupplierLedger') {

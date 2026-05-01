@@ -96,8 +96,13 @@ const simSaleSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'bank', 'jazzcash', 'easypaisa'],
+      enum: ['cash', 'bank', 'jazzcash', 'easypaisa', 'wallet'],
       default: 'cash',
+    },
+    paymentWalletType: {
+      type: String,
+      trim: true,
+      default: '',
     },
     notes: {
       type: String,

@@ -15,7 +15,8 @@ const createSimSale = {
     customerMobile: Joi.string().trim().allow(''),
     customerCNIC: Joi.string().trim().allow(''),
     customerLocation: Joi.string().trim().allow(''),
-    paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa').default('cash'),
+    paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa', 'wallet').default('cash'),
+    paymentWalletType: Joi.string().trim().allow(''),
     notes: Joi.string().allow(''),
   }),
 };
@@ -57,7 +58,8 @@ const updateSimSale = {
       customerMobile: Joi.string().trim().allow(''),
       customerCNIC: Joi.string().trim().allow(''),
       customerLocation: Joi.string().trim().allow(''),
-      paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa'),
+      paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa', 'wallet'),
+      paymentWalletType: Joi.string().trim().allow(''),
       notes: Joi.string().allow(''),
     })
     .min(1),

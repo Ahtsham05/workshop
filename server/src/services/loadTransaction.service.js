@@ -19,6 +19,12 @@ const sanitizeCustomerId = (value) => {
   return value;
 };
 
+const getLedgerPaymentMethodLabel = (paymentMethod) => {
+  const normalized = String(paymentMethod || 'cash').toLowerCase();
+  if (normalized === 'wallet') return 'Wallet';
+  return 'Cash';
+};
+
 const getNormalizedReceivedAmount = ({ amount, receivedAmount }) => {
   const totalAmount = Number(amount) || 0;
   const normalizedReceivedAmount = Number(receivedAmount);
@@ -65,7 +71,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     description: `Load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
     debit: Number(transaction.amount) || 0,
     credit: 0,
-    paymentMethod: 'Cash',
+    paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod),
     notes: transaction.notes || `Wallet: ${transaction.walletType}`,
   });
 
@@ -84,7 +90,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
       description: `Payment received for load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
       debit: 0,
       credit: receivedAmount,
-      paymentMethod: 'Cash',
+      paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod),
       notes: transaction.notes || `Wallet: ${transaction.walletType}`,
     });
   }
