@@ -31,13 +31,13 @@ const PRESETS: { label: string; value: Preset }[] = [
 function getPresetDates(preset: Preset, startDate: string, endDate: string): { from: string; to: string } {
   if (preset === 'custom') return { from: startDate, to: endDate }
   const now = new Date()
-  const to = now.toISOString()
+  const to = format(now, 'yyyy-MM-dd')
   switch (preset) {
-    case '7d':  return { from: subDays(now, 7).toISOString(), to }
-    case '30d': return { from: subDays(now, 30).toISOString(), to }
-    case '6m':  return { from: subMonths(now, 6).toISOString(), to }
+    case '7d':  return { from: format(subDays(now, 7), 'yyyy-MM-dd'), to }
+    case '30d': return { from: format(subDays(now, 30), 'yyyy-MM-dd'), to }
+    case '6m':  return { from: format(subMonths(now, 6), 'yyyy-MM-dd'), to }
     case '1y':
-    default:    return { from: subMonths(now, 12).toISOString(), to }
+    default:    return { from: format(subMonths(now, 12), 'yyyy-MM-dd'), to }
   }
 }
 

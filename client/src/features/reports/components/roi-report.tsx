@@ -41,30 +41,31 @@ const PRESETS: { label: string; value: Preset }[] = [
   { label: '1 Year', value: '1y' },
 ]
 
-function getPresetDates(preset: Preset): { from: string; to: string } {
+function getPresetDates(preset: Preset, startDate: string, endDate: string): { from: string; to: string } {
+  if (startDate && endDate) return { from: startDate, to: endDate }
   const now = new Date()
-  const to = now.toISOString()
+  const to = format(now, 'yyyy-MM-dd')
   let from: string
   switch (preset) {
     case '7d':
-      from = subDays(now, 7).toISOString()
+      from = format(subDays(now, 7), 'yyyy-MM-dd')
       break
     case '30d':
-      from = subDays(now, 30).toISOString()
+      from = format(subDays(now, 30), 'yyyy-MM-dd')
       break
     case '6m':
-      from = subMonths(now, 6).toISOString()
+      from = format(subMonths(now, 6), 'yyyy-MM-dd')
       break
     case '1y':
     default:
-      from = subMonths(now, 12).toISOString()
+      from = format(subMonths(now, 12), 'yyyy-MM-dd')
       break
   }
   return { from, to }
 }
 
 export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProps>(
-  (_props, ref) => {
+  ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
     const [preset, setPreset] = useState<Preset>('1y')
 
@@ -72,7 +73,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
     const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
     const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
 
-    const dates = useMemo(() => getPresetDates(preset), [preset])
+    const dates = useMemo(() => getPresetDates(preset, startDate, endDate), [preset, startDate, endDate])
 
     const { data: roiData, isLoading: roiLoading } = useGetRoiReportQuery(dates)
     const { data: monthlyData, isLoading: monthlyLoading } = useGetMonthlyRoiQuery(dates)
