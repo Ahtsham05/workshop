@@ -23,16 +23,6 @@ function CreateEmployee() {
   const { data: departmentsData } = useGetDepartmentsQuery({});
   const { data: employeesData } = useGetEmployeesQuery({ limit: 100 });
 
-  // Mock data for designations and shifts (you can create these APIs too)
-  const designations = [
-    { id: '1', title: 'Software Engineer' },
-    { id: '2', title: 'Senior Software Engineer' },
-    { id: '3', title: 'Team Lead' },
-    { id: '4', title: 'Manager' },
-    { id: '5', title: 'HR Executive' },
-    { id: '6', title: 'Accountant' },
-  ];
-
   const shifts = [
     { id: '1', name: 'Morning Shift (9 AM - 5 PM)' },
     { id: '2', name: 'Evening Shift (2 PM - 10 PM)' },
@@ -74,7 +64,6 @@ function CreateEmployee() {
             onCancel={handleCancel}
             isLoading={isLoading}
             departments={departmentsData?.results || []}
-            designations={designations}
             shifts={shifts}
             employees={employeesData?.results || []}
           />

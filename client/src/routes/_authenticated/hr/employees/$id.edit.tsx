@@ -31,16 +31,6 @@ function EmployeeEditPage() {
   const { data: departmentsData } = useGetDepartmentsQuery({ page: 1, limit: 100 });
   const { data: employeesData } = useGetEmployeesQuery({ page: 1, limit: 1000 });
 
-  // Mock data for designations and shifts
-  const designations = [
-    { id: '1', title: 'Software Engineer' },
-    { id: '2', title: 'Senior Software Engineer' },
-    { id: '3', title: 'Team Lead' },
-    { id: '4', title: 'Manager' },
-    { id: '5', title: 'HR Executive' },
-    { id: '6', title: 'Accountant' },
-  ];
-
   const shifts = [
     { id: '1', name: 'Morning Shift (9 AM - 5 PM)' },
     { id: '2', name: 'Evening Shift (2 PM - 10 PM)' },
@@ -178,7 +168,6 @@ function EmployeeEditPage() {
             onCancel={handleCancel}
             isLoading={isUpdating}
             departments={departments}
-            designations={designations}
             shifts={shifts}
             employees={employees}
           />
