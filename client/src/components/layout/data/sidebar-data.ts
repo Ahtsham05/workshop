@@ -31,7 +31,7 @@ import {
   IconClock,
   IconFileImport,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -55,7 +55,7 @@ export const sidebarData: SidebarData = {
           title: 'Dashboard',
           url: '/',
           icon: IconLayoutDashboard,
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         // {
         //   title: 'Users',
@@ -67,76 +67,76 @@ export const sidebarData: SidebarData = {
           url: '/suppliers',
           icon: IconUsers,
           permission: 'viewSuppliers',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Customers',
           url: '/customers',
           icon: IconUsers,
           permission: 'viewCustomers',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Categories',
           url: '/categories',
           icon: IconCategory,
           permission: 'viewCategories',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Products',
           url: '/products',
           icon: IconPackages,
           permission: 'viewProducts',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Purchases',
           url: '/purchase-invoice',
           icon: IconPackages,
           permission: 'viewPurchases',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Invoices',
           url: '/invoice',
           icon: IconPackages,
           permission: 'viewInvoices',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Sales Returns',
           url: '/sales-returns',
           icon: IconRefresh,
           permission: 'viewInvoices',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Purchase Returns',
           url: '/purchase-returns',
           icon: IconRefresh,
           permission: 'viewPurchases',
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
           title: 'Accounts',
           url: '/accounting',
           icon: IconChecklist,
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
           // No specific permission for accounting - will always show if user is authenticated
         },
         {
           title: 'Accounts System',
           url: '/school/accounts',
           icon: IconCash,
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
           // Double-entry bookkeeping — available to all non-school business types
         },
         {
           title: 'Cash Book',
           url: '/mobile-shop/cash-book',
           icon: NotebookText,
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         // {
         //   title: 'Chats',
@@ -144,6 +144,85 @@ export const sidebarData: SidebarData = {
         //   badge: '3',
         //   icon: IconMessages,
         // },
+      ],
+    },
+    {
+      title: 'Restaurant',
+      items: [
+        {
+          title: 'Venue overview',
+          url: '/restaurant',
+          icon: IconLayoutDashboard,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Menu & categories',
+          url: '/restaurant/menu',
+          icon: IconCategory,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Floor & tables',
+          url: '/restaurant/tables',
+          icon: IconBuildingStore,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Point of sale',
+          url: '/restaurant/pos',
+          icon: IconCash,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Kitchen display',
+          url: '/restaurant/kitchen',
+          icon: IconChecklist,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Reservations',
+          url: '/restaurant/reservations',
+          icon: IconCalendarEvent,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'QR ordering & print',
+          url: '/restaurant/qr',
+          icon: QrCode,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Service reports',
+          url: '/restaurant/reports',
+          icon: IconReportAnalytics,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Suppliers',
+          url: '/suppliers',
+          icon: IconUsers,
+          businessTypes: ['restaurant'],
+          permission: 'viewSuppliers',
+        },
+        {
+          title: 'Stock purchases',
+          url: '/purchase-invoice',
+          icon: IconPackages,
+          businessTypes: ['restaurant'],
+          permission: 'viewPurchases',
+        },
+        {
+          title: 'Accounting',
+          url: '/accounting',
+          icon: IconChecklist,
+          businessTypes: ['restaurant'],
+        },
+        {
+          title: 'Chart of accounts',
+          url: '/school/accounts',
+          icon: IconCash,
+          businessTypes: ['restaurant'],
+        },
       ],
     },
     {
@@ -685,7 +764,7 @@ export const sidebarData: SidebarData = {
           title: 'Reports',
           url: '/reports',
           icon: IconLockAccess,
-          excludeBusinessTypes: ['school'],
+          excludeBusinessTypes: ['school', 'restaurant'],
         },
         // {
         //   title: 'Errors',

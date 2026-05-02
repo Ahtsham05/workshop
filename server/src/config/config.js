@@ -26,6 +26,7 @@ const envVarsSchema = Joi.object()
     CLOUDINARY_CLOUD_NAME: Joi.string().description('Cloudinary cloud name'),
     CLOUDINARY_API_KEY: Joi.string().description('Cloudinary API key'),
     CLOUDINARY_API_SECRET: Joi.string().description('Cloudinary API secret'),
+    PEXELS_API_KEY: Joi.string().allow('').description('Pexels API key for product/category image search'),
   })
   .unknown();
 
@@ -73,5 +74,8 @@ module.exports = {
     cloudName: envVars.CLOUDINARY_CLOUD_NAME,
     apiKey: envVars.CLOUDINARY_API_KEY,
     apiSecret: envVars.CLOUDINARY_API_SECRET,
+  },
+  pexels: {
+    apiKey: envVars.PEXELS_API_KEY || '',
   },
 };

@@ -33,6 +33,14 @@ router
   .delete(auth('deleteCategories'), categoryController.deleteCategoryImage);
 
 router
+  .route('/fetch-image-from-search')
+  .post(
+    auth('createCategories'),
+    validate(categoryValidation.fetchImageFromSearch),
+    categoryController.fetchImageFromSearch,
+  );
+
+router
   .route('/:categoryId')
   .get(auth('viewCategories'), validate(categoryValidation.getCategory), categoryController.getCategory)
   .patch(

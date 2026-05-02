@@ -5,6 +5,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 
 const createCategory = catchAsync(async (req, res) => {
   let categoryData = req.body;
@@ -116,6 +117,15 @@ const deleteCategoryImage = catchAsync(async (req, res) => {
   }
 });
 
+const fetchImageFromSearch = catchAsync(async (req, res) => {
+  const { query } = req.body;
+  const result = await searchPexelsAndUpload(query, {
+    folder: 'categories',
+    publicIdPrefix: 'category',
+  });
+  res.send(result);
+});
+
 module.exports = {
   createCategory,
   getCategories,
@@ -125,4 +135,5 @@ module.exports = {
   deleteCategory,
   uploadCategoryImage,
   deleteCategoryImage,
+  fetchImageFromSearch,
 };

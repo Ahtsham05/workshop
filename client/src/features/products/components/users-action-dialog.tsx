@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -91,6 +91,28 @@ const formSchema = z.object({
 })
 
 type productForm = z.infer<typeof formSchema>
+
+function ProductFormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  return (
+    <section className='rounded-xl border border-border/80 bg-gradient-to-b from-card/80 to-muted/15 p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05] sm:p-5'>
+      <header className='mb-4 space-y-1 border-b border-border/60 pb-3'>
+        <h3 className='text-sm font-semibold tracking-tight text-foreground'>{title}</h3>
+        {description ? (
+          <p className='text-xs leading-relaxed text-muted-foreground'>{description}</p>
+        ) : null}
+      </header>
+      <div className='space-y-4'>{children}</div>
+    </section>
+  )
+}
 
 interface Props {
   currentRow?: any
@@ -186,8 +208,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
     }
   }, [open, isEdit])
   
-  // const isDirty = !!form.formState.dirtyFields
-  
+  const nameWatch = form.watch('name')
+
   return (
     <Dialog
       open={open}
@@ -197,20 +219,22 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         onOpenChange(state)
       }}
     >
-      <DialogContent className='sm:max-w-lg'>
-        <DialogHeader className='text-left'>
-          <DialogTitle className='mb-2'>{isEdit ? t('edit_product') : t('add_product')}</DialogTitle>
+      <DialogContent className='flex max-h-[90vh] w-[calc(100vw-1.25rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0'>
+        <DialogHeader className='shrink-0 space-y-2 border-b border-border/60 px-6 pb-4 pt-6 text-left'>
+          <DialogTitle className='text-xl'>
+            {isEdit ? t('edit_product') : t('add_product')}
+          </DialogTitle>
           <DialogDescription>
             {isEdit ? t('update_product_description') : t('create_product_description')}
           </DialogDescription>
         </DialogHeader>
-        <div className='-mr-4 h-[26.25rem] w-full overflow-y-auto py-1 pr-4'>
+        <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
-            <form
-              id='user-form'
-              onSubmit={form.handleSubmit(onSubmit)}
-              className='space-y-4 p-0.5'
-            >
+            <form id='user-form' onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+              <ProductFormSection
+                title={isEdit ? 'Product details' : 'New product'}
+                description='Name, description, and categories shoppers see in menus and lists.'
+              >
               <FormField
                 control={form.control}
                 name='name'
@@ -220,12 +244,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       {t('product_name')} *
                     </FormLabel>
                     <FormControl>
-                      <SmartInput 
+                      <SmartInput
                         placeholder={t('product_name')}
                         autoComplete='off'
                         showVoiceInput={true}
                         voiceInputSize="sm"
-                        className="col-span-4"
+                        className='col-span-4 min-h-11 text-base'
                         {...field}
                       />
                     </FormControl>
@@ -394,6 +418,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   </FormItem>
                 )}
               />
+              </ProductFormSection>
+
+              <ProductFormSection title='Barcode & scanning'>
               <FormField
                 control={form.control}
                 name='barcode'
@@ -443,63 +470,48 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   </FormItem>
                 )}
               />
+              </ProductFormSection>
+
+              <ProductFormSection
+                title='Product photo'
+                description='Optional — fetch a stock match from the product name, or upload your own.'
+              >
               <FormField
                 control={form.control}
                 name='image'
-                render={({ field }) => {
-                  console.log('Form image field:', field.value) // Debug log
-                  return (
-                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right pt-2'>
-                      {t('product_image')}
-                    </FormLabel>
+                render={({ field }) => (
+                  <FormItem className='space-y-0'>
                     <FormControl>
-                      <div className='col-span-4'>
-                        <ImageUpload
-                          key={`image-${imageKey}-${field.value ? 'has-image' : 'no-image'}`} // Force re-render when image changes
-                          onImageUpload={(imageData) => {
-                            console.log('Form received image data:', imageData) // Debug log
-                            setImageRemoved(false) // Reset removed flag when new image is uploaded
-                            field.onChange(imageData)
-                          }}
-                          onImageRemove={() => {
-                            console.log('Form removing image, current value:', field.value) // Debug log
-                            
-                            // Set local state to immediately hide image
-                            setImageRemoved(true)
-                            
-                            // Try multiple approaches to ensure field is cleared
-                            field.onChange(undefined)
-                            form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
-                            form.resetField('image', { defaultValue: undefined })
-                            form.trigger('image') // Force field validation and re-render
-                            
-                            // Force component re-render
-                            setImageKey(prev => prev + 1)
-                            
-                            console.log('Form after remove, new value:', form.getValues('image'))
-                            console.log("field.value?.url after remove:", field.value?.url)
-                            
-                            // Check if field updates after a short delay
-                            setTimeout(() => {
-                              console.log('Field value after timeout:', field.value)
-                              console.log('Form getValue after timeout:', form.getValues('image'))
-                            }, 100)
-                          }}
-                          currentImageUrl={imageRemoved ? undefined : field.value?.url}
-                          className="w-full p-0"
-                        />
-                        {/* Debug info - remove in production */}
-                        {/* <div className="mt-2 text-xs text-gray-500">
-                          Field value: {JSON.stringify(field.value)}
-                        </div> */}
-                      </div>
+                      <ImageUpload
+                        key={`product-image-${imageKey}`}
+                        onImageUpload={(imageData) => {
+                          setImageRemoved(false)
+                          field.onChange(imageData)
+                          setImageKey((k) => k + 1)
+                        }}
+                        onImageRemove={() => {
+                          setImageRemoved(true)
+                          field.onChange(undefined)
+                          form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
+                          form.resetField('image', { defaultValue: undefined })
+                          form.trigger('image')
+                          setImageKey((prev) => prev + 1)
+                        }}
+                        currentImageUrl={imageRemoved ? undefined : field.value?.url}
+                        className='w-full'
+                        layout='comfortable'
+                        autoSearchFromText={nameWatch}
+                        getSearchQuery={() => String(form.getValues('name') ?? '').trim()}
+                        searchContext='product'
+                      />
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
-                )
-                }}
+                )}
               />
+              </ProductFormSection>
+
+              <ProductFormSection title='Pricing & inventory' description='Costs, sell price, and stock on hand.'>
               <FormField
                 control={form.control}
                 name='price'
@@ -726,10 +738,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   }}
                 />
               )}
+              </ProductFormSection>
             </form>
           </Form>
         </div>
-        <DialogFooter>
+        <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4'>
           <Button type='submit' form='user-form'>
             {t('save_changes')}
           </Button>

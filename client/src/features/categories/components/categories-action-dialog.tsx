@@ -115,14 +115,16 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
     form.setValue('image', undefined)
   }
 
+  const nameWatch = form.watch('name')
+
   return (
     <Dialog open={state.open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="flex max-h-[min(90vh,880px)] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-6 pb-4 pt-6">
+          <DialogTitle className="text-xl">
             {state.currentCategory ? t('edit_category') : t('add_category')}
           </DialogTitle>
-          <DialogDescription className='mt-3'>
+          <DialogDescription className='mt-2'>
             {state.currentCategory
               ? t('update_category_description')
               : t('create_category_description')
@@ -130,47 +132,58 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex min-h-0 flex-1 flex-col">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">{t('category_name')} *</FormLabel>
+                    <FormControl>
+                      <SmartInput
+                        placeholder={t('enter_category_name')}
+                        showVoiceInput={true}
+                        voiceInputSize="sm"
+                        className="min-h-11 text-base"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('category_name')} *</FormLabel>
-                  <FormControl>
-                    <SmartInput 
-                      placeholder={t('enter_category_name')} 
-                      showVoiceInput={true}
-                      voiceInputSize="sm"
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="image"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('category_image')} ({t('optional')})</FormLabel>
-                  <FormControl>
+              <FormField
+                control={form.control}
+                name="image"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">
+                      {t('category_image')} ({t('optional')})
+                    </FormLabel>
+                    <FormControl>
                     <ImageUpload
                       onImageUpload={handleImageUpload}
                       onImageRemove={handleImageRemove}
                       currentImageUrl={field.value?.url || ''}
+                      layout="comfortable"
+                      autoSearchFromText={nameWatch}
+                      getSearchQuery={() => String(form.getValues('name') ?? '').trim()}
+                      searchContext="category"
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <DialogFooter className="shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
               <Button type="button" variant="outline" onClick={handleClose}>
                 {t('cancel')}
               </Button>
@@ -185,6 +198,7 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
             </DialogFooter>
           </form>
         </Form>
+        </div>
       </DialogContent>
     </Dialog>
   )

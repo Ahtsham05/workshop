@@ -43,6 +43,14 @@ router
   .delete(auth('deleteProducts'), productController.deleteProductImage);
 
 router
+  .route('/fetch-image-from-search')
+  .post(
+    auth('createProducts'),
+    validate(productValidation.fetchImageFromSearch),
+    productController.fetchImageFromSearch,
+  );
+
+router
   .route('/:productId')
   .get(auth('viewProducts'), validate(productValidation.getProduct), productController.getProduct)
   .patch(

@@ -79,6 +79,8 @@ const schoolAccountingRoute = require('./schoolAccounting.route');
 const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
 const accountsSystemRoute = require('./accountsSystem.route');
 const whatsappRoute = require('./whatsapp.route');
+const restaurantRoute = require('./restaurant.route');
+const restaurantPublicRoute = require('./restaurantPublic.route');
 
 // Subscription & Admin Routes
 const paymentRoute = require('./payment.route');
@@ -376,6 +378,14 @@ const defaultRoutes = [
     path: '/whatsapp',
     route: whatsappRoute,
   },
+  {
+    path: '/restaurant',
+    route: restaurantRoute,
+  },
+  {
+    path: '/public/restaurant',
+    route: restaurantPublicRoute,
+  },
   // Subscription & Admin
   {
     path: '/payments',
@@ -452,6 +462,7 @@ const protectedPaths = [
   '/teacher-payroll',
   '/whatsapp',
   '/admin',
+  '/restaurant',
 ];
 
 // Apply trial guard + enforcement to protected routes

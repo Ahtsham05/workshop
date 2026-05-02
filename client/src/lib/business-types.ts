@@ -44,3 +44,7 @@ export const isSchoolBusiness = (value?: string | null) => {
 export const isWholesaleRetailBusiness = (value?: string | null) => {
   return normalizeBusinessType(value) === 'wholesale_retail'
 }
+
+export const isRestaurantBusiness = (value?: string | null) => {
+  return normalizeBusinessType(value) === 'restaurant'
+}

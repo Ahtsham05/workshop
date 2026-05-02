@@ -18,7 +18,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { isMobileShopBusiness, isSchoolBusiness } from '@/lib/business-types'
+import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
 import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle, ShoppingBag } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
@@ -35,6 +35,10 @@ export default function Dashboard() {
   // Show the mobile-shop dashboard section for any mobile_shop organisation.
   // Individual cards that require a paid feature are further gated inside the section.
   const showMobileCards = isMobileShopBusiness(businessType)
+
+  if (isRestaurantBusiness(businessType)) {
+    return <Navigate to='/restaurant' replace />
+  }
 
   if (isSchoolBusiness(businessType)) {
     // Teachers must never see the admin school dashboard — redirect them immediately

@@ -152,36 +152,46 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     .filter((group) => group.items.length > 0)
 
   // Reorder groups for school orgs: School Management first
-  const groupOrder = userBusinessType === 'school'
-    ? schoolRole === 'teacher'
-      ? [
-          'My Classroom',
-          'Administration',
-          'Subscription',
-          'Reports',
-          'System Admin',
-        ]
-      : [
-          'School Management',
-          'Teachers',
-          'Academics',
-          'Fees & Accounts',
-          'Portals',
-          'Administration',
-          'Subscription',
-          'Reports',
-          'System Admin',
-        ]
-    : [
-        'General',
-        'Mobile Shop',
-        'School Management',
-        'Human Resources',
-        'Reports',
-        'Administration',
-        'Subscription',
-        'System Admin',
-      ]
+  const groupOrder =
+    userBusinessType === 'school'
+      ? schoolRole === 'teacher'
+        ? [
+            'My Classroom',
+            'Administration',
+            'Subscription',
+            'Reports',
+            'System Admin',
+          ]
+        : [
+            'School Management',
+            'Teachers',
+            'Academics',
+            'Fees & Accounts',
+            'Portals',
+            'Administration',
+            'Subscription',
+            'Reports',
+            'System Admin',
+          ]
+      : userBusinessType === 'restaurant'
+        ? [
+            'Restaurant',
+            'Human Resources',
+            'Administration',
+            'Subscription',
+            'Reports',
+            'System Admin',
+          ]
+        : [
+            'General',
+            'Mobile Shop',
+            'School Management',
+            'Human Resources',
+            'Reports',
+            'Administration',
+            'Subscription',
+            'System Admin',
+          ]
 
   const orderedNavGroups = [...filteredNavGroups].sort((a, b) => {
     const ai = groupOrder.indexOf(a.title)

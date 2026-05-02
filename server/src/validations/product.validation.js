@@ -38,6 +38,12 @@ const createProduct = {
   }),
 };
 
+const fetchImageFromSearch = {
+  body: Joi.object().keys({
+    query: Joi.string().trim().min(2).max(200).required(),
+  }),
+};
+
 const getProducts = {
   query: Joi.object().keys({
     name: Joi.string(),
@@ -144,6 +150,7 @@ const bulkAddProducts = {
 
 module.exports = {
   createProduct,
+  fetchImageFromSearch,
   getProducts,
   getProduct,
   updateProduct,

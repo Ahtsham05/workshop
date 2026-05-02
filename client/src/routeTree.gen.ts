@@ -13,6 +13,7 @@
 import { Route as rootRoute } from './routes/__root'
 import { Route as AuthenticatedImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index'
+import { Route as OrderQrTokenImport } from './routes/order.$qrToken'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
@@ -39,6 +40,7 @@ import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedSchoolIndexImport } from './routes/_authenticated/school/index'
 import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authenticated/sales-returns/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
+import { Route as AuthenticatedRestaurantIndexImport } from './routes/_authenticated/restaurant/index'
 import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
@@ -58,6 +60,13 @@ import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_aut
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedRestaurantTablesImport } from './routes/_authenticated/restaurant/tables'
+import { Route as AuthenticatedRestaurantReservationsImport } from './routes/_authenticated/restaurant/reservations'
+import { Route as AuthenticatedRestaurantReportsImport } from './routes/_authenticated/restaurant/reports'
+import { Route as AuthenticatedRestaurantQrImport } from './routes/_authenticated/restaurant/qr'
+import { Route as AuthenticatedRestaurantPosImport } from './routes/_authenticated/restaurant/pos'
+import { Route as AuthenticatedRestaurantMenuImport } from './routes/_authenticated/restaurant/menu'
+import { Route as AuthenticatedRestaurantKitchenImport } from './routes/_authenticated/restaurant/kitchen'
 import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenticated/mobile-shop/wallet'
 import { Route as AuthenticatedMobileShopSimSaleImport } from './routes/_authenticated/mobile-shop/sim-sale'
 import { Route as AuthenticatedMobileShopServicesImport } from './routes/_authenticated/mobile-shop/services'
@@ -125,6 +134,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const OrderQrTokenRoute = OrderQrTokenImport.update({
+  id: '/order/$qrToken',
+  path: '/order/$qrToken',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthenticatedVoiceDemoRoute = AuthenticatedVoiceDemoImport.update({
@@ -291,6 +306,13 @@ const AuthenticatedRolesIndexRoute = AuthenticatedRolesIndexImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
+const AuthenticatedRestaurantIndexRoute =
+  AuthenticatedRestaurantIndexImport.update({
+    id: '/restaurant/',
+    path: '/restaurant/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedPurchaseReturnsIndexRoute =
   AuthenticatedPurchaseReturnsIndexImport.update({
     id: '/purchase-returns/',
@@ -419,6 +441,55 @@ const AuthenticatedSettingsAccountRoute =
     id: '/account',
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedRestaurantTablesRoute =
+  AuthenticatedRestaurantTablesImport.update({
+    id: '/restaurant/tables',
+    path: '/restaurant/tables',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedRestaurantReservationsRoute =
+  AuthenticatedRestaurantReservationsImport.update({
+    id: '/restaurant/reservations',
+    path: '/restaurant/reservations',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedRestaurantReportsRoute =
+  AuthenticatedRestaurantReportsImport.update({
+    id: '/restaurant/reports',
+    path: '/restaurant/reports',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedRestaurantQrRoute = AuthenticatedRestaurantQrImport.update({
+  id: '/restaurant/qr',
+  path: '/restaurant/qr',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedRestaurantPosRoute = AuthenticatedRestaurantPosImport.update(
+  {
+    id: '/restaurant/pos',
+    path: '/restaurant/pos',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
+
+const AuthenticatedRestaurantMenuRoute =
+  AuthenticatedRestaurantMenuImport.update({
+    id: '/restaurant/menu',
+    path: '/restaurant/menu',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedRestaurantKitchenRoute =
+  AuthenticatedRestaurantKitchenImport.update({
+    id: '/restaurant/kitchen',
+    path: '/restaurant/kitchen',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 const AuthenticatedMobileShopWalletRoute =
@@ -931,6 +1002,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVoiceDemoImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/order/$qrToken': {
+      id: '/order/$qrToken'
+      path: '/order/$qrToken'
+      fullPath: '/order/$qrToken'
+      preLoaderRoute: typeof OrderQrTokenImport
+      parentRoute: typeof rootRoute
+    }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
@@ -999,6 +1077,55 @@ declare module '@tanstack/react-router' {
       path: '/mobile-shop/wallet'
       fullPath: '/mobile-shop/wallet'
       preLoaderRoute: typeof AuthenticatedMobileShopWalletImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/kitchen': {
+      id: '/_authenticated/restaurant/kitchen'
+      path: '/restaurant/kitchen'
+      fullPath: '/restaurant/kitchen'
+      preLoaderRoute: typeof AuthenticatedRestaurantKitchenImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/menu': {
+      id: '/_authenticated/restaurant/menu'
+      path: '/restaurant/menu'
+      fullPath: '/restaurant/menu'
+      preLoaderRoute: typeof AuthenticatedRestaurantMenuImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/pos': {
+      id: '/_authenticated/restaurant/pos'
+      path: '/restaurant/pos'
+      fullPath: '/restaurant/pos'
+      preLoaderRoute: typeof AuthenticatedRestaurantPosImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/qr': {
+      id: '/_authenticated/restaurant/qr'
+      path: '/restaurant/qr'
+      fullPath: '/restaurant/qr'
+      preLoaderRoute: typeof AuthenticatedRestaurantQrImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/reports': {
+      id: '/_authenticated/restaurant/reports'
+      path: '/restaurant/reports'
+      fullPath: '/restaurant/reports'
+      preLoaderRoute: typeof AuthenticatedRestaurantReportsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/reservations': {
+      id: '/_authenticated/restaurant/reservations'
+      path: '/restaurant/reservations'
+      fullPath: '/restaurant/reservations'
+      preLoaderRoute: typeof AuthenticatedRestaurantReservationsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/tables': {
+      id: '/_authenticated/restaurant/tables'
+      path: '/restaurant/tables'
+      fullPath: '/restaurant/tables'
+      preLoaderRoute: typeof AuthenticatedRestaurantTablesImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings/account': {
@@ -1132,6 +1259,13 @@ declare module '@tanstack/react-router' {
       path: '/purchase-returns'
       fullPath: '/purchase-returns'
       preLoaderRoute: typeof AuthenticatedPurchaseReturnsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/restaurant/': {
+      id: '/_authenticated/restaurant/'
+      path: '/restaurant'
+      fullPath: '/restaurant'
+      preLoaderRoute: typeof AuthenticatedRestaurantIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/roles/': {
@@ -1701,6 +1835,13 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileShopServicesRoute: typeof AuthenticatedMobileShopServicesRoute
   AuthenticatedMobileShopSimSaleRoute: typeof AuthenticatedMobileShopSimSaleRoute
   AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
+  AuthenticatedRestaurantKitchenRoute: typeof AuthenticatedRestaurantKitchenRoute
+  AuthenticatedRestaurantMenuRoute: typeof AuthenticatedRestaurantMenuRoute
+  AuthenticatedRestaurantPosRoute: typeof AuthenticatedRestaurantPosRoute
+  AuthenticatedRestaurantQrRoute: typeof AuthenticatedRestaurantQrRoute
+  AuthenticatedRestaurantReportsRoute: typeof AuthenticatedRestaurantReportsRoute
+  AuthenticatedRestaurantReservationsRoute: typeof AuthenticatedRestaurantReservationsRoute
+  AuthenticatedRestaurantTablesRoute: typeof AuthenticatedRestaurantTablesRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
@@ -1716,6 +1857,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedPurchaseReturnsIndexRoute: typeof AuthenticatedPurchaseReturnsIndexRoute
+  AuthenticatedRestaurantIndexRoute: typeof AuthenticatedRestaurantIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
@@ -1754,6 +1896,14 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileShopServicesRoute: AuthenticatedMobileShopServicesRoute,
   AuthenticatedMobileShopSimSaleRoute: AuthenticatedMobileShopSimSaleRoute,
   AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
+  AuthenticatedRestaurantKitchenRoute: AuthenticatedRestaurantKitchenRoute,
+  AuthenticatedRestaurantMenuRoute: AuthenticatedRestaurantMenuRoute,
+  AuthenticatedRestaurantPosRoute: AuthenticatedRestaurantPosRoute,
+  AuthenticatedRestaurantQrRoute: AuthenticatedRestaurantQrRoute,
+  AuthenticatedRestaurantReportsRoute: AuthenticatedRestaurantReportsRoute,
+  AuthenticatedRestaurantReservationsRoute:
+    AuthenticatedRestaurantReservationsRoute,
+  AuthenticatedRestaurantTablesRoute: AuthenticatedRestaurantTablesRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
@@ -1771,6 +1921,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedPurchaseInvoiceIndexRoute,
   AuthenticatedPurchaseReturnsIndexRoute:
     AuthenticatedPurchaseReturnsIndexRoute,
+  AuthenticatedRestaurantIndexRoute: AuthenticatedRestaurantIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
@@ -1814,6 +1965,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
+  '/order/$qrToken': typeof OrderQrTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
@@ -1824,6 +1976,13 @@ export interface FileRoutesByFullPath {
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
+  '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
+  '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
+  '/restaurant/pos': typeof AuthenticatedRestaurantPosRoute
+  '/restaurant/qr': typeof AuthenticatedRestaurantQrRoute
+  '/restaurant/reports': typeof AuthenticatedRestaurantReportsRoute
+  '/restaurant/reservations': typeof AuthenticatedRestaurantReservationsRoute
+  '/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -1843,6 +2002,7 @@ export interface FileRoutesByFullPath {
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
   '/school/': typeof AuthenticatedSchoolIndexRoute
@@ -1916,6 +2076,7 @@ export interface FileRoutesByTo {
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
+  '/order/$qrToken': typeof OrderQrTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
@@ -1926,6 +2087,13 @@ export interface FileRoutesByTo {
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
+  '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
+  '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
+  '/restaurant/pos': typeof AuthenticatedRestaurantPosRoute
+  '/restaurant/qr': typeof AuthenticatedRestaurantQrRoute
+  '/restaurant/reports': typeof AuthenticatedRestaurantReportsRoute
+  '/restaurant/reservations': typeof AuthenticatedRestaurantReservationsRoute
+  '/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -1945,6 +2113,7 @@ export interface FileRoutesByTo {
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
   '/school': typeof AuthenticatedSchoolIndexRoute
@@ -2021,6 +2190,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
+  '/order/$qrToken': typeof OrderQrTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
@@ -2031,6 +2201,13 @@ export interface FileRoutesById {
   '/_authenticated/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/_authenticated/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
   '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
+  '/_authenticated/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
+  '/_authenticated/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
+  '/_authenticated/restaurant/pos': typeof AuthenticatedRestaurantPosRoute
+  '/_authenticated/restaurant/qr': typeof AuthenticatedRestaurantQrRoute
+  '/_authenticated/restaurant/reports': typeof AuthenticatedRestaurantReportsRoute
+  '/_authenticated/restaurant/reservations': typeof AuthenticatedRestaurantReservationsRoute
+  '/_authenticated/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -2050,6 +2227,7 @@ export interface FileRoutesById {
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/_authenticated/restaurant/': typeof AuthenticatedRestaurantIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/sales-returns/': typeof AuthenticatedSalesReturnsIndexRoute
   '/_authenticated/school/': typeof AuthenticatedSchoolIndexRoute
@@ -2128,6 +2306,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/school'
     | '/voice-demo'
+    | '/order/$qrToken'
     | '/'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
@@ -2138,6 +2317,13 @@ export interface FileRouteTypes {
     | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
     | '/mobile-shop/wallet'
+    | '/restaurant/kitchen'
+    | '/restaurant/menu'
+    | '/restaurant/pos'
+    | '/restaurant/qr'
+    | '/restaurant/reports'
+    | '/restaurant/reservations'
+    | '/restaurant/tables'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -2157,6 +2343,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/purchase-invoice'
     | '/purchase-returns'
+    | '/restaurant'
     | '/roles'
     | '/sales-returns'
     | '/school/'
@@ -2229,6 +2416,7 @@ export interface FileRouteTypes {
     | '/barcode-demo'
     | '/reports'
     | '/voice-demo'
+    | '/order/$qrToken'
     | '/'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
@@ -2239,6 +2427,13 @@ export interface FileRouteTypes {
     | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
     | '/mobile-shop/wallet'
+    | '/restaurant/kitchen'
+    | '/restaurant/menu'
+    | '/restaurant/pos'
+    | '/restaurant/qr'
+    | '/restaurant/reports'
+    | '/restaurant/reservations'
+    | '/restaurant/tables'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -2258,6 +2453,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/purchase-invoice'
     | '/purchase-returns'
+    | '/restaurant'
     | '/roles'
     | '/sales-returns'
     | '/school'
@@ -2332,6 +2528,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/school'
     | '/_authenticated/voice-demo'
+    | '/order/$qrToken'
     | '/_authenticated/'
     | '/_authenticated/mobile-shop/bill-payments'
     | '/_authenticated/mobile-shop/cash-book'
@@ -2342,6 +2539,13 @@ export interface FileRouteTypes {
     | '/_authenticated/mobile-shop/services'
     | '/_authenticated/mobile-shop/sim-sale'
     | '/_authenticated/mobile-shop/wallet'
+    | '/_authenticated/restaurant/kitchen'
+    | '/_authenticated/restaurant/menu'
+    | '/_authenticated/restaurant/pos'
+    | '/_authenticated/restaurant/qr'
+    | '/_authenticated/restaurant/reports'
+    | '/_authenticated/restaurant/reservations'
+    | '/_authenticated/restaurant/tables'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -2361,6 +2565,7 @@ export interface FileRouteTypes {
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
     | '/_authenticated/purchase-returns/'
+    | '/_authenticated/restaurant/'
     | '/_authenticated/roles/'
     | '/_authenticated/sales-returns/'
     | '/_authenticated/school/'
@@ -2433,6 +2638,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  OrderQrTokenRoute: typeof OrderQrTokenRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -2448,6 +2654,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  OrderQrTokenRoute: OrderQrTokenRoute,
 }
 
 export const routeTree = rootRoute
@@ -2471,7 +2678,8 @@ export const routeTree = rootRoute
         "/(errors)/403",
         "/(errors)/404",
         "/(errors)/500",
-        "/(errors)/503"
+        "/(errors)/503",
+        "/order/$qrToken"
       ]
     },
     "/_authenticated": {
@@ -2492,6 +2700,13 @@ export const routeTree = rootRoute
         "/_authenticated/mobile-shop/services",
         "/_authenticated/mobile-shop/sim-sale",
         "/_authenticated/mobile-shop/wallet",
+        "/_authenticated/restaurant/kitchen",
+        "/_authenticated/restaurant/menu",
+        "/_authenticated/restaurant/pos",
+        "/_authenticated/restaurant/qr",
+        "/_authenticated/restaurant/reports",
+        "/_authenticated/restaurant/reservations",
+        "/_authenticated/restaurant/tables",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
         "/_authenticated/accounting/",
@@ -2507,6 +2722,7 @@ export const routeTree = rootRoute
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
         "/_authenticated/purchase-returns/",
+        "/_authenticated/restaurant/",
         "/_authenticated/roles/",
         "/_authenticated/sales-returns/",
         "/_authenticated/staff/",
@@ -2624,6 +2840,9 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/voice-demo.tsx",
       "parent": "/_authenticated"
     },
+    "/order/$qrToken": {
+      "filePath": "order.$qrToken.tsx"
+    },
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
       "parent": "/_authenticated"
@@ -2662,6 +2881,34 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/wallet": {
       "filePath": "_authenticated/mobile-shop/wallet.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/kitchen": {
+      "filePath": "_authenticated/restaurant/kitchen.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/menu": {
+      "filePath": "_authenticated/restaurant/menu.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/pos": {
+      "filePath": "_authenticated/restaurant/pos.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/qr": {
+      "filePath": "_authenticated/restaurant/qr.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/reports": {
+      "filePath": "_authenticated/restaurant/reports.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/reservations": {
+      "filePath": "_authenticated/restaurant/reservations.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/tables": {
+      "filePath": "_authenticated/restaurant/tables.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/settings/account": {
@@ -2738,6 +2985,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/purchase-returns/": {
       "filePath": "_authenticated/purchase-returns/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/restaurant/": {
+      "filePath": "_authenticated/restaurant/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/roles/": {

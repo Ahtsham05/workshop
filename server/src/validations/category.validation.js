@@ -55,6 +55,12 @@ const deleteCategory = {
   }),
 };
 
+const fetchImageFromSearch = {
+  body: Joi.object().keys({
+    query: Joi.string().trim().min(2).max(200).required(),
+  }),
+};
+
 module.exports = {
   createCategory,
   getCategories,
@@ -62,4 +68,5 @@ module.exports = {
   getCategory,
   updateCategory,
   deleteCategory,
+  fetchImageFromSearch,
 };

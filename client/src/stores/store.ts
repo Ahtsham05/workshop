@@ -23,6 +23,7 @@ import { mobileShopApi } from './mobile-shop.api';
 import { returnsApi } from './returns.api';
 import { schoolApi } from './school.api';
 import { expenseCategoryApi } from './expenseCategory.api';
+import { restaurantApi } from './restaurant.api';
 
 export const store = configureStore({
   reducer: {
@@ -50,6 +51,7 @@ export const store = configureStore({
     [returnsApi.reducerPath]: returnsApi.reducer,
     [schoolApi.reducerPath]: schoolApi.reducer,
     [expenseCategoryApi.reducerPath]: expenseCategoryApi.reducer,
+    [restaurantApi.reducerPath]: restaurantApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -71,6 +73,7 @@ export const store = configureStore({
       returnsApi.middleware,
       schoolApi.middleware,
       expenseCategoryApi.middleware,
+      restaurantApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

@@ -80,3 +80,9 @@ module.exports.Leave = require('./leave.model');
 module.exports.Payroll = require('./payroll.model');
 module.exports.PerformanceReview = require('./performanceReview.model');
 module.exports.EmployeeLedger = require('./employeeLedger.model');
+
+// Restaurant
+module.exports.RestaurantFloor = require('./restaurantFloor.model');
+module.exports.RestaurantTable = require('./restaurantTable.model');
+module.exports.RestaurantOrder = require('./restaurantOrder.model');
+module.exports.RestaurantReservation = require('./restaurantReservation.model');

@@ -5,6 +5,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 
 const createProduct = catchAsync(async (req, res) => {
   let productData = req.body;
@@ -149,6 +150,16 @@ const uploadProductImage = catchAsync(async (req, res) => {
   }
 });
 
+/** Body: { query: string } — search Pexels, upload best match to Cloudinary */
+const fetchImageFromSearch = catchAsync(async (req, res) => {
+  const { query } = req.body;
+  const result = await searchPexelsAndUpload(query, {
+    folder: 'products',
+    publicIdPrefix: 'product',
+  });
+  res.send(result);
+});
+
 const deleteProductImage = catchAsync(async (req, res) => {
   const { publicId } = req.body;
   
@@ -232,6 +243,7 @@ module.exports = {
   getAllProducts,
   uploadProductImage,
   deleteProductImage,
+  fetchImageFromSearch,
   bulkUpdateProducts,
   bulkAddProducts,
 };
