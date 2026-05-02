@@ -595,7 +595,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   if (updateBody.items) {
     invoice.calculateTotals();
   }
-  
+
+  if (invoice.type === 'cash') {
+    invoice.paidAmount = invoice.total;
+    invoice.balance = 0;
+    invoice.status = 'paid';
+  }
+
   await invoice.save();
   console.log('Invoice updated successfully');
   await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);

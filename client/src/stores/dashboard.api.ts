@@ -106,6 +106,9 @@ export interface RecentActivity {
   type: 'invoice' | 'purchase' | 'payment'
   description: string
   amount: number
+  /** Normalized for invoices (cash = total; credit = amount applied to invoice) */
+  paidAmount?: number
+  balance?: number
   timestamp: string
   status: string
 }

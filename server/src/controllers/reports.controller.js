@@ -119,6 +119,50 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
         },
       },
     },
+    // Normalize cash vs credit: cash is always fully paid in UI/reports; credit shows unpaid until settled
+    { $addFields: { _origPaid: { $ifNull: ['$paidAmount', 0] } } },
+    {
+      $addFields: {
+        paidAmount: {
+          $cond: [
+            { $eq: ['$type', 'cash'] },
+            '$total',
+            { $min: ['$_origPaid', '$total'] },
+          ],
+        },
+        balance: {
+          $cond: [
+            { $eq: ['$type', 'cash'] },
+            0,
+            {
+              $max: [
+                0,
+                {
+                  $subtract: [
+                    '$total',
+                    { $min: ['$_origPaid', '$total'] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        status: {
+          $cond: [
+            { $eq: ['$type', 'cash'] },
+            'paid',
+            {
+              $cond: [
+                { $gte: [{ $min: ['$_origPaid', '$total'] }, '$total'] },
+                'paid',
+                'unpaid',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $unset: '_origPaid' },
     { $sort: { invoiceDate: 1, invoiceNumber: 1 } },
   ]);
 

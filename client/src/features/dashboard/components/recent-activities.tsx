@@ -1,10 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
+import type { ComponentProps } from 'react'
 import { FileText, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useGetRecentActivitiesQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 export function RecentActivities() {
   const { t } = useLanguage()
@@ -23,11 +25,13 @@ export function RecentActivities() {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusVariant = (status: string): ComponentProps<typeof Badge>['variant'] => {
     switch (status) {
       case 'completed':
       case 'paid':
         return 'default'
+      case 'unpaid':
+        return 'outline'
       case 'pending':
         return 'secondary'
       case 'cancelled':
@@ -35,6 +39,12 @@ export function RecentActivities() {
       default:
         return 'outline'
     }
+  }
+
+  const statusLabel = (status: string) => {
+    if (status === 'paid') return t('Paid')
+    if (status === 'unpaid') return t('Unpaid')
+    return t(status)
   }
 
   if (isLoading) {
@@ -67,10 +77,39 @@ export function RecentActivities() {
             activities.map((activity) => (
               <div
                 key={activity.id}
-                className='flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors'
+                className={cn(
+                  'flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors',
+                  activity.type === 'invoice' &&
+                    activity.status === 'paid' &&
+                    'border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-card dark:border-emerald-900/40 dark:from-emerald-950/35',
+                  activity.type === 'invoice' &&
+                    activity.status === 'unpaid' &&
+                    'border-amber-200/80 bg-gradient-to-r from-amber-50/90 to-card dark:border-amber-900/40 dark:from-amber-950/35',
+                  activity.type === 'purchase' &&
+                    activity.status === 'paid' &&
+                    'border-sky-200/80 bg-gradient-to-r from-sky-50/90 to-card dark:border-sky-900/40 dark:from-sky-950/35',
+                  activity.type === 'purchase' &&
+                    activity.status === 'unpaid' &&
+                    'border-orange-200/80 bg-gradient-to-r from-orange-50/90 to-card dark:border-orange-900/40 dark:from-orange-950/35',
+                  !(
+                    (activity.type === 'invoice' || activity.type === 'purchase') &&
+                    (activity.status === 'paid' || activity.status === 'unpaid')
+                  ) && 'hover:bg-muted/50',
+                )}
               >
                 <div className='flex items-center gap-3'>
-                  <div className='flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary'>
+                  <div
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                      activity.type === 'invoice' && activity.status === 'paid' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+                      activity.type === 'invoice' && activity.status === 'unpaid' && 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
+                      activity.type === 'purchase' && activity.status === 'paid' && 'bg-sky-500/15 text-sky-800 dark:text-sky-200',
+                      activity.type === 'purchase' && activity.status === 'unpaid' && 'bg-orange-500/15 text-orange-800 dark:text-orange-200',
+                      ((activity.type !== 'invoice' && activity.type !== 'purchase') ||
+                        (activity.status !== 'paid' && activity.status !== 'unpaid')) &&
+                        'bg-primary/10 text-primary',
+                    )}
+                  >
                     {getIcon(activity.type)}
                   </div>
                   <div>
@@ -82,13 +121,34 @@ export function RecentActivities() {
                     </p>
                   </div>
                 </div>
-                <div className='flex items-center gap-2'>
-                  <span className='text-sm font-semibold'>
-                    Rs{(activity.amount ?? 0).toLocaleString()}
-                  </span>
-                  <Badge variant={getStatusColor(activity.status)} className='text-xs'>
-                    {t(activity.status)}
-                  </Badge>
+                <div className='flex flex-col items-end gap-1'>
+                  <div className='flex items-center gap-2'>
+                    <span className='text-sm font-semibold'>
+                      Rs{(activity.amount ?? 0).toLocaleString()}
+                    </span>
+                    <Badge
+                      variant={getStatusVariant(activity.status)}
+                      className={cn(
+                        'text-xs shrink-0',
+                        activity.status === 'unpaid' &&
+                          'border-amber-500/60 text-amber-900 dark:text-amber-100',
+                        activity.status === 'paid' &&
+                          (activity.type === 'purchase'
+                            ? 'bg-sky-600 hover:bg-sky-600 text-white border-transparent dark:bg-sky-600'
+                            : 'bg-emerald-700 hover:bg-emerald-700 text-white border-transparent dark:bg-emerald-700'),
+                      )}
+                    >
+                      {statusLabel(activity.status)}
+                    </Badge>
+                  </div>
+                  {(activity.type === 'invoice' || activity.type === 'purchase') &&
+                    activity.paidAmount != null &&
+                    activity.balance != null && (
+                      <p className='text-[11px] text-muted-foreground tabular-nums'>
+                        {t('Paid')}: Rs{activity.paidAmount.toLocaleString()} · {t('Balance')}: Rs
+                        {activity.balance.toLocaleString()}
+                      </p>
+                    )}
                 </div>
               </div>
             ))

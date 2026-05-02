@@ -5,6 +5,7 @@ const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseRet
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
+const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
  * Build an aggregate $match scope with properly cast ObjectIds.
@@ -523,7 +524,7 @@ const getRecentActivities = catchAsync(async (req, res) => {
   const recentInvoices = await Invoice.find({ ...bf })
     .sort({ createdAt: -1 })
     .limit(half)
-    .select('invoiceNumber total createdAt status walkInCustomerName customerId')
+    .select('invoiceNumber total createdAt status walkInCustomerName customerId type paidAmount balance')
     .lean();
 
   const customerIdsToResolve = [
@@ -542,10 +543,11 @@ const getRecentActivities = catchAsync(async (req, res) => {
       : [];
   const customerNameById = new Map(customerDocs.map((c) => [String(c._id), c.name]));
 
-  // Get recent purchases
+  // Get recent purchases (fields needed for paid/balance like purchase report)
   const recentPurchases = await Purchase.find({ ...bf })
     .sort({ createdAt: -1 })
     .limit(half)
+    .select('invoiceNumber totalAmount paidAmount balance paymentType createdAt supplier')
     .populate('supplier', 'name')
     .lean();
 
@@ -556,24 +558,32 @@ const getRecentActivities = catchAsync(async (req, res) => {
       cid && isValidRefObjectId(cid) ? customerNameById.get(String(cid)) : null;
     const label =
       resolvedName || inv.walkInCustomerName || 'Walk-in Customer';
+    const pay = normalizeInvoicePayment(inv);
     return {
       id: inv._id,
       type: 'invoice',
       description: `Invoice ${inv.invoiceNumber} - ${label}`,
       amount: inv.total,
+      paidAmount: pay.paidAmount,
+      balance: pay.balance,
       timestamp: inv.createdAt,
-      status: inv.status || 'completed',
+      status: pay.displayStatus,
     };
   });
 
-  const purchaseActivities = recentPurchases.map(pur => ({
-    id: pur._id,
-    type: 'purchase',
-    description: `Purchase ${pur.invoiceNumber} - ${pur.supplier?.name || 'Supplier'}`,
-    amount: pur.totalAmount,
-    timestamp: pur.createdAt,
-    status: 'completed'
-  }));
+  const purchaseActivities = recentPurchases.map((pur) => {
+    const pay = normalizePurchasePayment(pur);
+    return {
+      id: pur._id,
+      type: 'purchase',
+      description: `Purchase ${pur.invoiceNumber} - ${pur.supplier?.name || 'Supplier'}`,
+      amount: pur.totalAmount,
+      paidAmount: pay.paidAmount,
+      balance: pay.balance,
+      timestamp: pur.createdAt,
+      status: pay.displayStatus,
+    };
+  });
 
   // Combine and sort by timestamp
   const activities = [...invoiceActivities, ...purchaseActivities]

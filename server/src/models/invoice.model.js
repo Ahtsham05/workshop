@@ -196,9 +196,17 @@ InvoiceSchema.methods.calculateTotals = function() {
 
 // Method to finalize invoice
 InvoiceSchema.methods.finalize = function() {
-    this.status = 'finalized';
-    if (this.type === 'cash' && this.paidAmount >= this.total) {
+    if (this.type === 'cash') {
+        // Cash sales are collected immediately — keep DB consistent with totals
+        this.paidAmount = this.total;
+        this.balance = 0;
         this.status = 'paid';
+        return this;
+    }
+    this.status = 'finalized';
+    if (this.paidAmount >= this.total) {
+        this.status = 'paid';
+        this.balance = 0;
     }
     return this;
 };
