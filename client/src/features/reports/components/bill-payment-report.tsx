@@ -47,6 +47,8 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { useGetBillPaymentReportQuery, useGetUtilityCompaniesQuery } from '@/stores/mobile-shop.api'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -237,10 +239,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
         {/* ── Summary Cards ── */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
           {/* Paid bills */}
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Bills Collected</CardTitle>
-              <CheckCircle2 className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <CheckCircle2 className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{data?.totalBills ?? 0}</div>
@@ -248,10 +252,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Total collection */}
-          <Card>
+          <Card className={kpiCardClass('cyan')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Collection</CardTitle>
-              <Banknote className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('cyan'))}>
+                <Banknote className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{fmt(data?.totalCollection ?? 0)}</div>
@@ -261,10 +267,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Service charges / profit */}
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Your Profit</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-green-600'>{fmt(data?.totalServiceCharges ?? 0)}</div>
@@ -272,10 +280,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Pending */}
-          <Card>
+          <Card className={kpiCardClass('amber')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Pending Bills</CardTitle>
-              <Receipt className='h-4 w-4 text-yellow-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('amber'))}>
+                <Receipt className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-yellow-600'>{data?.totalPending ?? 0}</div>
@@ -285,10 +295,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Due Today */}
-          <Card>
+          <Card className={kpiCardClass('orange')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Due Today</CardTitle>
-              <Clock className='h-4 w-4 text-orange-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+                <Clock className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-orange-600'>{data?.totalDueToday ?? 0}</div>
@@ -296,10 +308,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Overdue */}
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Overdue</CardTitle>
-              <AlertCircle className='h-4 w-4 text-red-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('rose'))}>
+                <AlertCircle className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-red-600'>{data?.totalOverdue ?? 0}</div>
@@ -307,10 +321,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Pending profit estimate */}
-          <Card>
+          <Card className={kpiCardClass('indigo')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Pending Profit</CardTitle>
-              <TrendingUp className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('indigo'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(data?.totalPendingServiceCharges ?? 0)}</div>
@@ -318,10 +334,12 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             </CardContent>
           </Card>
           {/* Avg service charge */}
-          <Card>
+          <Card className={kpiCardClass('slate')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Avg Service Charge</CardTitle>
-              <Banknote className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <Banknote className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>

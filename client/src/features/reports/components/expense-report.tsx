@@ -48,6 +48,8 @@ import {
   Cell,
   Legend,
 } from 'recharts'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface ExpenseReportProps {
   startDate: string
@@ -161,10 +163,10 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       <div className="space-y-6">
         {/* ── Summary KPI bar ── */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardContent className="pt-5 flex items-center gap-4">
-              <div className="rounded-lg bg-red-100 p-3 dark:bg-red-900/20">
-                <TrendingDown className="h-5 w-5 text-red-600" />
+              <div className={cn('rounded-xl p-3', toneIconWrapClass('rose'))}>
+                <TrendingDown className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">{t('total_expenses')}</p>
@@ -172,10 +174,10 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardContent className="pt-5 flex items-center gap-4">
-              <div className="rounded-lg bg-blue-100 p-3 dark:bg-blue-900/20">
-                <Receipt className="h-5 w-5 text-blue-600" />
+              <div className={cn('rounded-xl p-3', toneIconWrapClass('sky'))}>
+                <Receipt className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">{t('expense_count')}</p>
@@ -183,10 +185,10 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardContent className="pt-5 flex items-center gap-4">
-              <div className="rounded-lg bg-green-100 p-3 dark:bg-green-900/20">
-                <BarChart2 className="h-5 w-5 text-green-600" />
+              <div className={cn('rounded-xl p-3', toneIconWrapClass('emerald'))}>
+                <BarChart2 className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">{t('avg_expense')}</p>

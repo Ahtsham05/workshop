@@ -13,6 +13,8 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { normalizeBusinessType } from '@/lib/business-types'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface ProfitLossReportProps {
   startDate: string
@@ -135,10 +137,12 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
 
         {/* Top KPI row */}
         <div className='grid gap-4 md:grid-cols-3'>
-          <Card>
+          <Card className={kpiCardClass(isProfit ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Net Profit / Loss</CardTitle>
-              {isProfit ? <TrendingUp className='h-4 w-4 text-green-500' /> : <TrendingDown className='h-4 w-4 text-red-500' />}
+              <div className={cn('shrink-0', toneIconWrapClass(isProfit ? 'emerald' : 'rose'))}>
+                {isProfit ? <TrendingUp className='h-4 w-4' /> : <TrendingDown className='h-4 w-4' />}
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-3xl font-bold ${isProfit ? 'text-green-600' : 'text-red-600'}`}>
@@ -147,10 +151,12 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               <p className='text-xs text-muted-foreground mt-1'>Margin: {data?.netProfitMargin ?? 0}%</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('indigo')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Investment</CardTitle>
-              <PiggyBank className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('indigo'))}>
+                <PiggyBank className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(data?.investment ?? 0)}</div>
@@ -165,10 +171,12 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass(isPositiveRoi ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>ROI</CardTitle>
-              <Percent className={`h-4 w-4 ${isPositiveRoi ? 'text-green-500' : 'text-red-500'}`} />
+              <div className={cn('shrink-0', toneIconWrapClass(isPositiveRoi ? 'emerald' : 'rose'))}>
+                <Percent className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-3xl font-bold ${isPositiveRoi ? 'text-green-600' : 'text-red-600'}`}>

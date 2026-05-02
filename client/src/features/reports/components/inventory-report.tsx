@@ -9,6 +9,7 @@ import { useState, forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t } = useLanguage()
@@ -52,7 +53,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
   return (
     <div className='space-y-6'>
       <div className='grid gap-4 md:grid-cols-4'>
-        <Card>
+        <Card className={kpiCardClass('sky')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_products')}</CardTitle>
           </CardHeader>
@@ -60,7 +61,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             <div className='text-2xl font-bold'>{data?.summary?.totalProducts || 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('violet')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('stock_value')}</CardTitle>
           </CardHeader>
@@ -68,7 +69,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalStockValue || 0)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('amber')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('low_stock')}</CardTitle>
           </CardHeader>
@@ -76,7 +77,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             <div className='text-2xl font-bold text-orange-600'>{data?.summary?.lowStockCount || 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('rose')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('out_of_stock')}</CardTitle>
           </CardHeader>

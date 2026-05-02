@@ -7,6 +7,7 @@ import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface TaxReportProps {
   startDate: string
@@ -53,7 +54,7 @@ export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProp
   return (
     <div className='space-y-6'>
       <div className='grid gap-4 md:grid-cols-2'>
-        <Card>
+        <Card className={kpiCardClass('indigo')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_tax_collected')}</CardTitle>
           </CardHeader>
@@ -61,7 +62,7 @@ export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProp
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalTaxCollected || 0)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('sky')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_sales')}</CardTitle>
           </CardHeader>

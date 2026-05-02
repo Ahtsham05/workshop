@@ -9,6 +9,8 @@ import { RotateCcw, Package, DollarSign } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -67,30 +69,36 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
       <div className='space-y-6'>
         {/* Summary cards */}
         <div className='grid gap-4 md:grid-cols-3'>
-          <Card>
+          <Card className={kpiCardClass('slate')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('Total Returns')}</CardTitle>
-              <RotateCcw className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <RotateCcw className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s?.totalReturns ?? 0}</div>
               <p className='text-xs text-muted-foreground'>{t('return transactions')}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('cyan')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('Total Amount Recovered')}</CardTitle>
-              <DollarSign className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('cyan'))}>
+                <DollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(s?.totalReturnsAmount ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>{t('recovered from suppliers')}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('Items Returned')}</CardTitle>
-              <Package className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
+                <Package className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s?.totalItemsReturned ?? 0}</div>

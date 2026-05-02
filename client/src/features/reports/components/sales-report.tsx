@@ -18,6 +18,8 @@ import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface SalesReportProps {
   startDate: string
@@ -174,10 +176,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       <div className='space-y-6'>
         {/* ── Summary Cards ────────────────────────────────────────────────── */}
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('total_revenue')}</CardTitle>
-              <DollarSign className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <DollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
@@ -186,10 +190,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('total_profit')}</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
@@ -205,20 +211,24 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('total_invoices')}</CardTitle>
-              <ShoppingCart className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                <ShoppingCart className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{data?.summary?.totalInvoices || 0}</div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('avg_invoice_value')}</CardTitle>
-              <Package className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
+                <Package className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>

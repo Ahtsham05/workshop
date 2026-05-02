@@ -26,6 +26,8 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { normalizeBusinessType } from '@/lib/business-types'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface RoiReportProps {
   startDate: string
@@ -183,14 +185,12 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         {/* KPI Cards */}
         <div className='grid gap-4 md:grid-cols-3'>
           {/* ROI % */}
-          <Card>
+          <Card className={kpiCardClass(isPositiveRoi ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Return on Investment</CardTitle>
-              {isPositiveRoi ? (
-                <TrendingUp className='h-4 w-4 text-green-500' />
-              ) : (
-                <TrendingDown className='h-4 w-4 text-red-500' />
-              )}
+              <div className={cn('shrink-0', toneIconWrapClass(isPositiveRoi ? 'emerald' : 'rose'))}>
+                {isPositiveRoi ? <TrendingUp className='h-4 w-4' /> : <TrendingDown className='h-4 w-4' />}
+              </div>
             </CardHeader>
             <CardContent>
               <div
@@ -212,10 +212,12 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
           </Card>
 
           {/* Total Investment */}
-          <Card>
+          <Card className={kpiCardClass('indigo')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Investment</CardTitle>
-              <PiggyBank className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('indigo'))}>
+                <PiggyBank className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(roiData?.investment ?? 0)}</div>
@@ -230,10 +232,12 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
           </Card>
 
           {/* Total Profit */}
-          <Card>
+          <Card className={kpiCardClass(isPositiveProfit ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Profit</CardTitle>
-              <DollarSign className={`h-4 w-4 ${isPositiveProfit ? 'text-green-500' : 'text-red-500'}`} />
+              <div className={cn('shrink-0', toneIconWrapClass(isPositiveProfit ? 'emerald' : 'rose'))}>
+                <DollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div

@@ -8,6 +8,7 @@ import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface PurchaseReportProps {
   startDate: string
@@ -57,7 +58,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
   return (
     <div className='space-y-6'>
       <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-        <Card>
+        <Card className={kpiCardClass('orange')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_purchases')}</CardTitle>
           </CardHeader>
@@ -66,7 +67,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             <p className='text-xs text-muted-foreground mt-1'>{data?.summary?.purchaseCount || 0} {t('invoices')}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('emerald')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('cash_paid')}</CardTitle>
           </CardHeader>
@@ -75,7 +76,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             <p className='text-xs text-muted-foreground mt-1'>{t('cash_purchases_fully_paid')}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('cyan')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_paid')}</CardTitle>
           </CardHeader>
@@ -83,7 +84,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPaid || 0)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('rose')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('balance_due')}</CardTitle>
           </CardHeader>

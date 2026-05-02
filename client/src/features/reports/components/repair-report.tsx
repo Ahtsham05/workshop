@@ -9,6 +9,8 @@ import { Wrench, TrendingUp, CircleDollarSign, Clock } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface RepairReportProps {
   startDate: string
@@ -92,10 +94,12 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
       <div className='space-y-6'>
         {/* Summary cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('orange')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Jobs</CardTitle>
-              <Wrench className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+                <Wrench className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s?.totalJobs ?? 0}</div>
@@ -106,30 +110,36 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Revenue</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(s?.totalRevenue ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>charges billed to customers</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Cost</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-red-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('rose'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-red-600'>{fmt(s?.totalCost ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>parts &amp; labour cost</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Net Profit</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${(s?.totalProfit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -142,19 +152,23 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
 
         {/* Additional metrics */}
         <div className='grid gap-4 sm:grid-cols-2'>
-          <Card>
+          <Card className={kpiCardClass('slate')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Delivered Jobs</CardTitle>
-              <Wrench className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <Wrench className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s?.deliveredJobs ?? 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('amber')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Advance Collected</CardTitle>
-              <Clock className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('amber'))}>
+                <Clock className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-orange-600'>{fmt(s?.totalAdvance ?? 0)}</div>

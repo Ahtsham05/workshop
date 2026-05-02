@@ -198,6 +198,7 @@ export default function CashBookPage() {
           icon={<BookOpen className='h-4 w-4' />}
           valuePrefix='Rs '
           description='Balance before selected period'
+          tone='slate'
         />
         <StatCard
           title='Total Income'
@@ -205,6 +206,7 @@ export default function CashBookPage() {
           icon={<ArrowUpCircle className='h-4 w-4' />}
           valuePrefix='Rs '
           description='Cash book income entries'
+          tone='emerald'
         />
         <StatCard
           title='Total Expense'
@@ -212,6 +214,7 @@ export default function CashBookPage() {
           icon={<ArrowDownCircle className='h-4 w-4' />}
           valuePrefix='Rs '
           description='Cash book expense entries'
+          tone='rose'
         />
         <StatCard
           title='Closing Balance'
@@ -219,6 +222,7 @@ export default function CashBookPage() {
           icon={<Wallet className='h-4 w-4' />}
           valuePrefix='Rs '
           description='Opening + Income − Expense'
+          tone='cyan'
         />
       </div>
 

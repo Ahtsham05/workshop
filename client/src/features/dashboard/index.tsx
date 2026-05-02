@@ -103,6 +103,7 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={t('Available cash after expenses')}
               isLoading={isLoading}
+              tone='emerald'
             />
             <StatCard
               title={t('Wallet Balance')}
@@ -111,6 +112,7 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={t('Total balance across all wallets')}
               isLoading={isLoading}
+              tone='cyan'
             />
             <StatCard
               title={t('Load Sold')}
@@ -119,14 +121,16 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={t('Mobile load transactions')}
               isLoading={isLoading}
+              tone='violet'
             />
             <StatCard
               title={t('Load Purchased')}
               value={stats?.totalLoadPurchased || 0}
-              icon={<ShoppingBag className='h-4 w-4 text-blue-500' />}
+              icon={<ShoppingBag className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Load bought from distributors')}
               isLoading={isLoading}
+              tone='sky'
             />
           </div>
         )}
@@ -141,6 +145,7 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={t('Repair charges collected')}
               isLoading={isLoading}
+              tone='orange'
             />
             <StatCard
               title={t('Bill Collection')}
@@ -149,20 +154,23 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={t('Total utility bills collected')}
               isLoading={isLoading}
+              tone='indigo'
             />
             <StatCard
               title={t('Bills Due Today')}
               value={stats?.billsDueToday || 0}
-              icon={<Clock className='h-4 w-4 text-yellow-500' />}
+              icon={<Clock className='h-4 w-4' />}
               description={t('Pending bills due today')}
               isLoading={isLoading}
+              tone='amber'
             />
             <StatCard
               title={t('Overdue Bills')}
               value={stats?.billsOverdue || 0}
-              icon={<AlertCircle className='h-4 w-4 text-destructive' />}
+              icon={<AlertCircle className='h-4 w-4' />}
               description={t('Bills past due date')}
               isLoading={isLoading}
+              tone='rose'
             />
           </div>
         )}
@@ -177,6 +185,7 @@ export default function Dashboard() {
             valuePrefix='Rs'
             description={t('from last month')}
             isLoading={isLoading}
+            tone='emerald'
           />
           <StatCard
             title={t('Total Sales')}
@@ -185,6 +194,7 @@ export default function Dashboard() {
             icon={<ShoppingCart className='h-4 w-4' />}
             description={t('from last month')}
             isLoading={isLoading}
+            tone='sky'
           />
           <StatCard
             title={t('Inventory Value')}
@@ -193,13 +203,15 @@ export default function Dashboard() {
             valuePrefix='Rs'
             description={t('Total stock value')}
             isLoading={isLoading}
+            tone='violet'
           />
           <StatCard
             title={t('Low Stock Items')}
             value={stats?.lowStockCount || 0}
-            icon={<AlertTriangle className='h-4 w-4 text-orange-500' />}
+            icon={<AlertTriangle className='h-4 w-4' />}
             description={`${stats?.outOfStockCount || 0} ${t('out of stock')}`}
             isLoading={isLoading}
+            tone='amber'
           />
           <StatCard
             title={t('Pending Invoices')}
@@ -208,6 +220,7 @@ export default function Dashboard() {
             valuePrefix='Rs'
             description={`${t('Total')}: Rs${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
             isLoading={isLoading}
+            tone='indigo'
           />
         </div>
 
@@ -216,18 +229,20 @@ export default function Dashboard() {
           <StatCard
             title={t('Sales Returns')}
             value={stats?.totalSalesReturns || 0}
-            icon={<RefreshCcw className='h-4 w-4 text-red-500' />}
+            icon={<RefreshCcw className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total amount refunded to customers')}
             isLoading={isLoading}
+            tone='rose'
           />
           <StatCard
             title={t('Purchase Returns')}
             value={stats?.totalPurchaseReturns || 0}
-            icon={<RefreshCcw className='h-4 w-4 text-blue-500' />}
+            icon={<RefreshCcw className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total amount recovered from suppliers')}
             isLoading={isLoading}
+            tone='cyan'
           />
         </div>
 
@@ -236,18 +251,20 @@ export default function Dashboard() {
           <StatCard
             title={t('Net Sales')}
             value={stats?.netSales || 0}
-            icon={<ShoppingCart className='h-4 w-4 text-green-600' />}
+            icon={<ShoppingCart className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Revenue after sales returns')}
             isLoading={isLoading}
+            tone='emerald'
           />
           <StatCard
             title={t('Net Purchases')}
             value={stats?.netPurchase || 0}
-            icon={<Package className='h-4 w-4 text-orange-500' />}
+            icon={<Package className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total purchases minus returns')}
             isLoading={isLoading}
+            tone='orange'
           />
         </div>
 

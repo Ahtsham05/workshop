@@ -7,6 +7,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface CustomerReportProps {
   startDate: string
@@ -55,7 +56,7 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
   return (
     <div className='space-y-6'>
       <div className='grid gap-4 md:grid-cols-3'>
-        <Card>
+        <Card className={kpiCardClass('indigo')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('unique_customers')}</CardTitle>
           </CardHeader>
@@ -63,7 +64,7 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
             <div className='text-2xl font-bold'>{data?.summary?.uniqueCustomers || 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('emerald')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('total_revenue')}</CardTitle>
           </CardHeader>
@@ -71,7 +72,7 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalRevenue || 0)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={kpiCardClass('cyan')}>
           <CardHeader>
             <CardTitle className='text-sm'>{t('avg_transaction')}</CardTitle>
           </CardHeader>

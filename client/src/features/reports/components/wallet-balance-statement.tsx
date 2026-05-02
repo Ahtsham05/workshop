@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import { Download, Wallet, TrendingUp, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useGetWalletBalanceStatementQuery } from '@/stores/reports.api'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export function WalletBalanceStatement({
           <div className='space-y-4'>
             {viewMode === 'summary' && (
               <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6'>
-                <Card>
+                <Card className={kpiCardClass('slate')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Opening Balance</p>
@@ -240,7 +241,7 @@ export function WalletBalanceStatement({
                     <p className='text-xs text-muted-foreground'>start of period</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('sky')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Total Sold</p>
@@ -250,7 +251,7 @@ export function WalletBalanceStatement({
                     <p className='text-xs text-muted-foreground'>{salesDays} active days</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('emerald')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Withdrawals (+)</p>
@@ -260,7 +261,7 @@ export function WalletBalanceStatement({
                     <p className='text-xs text-muted-foreground'>cash out — balance ↑</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('orange')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Deposits (−)</p>
@@ -270,7 +271,7 @@ export function WalletBalanceStatement({
                     <p className='text-xs text-muted-foreground'>cash in — balance ↓</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('emerald')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Total Profit</p>
@@ -282,7 +283,7 @@ export function WalletBalanceStatement({
                     </p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('violet')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
                       <p className='text-xs text-muted-foreground'>Closing Balance</p>

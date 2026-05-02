@@ -10,6 +10,8 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { WalletBalanceStatement } from './wallet-balance-statement'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface LoadReportProps {
   startDate: string
@@ -69,20 +71,24 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
       <div className='space-y-6'>
         {/* Summary cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-          <Card>
+          <Card className={kpiCardClass('slate')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Transactions</CardTitle>
-              <Wallet className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <Wallet className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s?.totalTransactions ?? 0}</div>
               <p className='text-xs text-muted-foreground'>load transactions in period</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Sold</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(s?.totalSold ?? 0)}</div>
@@ -94,40 +100,48 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Profit</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-green-600'>{fmt(s?.purchaseSavings ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>supplier commission &amp; discounts</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('cyan')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Purchase Savings</CardTitle>
-              <TrendingUp className='h-4 w-4 text-emerald-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('cyan'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-emerald-600'>{fmt(s?.purchaseSavings ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>supplier commission &amp; discounts</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('orange')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Purchased</CardTitle>
-              <ShoppingCart className='h-4 w-4 text-orange-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+                <ShoppingCart className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-orange-600'>{fmt(s?.totalPurchased ?? 0)}</div>
               <p className='text-xs text-muted-foreground'>load purchased from suppliers</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Net Inventory Balance</CardTitle>
-              <Wallet className='h-4 w-4 text-purple-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
+                <Wallet className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${(s?.netBalance ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -136,10 +150,12 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
               <p className='text-xs text-muted-foreground'>purchased minus sold</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('amber')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Extra Charges</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('amber'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{fmt(s?.totalExtraCharges ?? 0)}</div>
@@ -276,10 +292,12 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
             <div>
               <h3 className='mb-3 text-base font-semibold text-muted-foreground uppercase tracking-wide'>Cash Withdrawal &amp; Deposit</h3>
               <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-                <Card>
+                <Card className={kpiCardClass('slate')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                     <CardTitle className='text-sm font-medium'>Total Transactions</CardTitle>
-                    <Wallet className='h-4 w-4 text-muted-foreground' />
+                    <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                      <Wallet className='h-4 w-4' />
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold'>{data!.withdrawalSummary.totalCount}</div>
@@ -288,30 +306,36 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                     </p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('sky')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                     <CardTitle className='text-sm font-medium'>Withdrawals (cash out)</CardTitle>
-                    <ArrowUpCircle className='h-4 w-4 text-blue-500' />
+                    <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                      <ArrowUpCircle className='h-4 w-4' />
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold text-blue-600'>{fmt(data!.withdrawalSummary.totalWithdrawalAmount)}</div>
                     <p className='text-xs text-muted-foreground'>customer digital → you give cash</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('orange')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                     <CardTitle className='text-sm font-medium'>Deposits (cash in)</CardTitle>
-                    <ArrowDownCircle className='h-4 w-4 text-orange-500' />
+                    <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+                      <ArrowDownCircle className='h-4 w-4' />
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold text-orange-600'>{fmt(data!.withdrawalSummary.totalDepositAmount)}</div>
                     <p className='text-xs text-muted-foreground'>customer gives cash → you send digital</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className={kpiCardClass('emerald')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                     <CardTitle className='text-sm font-medium'>Commission Profit</CardTitle>
-                    <TrendingUp className='h-4 w-4 text-green-500' />
+                    <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                      <TrendingUp className='h-4 w-4' />
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold text-green-600'>{fmt(data!.withdrawalSummary.totalProfit)}</div>

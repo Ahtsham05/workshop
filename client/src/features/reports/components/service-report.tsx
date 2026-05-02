@@ -47,6 +47,8 @@ import {
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface ServiceReportProps {
   startDate: string
@@ -183,10 +185,10 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
 
         {/* ── Top Summary Cards ─────────────────────────────────────────────── */}
         <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardContent className='p-5 flex items-center gap-4'>
-              <div className='rounded-full bg-blue-100 dark:bg-blue-900/30 p-2.5'>
-                <ReceiptText className='h-5 w-5 text-blue-600' />
+              <div className={cn('rounded-xl p-2.5', toneIconWrapClass('sky'))}>
+                <ReceiptText className='h-5 w-5' />
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Total Invoices</p>
@@ -194,10 +196,10 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardContent className='p-5 flex items-center gap-4'>
-              <div className='rounded-full bg-emerald-100 dark:bg-emerald-900/30 p-2.5'>
-                <DollarSign className='h-5 w-5 text-emerald-600' />
+              <div className={cn('rounded-xl p-2.5', toneIconWrapClass('emerald'))}>
+                <DollarSign className='h-5 w-5' />
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Total Revenue</p>
@@ -205,10 +207,10 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('cyan')}>
             <CardContent className='p-5 flex items-center gap-4'>
-              <div className='rounded-full bg-green-100 dark:bg-green-900/30 p-2.5'>
-                <TrendingUp className='h-5 w-5 text-green-600' />
+              <div className={cn('rounded-xl p-2.5', toneIconWrapClass('cyan'))}>
+                <TrendingUp className='h-5 w-5' />
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Total Profit</p>
@@ -216,10 +218,10 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardContent className='p-5 flex items-center gap-4'>
-              <div className='rounded-full bg-purple-100 dark:bg-purple-900/30 p-2.5'>
-                <ShoppingBag className='h-5 w-5 text-purple-600' />
+              <div className={cn('rounded-xl p-2.5', toneIconWrapClass('violet'))}>
+                <ShoppingBag className='h-5 w-5' />
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Avg Invoice</p>

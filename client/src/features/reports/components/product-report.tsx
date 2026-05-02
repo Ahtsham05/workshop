@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { ProductDetailDialog } from './product-detail-dialog'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface ProductReportProps {
   startDate: string
@@ -65,7 +66,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
       <div className='space-y-6'>
         {/* Sales Summary */}
         <div className='grid gap-4 md:grid-cols-3'>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('total_sold_value')}</CardTitle>
             </CardHeader>
@@ -74,7 +75,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               <p className='text-xs text-muted-foreground mt-1'>{t('total_revenue_from_sales')}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('orange')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('total_cost_of_goods_sold')}</CardTitle>
             </CardHeader>
@@ -83,7 +84,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               <p className='text-xs text-muted-foreground mt-1'>{t('cost_of_sold_items')}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('total_profit')}</CardTitle>
             </CardHeader>
@@ -98,7 +99,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
 
         {/* Inventory Summary */}
         <div className='grid gap-4 md:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('total_products')}</CardTitle>
             </CardHeader>
@@ -106,7 +107,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               <div className='text-2xl font-bold'>{data?.stockSummary?.totalProducts || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('stock_value')}</CardTitle>
             </CardHeader>
@@ -115,7 +116,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               <p className='text-xs text-muted-foreground mt-1'>{t('current_inventory_value')}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('amber')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('low_stock')}</CardTitle>
             </CardHeader>
@@ -123,7 +124,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               <div className='text-2xl font-bold text-orange-600'>{data?.stockSummary?.lowStockProducts || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardHeader>
               <CardTitle className='text-sm'>{t('out_of_stock')}</CardTitle>
             </CardHeader>

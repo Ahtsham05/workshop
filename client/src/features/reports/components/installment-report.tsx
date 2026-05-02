@@ -9,6 +9,8 @@ import { Users, TrendingUp, CircleDollarSign, AlertTriangle } from 'lucide-react
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface InstallmentReportProps {
   startDate: string
@@ -106,10 +108,12 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
       <div className='space-y-6'>
         {/* Plan Summary cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('indigo')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Plans</CardTitle>
-              <Users className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('indigo'))}>
+                <Users className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{ps ? ps.totalPlans : 0}</div>
@@ -118,30 +122,36 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Outstanding</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-red-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('rose'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-red-600'>{fmt(ps ? ps.totalOutstanding : 0)}</div>
               <p className='text-xs text-muted-foreground'>yet to be collected</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Collected</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-green-600'>{fmt(ps ? ps.totalPaid : 0)}</div>
               <p className='text-xs text-muted-foreground'>all time</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Collected This Period</CardTitle>
-              <AlertTriangle className='h-4 w-4 text-yellow-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                <AlertTriangle className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(pmtS ? pmtS.totalCollected : 0)}</div>

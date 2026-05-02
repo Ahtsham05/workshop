@@ -8,6 +8,8 @@ import { Smartphone, TrendingUp, CircleDollarSign, Wallet } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 
 interface SimSaleReportProps {
   startDate: string
@@ -100,40 +102,48 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
       <div className='space-y-6'>
         {/* Summary cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-          <Card>
+          <Card className={kpiCardClass('violet')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Sales</CardTitle>
-              <Smartphone className='h-4 w-4 text-muted-foreground' />
+              <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
+                <Smartphone className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>{s ? s.totalSales : 0}</div>
               <p className='text-xs text-muted-foreground'>SIMs sold in period</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Sale Amount</CardTitle>
-              <CircleDollarSign className='h-4 w-4 text-blue-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+                <CircleDollarSign className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-blue-600'>{fmt(s ? s.totalSaleAmount : 0)}</div>
               <p className='text-xs text-muted-foreground'>charged to customers</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('orange')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Load Deducted</CardTitle>
-              <Wallet className='h-4 w-4 text-orange-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+                <Wallet className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold text-orange-600'>{fmt(s ? s.totalLoadAmount : 0)}</div>
               <p className='text-xs text-muted-foreground'>deducted from wallets</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Commission</CardTitle>
-              <TrendingUp className='h-4 w-4 text-green-500' />
+              <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                <TrendingUp className='h-4 w-4' />
+              </div>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${(s ? s.totalCommission : 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -146,7 +156,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
 
         {/* Additional summary row */}
         <div className='grid gap-4 sm:grid-cols-2'>
-          <Card>
+          <Card className={kpiCardClass('indigo')}>
             <CardHeader>
               <CardTitle className='text-sm font-medium'>SIM Amount</CardTitle>
             </CardHeader>
@@ -155,7 +165,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
               <p className='text-xs text-muted-foreground'>total SIM purchase cost</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={kpiCardClass('rose')}>
             <CardHeader>
               <CardTitle className='text-sm font-medium'>Total Purchase Cost</CardTitle>
             </CardHeader>

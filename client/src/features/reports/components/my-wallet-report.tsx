@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { ArrowDownLeft, ArrowUpRight, Wallet, TrendingUp, ReceiptText } from 'lucide-react'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useGetWalletBalanceStatementQuery } from '@/stores/reports.api'
+import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface MyWalletReportProps {
   startDate: string
@@ -189,7 +190,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
         {data ? (
           <>
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5'>
-              <Card>
+              <Card className={kpiCardClass('slate')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Opening Balance</CardTitle>
                 </CardHeader>
@@ -198,7 +199,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <Wallet className='h-4 w-4 text-muted-foreground' />
                 </CardContent>
               </Card>
-              <Card>
+              <Card className={kpiCardClass('emerald')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Total Inflow</CardTitle>
                 </CardHeader>
@@ -207,7 +208,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <ArrowDownLeft className='h-4 w-4 text-green-600' />
                 </CardContent>
               </Card>
-              <Card>
+              <Card className={kpiCardClass('rose')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Total Outflow</CardTitle>
                 </CardHeader>
@@ -216,7 +217,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <ArrowUpRight className='h-4 w-4 text-red-600' />
                 </CardContent>
               </Card>
-              <Card>
+              <Card className={kpiCardClass('indigo')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Transactions</CardTitle>
                 </CardHeader>
@@ -225,7 +226,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <ReceiptText className='h-4 w-4 text-muted-foreground' />
                 </CardContent>
               </Card>
-              <Card>
+              <Card className={kpiCardClass('cyan')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Closing Balance</CardTitle>
                 </CardHeader>
