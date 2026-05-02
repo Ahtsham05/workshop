@@ -183,6 +183,7 @@ export default function PurchasePanel({
             email: branchData?.email,
             logo: orgData?.logo?.url,
             isTrial: orgData?.subscription?.isTrial,
+            invoiceNote: branchData?.invoiceNote,
           }
           const html =
             printType === 'receipt'

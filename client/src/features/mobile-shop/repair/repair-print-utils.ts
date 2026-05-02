@@ -1,4 +1,5 @@
 // Repair job receipt print utility — 80mm thermal printer format with dual-language support
+import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { repairReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 
 export interface RepairReceiptData {
@@ -21,6 +22,7 @@ export interface RepairReceiptData {
   companyEmail?: string
   companyLogo?: string
   isTrial?: boolean
+  invoiceNote?: string
   language?: InvoiceLanguage
   isUrduOnly?: boolean
   userPreferredLanguage?: InvoiceLanguage
@@ -92,6 +94,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     .total-final { font-weight: bold; font-size: 16px; border-top: 1px solid #000; padding-top: 3px; margin-top: 3px; }
     .signatures { display: flex; justify-content: space-between; margin-top: 20px; gap: 20px; }
     .sig-box { flex: 1; border-top: 1px solid #000; padding-top: 3px; text-align: center; font-size: 10px; }
+    .invoice-branch-note { margin: 10px 0 0; padding: 8px 4px 0; border-top: 1px dashed #666; font-size: 10px; text-align: center; line-height: 1.35; white-space: normal; word-break: break-word; }
     .footer { text-align: center; font-size: 9px; margin-top: 12px; border-top: 2px solid #000; padding-top: 8px; }
     .footer-line { margin-bottom: 2px; }
     .no-print { text-align: center; margin: 20px 0; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 5px; }
@@ -151,6 +154,8 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     <div class="sig-box">${labels.customer_signature}</div>
     <div class="sig-box">${labels.technician_signature}</div>
   </div>
+
+  ${data.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(data.invoiceNote)}</div>` : ''}
 
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>

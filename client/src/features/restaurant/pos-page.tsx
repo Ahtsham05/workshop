@@ -33,6 +33,7 @@ import { toast } from 'sonner'
 import { useReactToPrint } from 'react-to-print'
 import { KitchenTicket, CustomerReceipt } from '@/features/restaurant/print-templates'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import {
   PosMenuCatalog,
   type PosProduct,
@@ -110,6 +111,8 @@ function canMarkPaid(order: RestaurantOrder): boolean {
 export default function RestaurantPosPage() {
   const dispatch = useDispatch<AppDispatch>()
   const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const products = useSelector((s: RootState) => s.product.data) as PosProduct[] | null
   const { data: tables = [] } = useGetTablesQuery()
   const { data: orders = [], refetch: refetchOrders } = useGetOrdersQuery(
@@ -1253,12 +1256,12 @@ export default function RestaurantPosPage() {
       <div className='hidden'>
         <div ref={kitchenRef}>
           {printOrder ? (
-            <KitchenTicket order={printOrder} venueName={org?.name} />
+            <KitchenTicket order={printOrder} venueName={org?.name} invoiceNote={branchData?.invoiceNote} />
           ) : null}
         </div>
         <div ref={receiptRef}>
           {printOrder ? (
-            <CustomerReceipt order={printOrder} venueName={org?.name} />
+            <CustomerReceipt order={printOrder} venueName={org?.name} invoiceNote={branchData?.invoiceNote} />
           ) : null}
         </div>
       </div>

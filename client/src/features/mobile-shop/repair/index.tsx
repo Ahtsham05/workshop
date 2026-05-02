@@ -383,6 +383,7 @@ export default function RepairPage() {
       companyEmail: branchData?.email,
       companyLogo: orgData?.logo?.url,
       isTrial: orgData?.subscription?.isTrial,
+      invoiceNote: branchData?.invoiceNote,
       userPreferredLanguage: preferredLanguage as 'en' | 'ur',
     })
     openRepairPrintWindow(html)

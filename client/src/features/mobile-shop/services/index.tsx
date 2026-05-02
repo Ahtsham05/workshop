@@ -33,7 +33,18 @@ import {
   useUpdateServiceInvoiceMutation,
   useDeleteServiceInvoiceMutation,
   type ServiceCatalogRecord,
+  type ServiceInvoiceRecord,
 } from '@/stores/mobile-shop.api'
+import {
+  MobileReceiptOffer,
+  fmtRs,
+  type MobileReceiptData,
+} from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
 
 type CatalogForm = {
   serviceName: string
@@ -93,6 +104,11 @@ export default function ServicesPage() {
   const [catalogLimit, setCatalogLimit] = useState(10)
   const [invoicePage, setInvoicePage] = useState(1)
   const [invoiceLimit, setInvoiceLimit] = useState(10)
+
+  const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: catalogData } = useGetServicesQuery({ page: catalogPage, limit: catalogLimit })
   const { data: invoiceData } = useGetServiceInvoicesQuery({ page: invoicePage, limit: invoiceLimit })
@@ -247,13 +263,33 @@ export default function ServicesPage() {
         })),
       }
 
+      let inv: ServiceInvoiceRecord
       if (editingInvoiceId) {
-        await updateInvoice({ id: editingInvoiceId, body: payload }).unwrap()
+        inv = await updateInvoice({ id: editingInvoiceId, body: payload }).unwrap()
         toast.success('Service invoice updated successfully')
       } else {
-        await createInvoice(payload).unwrap()
+        inv = await createInvoice(payload).unwrap()
         toast.success('Service invoice saved successfully')
       }
+
+      const lineRows = (inv.items || []).map((item) => ({
+        label: `${item.quantity}× ${item.serviceName}`,
+        value: fmtRs(item.total),
+      }))
+      setSavedReceipt({
+        title: 'Service invoice',
+        reference: inv.invoiceNumber,
+        issuedAt: new Date(inv.date).toLocaleString(),
+        lines: [
+          { label: 'Customer', value: inv.customerName || '—' },
+          { label: 'Phone', value: inv.customerPhone || '—' },
+          { label: 'Payment', value: inv.paymentMethod },
+          ...lineRows,
+          { label: 'Subtotal', value: fmtRs(inv.subtotal) },
+          { label: 'Total', value: fmtRs(inv.totalAmount) },
+          ...(inv.notes ? [{ label: 'Notes', value: inv.notes }] : []),
+        ],
+      })
 
       setInvoiceLines([])
       setInvoiceForm(initialInvoiceForm())
@@ -309,6 +345,15 @@ export default function ServicesPage() {
       description='Save services with default prices, then create service invoices and adjust line prices at invoice time.'
     >
       <div className='space-y-4'>
+        {savedReceipt ? (
+          <MobileReceiptOffer
+            onPrint={() => {
+              if (savedReceipt) printMobileShopReceipt(savedReceipt, org, branchData?.invoiceNote)
+            }}
+            onDismiss={() => setSavedReceipt(null)}
+          />
+        ) : null}
+
         <div className='flex gap-2'>
           <Button variant={activeTab === 'catalog' ? 'default' : 'outline'} onClick={() => setActiveTab('catalog')}>
             Service Catalog

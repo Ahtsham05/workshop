@@ -38,6 +38,7 @@ import {
   useUpdateSimSaleMutation,
   useDeleteSimSaleMutation,
   useGetWalletsQuery,
+  type SimSaleRecord,
 } from '@/stores/mobile-shop.api'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
@@ -45,6 +46,14 @@ import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import {
+  MobileReceiptOffer,
+  fmtRs,
+  type MobileReceiptData,
+} from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 
 type SimSaleFormState = {
   date: string
@@ -89,6 +98,11 @@ export default function SimSalePage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+
+  const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: walletsData } = useGetWalletsQuery()
   const { data: customersData } = useGetAllCustomersQuery(undefined)
@@ -206,13 +220,32 @@ export default function SimSalePage() {
     }
 
     try {
+      let record: SimSaleRecord
       if (editingId) {
-        await updateSimSale({ id: editingId, body: payload }).unwrap()
+        record = await updateSimSale({ id: editingId, body: payload }).unwrap()
         toast.success('Sim sale updated')
       } else {
-        await createSimSale(payload).unwrap()
+        record = await createSimSale(payload).unwrap()
         toast.success('Sim sale saved')
       }
+      setSavedReceipt({
+        title: 'SIM sale',
+        reference: `Job #${record.jobNumber}`,
+        issuedAt: new Date(record.date).toLocaleString(),
+        lines: [
+          { label: 'Item', value: record.productName || '—' },
+          { label: 'Load A/C', value: record.walletType || '—' },
+          { label: 'Customer', value: record.customerName || '—' },
+          { label: 'Mobile', value: record.customerMobile || '—' },
+          { label: 'SIM amount', value: fmtRs(record.simAmount) },
+          { label: 'Load amount', value: fmtRs(record.loadAmount) },
+          { label: 'Sale amount', value: fmtRs(record.saleAmount) },
+          {
+            label: 'Payment',
+            value: `${record.paymentMethod}${record.paymentWalletType ? ` (${record.paymentWalletType})` : ''}`,
+          },
+        ],
+      })
       resetForm()
     } catch (err: any) {
       toast.error(err?.data?.message || 'Failed to save sim sale')
@@ -254,6 +287,15 @@ export default function SimSalePage() {
   return (
     <MobilePageShell title='Sim Sale' description='Manage SIM card sales'>
       <div className='space-y-6'>
+        {savedReceipt ? (
+          <MobileReceiptOffer
+            onPrint={() => {
+              if (savedReceipt) printMobileShopReceipt(savedReceipt, org, branchData?.invoiceNote)
+            }}
+            onDismiss={() => setSavedReceipt(null)}
+          />
+        ) : null}
+
         {/* Toolbar */}
         <div className='flex justify-end'>
           <Button onClick={() => { resetForm(); setShowForm(true) }}>

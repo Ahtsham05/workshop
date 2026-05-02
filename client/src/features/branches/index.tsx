@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,7 @@ export default function BranchesPage() {
     location: { address: '', city: '', country: '' },
     phone: '',
     email: '',
+    invoiceNote: '',
   })
 
   const { data, isLoading, refetch } = useGetBranchesQuery({ page, limit: 20 })
@@ -63,7 +65,7 @@ export default function BranchesPage() {
 
   const handleCreate = () => {
     setSelectedBranch(null)
-    setFormData({ name: '', location: { address: '', city: '', country: '' }, phone: '', email: '' })
+    setFormData({ name: '', location: { address: '', city: '', country: '' }, phone: '', email: '', invoiceNote: '' })
     setDialogOpen(true)
   }
 
@@ -74,6 +76,7 @@ export default function BranchesPage() {
       location: branch.location || { address: '', city: '', country: '' },
       phone: branch.phone || '',
       email: branch.email || '',
+      invoiceNote: branch.invoiceNote || '',
     })
     setDialogOpen(true)
   }
@@ -322,6 +325,20 @@ export default function BranchesPage() {
                   placeholder="branch@company.com"
                 />
               </div>
+            </div>
+            <div>
+              <Label htmlFor="branch-invoice-note">Invoice / receipt note</Label>
+              <Textarea
+                id="branch-invoice-note"
+                value={formData.invoiceNote || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, invoiceNote: e.target.value }))}
+                placeholder="Optional message printed at the bottom of invoices and receipts for this branch (e.g. thank-you, terms, return policy)."
+                rows={4}
+                className="resize-y min-h-[88px]"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Shown on sales invoices, purchase slips, mobile shop receipts, repair tickets, bills, and restaurant prints when this branch is active.
+              </p>
             </div>
           </div>
           <DialogFooter>

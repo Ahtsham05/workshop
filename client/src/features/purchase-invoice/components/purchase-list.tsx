@@ -84,6 +84,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           email: branchData?.email,
           logo: orgData?.logo?.url,
           isTrial: orgData?.subscription?.isTrial,
+          invoiceNote: branchData?.invoiceNote,
         }
 
         const html =

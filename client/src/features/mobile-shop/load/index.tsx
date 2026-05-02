@@ -57,6 +57,14 @@ import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import {
+  MobileReceiptOffer,
+  fmtRs,
+  type MobileReceiptData,
+} from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
 
 type PurchaseFormState = {
   walletId: string
@@ -230,6 +238,11 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal'; id: string } | null>(null)
+
+  const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: walletsData } = useGetWalletsQuery()
   const { data: customersData } = useGetAllCustomersQuery(undefined)
@@ -485,7 +498,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     if (!purchaseForm.amount || Number(purchaseForm.amount) <= 0) { toast.error('Please enter a valid amount'); return }
     if (purchaseForm.paymentMethod === 'wallet' && !purchaseForm.paymentWalletType) { toast.error('Please select payment wallet'); return }
     try {
-      await createLoadPurchase({
+      const created = await createLoadPurchase({
         walletType: purchaseForm.walletType,
         supplierId: purchaseForm.savedSupplierId || undefined,
         amount: Number(purchaseForm.amount),
@@ -498,6 +511,21 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Load purchase recorded!')
+      setSavedReceipt({
+        title: 'Load purchase',
+        reference: String(created.id).slice(-10).toUpperCase(),
+        issuedAt: new Date(created.date).toLocaleString(),
+        lines: [
+          { label: 'Wallet', value: created.walletType },
+          { label: 'Amount', value: fmtRs(created.amount) },
+          { label: 'Paid', value: fmtRs(created.paidAmount ?? 0) },
+          ...(created.supplierName ? [{ label: 'Supplier', value: created.supplierName }] : []),
+          {
+            label: 'Payment',
+            value: `${created.paymentMethod}${created.paymentWalletType ? ` (${created.paymentWalletType})` : ''}`,
+          },
+        ],
+      })
       setPurchaseForm(initialPurchaseForm)
       setIsPurchasePaidAmountManual(false)
     } catch (error: any) {
@@ -512,7 +540,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     if (!saleForm.walletType) { toast.error('Selected wallet is invalid'); return }
     if (saleForm.paymentMethod === 'wallet' && !saleForm.paymentWalletType) { toast.error('Please select payment wallet'); return }
     try {
-      await createLoadTransaction({
+      const sold = await createLoadTransaction({
         walletId: saleForm.walletId,
         walletType: saleForm.walletType,
         customerId: saleForm.customerId || undefined,
@@ -529,6 +557,18 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
       }).unwrap()
       toast.success('Load sold successfully!')
+      setSavedReceipt({
+        title: 'Load sale',
+        reference: String(sold.id).slice(-10).toUpperCase(),
+        issuedAt: new Date(sold.date).toLocaleString(),
+        lines: [
+          { label: 'Wallet', value: sold.walletType },
+          { label: 'Customer', value: sold.customerName || '—' },
+          { label: 'Mobile', value: sold.mobileNumber || '—' },
+          { label: 'Amount', value: fmtRs(sold.amount) },
+          { label: 'Received', value: fmtRs(sold.receivedAmount ?? 0) },
+        ],
+      })
       setSaleForm(initialSaleForm)
       setIsSaleReceivedAmountManual(false)
     } catch (error: any) {
@@ -546,7 +586,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       return
     }
     try {
-      await createCashWithdrawal({
+      const cw = await createCashWithdrawal({
         walletId: withdrawalForm.walletId,
         walletType: withdrawalForm.walletType,
         amount: Number(withdrawalForm.amount),
@@ -561,6 +601,19 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Cash withdrawal recorded!')
+      setSavedReceipt({
+        title: cw.transactionType === 'withdrawal' ? 'Cash withdrawal' : 'Cash deposit',
+        reference: String(cw.id).slice(-10).toUpperCase(),
+        issuedAt: new Date(cw.date).toLocaleString(),
+        lines: [
+          { label: 'Wallet', value: cw.walletType },
+          { label: 'Amount', value: fmtRs(cw.amount) },
+          { label: 'Cash', value: fmtRs(cw.cashAmount ?? 0) },
+          { label: 'Customer', value: cw.customerName || '—' },
+          { label: 'Phone', value: cw.customerNumber || '—' },
+          ...(cw.notes ? [{ label: 'Notes', value: cw.notes }] : []),
+        ],
+      })
       const prevType = withdrawalForm.transactionType
       const prevWalletId = withdrawalForm.walletId
       const prevWalletType = withdrawalForm.walletType
@@ -660,7 +713,10 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     const validEntries = bulkWithdrawalForm.entries.filter(e => parseFloat(e.amount) > 0)
     if (validEntries.length === 0) { toast.error('Enter at least one valid amount'); return }
     try {
-      await createCashWithdrawalsBatch({
+      const batchWalletType = bulkWithdrawalForm.walletType
+      const batchTxType = bulkWithdrawalForm.transactionType
+      const batchDate = bulkWithdrawalForm.date
+      const createdRows = await createCashWithdrawalsBatch({
         walletId: bulkWithdrawalForm.walletId,
         walletType: bulkWithdrawalForm.walletType,
         transactionType: bulkWithdrawalForm.transactionType,
@@ -675,6 +731,25 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         })),
       }).unwrap()
       toast.success(`${validEntries.length} ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'withdrawal' : 'deposit'} entries saved!`)
+      const totalAmt = createdRows.reduce((s, x) => s + x.amount, 0)
+      setSavedReceipt({
+        title: batchTxType === 'withdrawal' ? 'Bulk cash withdrawals' : 'Bulk cash deposits',
+        subtitle: `${createdRows.length} entries`,
+        reference: createdRows[0] ? String(createdRows[0].id).slice(-10).toUpperCase() : undefined,
+        issuedAt: new Date(batchDate).toLocaleString(),
+        lines: [
+          { label: 'Wallet', value: batchWalletType },
+          { label: 'Entries', value: String(createdRows.length) },
+          { label: 'Total amount', value: fmtRs(totalAmt) },
+          ...createdRows.slice(0, 8).map((row, i) => ({
+            label: `#${i + 1}`,
+            value: `${fmtRs(row.amount)}${row.customerName ? ` · ${row.customerName}` : ''}`,
+          })),
+          ...(createdRows.length > 8
+            ? [{ label: '…', value: `+ ${createdRows.length - 8} more` }]
+            : []),
+        ],
+      })
       // Preserve wallet, type, commission and date — only clear entries
       setBulkWithdrawalForm(prev => ({ ...prev, entries: [makeEmptyBulkEntry()] }))
       // Focus first amount field of the fresh row
@@ -907,6 +982,15 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       title={isCashManagementMode ? 'Cash Management' : 'Load Management'}
       description={isCashManagementMode ? 'Manage cash withdrawals and deposits' : 'Purchase and sell mobile load'}
     >
+      {savedReceipt ? (
+        <MobileReceiptOffer
+          onPrint={() => {
+            if (savedReceipt) printMobileShopReceipt(savedReceipt, org, branchData?.invoiceNote)
+          }}
+          onDismiss={() => setSavedReceipt(null)}
+        />
+      ) : null}
+
       <Tabs defaultValue={isCashManagementMode ? 'withdrawal' : 'sell'}>
         {!isCashManagementMode && (
           <TabsList className='mb-4'>
@@ -917,8 +1001,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
         {/* ── PURCHASE LOAD TAB ── */}
         {!isCashManagementMode && (
-        <TabsContent value='purchase'>
-          <div className='grid gap-6'>
+        <TabsContent value='purchase' className='min-w-0'>
+          <div className='grid min-w-0 gap-6'>
             <Card className='border-2 border-blue-200'>
               <CardHeader>
                 <CardTitle className='text-blue-700'>📥 {editingPurchase ? 'Edit' : 'Purchase'} Load</CardTitle>
@@ -1084,9 +1168,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className='min-w-0'>
               <CardHeader><CardTitle>Recent Load Purchases</CardTitle></CardHeader>
-              <CardContent>
+              <CardContent className='min-w-0'>
                 {purchases.length === 0 ? (
                   <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No purchases yet.</p></div>
                 ) : (
@@ -1149,8 +1233,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
         {/* ── SELL LOAD TAB ── */}
         {!isCashManagementMode && (
-        <TabsContent value='sell'>
-          <div className='grid gap-6'>
+        <TabsContent value='sell' className='min-w-0'>
+          <div className='grid min-w-0 gap-6'>
             <Card className='border-2 border-green-200'>
               <CardHeader>
                 <CardTitle className='text-green-700'>📤 {editingTransaction ? 'Edit' : 'Sell'} Mobile Load</CardTitle>
@@ -1317,9 +1401,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className='min-w-0'>
               <CardHeader><CardTitle>Recent Load Sales</CardTitle></CardHeader>
-              <CardContent>
+              <CardContent className='min-w-0'>
                 {transactions.length === 0 ? (
                   <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No sales yet.</p></div>
                 ) : (
@@ -1384,8 +1468,8 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
         {/* ── CASH WITHDRAWAL TAB ── */}
         {isCashManagementMode && (
-        <TabsContent value='withdrawal'>
-          <div className='grid gap-6'>
+        <TabsContent value='withdrawal' className='min-w-0'>
+          <div className='grid min-w-0 gap-6'>
             <Card className='border-2 border-orange-200'>
               <CardHeader>
                 <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
@@ -1815,7 +1899,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className='min-w-0'>
               <CardHeader>
                 <div className='flex items-center justify-between'>
                   <CardTitle>Recent Cash Withdrawals</CardTitle>
@@ -1832,7 +1916,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className='min-w-0'>
                 {withdrawals.length === 0 ? (
                   <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No withdrawals yet.</p></div>
                 ) : (

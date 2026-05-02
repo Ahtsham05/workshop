@@ -24,6 +24,18 @@ const buildAggregateScope = (req) => {
   return scope;
 };
 
+/** True if value can be used as Customer/Product _id (excludes walk-in and bad strings). */
+const isValidRefObjectId = (id) => {
+  if (id == null || id === '' || id === 'walk-in') return false;
+  const s = String(id);
+  if (!/^[a-fA-F0-9]{24}$/.test(s)) return false;
+  try {
+    return String(new mongoose.Types.ObjectId(s)) === s;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Get dashboard statistics
  * @route GET /v1/dashboard/stats
@@ -220,7 +232,9 @@ const getDashboardStats = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/revenue?period=week
  */
 const getRevenueData = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
+  // Aggregates must use BSON ObjectIds — applyBranchFilter leaves branchId as strings,
+  // which Mongoose fixes for .find() but NOT for aggregate $match (would return []).
+  const aggScope = buildAggregateScope(req);
   const { period = 'week' } = req.query;
   const now = new Date();
   let startDate;
@@ -255,7 +269,7 @@ const getRevenueData = catchAsync(async (req, res) => {
   const revenueData = await Invoice.aggregate([
     {
       $match: {
-        ...bf,
+        ...aggScope,
         createdAt: { $gte: startDate },
         status: { $ne: 'cancelled' }
       }
@@ -265,7 +279,7 @@ const getRevenueData = catchAsync(async (req, res) => {
         _id: groupBy,
         revenue: { $sum: '$total' },
         sales: { $sum: 1 },
-        profit: { $sum: '$totalProfit' }
+        profit: { $sum: { $ifNull: ['$totalProfit', 0] } },
       }
     },
     {
@@ -314,7 +328,7 @@ const getRevenueData = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/top-products?limit=5
  */
 const getTopProducts = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
+  const aggScope = buildAggregateScope(req);
   const { limit = 5 } = req.query;
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
@@ -322,12 +336,27 @@ const getTopProducts = catchAsync(async (req, res) => {
   const topProducts = await Invoice.aggregate([
     {
       $match: {
-        ...bf,
+        ...aggScope,
         createdAt: { $gte: lastMonth },
         status: { $ne: 'cancelled' }
       }
     },
     { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
     {
       $group: {
         _id: '$items.productId',
@@ -338,9 +367,22 @@ const getTopProducts = catchAsync(async (req, res) => {
     { $sort: { totalRevenue: -1 } },
     { $limit: parseInt(limit) },
     {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$_id',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
       $lookup: {
         from: 'products',
-        localField: '_id',
+        localField: 'productLookupId',
         foreignField: '_id',
         as: 'product'
       }
@@ -367,7 +409,7 @@ const getTopProducts = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/top-customers?limit=5
  */
 const getTopCustomers = catchAsync(async (req, res) => {
-  const bf = applyBranchFilter({}, req);
+  const aggScope = buildAggregateScope(req);
   const { limit = 5 } = req.query;
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
@@ -375,11 +417,21 @@ const getTopCustomers = catchAsync(async (req, res) => {
   const topCustomers = await Invoice.aggregate([
     {
       $match: {
-        ...bf,
+        ...aggScope,
         createdAt: { $gte: lastMonth },
         status: { $ne: 'cancelled' },
-        customerId: { $exists: true, $ne: 'walk-in' }
-      }
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$customerId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$customerId' }, 'string'] },
+                { $regexMatch: { input: '$customerId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
     },
     {
       $group: {
@@ -392,9 +444,22 @@ const getTopCustomers = catchAsync(async (req, res) => {
     { $sort: { totalAmount: -1 } },
     { $limit: parseInt(limit) },
     {
+      $addFields: {
+        customerLookupId: {
+          $convert: {
+            input: '$_id',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { customerLookupId: { $ne: null } } },
+    {
       $lookup: {
         from: 'customers',
-        localField: '_id',
+        localField: 'customerLookupId',
         foreignField: '_id',
         as: 'customer'
       }
@@ -452,30 +517,54 @@ const getLowStockProducts = catchAsync(async (req, res) => {
 const getRecentActivities = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
   const { limit = 10 } = req.query;
+  const half = Math.max(1, Math.ceil(parseInt(limit, 10) / 2));
 
-  // Get recent invoices
+  // Do not .populate(customerId): walk-in invoices use customerId === 'walk-in', which is not a valid ObjectId
   const recentInvoices = await Invoice.find({ ...bf })
     .sort({ createdAt: -1 })
-    .limit(parseInt(limit) / 2)
-    .populate('customerId', 'name')
+    .limit(half)
+    .select('invoiceNumber total createdAt status walkInCustomerName customerId')
     .lean();
+
+  const customerIdsToResolve = [
+    ...new Set(
+      recentInvoices
+        .map((inv) => inv.customerId)
+        .filter((id) => isValidRefObjectId(id))
+        .map((id) => String(id)),
+    ),
+  ];
+  const customerDocs =
+    customerIdsToResolve.length > 0
+      ? await Customer.find({ _id: { $in: customerIdsToResolve } })
+          .select('name')
+          .lean()
+      : [];
+  const customerNameById = new Map(customerDocs.map((c) => [String(c._id), c.name]));
 
   // Get recent purchases
   const recentPurchases = await Purchase.find({ ...bf })
     .sort({ createdAt: -1 })
-    .limit(parseInt(limit) / 2)
+    .limit(half)
     .populate('supplier', 'name')
     .lean();
 
   // Combine and format activities
-  const invoiceActivities = recentInvoices.map(inv => ({
-    id: inv._id,
-    type: 'invoice',
-    description: `Invoice ${inv.invoiceNumber} - ${inv.customerId?.name || inv.walkInCustomerName || 'Walk-in Customer'}`,
-    amount: inv.total,
-    timestamp: inv.createdAt,
-    status: inv.status || 'completed'
-  }));
+  const invoiceActivities = recentInvoices.map((inv) => {
+    const cid = inv.customerId;
+    const resolvedName =
+      cid && isValidRefObjectId(cid) ? customerNameById.get(String(cid)) : null;
+    const label =
+      resolvedName || inv.walkInCustomerName || 'Walk-in Customer';
+    return {
+      id: inv._id,
+      type: 'invoice',
+      description: `Invoice ${inv.invoiceNumber} - ${label}`,
+      amount: inv.total,
+      timestamp: inv.createdAt,
+      status: inv.status || 'completed',
+    };
+  });
 
   const purchaseActivities = recentPurchases.map(pur => ({
     id: pur._id,

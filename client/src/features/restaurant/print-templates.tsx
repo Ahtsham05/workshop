@@ -6,8 +6,8 @@ const formatMoney = (n: number) =>
 
 export const KitchenTicket = forwardRef<
   HTMLDivElement,
-  { order: RestaurantOrder; venueName?: string }
->(({ order, venueName }, ref) => {
+  { order: RestaurantOrder; venueName?: string; invoiceNote?: string }
+>(({ order, venueName, invoiceNote }, ref) => {
   return (
     <div ref={ref} className='bg-white p-6 text-black text-sm' style={{ width: '80mm' }}>
       <div className='text-center font-bold text-base border-b border-dashed border-black pb-2 mb-2'>
@@ -31,6 +31,11 @@ export const KitchenTicket = forwardRef<
           </li>
         ))}
       </ul>
+      {invoiceNote?.trim() ? (
+        <div className='mt-4 border-t border-dashed border-gray-400 pt-3 text-[10px] text-center leading-snug text-gray-700 whitespace-pre-wrap'>
+          {invoiceNote.trim()}
+        </div>
+      ) : null}
       <div className='mt-4 text-xs text-center text-gray-500'>Kitchen copy — fire immediately</div>
     </div>
   )
@@ -39,8 +44,8 @@ KitchenTicket.displayName = 'KitchenTicket'
 
 export const CustomerReceipt = forwardRef<
   HTMLDivElement,
-  { order: RestaurantOrder; venueName?: string; branchName?: string }
->(({ order, venueName, branchName }, ref) => {
+  { order: RestaurantOrder; venueName?: string; branchName?: string; invoiceNote?: string }
+>(({ order, venueName, branchName, invoiceNote }, ref) => {
   return (
     <div ref={ref} className='bg-white p-6 text-black text-sm' style={{ width: '72mm' }}>
       <div className='text-center font-bold'>{venueName || 'Receipt'}</div>
@@ -76,6 +81,11 @@ export const CustomerReceipt = forwardRef<
       {order.paymentMethod ? (
         <div className='text-xs text-center mt-2 text-gray-600'>Paid via {order.paymentMethod}</div>
       ) : null}
+      {invoiceNote?.trim() ? (
+        <div className='mt-3 border-t border-dashed border-gray-400 pt-3 text-[10px] text-center leading-snug text-gray-700 whitespace-pre-wrap'>
+          {invoiceNote.trim()}
+        </div>
+      ) : null}
     </div>
   )
 })
@@ -83,8 +93,8 @@ CustomerReceipt.displayName = 'CustomerReceipt'
 
 export const QrTableSheet = forwardRef<
   HTMLDivElement,
-  { table: RestaurantTable; orderUrl: string; venueName: string; floorName?: string }
->(({ table, orderUrl, venueName, floorName }, ref) => {
+  { table: RestaurantTable; orderUrl: string; venueName: string; floorName?: string; invoiceNote?: string }
+>(({ table, orderUrl, venueName, floorName, invoiceNote }, ref) => {
   return (
     <div
       ref={ref}
@@ -95,6 +105,11 @@ export const QrTableSheet = forwardRef<
       {floorName ? <div className='text-sm text-gray-600'>{floorName}</div> : null}
       <div className='text-2xl font-semibold mt-4'>Table {table.label}</div>
       <div className='text-xs break-all mt-4 px-2 font-mono'>{orderUrl}</div>
+      {invoiceNote?.trim() ? (
+        <div className='text-[10px] text-gray-700 mt-4 px-2 leading-snug whitespace-pre-wrap border-t border-dashed border-gray-300 pt-3'>
+          {invoiceNote.trim()}
+        </div>
+      ) : null}
       <div className='text-xs text-gray-500 mt-6'>Scan to order &amp; pay at the table</div>
     </div>
   )
@@ -103,8 +118,8 @@ QrTableSheet.displayName = 'QrTableSheet'
 
 export const EndOfDaySummary = forwardRef<
   HTMLDivElement,
-  { date: string; totalOrders: number; revenue: number; venueName: string }
->(({ date, totalOrders, revenue, venueName }, ref) => {
+  { date: string; totalOrders: number; revenue: number; venueName: string; invoiceNote?: string }
+>(({ date, totalOrders, revenue, venueName, invoiceNote }, ref) => {
   return (
     <div ref={ref} className='bg-white p-8 text-black' style={{ width: 'A4' }}>
       <h2 className='text-xl font-bold'>{venueName}</h2>
@@ -121,6 +136,11 @@ export const EndOfDaySummary = forwardRef<
           </tr>
         </tbody>
       </table>
+      {invoiceNote?.trim() ? (
+        <p className='text-xs text-gray-700 mt-6 whitespace-pre-wrap border-t border-dashed border-gray-300 pt-4'>
+          {invoiceNote.trim()}
+        </p>
+      ) : null}
       <p className='text-xs text-gray-500 mt-6'>Manager / owner copy — retain for records</p>
     </div>
   )

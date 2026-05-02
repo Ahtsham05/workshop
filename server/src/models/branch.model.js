@@ -39,6 +39,13 @@ const branchSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /** Shown at bottom of thermal/HTML receipts & invoices for this branch */
+    invoiceNote: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: '',
+    },
   },
   {
     timestamps: true,

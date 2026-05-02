@@ -394,6 +394,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         companyEmail: branchData?.email,
         companyLogo: orgData?.logo?.url,
         isTrial: orgData?.subscription?.isTrial,
+        invoiceNote: branchData?.invoiceNote,
       }
 
       if (printType === 'a4') {
@@ -836,6 +837,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     companyName: branchData?.name,
                                     companyLogo: orgData?.logo?.url,
                                     isTrial: orgData?.subscription?.isTrial,
+                                    invoiceNote: branchData?.invoiceNote,
                                   }
                                   const htmlContent = generateInvoiceHTML(printData)
                                   openPrintWindow(htmlContent)
@@ -873,6 +875,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     companyName: branchData?.name,
                                     companyLogo: orgData?.logo?.url,
                                     isTrial: orgData?.subscription?.isTrial,
+                                    invoiceNote: branchData?.invoiceNote,
                                   }
                                   const htmlContent = generateA4InvoiceHTML(printData)
                                   openA4PrintWindow(htmlContent)

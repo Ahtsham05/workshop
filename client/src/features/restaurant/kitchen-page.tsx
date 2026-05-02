@@ -13,11 +13,16 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useReactToPrint } from 'react-to-print'
 import { KitchenTicket } from '@/features/restaurant/print-templates'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import { toast } from 'sonner'
 
 export default function RestaurantKitchenPage() {
   const { data: orders = [], refetch } = useGetOrdersQuery({ limit: 80 })
   const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { refetch: refetchStats } = useGetRestaurantStatsQuery()
   const [patchLine] = useUpdateLineKitchenStatusMutation()
 
@@ -134,7 +139,7 @@ export default function RestaurantKitchenPage() {
       <div className='hidden'>
         <div ref={printRef}>
           {printOrder ? (
-            <KitchenTicket order={printOrder} venueName={org?.name} />
+            <KitchenTicket order={printOrder} venueName={org?.name} invoiceNote={branchData?.invoiceNote} />
           ) : null}
         </div>
       </div>

@@ -177,6 +177,7 @@ export function InvoicePanel({
         language: invoiceData.language,
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
+        invoiceNote: branchData?.invoiceNote,
       }
 
       // Force Urdu/RTL for print
@@ -235,6 +236,7 @@ export function InvoicePanel({
         language: invoiceData.language,
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
+        invoiceNote: branchData?.invoiceNote,
       }
 
       // Force Urdu/RTL for print

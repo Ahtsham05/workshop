@@ -1,3 +1,4 @@
+import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import type { BillPaymentReceipt } from '@/stores/mobile-shop.api'
 import { billReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 
@@ -8,6 +9,7 @@ interface BillReceiptOptions {
     address?: string
     phone?: string
     email?: string
+    invoiceNote?: string
   }
   userPreferredLanguage?: InvoiceLanguage
   isTrial?: boolean
@@ -136,6 +138,17 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
       text-transform: uppercase;
     }
     
+    .invoice-branch-note {
+      margin: 10px 0 0;
+      padding: 8px 4px 0;
+      border-top: 1px dashed #666;
+      font-size: 10px;
+      text-align: center;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+    }
+
     .footer {
       text-align: center;
       font-size: 9px;
@@ -253,6 +266,10 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
       <span class="status-badge">${receipt.status.toUpperCase()}</span>
     </div>
   </div>
+
+  ${options.branchDetails?.invoiceNote?.trim()
+    ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(options.branchDetails.invoiceNote)}</div>`
+    : ''}
   
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>

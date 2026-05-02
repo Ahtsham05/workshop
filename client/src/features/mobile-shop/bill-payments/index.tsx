@@ -372,6 +372,7 @@ function PrintReceiptButton({ billId }: { billId: string }) {
       address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
       phone: branchData?.phone,
       email: branchData?.email,
+      invoiceNote: branchData?.invoiceNote,
     },
     userPreferredLanguage: preferredLanguage as 'en' | 'ur',
     isTrial: orgData?.subscription?.isTrial,

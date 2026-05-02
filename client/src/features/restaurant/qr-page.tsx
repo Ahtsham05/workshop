@@ -6,12 +6,17 @@ import { Button } from '@/components/ui/button'
 import { useReactToPrint } from 'react-to-print'
 import { QrTableSheet } from '@/features/restaurant/print-templates'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import { toast } from 'sonner'
 
 export default function RestaurantQrPage() {
   const { data: floors = [] } = useGetFloorsQuery()
   const { data: tables = [] } = useGetTablesQuery()
   const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const printRef = useRef<HTMLDivElement>(null)
   const [printPayload, setPrintPayload] = useState<{
     table: import('@/stores/restaurant.api').RestaurantTable
@@ -93,6 +98,7 @@ export default function RestaurantQrPage() {
               orderUrl={printPayload.orderUrl}
               venueName={printPayload.venueName}
               floorName={printPayload.floorName}
+              invoiceNote={branchData?.invoiceNote}
             />
           ) : null}
         </div>

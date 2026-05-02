@@ -15,6 +15,8 @@ export interface Branch {
   manager?: { id: string; name: string; email: string } | null;
   isDefault: boolean;
   isActive: boolean;
+  /** Printed on receipts/invoices (thermal & HTML) for this branch */
+  invoiceNote?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +32,7 @@ export interface CreateBranchRequest {
   email?: string;
   manager?: string;
   isActive?: boolean;
+  invoiceNote?: string;
 }
 
 export interface BranchesResponse {

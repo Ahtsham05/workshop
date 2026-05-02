@@ -1,3 +1,4 @@
+import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
 
 export interface PrintInvoiceData {
@@ -21,6 +22,8 @@ export interface PrintInvoiceData {
   balance: number
   dueDate?: string
   notes?: string
+  /** Branch-level footer from Branch Management (shown on all prints when set) */
+  invoiceNote?: string
   deliveryCharge?: number
   serviceCharge?: number
   previousBalance?: number
@@ -63,6 +66,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     // balance,
     dueDate,
     notes,
+    invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
     companyName,
@@ -334,6 +338,17 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       border-top: 1px dashed #000;
       font-size: 9px;
     }
+
+    .invoice-branch-note {
+      margin: 10px 0 0;
+      padding: 8px 4px 0;
+      border-top: 1px dashed #666;
+      font-size: 10px;
+      text-align: center;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+    }
     
     .footer {
       text-align: center;
@@ -555,6 +570,10 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <div>${notes}</div>
     </div>
   ` : ''}
+
+  ${invoiceNote?.trim() ? `
+    <div class="invoice-branch-note">${invoiceNoteToSafeHtml(invoiceNote)}</div>
+  ` : ''}
   
   <div class="footer">
     <div class="footer-line"><strong>${urduTexts.thank_you}</strong></div>
@@ -602,6 +621,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     // balance,
     dueDate,
     notes,
+    invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
     companyName,
@@ -922,6 +942,19 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       border-right: 4px solid black;
       border-radius: 8px 0 0 8px;
     }
+
+    .invoice-branch-note {
+      margin: 24px 0 0;
+      padding: 16px;
+      background: #fafafa;
+      border: 1px dashed #ccc;
+      border-radius: 6px;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.45;
+      white-space: normal;
+      word-break: break-word;
+    }
     
     .footer {
       text-align: center;
@@ -1152,6 +1185,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.additional_notes}:</div>
       <div style="font-size: 14px;">${notes}</div>
     </div>
+  ` : ''}
+
+  ${invoiceNote?.trim() ? `
+    <div class="invoice-branch-note">${invoiceNoteToSafeHtml(invoiceNote)}</div>
   ` : ''}
   
   <div class="footer">

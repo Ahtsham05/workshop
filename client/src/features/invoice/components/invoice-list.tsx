@@ -265,6 +265,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         language: invoice.language,
         isUrduOnly: invoice.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
+        invoiceNote: branchData?.invoiceNote,
       }
 
       if (format === 'receipt') {

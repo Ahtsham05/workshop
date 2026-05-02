@@ -24,6 +24,8 @@ import {
   useGetStudentsQuery,
 } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
+import { useGetBranchQuery } from '@/stores/branch.api';
+import { invoiceNoteToSafeHtml } from '@/lib/escape-html';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
@@ -56,6 +58,8 @@ export default function FeeVouchers() {
   const now = new Date();
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
 
   const [filters, setFilters] = useState({
     month: MONTHS[now.getMonth()],
@@ -397,7 +401,7 @@ export default function FeeVouchers() {
 
   const openPrintWindow = (data: any[]) => {    const win = window.open('', '_blank');
     if (!win) return toast.error('Allow pop-ups to print');
-    win.document.write(buildPrintHTML(data, org?.name || 'School'));
+    win.document.write(buildPrintHTML(data, org?.name || 'School', branchData?.invoiceNote));
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 600);
@@ -1338,7 +1342,7 @@ export default function FeeVouchers() {
 }
 
 // ── Professional Print HTML (4 vouchers per A4 page, 2×2 grid) ──────────────────
-function buildPrintHTML(vouchers: any[], schoolName: string): string {
+function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: string): string {
   // Layout: 3 students per A4 page, each row = Student Copy (left) | cut | Office Copy (right)
   const PER_PAGE = 3;
   const pages: string[] = [];
@@ -1346,9 +1350,9 @@ function buildPrintHTML(vouchers: any[], schoolName: string): string {
     const group = vouchers.slice(i, i + PER_PAGE);
     const rows = group.map((v, ri) => `
       <div class="row${ri < group.length - 1 ? ' has-cut' : ''}">
-        <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy')}</div>
+        <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote)}</div>
         <div class="vcut"><span>✂</span></div>
-        <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy')}</div>
+        <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote)}</div>
       </div>`).join('');
     pages.push(`<div class="page">${rows}</div>`);
   }
@@ -1507,6 +1511,16 @@ function buildPrintHTML(vouchers: any[], schoolName: string): string {
     background: #efefef;
   }
 
+  .vc-note {
+    text-align: center;
+    font-size: 7px;
+    line-height: 1.35;
+    padding: 3px 4px 2px;
+    border-top: 1px dashed #888;
+    white-space: normal;
+    word-break: break-word;
+  }
+
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { size: A4 portrait; margin: 0; }
@@ -1519,7 +1533,7 @@ ${pageHTML}
 </html>`;
 }
 
-function voucherCopyHTML(v: any, schoolName: string, copyLabel: string): string {
+function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceNote?: string): string {
   const feeItems: any[] = v.feeItems || [];
   const feeTotal = feeItems.reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
   const discount = v.discount || 0;
@@ -1617,6 +1631,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string): string 
     <span>Checked by: ___________</span>
     <span>Counter Signed by: ___________</span>
   </div>
+  ${invoiceNote?.trim() ? `<div class="vc-note">${invoiceNoteToSafeHtml(invoiceNote)}</div>` : ''}
   <div class="vc-copy-label">${copyLabel}</div>
 </div>`;
 }

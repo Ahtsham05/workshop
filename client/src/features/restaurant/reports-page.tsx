@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useReactToPrint } from 'react-to-print'
 import { EndOfDaySummary } from '@/features/restaurant/print-templates'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useSelector } from 'react-redux'
+import type { RootState } from '@/stores/store'
+import { useGetBranchQuery } from '@/stores/branch.api'
 
 export default function RestaurantReportsPage() {
   const {
@@ -26,6 +29,8 @@ export default function RestaurantReportsPage() {
     refetch: refetchStats,
   } = useGetRestaurantStatsQuery()
   const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const printRef = useRef<HTMLDivElement>(null)
   const handlePrint = useReactToPrint({ contentRef: printRef, documentTitle: 'Day sheet' })
 
@@ -181,6 +186,7 @@ export default function RestaurantReportsPage() {
             totalOrders={stats?.todayOrders ?? orders.length}
             revenue={stats?.todayRevenue ?? revenue}
             venueName={org?.name || 'Restaurant'}
+            invoiceNote={branchData?.invoiceNote}
           />
         </div>
       </div>

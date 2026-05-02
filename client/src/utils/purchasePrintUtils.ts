@@ -1,4 +1,5 @@
 // Purchase invoice print utilities - delegates to the central language system
+import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 
 type BranchPrintDetails = {
@@ -8,6 +9,7 @@ type BranchPrintDetails = {
   email?: string
   logo?: string
   isTrial?: boolean
+  invoiceNote?: string
 }
 
 const resolveUnitPrice = (item: any): number =>
@@ -116,6 +118,7 @@ export function generatePurchaseInvoiceHTML(
     .barcode { font-family: 'Libre Barcode 39', 'Courier New', monospace; font-size: 20px; letter-spacing: 1px; margin: 6px 0; font-weight: normal; direction: ltr; }
     .barcode-text { font-size: 8px; margin-top: 2px; }
     .notes-section { margin: 12px 0; padding: 8px 0; border-top: 1px dashed #000; font-size: 9px; }
+    .invoice-branch-note { margin: 10px 0 0; padding: 8px 4px 0; border-top: 1px dashed #666; font-size: 10px; text-align: center; line-height: 1.35; white-space: normal; word-break: break-word; }
     .footer { text-align: center; font-size: 9px; margin-top: 12px; border-top: 2px solid #000; padding-top: 8px; }
     .footer-line { margin-bottom: 2px; }
     .no-print { text-align: center; margin: 20px 0; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 5px; }
@@ -183,6 +186,8 @@ export function generatePurchaseInvoiceHTML(
   </div>
 
   ${purchase.notes ? `<div class="notes-section"><div style="font-weight: bold; margin-bottom: 3px;">${labels.notes}:</div><div>${purchase.notes}</div></div>` : ''}
+
+  ${branchDetails?.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(branchDetails.invoiceNote)}</div>` : ''}
 
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>
@@ -283,6 +288,7 @@ export function generatePurchaseInvoiceA4HTML(
     .barcode { font-family: 'Libre Barcode 39', 'Courier New', monospace; font-size: 32px; letter-spacing: 2px; margin: 10px 0; font-weight: normal; direction: ltr; }
     .barcode-text { font-size: 12px; color: #666; margin-top: 5px; }
     .notes-section { margin: 30px 0; padding: 15px; background: #f8f9fa; border-right: 4px solid black; border-radius: 8px 0 0 8px; }
+    .invoice-branch-note { margin: 24px 0 0; padding: 16px; background: #fafafa; border: 1px dashed #ccc; border-radius: 6px; font-size: 13px; text-align: center; line-height: 1.45; white-space: normal; word-break: break-word; }
     .footer { text-align: center; font-size: 12px; color: #666; margin-top: 40px; padding-top: 20px; border-top: 2px solid #e9ecef; }
     .footer-line { margin-bottom: 5px; }
     .no-print { text-align: center; margin: 30px 0; padding: 20px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; }
@@ -362,6 +368,8 @@ export function generatePurchaseInvoiceA4HTML(
   </div>
 
   ${purchase.notes ? `<div class="notes-section"><div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${labels.notes}:</div><div style="font-size: 14px;">${purchase.notes}</div></div>` : ''}
+
+  ${branchDetails?.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(branchDetails.invoiceNote)}</div>` : ''}
 
   <div class="footer">
     <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${labels.thank_you}</div>
