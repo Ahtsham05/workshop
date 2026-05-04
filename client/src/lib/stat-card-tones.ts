@@ -1,4 +1,4 @@
-/** Shared gradient/tint styles for dashboard StatCards and report KPI cards */
+/** Shared dark-tint styles for dashboard StatCards and report KPI cards */
 
 export type StatCardTone =
   | 'emerald'
@@ -11,72 +11,89 @@ export type StatCardTone =
   | 'rose'
   | 'slate'
 
+/** Ensures labels and common semantic colors stay readable on dark KPI tiles */
+const KPI_DESCENDANT_OVERRIDES =
+  '[&_[data-slot=card-title]]:text-white/95 [&_.text-muted-foreground]:text-white/70 [&_.text-green-600]:text-emerald-200 [&_.text-red-600]:text-rose-200 [&_.text-orange-600]:text-orange-200'
+
+function cnDarkCard(surface: string): string {
+  return `${surface} ${KPI_DESCENDANT_OVERRIDES}`
+}
+
 export const STAT_CARD_TONE_STYLES: Record<
   StatCardTone,
   { card: string; iconWrap: string; skeleton: string }
 > = {
   emerald: {
-    card:
-      'border-emerald-200/70 bg-gradient-to-br from-emerald-50/95 via-white to-white dark:border-emerald-800/35 dark:from-emerald-950/45 dark:via-card dark:to-card shadow-sm shadow-emerald-500/[0.07]',
+    card: cnDarkCard(
+      'border-emerald-500/35 bg-gradient-to-br from-emerald-600 via-emerald-800 to-emerald-950 text-white shadow-md shadow-emerald-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-emerald-500/15 p-2 text-emerald-700 [&_svg]:text-current dark:bg-emerald-400/10 dark:text-emerald-300',
-    skeleton: 'bg-emerald-200/70 dark:bg-emerald-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   cyan: {
-    card:
-      'border-cyan-200/70 bg-gradient-to-br from-cyan-50/95 via-white to-white dark:border-cyan-800/35 dark:from-cyan-950/40 dark:via-card dark:to-card shadow-sm shadow-cyan-500/[0.07]',
+    card: cnDarkCard(
+      'border-cyan-500/35 bg-gradient-to-br from-cyan-600 via-cyan-800 to-cyan-950 text-white shadow-md shadow-cyan-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-cyan-500/15 p-2 text-cyan-700 [&_svg]:text-current dark:bg-cyan-400/10 dark:text-cyan-300',
-    skeleton: 'bg-cyan-200/70 dark:bg-cyan-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   violet: {
-    card:
-      'border-violet-200/70 bg-gradient-to-br from-violet-50/95 via-white to-white dark:border-violet-800/35 dark:from-violet-950/40 dark:via-card dark:to-card shadow-sm shadow-violet-500/[0.07]',
+    card: cnDarkCard(
+      'border-violet-500/35 bg-gradient-to-br from-violet-600 via-violet-800 to-violet-950 text-white shadow-md shadow-violet-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-violet-500/15 p-2 text-violet-700 [&_svg]:text-current dark:bg-violet-400/10 dark:text-violet-300',
-    skeleton: 'bg-violet-200/70 dark:bg-violet-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   sky: {
-    card:
-      'border-sky-200/70 bg-gradient-to-br from-sky-50/95 via-white to-white dark:border-sky-800/35 dark:from-sky-950/40 dark:via-card dark:to-card shadow-sm shadow-sky-500/[0.07]',
+    card: cnDarkCard(
+      'border-sky-500/35 bg-gradient-to-br from-sky-600 via-sky-800 to-sky-950 text-white shadow-md shadow-sky-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-sky-500/15 p-2 text-sky-700 [&_svg]:text-current dark:bg-sky-400/10 dark:text-sky-300',
-    skeleton: 'bg-sky-200/70 dark:bg-sky-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   orange: {
-    card:
-      'border-orange-200/70 bg-gradient-to-br from-orange-50/95 via-white to-white dark:border-orange-800/35 dark:from-orange-950/40 dark:via-card dark:to-card shadow-sm shadow-orange-500/[0.07]',
+    card: cnDarkCard(
+      'border-orange-500/35 bg-gradient-to-br from-orange-600 via-orange-800 to-orange-950 text-white shadow-md shadow-orange-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-orange-500/15 p-2 text-orange-700 [&_svg]:text-current dark:bg-orange-400/10 dark:text-orange-300',
-    skeleton: 'bg-orange-200/70 dark:bg-orange-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   indigo: {
-    card:
-      'border-indigo-200/70 bg-gradient-to-br from-indigo-50/95 via-white to-white dark:border-indigo-800/35 dark:from-indigo-950/40 dark:via-card dark:to-card shadow-sm shadow-indigo-500/[0.07]',
+    card: cnDarkCard(
+      'border-indigo-500/35 bg-gradient-to-br from-indigo-600 via-indigo-800 to-indigo-950 text-white shadow-md shadow-indigo-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-indigo-500/15 p-2 text-indigo-700 [&_svg]:text-current dark:bg-indigo-400/10 dark:text-indigo-300',
-    skeleton: 'bg-indigo-200/70 dark:bg-indigo-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   amber: {
-    card:
-      'border-amber-200/70 bg-gradient-to-br from-amber-50/95 via-white to-white dark:border-amber-800/35 dark:from-amber-950/40 dark:via-card dark:to-card shadow-sm shadow-amber-500/[0.07]',
+    card: cnDarkCard(
+      'border-amber-500/40 bg-gradient-to-br from-amber-600 via-amber-800 to-amber-950 text-white shadow-md shadow-amber-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-amber-500/15 p-2 text-amber-800 [&_svg]:text-current dark:bg-amber-400/10 dark:text-amber-200',
-    skeleton: 'bg-amber-200/70 dark:bg-amber-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   rose: {
-    card:
-      'border-rose-200/70 bg-gradient-to-br from-rose-50/95 via-white to-white dark:border-rose-800/35 dark:from-rose-950/40 dark:via-card dark:to-card shadow-sm shadow-rose-500/[0.07]',
+    card: cnDarkCard(
+      'border-rose-500/35 bg-gradient-to-br from-rose-600 via-rose-800 to-rose-950 text-white shadow-md shadow-rose-950/25'
+    ),
     iconWrap:
-      'rounded-xl bg-rose-500/15 p-2 text-rose-700 [&_svg]:text-current dark:bg-rose-400/10 dark:text-rose-300',
-    skeleton: 'bg-rose-200/70 dark:bg-rose-800/50',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
   slate: {
-    card:
-      'border-border/80 bg-gradient-to-br from-muted/50 via-card to-card dark:from-muted/25 dark:via-card dark:to-card shadow-sm',
+    card: cnDarkCard(
+      'border-slate-500/30 bg-gradient-to-br from-slate-600 via-slate-800 to-slate-950 text-white shadow-md shadow-black/20'
+    ),
     iconWrap:
-      'rounded-xl bg-muted p-2 text-muted-foreground [&_svg]:text-current',
-    skeleton: 'bg-muted',
+      'rounded-xl bg-white/15 p-2 text-white ring-1 ring-white/20 [&_svg]:text-current',
+    skeleton: 'bg-white/25',
   },
 }
 
@@ -90,5 +107,5 @@ export function toneIconWrapClass(tone: StatCardTone): string {
 
 /** Card + hover shadow used on KPI tiles */
 export function kpiCardClass(tone: StatCardTone): string {
-  return `${toneCardClass(tone)} hover:shadow-md transition-shadow duration-200`
+  return `${toneCardClass(tone)} hover:shadow-lg hover:brightness-[1.03] transition-shadow duration-200`
 }

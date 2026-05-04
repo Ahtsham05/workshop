@@ -209,8 +209,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <BranchSwitcher />
           </div>
         ) : activeBranchName ? (
-          <div className="px-2 pb-1 flex items-center gap-2 text-xs text-muted-foreground border rounded-md p-2 mx-1">
-            <GitBranch className="h-3.5 w-3.5 shrink-0" />
+          <div className="px-2 pb-1 flex items-center gap-2 text-xs text-sidebar-foreground/75 border border-sidebar-border rounded-md bg-sidebar-accent/20 p-2 mx-1">
+            <GitBranch className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/70" />
             <span className="truncate font-medium">{activeBranchName}</span>
           </div>
         ) : null}

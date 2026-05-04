@@ -19,7 +19,7 @@ interface StatCardProps {
   isLoading?: boolean
   valuePrefix?: string
   valueSuffix?: string
-  /** Soft gradient + accent — defaults to slate */
+  /** Dark gradient + accent — defaults to slate */
   tone?: StatCardTone
 }
 
@@ -78,10 +78,10 @@ export function StatCard({
           {valueSuffix}
         </div>
         {(change !== undefined || description) && (
-          <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='mt-1 flex items-center gap-2 text-xs text-white/70'>
             {change !== undefined && (
               <div
-                className={`flex items-center gap-1 ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                className={`flex items-center gap-1 ${isPositive ? 'text-emerald-200' : 'text-rose-200'}`}
               >
                 {isPositive ? (
                   <TrendingUp className='h-3 w-3' />

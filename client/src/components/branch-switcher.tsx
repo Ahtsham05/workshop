@@ -54,8 +54,8 @@ export function BranchSwitcher() {
   // Non-superAdmin users can only belong to one branch — show it as a static badge
   if (!isSuperAdmin) {
     return (
-      <div className="flex items-center gap-2 h-9 px-3 text-sm rounded-md border bg-muted/40 truncate">
-        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="flex items-center gap-2 h-9 px-3 text-sm rounded-md border border-sidebar-border bg-sidebar-accent/25 text-sidebar-foreground truncate">
+        <GitBranch className="h-4 w-4 shrink-0 text-sidebar-foreground/70" />
         <span className="truncate text-sm">{displayName}</span>
       </div>
     )
@@ -69,10 +69,10 @@ export function BranchSwitcher() {
           role="combobox"
           aria-expanded={open}
           aria-label="Select branch"
-          className="w-full justify-between h-9 px-3 text-sm"
+          className="w-full justify-between h-9 px-3 text-sm border-sidebar-border bg-sidebar-accent/15 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <div className="flex items-center gap-2 truncate">
-            <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <GitBranch className="h-4 w-4 shrink-0 text-sidebar-foreground/70" />
             <span className="truncate">{displayName}</span>
           </div>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
