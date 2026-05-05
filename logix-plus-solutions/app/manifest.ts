@@ -5,14 +5,14 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Logix Plus Solutions",
     short_name: "Logix Plus",
     description:
-      "Smart business software for ERP, inventory, HR, invoicing, and accounting.",
+      "Custom CMS platforms, SaaS development, and corporate websites — senior-led engineering studio.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#0f172a",
-    theme_color: "#0f172a",
-    categories: ["business", "productivity"],
+    background_color: "#fafaf9",
+    theme_color: "#fafaf9",
+    categories: ["business", "productivity", "developer tools"],
     icons: [
       {
         src: "/favicon-192.png",
@@ -39,16 +39,16 @@ export default function manifest(): MetadataRoute.Manifest {
         url: "/#home",
       },
       {
-        name: "Features",
-        short_name: "Features",
-        description: "See platform features",
-        url: "/#features",
+        name: "Expertise",
+        short_name: "Expertise",
+        description: "What we deliver",
+        url: "/#expertise",
       },
       {
-        name: "Launch App",
-        short_name: "Launch",
-        description: "Open main product app",
-        url: "https://app.logixplussolutions.com",
+        name: "Contact",
+        short_name: "Contact",
+        description: "Start a project",
+        url: "/#contact",
       },
     ],
   };

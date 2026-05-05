@@ -1,24 +1,40 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Award, CheckCircle2, Rocket, Shield, Target } from "lucide-react";
+import { Award, CheckCircle2, Handshake, Scale, Sparkles } from "lucide-react";
 
 const values = [
-  { icon: Target, title: "Mission-Driven", desc: "Empowering businesses with intelligent software that removes complexity and drives results." },
-  { icon: Shield, title: "Security First", desc: "Enterprise-grade security with end-to-end encryption, regular audits, and 99.9% uptime guarantee." },
-  { icon: Rocket, title: "Constant Innovation", desc: "We ship new features weekly, staying ahead of market trends and customer needs." },
-  { icon: Award, title: "Quality Obsessed", desc: "Every feature is rigorously tested and refined based on real-world customer feedback." },
+  {
+    icon: Scale,
+    title: "Proportionate decisions",
+    desc: "We recommend technology that fits governance and budget — not the loudest framework on social media.",
+  },
+  {
+    icon: Handshake,
+    title: "Transparent collaboration",
+    desc: "Weekly checkpoints, shared trackers, and honest trade-offs so stakeholders stay aligned across time zones.",
+  },
+  {
+    icon: Sparkles,
+    title: "Craft without ego",
+    desc: "Interfaces and APIs are refined until they are explainable — because maintainability outlasts launch-day hype.",
+  },
+  {
+    icon: Award,
+    title: "Long-term fit",
+    desc: "We architect for handover: your in-house team, a future partner, or an extended engagement with us.",
+  },
 ];
 
 const reasons = [
-  "No per-user pricing — flat, predictable plans",
-  "Dedicated onboarding specialist for every client",
-  "Local language support (Urdu & English)",
-  "Data hosted in Pakistan & internationally",
-  "Free migration from legacy systems",
-  "White-label options available",
-  "Customizable workflows to fit your industry",
-  "Regular free product training sessions",
+  "Fixed discovery workshops before we write code",
+  "Written statements of work with explicit acceptance criteria",
+  "English / Urdu communication; EU-friendly contracting options",
+  "Source control, CI, and environments you can audit",
+  "WCAG- and performance-minded front ends by default",
+  "Post-launch support windows with clear response times",
+  "No lock-in: you own the repository and documentation",
+  "Optional retainers for iteration after go-live",
 ];
 
 export default function About() {
@@ -34,94 +50,82 @@ export default function About() {
   }, []);
 
   return (
-    <section id="about" ref={sectionRef} className="relative py-24 lg:py-32 bg-slate-900">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
-      </div>
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Top: Who we are */}
-        <div className="grid lg:grid-cols-2 gap-16 items-center mb-24">
+    <section id="about" ref={sectionRef} className="relative py-20 lg:py-28 bg-white">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid lg:grid-cols-2 gap-14 lg:gap-20 items-start mb-20 md:mb-24">
           <div>
-            <p className="reveal text-sm font-semibold uppercase tracking-widest text-blue-400 mb-3">
-              Who We Are
+            <p className="reveal text-sm font-semibold uppercase tracking-[0.12em] text-teal-800 mb-3">
+              Studio
             </p>
-            <h2 className="reveal text-3xl sm:text-4xl md:text-5xl font-black text-white leading-tight mb-6">
-              Built by Operators,
-              <br />
-              <span className="gradient-text">for Business Owners</span>
+            <h2 className="reveal font-serif text-3xl sm:text-4xl md:text-[2.5rem] font-semibold text-stone-900 leading-tight mb-5">
+              Built for organisations that buy software{" "}
+              <span className="italic text-teal-900 font-normal">the European way</span>
             </h2>
-            <div className="section-divider reveal !mx-0" />
-            <p className="reveal text-slate-300 text-lg leading-relaxed mb-6">
-              Logix Plus Solutions was born out of frustration with overpriced, overcomplicated
-              enterprise software. We built the platform we always wished existed — one that
-              actually understands how real businesses operate.
+            <div className="section-rule reveal mb-6" />
+            <p className="reveal text-stone-600 text-lg leading-relaxed mb-5">
+              Logix Plus Solutions is a senior-led engineering studio. We sit alongside founders,
+              marketing directors, and IT leads — translating ambition into roadmaps, prototypes,
+              and production systems that procurement and engineering can both stand behind.
             </p>
-            <p className="reveal text-slate-400 leading-relaxed mb-8">
-              Our team of engineers, designers, and business experts work tirelessly to deliver
-              software that is powerful enough for large enterprises yet simple enough for small
-              businesses. From Karachi to Lahore, from retail to manufacturing — we serve them all.
+            <p className="reveal text-stone-600 leading-relaxed mb-8">
+              Whether you are headquartered in the EU, scaling into Europe from elsewhere, or serving
+              European customers from Pakistan and the Gulf, we align delivery with serious vendor
+              hygiene: documentation, security basics, and respectful communication.
             </p>
 
-            {/* Why choose us list */}
             <div className="reveal grid grid-cols-1 sm:grid-cols-2 gap-3">
               {reasons.map((r) => (
                 <div key={r} className="flex items-start gap-2.5">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-300 text-sm">{r}</span>
+                  <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0 mt-0.5" />
+                  <span className="text-stone-700 text-sm leading-snug">{r}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Visual side */}
-          <div className="reveal relative">
-            <div className="relative glass-card p-8 overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-500/20 to-violet-500/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
-
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-2xl shadow-blue-500/30 mb-4">
-                  <span className="text-white font-black text-2xl">L+</span>
+          <div className="reveal lg:sticky lg:top-28">
+            <div className="surface-card p-8 md:p-10">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-14 h-14 rounded-lg bg-stone-900 text-white flex items-center justify-center font-serif text-lg font-semibold">
+                  L+
                 </div>
-                <h3 className="text-white font-bold text-xl">Logix Plus Solutions</h3>
-                <p className="text-slate-400 text-sm mt-1">Software that means business</p>
+                <div>
+                  <h3 className="text-stone-900 font-semibold text-lg">Logix Plus Solutions</h3>
+                  <p className="text-stone-500 text-sm">CMS · SaaS · Web</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 mb-8">
                 {[
                   { n: "2019", l: "Founded" },
-                  { n: "500+", l: "Clients" },
-                  { n: "12+", l: "Industries" },
-                  { n: "10+", l: "Countries" },
+                  { n: "120+", l: "Projects" },
+                  { n: "15+", l: "Sectors" },
+                  { n: "EU", l: "Typical market" },
                 ].map((s) => (
-                  <div key={s.l} className="bg-white/5 rounded-xl p-4 text-center border border-white/5">
+                  <div
+                    key={s.l}
+                    className="bg-stone-50 border border-stone-200 rounded-lg p-4 text-center"
+                  >
                     <div className="stat-number text-2xl">{s.n}</div>
-                    <div className="text-slate-400 text-xs mt-1">{s.l}</div>
+                    <div className="text-stone-500 text-xs font-medium mt-1">{s.l}</div>
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* Floating badge */}
-            <div className="absolute -bottom-4 -left-4 glass-card px-4 py-3 flex items-center gap-3 hover:!transform-none shadow-xl">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                <Award className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="text-white text-sm font-bold">Top Rated 2024</div>
-                <div className="text-slate-400 text-xs">Business Software Award</div>
-              </div>
+              <p className="text-stone-600 text-sm leading-relaxed border-t border-stone-200 pt-6">
+                We are intentionally small: every project is led by people who have shipped
+                high-stakes software before — not passed through an anonymous account team.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Core values */}
-        <div className="text-center mb-12">
-          <h3 className="reveal text-2xl sm:text-3xl font-bold text-white mb-3">
-            Our Core <span className="gradient-text">Values</span>
+        <div className="text-center mb-10 max-w-xl mx-auto">
+          <h3 className="reveal font-serif text-2xl sm:text-3xl font-semibold text-stone-900 mb-2">
+            How we show up
           </h3>
-          <p className="reveal text-slate-400 max-w-xl mx-auto">
-            These principles guide every decision we make — from product design to customer support.
+          <p className="reveal text-stone-600 text-sm md:text-base">
+            Values that map to the way professional services are bought in European markets.
           </p>
         </div>
 
@@ -131,14 +135,14 @@ export default function About() {
             return (
               <div
                 key={v.title}
-                className="reveal glass-card p-6 text-center"
-                style={{ transitionDelay: `${i * 80}ms` }}
+                className="reveal surface-card p-6 text-left"
+                style={{ transitionDelay: `${i * 70}ms` }}
               >
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
-                  <Icon className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center mb-4 text-stone-800">
+                  <Icon className="w-5 h-5" strokeWidth={1.75} />
                 </div>
-                <h4 className="text-white font-semibold mb-2">{v.title}</h4>
-                <p className="text-slate-400 text-sm leading-relaxed">{v.desc}</p>
+                <h4 className="text-stone-900 font-semibold mb-2">{v.title}</h4>
+                <p className="text-stone-600 text-sm leading-relaxed">{v.desc}</p>
               </div>
             );
           })}

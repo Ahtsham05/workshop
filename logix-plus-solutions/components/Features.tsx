@@ -2,116 +2,71 @@
 
 import { useEffect, useRef } from "react";
 import {
-  BarChart3,
-  Box,
-  Calculator,
-  ClipboardList,
-  Clock,
-  FileText,
-  Globe,
+  BookOpen,
+  Code2,
+  FileStack,
+  LayoutTemplate,
   Lock,
-  Smartphone,
-  TrendingUp,
-  Users,
-  Zap,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Workflow,
 } from "lucide-react";
 
 const features = [
   {
-    icon: BarChart3,
-    title: "Real-Time Analytics",
+    icon: LayoutTemplate,
+    title: "Headless & classic CMS",
     description:
-      "Gain powerful insights with live dashboards, custom reports, and AI-driven forecasts to make smarter business decisions.",
-    color: "from-blue-500 to-cyan-500",
-    glow: "group-hover:shadow-blue-500/20",
+      "Strapi, Contentful, Sanity, WordPress in headless mode, and custom editorial workflows — so marketing moves fast without breaking the product.",
   },
   {
-    icon: Box,
-    title: "Inventory Management",
+    icon: Code2,
+    title: "SaaS application engineering",
     description:
-      "Track stock levels, automate reorders, manage barcodes, and eliminate stockouts with our intelligent inventory system.",
-    color: "from-violet-500 to-purple-500",
-    glow: "group-hover:shadow-violet-500/20",
+      "Multi-tenant patterns, auth, billing hooks, and observability baked in from day one — not bolted on after launch.",
   },
   {
-    icon: FileText,
-    title: "Invoicing & Billing",
+    icon: Server,
+    title: "Performance & hosting",
     description:
-      "Create professional invoices, manage payments, track receivables, and automate reminders — all in one click.",
-    color: "from-emerald-500 to-teal-500",
-    glow: "group-hover:shadow-emerald-500/20",
+      "Edge-ready front ends, caching strategies, and infrastructure choices that stand up to GDPR-era scrutiny and traffic spikes.",
   },
   {
-    icon: Users,
-    title: "HR Management",
+    icon: ShieldCheck,
+    title: "Security-minded delivery",
     description:
-      "Streamline hiring, attendance, payroll, leaves, and performance reviews in a unified HR control center.",
-    color: "from-orange-500 to-amber-500",
-    glow: "group-hover:shadow-orange-500/20",
+      "Threat modelling basics, dependency hygiene, and reviewable pull requests — documentation your compliance team can actually read.",
   },
   {
-    icon: Calculator,
-    title: "Accounting & Finance",
+    icon: Workflow,
+    title: "Design systems & UI kits",
     description:
-      "Full double-entry accounting with automated ledgers, trial balance, P&L statements, and tax compliance built-in.",
-    color: "from-pink-500 to-rose-500",
-    glow: "group-hover:shadow-pink-500/20",
+      "Reusable components and tokens so your brand stays consistent across landing pages, apps, and microsites.",
   },
   {
-    icon: ClipboardList,
-    title: "Purchase Orders",
+    icon: FileStack,
+    title: "Integrations & APIs",
     description:
-      "Manage vendors, create POs, track deliveries, and reconcile invoices seamlessly from requisition to payment.",
-    color: "from-sky-500 to-indigo-500",
-    glow: "group-hover:shadow-sky-500/20",
-  },
-  {
-    icon: Smartphone,
-    title: "Mobile Ready",
-    description:
-      "Access your business from anywhere. Our platform is fully responsive and works on every device and screen size.",
-    color: "from-lime-500 to-green-500",
-    glow: "group-hover:shadow-lime-500/20",
+      "CRM, ERP, payments, and marketing automation connected through stable APIs — fewer spreadsheets, fewer mistakes.",
   },
   {
     icon: Lock,
-    title: "Role-Based Access",
+    title: "Access control & roles",
     description:
-      "Granular permissions and RBAC ensure every team member sees only what they need — keeping your data secure.",
-    color: "from-red-500 to-orange-500",
-    glow: "group-hover:shadow-red-500/20",
+      "Granular permissions for editors, partners, and administrators — especially important for B2B SaaS and member portals.",
   },
   {
-    icon: Globe,
-    title: "Multi-Branch Support",
+    icon: BookOpen,
+    title: "Handover you can trust",
     description:
-      "Manage multiple branches, warehouses, or franchises from a single account with consolidated reporting.",
-    color: "from-teal-500 to-cyan-500",
-    glow: "group-hover:shadow-teal-500/20",
+      "Architecture notes, runbooks, and walkthrough sessions so your team or another agency can maintain the work.",
   },
   {
-    icon: Zap,
-    title: "Automation Engine",
+    icon: Sparkles,
+    title: "AI-assisted workflows (optional)",
     description:
-      "Set up smart triggers and workflows to automate repetitive tasks — from alerts to document generation.",
-    color: "from-yellow-500 to-amber-500",
-    glow: "group-hover:shadow-yellow-500/20",
-  },
-  {
-    icon: TrendingUp,
-    title: "Sales & CRM",
-    description:
-      "Track leads, manage customers, forecast sales, and nurture relationships with an integrated CRM module.",
-    color: "from-blue-600 to-violet-600",
-    glow: "group-hover:shadow-blue-600/20",
-  },
-  {
-    icon: Clock,
-    title: "24/7 Support",
-    description:
-      "Our dedicated support team is always available via chat, email, or phone to help you resolve issues fast.",
-    color: "from-purple-500 to-pink-500",
-    glow: "group-hover:shadow-purple-500/20",
+      "Where it adds real value — content assist, internal copilots, and retrieval pipelines — introduced with clear boundaries.",
   },
 ];
 
@@ -129,49 +84,37 @@ export default function Features() {
   }, []);
 
   return (
-    <section id="features" ref={sectionRef} className="relative py-24 lg:py-32 bg-slate-900">
-      {/* Background gradient */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
-        <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent" />
-      </div>
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section header */}
-        <div className="text-center mb-16">
-          <div className="reveal inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium text-violet-300 mb-4 hover:!transform-none">
-            <Zap className="w-3.5 h-3.5" />
-            Packed with powerful features
-          </div>
-          <h2 className="reveal text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4">
-            Everything Your Business
-            <br />
-            <span className="gradient-text">Needs in One Place</span>
+    <section id="expertise" ref={sectionRef} className="relative py-20 lg:py-28 bg-white border-y border-stone-200">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-14 md:mb-16 max-w-2xl">
+          <p className="reveal text-sm font-semibold uppercase tracking-[0.12em] text-teal-800 mb-3">
+            Expertise
+          </p>
+          <h2 className="reveal font-serif text-3xl sm:text-4xl md:text-[2.5rem] font-semibold text-stone-900 tracking-tight mb-4">
+            What clients hire us to deliver
           </h2>
-          <div className="section-divider reveal" />
-          <p className="reveal max-w-2xl mx-auto text-slate-400 text-lg">
-            Stop juggling between multiple tools. Logix Plus Solutions consolidates all your
-            critical business operations into one intelligent, seamless platform.
+          <div className="section-rule reveal mb-5" />
+          <p className="reveal text-stone-600 text-lg leading-relaxed">
+            Product-led organisations commission us for CMS roll-outs, customer-facing SaaS, and
+            high-trust websites — with engineering discipline that matches procurement expectations
+            in European markets.
           </p>
         </div>
 
-        {/* Feature grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
           {features.map((feature, i) => {
             const Icon = feature.icon;
             return (
               <div
                 key={feature.title}
-                className="reveal group glass-card p-6 cursor-default"
-                style={{ transitionDelay: `${i * 40}ms` }}
+                className="reveal surface-card p-6 md:p-7"
+                style={{ transitionDelay: `${i * 35}ms` }}
               >
-                <div
-                  className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-4 shadow-lg ${feature.glow} transition-shadow duration-300`}
-                >
-                  <Icon className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center mb-4 text-stone-800">
+                  <Icon className="w-5 h-5" strokeWidth={1.75} />
                 </div>
-                <h3 className="text-white font-semibold text-base mb-2">{feature.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{feature.description}</p>
+                <h3 className="text-stone-900 font-semibold text-base mb-2">{feature.title}</h3>
+                <p className="text-stone-600 text-sm leading-relaxed">{feature.description}</p>
               </div>
             );
           })}

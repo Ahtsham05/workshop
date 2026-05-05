@@ -5,58 +5,52 @@ import { Quote, Star } from "lucide-react";
 
 const testimonials = [
   {
-    name: "Asad Raza",
-    role: "CEO, Al-Raza Traders",
-    company: "Wholesale Distribution",
-    avatar: "AR",
+    name: "Director of Digital",
+    role: "Pan-European industrial brand",
+    company: "Corporate website & CMS",
+    avatar: "DD",
     rating: 5,
-    text: "Logix Plus Solutions completely transformed how we manage our inventory. We went from tracking everything in Excel to having real-time stock levels across 3 warehouses. Best investment we made.",
-    color: "from-blue-500 to-cyan-500",
+    text: "They documented assumptions early, pushed back when scope creep appeared, and handed us a codebase our internal team could actually operate. Rare combination.",
   },
   {
-    name: "Fatima Sheikh",
-    role: "CFO, Nova Retail Chain",
-    company: "Retail & POS",
-    avatar: "FS",
+    name: "Head of Product",
+    role: "B2B SaaS — logistics",
+    company: "Multi-tenant product",
+    avatar: "HP",
     rating: 5,
-    text: "The accounting module is exceptional. Month-end closing that used to take 5 days now takes a few hours. The automated reconciliation alone saved us 40 hours per month.",
-    color: "from-violet-500 to-purple-500",
+    text: "Milestone-based delivery with clear acceptance tests. We used the same structure to align investors and engineering — that mattered as much as the code.",
   },
   {
-    name: "Imran Malik",
-    role: "HR Director, Nexgen Manufacturing",
-    company: "Manufacturing",
-    avatar: "IM",
+    name: "Marketing Lead",
+    role: "UK & DACH go-to-market",
+    company: "Headless content platform",
+    avatar: "ML",
     rating: 5,
-    text: "Managing 200+ employees was a nightmare before Logix. Now payroll, attendance, and leave approvals are completely automated. The support team is always responsive and helpful.",
-    color: "from-emerald-500 to-teal-500",
+    text: "Editors finally have previews and scheduling that do not break the site. Engineering gets structured content. Both sides are calmer.",
   },
   {
-    name: "Sadia Khan",
-    role: "Owner, Sadia's Boutique Network",
-    company: "Fashion Retail",
-    avatar: "SK",
+    name: "CTO",
+    role: "Fintech services",
+    company: "Customer portal",
+    avatar: "CT",
     rating: 5,
-    text: "I was skeptical at first but the team made migration painless. Within 2 weeks my staff was fully trained. Sales reporting and CRM features are simply outstanding.",
-    color: "from-orange-500 to-amber-500",
+    text: "Security and access control were treated as product features, not an afterthought. That was essential for our risk committee.",
   },
   {
-    name: "Bilal Ahmed",
-    role: "Operations Manager, CargoX Logistics",
-    company: "Logistics",
-    avatar: "BA",
+    name: "Founder",
+    role: "Vertical SaaS",
+    company: "MVP to first paying users",
+    avatar: "FO",
     rating: 5,
-    text: "The multi-branch feature is a game changer for us. We manage 7 city offices from one dashboard. Reporting that used to take a week is generated in minutes now.",
-    color: "from-pink-500 to-rose-500",
+    text: "We needed speed without paint-by-numbers templates. The architecture we launched with is the one we are still extending — no emergency rewrite.",
   },
   {
-    name: "Zara Hussain",
-    role: "MD, MedPlus Pharmaceuticals",
-    company: "Pharmaceutical",
-    avatar: "ZH",
+    name: "IT Programme Manager",
+    role: "Global manufacturing",
+    company: "Legacy migration",
+    avatar: "IT",
     rating: 5,
-    text: "Expiry date tracking, FIFO inventory, and regulatory compliance reporting — Logix handles all our pharma-specific requirements. Highly recommend for any healthcare business.",
-    color: "from-sky-500 to-indigo-500",
+    text: "Migration from a tangled WordPress estate was unglamorous work done with patience. Stakeholders saw progress every week.",
   },
 ];
 
@@ -76,74 +70,64 @@ export default function Testimonials() {
     <section
       id="testimonials"
       ref={sectionRef}
-      className="relative py-24 lg:py-32 animated-bg overflow-hidden"
+      className="relative py-20 lg:py-28 bg-stone-100 border-y border-stone-200"
     >
-      <div className="blob absolute top-1/4 right-0 w-80 h-80 bg-blue-700" />
-      <div className="blob absolute bottom-1/4 left-0 w-72 h-72 bg-violet-700" style={{ animationDelay: "3s" }} />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <p className="reveal text-sm font-semibold uppercase tracking-widest text-blue-400 mb-3">
-            Customer Stories
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-14 md:mb-16 text-center max-w-2xl mx-auto">
+          <p className="reveal text-sm font-semibold uppercase tracking-[0.12em] text-teal-800 mb-3">
+            Client perspectives
           </p>
-          <h2 className="reveal text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4">
-            Loved by Businesses
-            <br />
-            <span className="gradient-text">Across Every Industry</span>
+          <h2 className="reveal font-serif text-3xl sm:text-4xl md:text-[2.5rem] font-semibold text-stone-900 tracking-tight mb-4">
+            Trust built through delivery, not slides
           </h2>
-          <div className="section-divider reveal" />
-          <p className="reveal max-w-xl mx-auto text-slate-400 text-lg">
-            Don't take our word for it. Here's what real business owners say after switching to
-            Logix Plus Solutions.
+          <div className="section-rule reveal mx-auto mb-5" />
+          <p className="reveal text-stone-600 text-lg leading-relaxed">
+            Names and logos are often under NDA. These roles and outcomes reflect the type of
+            organisations that commission our work.
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {testimonials.map((t, i) => (
             <div
-              key={t.name}
-              className="reveal glass-card p-6 flex flex-col justify-between"
-              style={{ transitionDelay: `${i * 80}ms` }}
+              key={t.name + t.company}
+              className="reveal surface-card p-6 flex flex-col h-full"
+              style={{ transitionDelay: `${i * 60}ms` }}
             >
-              {/* Quote icon */}
-              <Quote className="w-8 h-8 text-blue-500/40 mb-4" />
+              <Quote className="w-7 h-7 text-stone-300 mb-3" strokeWidth={1.25} />
 
-              {/* Stars */}
               <div className="flex gap-1 mb-3">
                 {Array.from({ length: t.rating }).map((_, s) => (
-                  <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <Star key={s} className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                 ))}
               </div>
 
-              {/* Text */}
-              <p className="text-slate-300 text-sm leading-relaxed flex-1 mb-6">"{t.text}"</p>
+              <p className="text-stone-700 text-sm leading-relaxed flex-1 mb-6">&ldquo;{t.text}&rdquo;</p>
 
-              {/* Author */}
-              <div className="flex items-center gap-3 pt-4 border-t border-white/5">
-                <div
-                  className={`w-10 h-10 rounded-xl bg-gradient-to-br ${t.color} flex items-center justify-center flex-shrink-0 shadow-lg`}
-                >
-                  <span className="text-white text-xs font-bold">{t.avatar}</span>
+              <div className="flex items-center gap-3 pt-4 border-t border-stone-200 mt-auto">
+                <div className="w-10 h-10 rounded-lg bg-stone-200 flex items-center justify-center flex-shrink-0">
+                  <span className="text-stone-700 text-xs font-semibold">{t.avatar}</span>
                 </div>
                 <div>
-                  <div className="text-white font-semibold text-sm">{t.name}</div>
-                  <div className="text-slate-400 text-xs">{t.role}</div>
-                  <div className="text-blue-400 text-xs font-medium">{t.company}</div>
+                  <div className="text-stone-900 font-semibold text-sm">{t.name}</div>
+                  <div className="text-stone-500 text-xs">{t.role}</div>
+                  <div className="text-teal-900 text-xs font-medium">{t.company}</div>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Overall rating banner */}
-        <div className="reveal mt-12 glass-card p-6 max-w-2xl mx-auto text-center hover:!transform-none">
+        <div className="reveal mt-12 surface-card p-6 max-w-xl mx-auto text-center">
           <div className="flex items-center justify-center gap-1 mb-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} className="w-6 h-6 text-amber-400 fill-amber-400" />
+              <Star key={i} className="w-5 h-5 text-amber-500 fill-amber-500" />
             ))}
           </div>
-          <p className="text-white font-bold text-xl mb-1">4.9/5 Average Rating</p>
-          <p className="text-slate-400 text-sm">Based on 500+ verified customer reviews</p>
+          <p className="text-stone-900 font-semibold text-lg mb-1">Consistently strong feedback</p>
+          <p className="text-stone-500 text-sm">
+            Referrals and repeat engagements are our main source of new work.
+          </p>
         </div>
       </div>
     </section>

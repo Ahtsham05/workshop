@@ -1,56 +1,32 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ArrowRight, BarChart3, Box, Calculator, Users } from "lucide-react";
+import { ArrowRight, Globe, Layers, Rocket } from "lucide-react";
 
 const services = [
   {
-    icon: Box,
-    title: "Inventory & POS",
-    tagline: "Never run out of stock",
+    icon: Layers,
+    title: "CMS & content platforms",
+    tagline: "Editorial freedom, technical guardrails",
     description:
-      "Our intelligent inventory system tracks stock in real-time, manages barcodes, triggers auto-reorder alerts, and integrates directly with your POS terminals for lightning-fast transactions.",
-    features: ["Barcode scanning", "Auto reorder alerts", "Multi-warehouse", "POS integration"],
-    color: "from-blue-500 to-cyan-400",
-    bg: "bg-blue-500/5",
-    border: "border-blue-500/20",
-    accent: "text-blue-400",
+      "We implement and extend content platforms so your team can publish and experiment safely — from multilingual corporate sites to documentation portals and partner extranets.",
+    features: ["Information architecture", "Editor UX & previews", "Migration from legacy CMS", "SEO & structured data"],
   },
   {
-    icon: Calculator,
-    title: "Accounting Suite",
-    tagline: "Financial clarity at every step",
+    icon: Rocket,
+    title: "SaaS product builds",
+    tagline: "From validated concept to recurring revenue",
     description:
-      "Full-featured double-entry accounting with automated journal entries, chart of accounts, tax management, and instant financial statements — no accountant experience required.",
-    features: ["Double-entry ledger", "Tax management", "P&L statements", "Balance sheet"],
-    color: "from-violet-500 to-purple-400",
-    bg: "bg-violet-500/5",
-    border: "border-violet-500/20",
-    accent: "text-violet-400",
+      "We ship B2B and vertical SaaS with clear tenancy boundaries, subscription-aware UX, and instrumentation your investors expect — without sacrificing maintainability.",
+    features: ["Roadmap & milestones", "Auth & organisations", "Billing-ready architecture", "Staging & release cadence"],
   },
   {
-    icon: Users,
-    title: "Human Resources",
-    tagline: "Empower your people",
+    icon: Globe,
+    title: "Websites & campaign engines",
+    tagline: "Conversion-focused, fast, accessible",
     description:
-      "End-to-end HR management covering recruitment, onboarding, attendance tracking, payroll processing, leave management, and performance appraisals in one unified system.",
-    features: ["Payroll automation", "Attendance tracking", "Leave management", "Performance KPIs"],
-    color: "from-emerald-500 to-teal-400",
-    bg: "bg-emerald-500/5",
-    border: "border-emerald-500/20",
-    accent: "text-emerald-400",
-  },
-  {
-    icon: BarChart3,
-    title: "Business Intelligence",
-    tagline: "Data-driven decisions",
-    description:
-      "Transform raw business data into actionable intelligence with custom dashboards, automated reports, trend analysis, and predictive insights tailored to your industry.",
-    features: ["Custom dashboards", "Automated reports", "Trend analysis", "Export to Excel/PDF"],
-    color: "from-orange-500 to-amber-400",
-    bg: "bg-orange-500/5",
-    border: "border-orange-500/20",
-    accent: "text-orange-400",
+      "Marketing sites that load quickly, meet accessibility expectations, and integrate with your stack — whether you need a flagship European presence or a portfolio of sector landing pages.",
+    features: ["Performance budgets", "WCAG-minded patterns", "Analytics & consent", "Component libraries"],
   },
 ];
 
@@ -71,78 +47,65 @@ export default function Services() {
     <section
       id="services"
       ref={sectionRef}
-      className="relative py-24 lg:py-32 animated-bg overflow-hidden"
+      className="relative py-20 lg:py-28 bg-stone-100 border-b border-stone-200"
     >
-      <div className="blob absolute -top-20 right-0 w-96 h-96 bg-violet-700" />
-      <div className="blob absolute bottom-0 left-10 w-80 h-80 bg-blue-700" style={{ animationDelay: "3s" }} />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <p className="reveal text-sm font-semibold uppercase tracking-widest text-blue-400 mb-3">
-            Our Core Services
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-14 md:mb-16 text-center max-w-2xl mx-auto">
+          <p className="reveal text-sm font-semibold uppercase tracking-[0.12em] text-teal-800 mb-3">
+            Engagement models
           </p>
-          <h2 className="reveal text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4">
-            Modular Solutions That
-            <br />
-            <span className="gradient-text">Grow With You</span>
+          <h2 className="reveal font-serif text-3xl sm:text-4xl md:text-[2.5rem] font-semibold text-stone-900 tracking-tight mb-4">
+            Three ways teams work with us
           </h2>
-          <div className="section-divider reveal" />
-          <p className="reveal max-w-xl mx-auto text-slate-400 text-lg">
-            Pick the modules you need today and expand as your business grows — no complicated
-            migrations, no vendor lock-in.
+          <div className="section-rule reveal mx-auto mb-5" />
+          <p className="reveal text-stone-600 text-lg leading-relaxed">
+            Each engagement starts with a short discovery phase: goals, constraints, and success
+            metrics — so proposals are fixed-scope where possible and transparent when research is
+            required.
           </p>
         </div>
 
-        {/* Services grid */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-1 gap-6 max-w-3xl mx-auto md:max-w-none">
           {services.map((service, i) => {
             const Icon = service.icon;
             return (
-              <div
+              <article
                 key={service.title}
-                className={`reveal glass-card p-8 ${service.bg} border ${service.border}`}
-                style={{ transitionDelay: `${i * 100}ms` }}
+                className="reveal surface-card p-8 md:p-10 md:flex md:gap-10 md:items-start"
+                style={{ transitionDelay: `${i * 80}ms` }}
               >
-                <div className="flex items-start gap-5">
-                  <div
-                    className={`flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${service.color} flex items-center justify-center shadow-xl`}
-                  >
-                    <Icon className="w-7 h-7 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-xs font-semibold uppercase tracking-widest ${service.accent} mb-1`}>
-                      {service.tagline}
-                    </p>
-                    <h3 className="text-xl font-bold text-white mb-3">{service.title}</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-5">
-                      {service.description}
-                    </p>
-                    <ul className="flex flex-wrap gap-2">
-                      {service.features.map((f) => (
-                        <li
-                          key={f}
-                          className={`text-xs font-medium px-3 py-1.5 rounded-full bg-white/5 border border-white/8 ${service.accent}`}
-                        >
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-stone-900 text-white flex items-center justify-center mb-6 md:mb-0">
+                  <Icon className="w-6 h-6" strokeWidth={1.5} />
                 </div>
-
-                <div className="mt-6 pt-5 border-t border-white/5 flex justify-end">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-800 mb-1">
+                    {service.tagline}
+                  </p>
+                  <h3 className="font-serif text-xl md:text-2xl font-semibold text-stone-900 mb-3">
+                    {service.title}
+                  </h3>
+                  <p className="text-stone-600 text-sm md:text-base leading-relaxed mb-6">
+                    {service.description}
+                  </p>
+                  <ul className="flex flex-wrap gap-2 mb-6">
+                    {service.features.map((f) => (
+                      <li
+                        key={f}
+                        className="text-xs font-medium px-3 py-1.5 rounded-md bg-stone-100 text-stone-700 border border-stone-200"
+                      >
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
                   <a
-                    href="https://app.logixplussolutions.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-2 text-sm font-semibold ${service.accent} hover:opacity-80 transition-opacity group`}
+                    href="#contact"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-teal-900 hover:text-teal-700 transition-colors group"
                   >
-                    Explore module
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    Request a tailored estimate
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                   </a>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
