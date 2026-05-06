@@ -69,7 +69,7 @@ const payVoucher = {
   }),
   body: Joi.object().keys({
     amount: Joi.number().min(1).required(),
-    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other'),
+    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet'),
     categoryId: Joi.string().custom(objectId).allow(null, ''),
     remarks: Joi.string().allow('', null),
   }),
@@ -108,7 +108,7 @@ const bulkPayStudentVouchers = {
   }),
   body: Joi.object().keys({
     amount: Joi.number().min(1).required(),
-    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other'),
+    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet'),
     categoryId: Joi.string().custom(objectId).allow(null, ''),
     remarks: Joi.string().allow('', null),
   }),
@@ -120,7 +120,7 @@ const recordAdvancePayment = {
   }),
   body: Joi.object().keys({
     amount: Joi.number().min(1).required(),
-    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other'),
+    paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet'),
     categoryId: Joi.string().custom(objectId).allow(null, ''),
     remarks: Joi.string().allow('', null),
   }),

@@ -135,8 +135,40 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
 
   const skipped = [];  // students with no fees at all
 
+  // Skip students who already have a voucher for this month/year (avoid duplicate-key rejects)
+  const studentIds = students.map((s) => s._id || s.id).filter(Boolean);
+  const existingRows = studentIds.length
+    ? await FeeVoucher.find({
+      ...getTenantFilter(scope),
+      studentId: { $in: studentIds },
+      month,
+      year: Number(year),
+    })
+      .select('studentId')
+      .lean()
+    : [];
+  const alreadyHasVoucher = new Set(existingRows.map((r) => r.studentId.toString()));
+
+  // Admission fee is one-time. If any prior voucher already contains an admission line,
+  // do not include admission fee again in newly generated monthly vouchers.
+  const priorRows = studentIds.length
+    ? await FeeVoucher.find({
+      ...getTenantFilter(scope),
+      studentId: { $in: studentIds },
+    })
+      .select('studentId feeItems')
+      .lean()
+    : [];
+  const hasAdmissionCharged = new Set(
+    priorRows
+      .filter((r) =>
+        (r.feeItems || []).some((fi) => /admission/i.test(String(fi?.name || '')))
+      )
+      .map((r) => r.studentId.toString())
+  );
+
   const results = await Promise.allSettled(
-    students.map((student) => {
+    students.map(async (student) => {
       const sf = student.feeStructure || {};
       const hasSf = sf.monthlyFee > 0 || sf.admissionFee > 0 || sf.transportFee > 0;
 
@@ -144,10 +176,15 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
       let discount;
       let classIdToUse;
 
+      const sid = (student._id || student.id).toString();
+      const includeAdmissionFee = !hasAdmissionCharged.has(sid);
+
       if (feeSource === 'admission_form' || (feeSource === 'mixed' && hasSf)) {
         // Build fee items from the student's admission-time fee structure
         feeItems = [];
-        if (sf.admissionFee > 0) feeItems.push({ name: 'Admission Fee', amount: sf.admissionFee });
+        if (includeAdmissionFee && sf.admissionFee > 0) {
+          feeItems.push({ name: 'Admission Fee', amount: sf.admissionFee });
+        }
         if (sf.monthlyFee > 0)   feeItems.push({ name: 'Monthly Fee',   amount: sf.monthlyFee });
         if (sf.transportFee > 0) feeItems.push({ name: 'Transport Fee', amount: sf.transportFee });
         discount = sf.discount || 0;
@@ -159,7 +196,8 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
           name: item.name,
           amount: item.amount,
           categoryId: item.categoryId,
-        }));
+        }))
+          .filter((item) => includeAdmissionFee || !/admission/i.test(String(item.name || '')));
         discount = sf.discount || 0;
         classIdToUse = feeStructure.classId._id || feeStructure.classId;
       }
@@ -167,6 +205,10 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
       if (!feeItems.length) {
         // Student has no fees at all in either source — skip silently
         skipped.push(student._id || student.id);
+        return Promise.resolve(null);
+      }
+
+      if (alreadyHasVoucher.has(sid)) {
         return Promise.resolve(null);
       }
 
@@ -189,7 +231,65 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
 
   const insertedCount = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
   const errorCount = results.filter((r) => r.status === 'rejected').length;
-  return { insertedCount, skipped: skipped.length, errorCount };
+  const skippedDuplicates = alreadyHasVoucher.size;
+  // Auto-apply credit wallet to ALL target month vouchers (including pre-existing duplicates).
+  let autoAppliedAmount = 0;
+  const autoAppliedVoucherIds = new Set();
+  for (const student of students) {
+    const sid = (student._id || student.id).toString();
+    const freshStudent = await Student.findOne({ _id: sid, ...getTenantFilter(scope) })
+      .select('creditBalance')
+      .lean();
+    let credit = Math.max(0, Number(freshStudent?.creditBalance || 0));
+    if (credit <= 0) continue;
+
+    const monthVouchers = await FeeVoucher.find({
+      ...getTenantFilter(scope),
+      studentId: sid,
+      month,
+      year: Number(year),
+      status: { $in: ['unpaid', 'partial', 'overdue'] },
+    }).sort({ createdAt: 1 });
+
+    for (const v of monthVouchers) {
+      if (credit <= 0) break;
+      const remaining = Math.max(0, effectiveNet(v) - (v.paidAmount || 0));
+      if (remaining <= 0) continue;
+      const applyFromWallet = Math.min(credit, remaining);
+      v.paidAmount = (v.paidAmount || 0) + applyFromWallet;
+      v.paymentMethod = 'credit_wallet';
+      v.paidDate = new Date();
+      const autoNote = `Auto-settled from advance wallet on generation (${month} ${year})`;
+      v.remarks = v.remarks ? `${v.remarks} | ${autoNote}` : autoNote;
+      await v.save();
+
+      await adjustCredit(
+        sid,
+        -applyFromWallet,
+        'applied',
+        {
+          voucherId: v._id,
+          description: `Credit auto-applied to voucher ${v.voucherNumber} (${month} ${year})`,
+          paymentMethod: 'credit_wallet',
+          createdBy: scope.createdBy,
+        },
+        scope
+      );
+
+      credit -= applyFromWallet;
+      autoAppliedAmount += applyFromWallet;
+      autoAppliedVoucherIds.add(v._id.toString());
+    }
+  }
+  const autoAppliedCount = autoAppliedVoucherIds.size;
+  return {
+    insertedCount,
+    skipped: skipped.length,
+    skippedDuplicates,
+    errorCount,
+    autoAppliedCount,
+    autoAppliedAmount,
+  };
 };
 
 const queryVouchers = async (filter, options) => {
@@ -353,6 +453,15 @@ const effectiveNet = (v) => {
   return Math.max(0, t - (v.discount || 0) + (v.fine || 0));
 };
 
+/** Comparable index so January 2026 < February 2026 < … < December 2026 < January 2027 */
+const voucherPeriodIndex = (month, year) => {
+  const mi = MONTH_ORDER.indexOf(month);
+  const y = Number(year);
+  if (!Number.isFinite(y)) return 0;
+  if (mi < 0) return y * 12;
+  return y * 12 + mi;
+};
+
 const getStudentFeeSummary = async (studentId, scope = {}) => {
   const [allVouchers, student] = await Promise.all([
     FeeVoucher.find({ ...getTenantFilter(scope), studentId })
@@ -477,7 +586,10 @@ const getStudentCreditHistory = async (studentId, scope = {}, options = {}) => {
 
 /**
  * Batch-fetch credit balance + total outstanding for a list of studentIds.
- * Splits per-student totals into thisMonthOutstanding vs previousArrears.
+ * Splits pending amounts by calendar order vs the selected month/year:
+ * - thisMonthOutstanding  : unpaid balance on vouchers for exactly that month/year
+ * - previousArrears        : unpaid balance on vouchers for any earlier month (true arrears)
+ * - futureMonthsOutstanding: unpaid balance on vouchers for later months (NOT arrears; e.g. May while viewing April)
  * Uses JS-side effectiveNet() to correctly handle stale netAmount=0 vouchers.
  */
 const getStudentBalances = async (studentIds, scope = {}, currentMonth, currentYear) => {
@@ -495,13 +607,21 @@ const getStudentBalances = async (studentIds, scope = {}, currentMonth, currentY
   const balanceMap = {};
   for (const s of students) {
     balanceMap[s._id.toString()] = {
-      creditBalance:         s.creditBalance || 0,
-      totalOutstanding:      0,
-      thisMonthOutstanding:  0,
-      previousArrears:       0,
-      pendingCount:          0,
+      creditBalance:            s.creditBalance || 0,
+      totalOutstanding:         0,
+      thisMonthOutstanding:     0,
+      previousArrears:          0,
+      futureMonthsOutstanding:  0,
+      pendingCount:             0,
     };
   }
+
+  const hasFilterMonth =
+    currentMonth && currentYear !== undefined && currentYear !== null && currentYear !== '';
+  const currentIdx = hasFilterMonth
+    ? voucherPeriodIndex(currentMonth, Number(currentYear))
+    : null;
+
   for (const v of pendingVouchers) {
     const sid = v.studentId.toString();
     if (!balanceMap[sid]) continue;
@@ -509,12 +629,17 @@ const getStudentBalances = async (studentIds, scope = {}, currentMonth, currentY
     const outstanding = Math.max(0, net - (v.paidAmount || 0));
     balanceMap[sid].totalOutstanding += outstanding;
     balanceMap[sid].pendingCount++;
-    const isCurrent = currentMonth && currentYear &&
-      v.month === currentMonth && Number(v.year) === Number(currentYear);
-    if (isCurrent) {
+    if (currentIdx === null) {
+      balanceMap[sid].thisMonthOutstanding += outstanding;
+      continue;
+    }
+    const vIdx = voucherPeriodIndex(v.month, v.year);
+    if (vIdx < currentIdx) {
+      balanceMap[sid].previousArrears += outstanding;
+    } else if (vIdx === currentIdx) {
       balanceMap[sid].thisMonthOutstanding += outstanding;
     } else {
-      balanceMap[sid].previousArrears += outstanding;
+      balanceMap[sid].futureMonthsOutstanding += outstanding;
     }
   }
   return balanceMap;
@@ -604,9 +729,11 @@ const bulkPayStudentVouchers = async (studentId, paymentData, scope = {}) => {
   }
 
   // If there is remaining pool (cash paid > total outstanding), save excess as advance credit
+  let excessDeposited = 0;
   if (pool > 0 && pool > creditAvailable - creditUsed) {
     const excessCash = Math.max(0, pool - (creditAvailable - creditUsed));
     if (excessCash > 0) {
+      excessDeposited = excessCash;
       await adjustCredit(
         studentId,
         excessCash,
@@ -629,6 +756,8 @@ const bulkPayStudentVouchers = async (studentId, paymentData, scope = {}) => {
     totalApplied:    creditUsed + cashUsed,
     newCreditBalance: updatedStudent?.creditBalance ?? 0,
     vouchersPaid:    paid,
+    /** Cash added to the credit wallet this request (for advance / future-month receipts) */
+    excessDeposited,
   };
 };
 

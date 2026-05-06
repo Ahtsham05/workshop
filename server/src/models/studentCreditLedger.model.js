@@ -57,7 +57,7 @@ const studentCreditLedgerSchema = mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'bank_transfer', 'cheque', 'online', 'other', ''],
+      enum: ['cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet', ''],
       default: '',
     },
     date: {

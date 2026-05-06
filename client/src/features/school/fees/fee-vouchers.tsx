@@ -54,6 +54,130 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
   cancelled: { bg: 'bg-gray-50 border-gray-200',     text: 'text-gray-500',   label: 'Cancelled' },
 };
 
+function compareMonthYear(a: { month: string; year: number }, b: { month: string; year: number }): number {
+  if (a.year !== b.year) return a.year - b.year;
+  return MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month);
+}
+
+function addCalendarMonths(monthName: string, year: number, delta: number): { month: string; year: number } {
+  const idx = MONTHS.indexOf(monthName);
+  if (idx < 0) return { month: monthName, year };
+  let m = idx + delta;
+  let y = year;
+  while (m > 11) {
+    m -= 12;
+    y += 1;
+  }
+  while (m < 0) {
+    m += 12;
+    y -= 1;
+  }
+  return { month: MONTHS[m], year: y };
+}
+
+function maxMonthYearInList(list: { month: string; year: number }[]): { month: string; year: number } | null {
+  if (!list.length) return null;
+  return list.reduce((best, x) => (compareMonthYear(x, best) > 0 ? x : best));
+}
+
+/** Best guess monthly fee for projecting advance receipts */
+function estimateMonthlyFee(voucher: any, studentSummary: any, studentRow?: any): number {
+  const fromStructure = studentRow?.feeStructure?.monthlyFee;
+  if (fromStructure != null && Number(fromStructure) > 0) return Number(fromStructure);
+  const items = voucher?.feeItems || [];
+  const monthlyLine = items.find((fi: any) => /monthly/i.test(String(fi?.name || '')));
+  if (monthlyLine?.amount != null && Number(monthlyLine.amount) > 0) return Number(monthlyLine.amount);
+  const sub = items.reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
+  if (sub > 0) return sub;
+  const pend = studentSummary?.pendingVouchers?.[0];
+  if (pend?.netAmount != null && Number(pend.netAmount) > 0) return Number(pend.netAmount);
+  return 0;
+}
+
+/** Synthetic “paid” vouchers for future months covered by advance (for printing only; not saved). */
+function buildAdvanceProjectionVouchers(
+  template: { studentId: any; classId: any; sectionId: any },
+  startAfterMonth: string,
+  startAfterYear: number,
+  advanceAmount: number,
+  monthlyFee: number,
+): any[] {
+  const out: any[] = [];
+  let pool = Math.max(0, advanceAmount);
+  if (pool <= 0) return out;
+
+  let { month, year } = addCalendarMonths(startAfterMonth, startAfterYear, 1);
+  let seq = 1;
+
+  if (monthlyFee <= 0) {
+    const due = new Date(year, MONTHS.indexOf(month), 10);
+    out.push({
+      isAdvanceProjection: true,
+      month,
+      year,
+      netAmount: pool,
+      status: 'paid',
+      paidAmount: pool,
+      discount: 0,
+      fine: 0,
+      feeItems: [{ name: 'Advance fee (on account)', amount: pool }],
+      voucherNumber: `ADV-${String(year).slice(2)}-${String(seq).padStart(3, '0')}`,
+      dueDate: due.toISOString(),
+      studentId: template.studentId,
+      classId: template.classId,
+      sectionId: template.sectionId,
+    });
+    return out;
+  }
+
+  while (pool >= monthlyFee) {
+    const due = new Date(year, MONTHS.indexOf(month), 10);
+    out.push({
+      isAdvanceProjection: true,
+      month,
+      year,
+      netAmount: monthlyFee,
+      status: 'paid',
+      paidAmount: monthlyFee,
+      discount: 0,
+      fine: 0,
+      feeItems: [{ name: `Tuition / Monthly fee — advance for ${month} ${year}`, amount: monthlyFee }],
+      voucherNumber: `ADV-${String(year).slice(2)}-${String(seq).padStart(3, '0')}`,
+      dueDate: due.toISOString(),
+      studentId: template.studentId,
+      classId: template.classId,
+      sectionId: template.sectionId,
+    });
+    pool -= monthlyFee;
+    seq += 1;
+    const next = addCalendarMonths(month, year, 1);
+    month = next.month;
+    year = next.year;
+  }
+
+  if (pool > 0) {
+    const due = new Date(year, MONTHS.indexOf(month), 10);
+    out.push({
+      isAdvanceProjection: true,
+      month,
+      year,
+      netAmount: pool,
+      status: 'paid',
+      paidAmount: pool,
+      discount: 0,
+      fine: 0,
+      feeItems: [{ name: `Partial advance toward ${month} ${year} (remainder on credit)`, amount: pool }],
+      voucherNumber: `ADV-${String(year).slice(2)}-${String(seq).padStart(3, '0')}`,
+      dueDate: due.toISOString(),
+      studentId: template.studentId,
+      classId: template.classId,
+      sectionId: template.sectionId,
+    });
+  }
+
+  return out;
+}
+
 export default function FeeVouchers() {
   const now = new Date();
   const user = useSelector((state: RootState) => state.auth.data?.user);
@@ -157,14 +281,22 @@ export default function FeeVouchers() {
   const getStudentBalance = (v: any) => {
     const sid = v.studentId?.id || v.studentId?._id || v.studentId;
     return studentBalances?.[sid] ?? {
-      totalOutstanding: 0, thisMonthOutstanding: 0, previousArrears: 0,
-      creditBalance: 0, pendingCount: 0
+      totalOutstanding: 0,
+      thisMonthOutstanding: 0,
+      previousArrears: 0,
+      futureMonthsOutstanding: 0,
+      creditBalance: 0,
+      pendingCount: 0,
     };
   };
 
-  // Org-level receivable summary for the stats header
+  // Org-level receivable summary — scoped to selected class when not "All Classes"
   const { data: receivable } = useGetReceivableSummaryQuery(
-    { month: filters.month, year: filters.year },
+    {
+      month: filters.month,
+      year: filters.year,
+      ...(filters.classId !== 'all' ? { classId: filters.classId } : {}),
+    },
     { skip: false }
   );
 
@@ -301,16 +433,21 @@ export default function FeeVouchers() {
       if (genForm.feeStructureId) payload.feeStructureId = genForm.feeStructureId;
       const result = await bulkGenerate(payload).unwrap();
       const skipped = result.skipped ? ` · ${result.skipped} skipped (no fees)` : '';
-      toast.success(`Generated ${result.generated} / ${result.total} vouchers${skipped}`);
+      const dups = result.skippedDuplicates ? ` · ${result.skippedDuplicates} already had this month` : '';
+      const autoApplied = result.autoAppliedCount
+        ? ` · ${result.autoAppliedCount} auto-paid from wallet (PKR ${(result.autoAppliedAmount || 0).toLocaleString()})`
+        : '';
+      toast.success(`Generated ${result.generated} / ${result.total} vouchers${skipped}${dups}${autoApplied}`);
       setGenerateDialog(false);
       setGenForm({ classId: '', feeStructureId: '', month: MONTHS[now.getMonth()], year: now.getFullYear(), feeSource: 'admission_form' });
     } catch (err: any) { toast.error(err?.data?.message || 'Generation failed'); }
   };
 
-  const openPay = (v: any) => {
+  const openPay = (v: any, suggestedAmount?: number) => {
     setSelectedVoucher(v);
-    const remaining = vNet(v) - (v.paidAmount || 0);
-    setPayForm({ amount: String(Math.max(0, remaining)), paymentMethod: 'cash', remarks: '' });
+    const remaining = Math.max(0, vNet(v) - (v.paidAmount || 0));
+    const initialAmount = suggestedAmount != null ? Math.max(0, suggestedAmount) : remaining;
+    setPayForm({ amount: String(initialAmount), paymentMethod: 'cash', remarks: '' });
     setPayDialog(true);
   };
 
@@ -332,9 +469,52 @@ export default function FeeVouchers() {
         }).unwrap();
         const count = result?.vouchersPaid?.length ?? 0;
         const newCredit = result?.newCreditBalance ?? 0;
+        const excessDeposited = Number(result?.excessDeposited ?? 0);
         let msg = `PKR ${amountToPay.toLocaleString()} applied across ${count} voucher${count !== 1 ? 's' : ''}`;
         if (newCredit > 0) msg += ` · PKR ${newCredit.toLocaleString()} saved to credit wallet`;
         toast.success(msg);
+
+        const ids = (result?.vouchersPaid || [])
+          .map((x: any) => x?.voucherId)
+          .filter(Boolean)
+          .map((id: any) => (typeof id === 'string' ? id : id?.toString?.() ?? ''))
+          .filter(Boolean);
+        let printRows: any[] = [];
+        if (ids.length) {
+          try {
+            printRows = await getForPrint(ids).unwrap();
+          } catch {
+            toast.error('Payment saved but print preview failed to load');
+          }
+        }
+        if (excessDeposited > 0) {
+          const studentRow = selectedVoucher?.studentId;
+          const monthlyFee = estimateMonthlyFee(selectedVoucher, studentSummary, studentRow);
+          const paidMonths = (result?.vouchersPaid || []).map((x: any) => ({
+            month: x.month,
+            year: Number(x.year),
+          }));
+          const latestPaid = maxMonthYearInList(paidMonths);
+          const startAfter = latestPaid ?? {
+            month: selectedVoucher.month,
+            year: Number(selectedVoucher.year),
+          };
+          printRows = [
+            ...printRows,
+            ...buildAdvanceProjectionVouchers(
+              {
+                studentId: studentRow,
+                classId: selectedVoucher.classId,
+                sectionId: selectedVoucher.sectionId,
+              },
+              startAfter.month,
+              startAfter.year,
+              excessDeposited,
+              monthlyFee,
+            ),
+          ];
+        }
+        if (printRows.length) openPrintWindow(printRows);
       } else {
         await payVoucher({
           id: selectedVoucher.id,
@@ -360,13 +540,29 @@ export default function FeeVouchers() {
     }
     const sid = advanceStudent?.id || advanceStudent?._id || advanceStudent;
     try {
+      const amountNum = Number(advanceForm.amount);
       const result = await recordAdvance({
         studentId: sid,
-        amount: Number(advanceForm.amount),
+        amount: amountNum,
         paymentMethod: advanceForm.paymentMethod,
         remarks: advanceForm.remarks,
       }).unwrap();
-      toast.success(`PKR ${Number(advanceForm.amount).toLocaleString()} added to credit wallet. New balance: PKR ${(result.creditBalance || 0).toLocaleString()}`);
+      toast.success(`PKR ${amountNum.toLocaleString()} added to credit wallet. New balance: PKR ${(result.creditBalance || 0).toLocaleString()}`);
+      const studentRow = advanceStudent;
+      const monthlyFee = estimateMonthlyFee(null, null, studentRow);
+      const startAfter = { month: filters.month, year: Number(filters.year) };
+      const synth = buildAdvanceProjectionVouchers(
+        {
+          studentId: studentRow,
+          classId: studentRow?.classId,
+          sectionId: studentRow?.sectionId,
+        },
+        startAfter.month,
+        startAfter.year,
+        amountNum,
+        monthlyFee,
+      );
+      if (synth.length) openPrintWindow(synth);
       setAdvanceDialog(false);
     } catch (err: any) { toast.error(err?.data?.message || 'Failed to record advance'); }
   };
@@ -409,6 +605,7 @@ export default function FeeVouchers() {
 
   const svNet = selectedVoucher ? vNet(selectedVoucher) : 0;
   const remaining = selectedVoucher ? Math.max(0, svNet - (selectedVoucher.paidAmount || 0)) : 0;
+  const quickPayFull = Math.max(remaining, Number(studentSummary?.totalPending || 0));
   const payPercent = svNet > 0
     ? Math.min(100, Math.round((Number(payForm.amount) / svNet) * 100))
     : 0;
@@ -508,6 +705,7 @@ export default function FeeVouchers() {
             PKR {(receivable?.totalCreditBalance || 0).toLocaleString()}
           </p>
           <p className="text-[10px] text-emerald-600">held in credit wallet(s)</p>
+          <p className="text-[10px] text-blue-600">PKR {(receivable?.totalWalletAppliedThisMonth || 0).toLocaleString()} used from wallet this month</p>
         </div>
       </div>
 
@@ -653,11 +851,21 @@ export default function FeeVouchers() {
                     {bal.totalOutstanding > 0 ? (
                       <>
                         <p className="text-sm font-bold text-red-600">PKR {bal.totalOutstanding.toLocaleString()}</p>
-                        {bal.previousArrears > 0 ? (
+                        {(bal.previousArrears > 0 || (bal.futureMonthsOutstanding ?? 0) > 0) ? (
                           <p className="text-[10px] text-muted-foreground leading-tight">
                             <span className="text-amber-600">{filters.month}: {bal.thisMonthOutstanding.toLocaleString()}</span>
-                            {' + '}
-                            <span className="text-red-500">arrears: {bal.previousArrears.toLocaleString()}</span>
+                            {bal.previousArrears > 0 && (
+                              <>
+                                {' + '}
+                                <span className="text-red-500">earlier: {bal.previousArrears.toLocaleString()}</span>
+                              </>
+                            )}
+                            {(bal.futureMonthsOutstanding ?? 0) > 0 && (
+                              <>
+                                {' + '}
+                                <span className="text-violet-600">upcoming: {(bal.futureMonthsOutstanding ?? 0).toLocaleString()}</span>
+                              </>
+                            )}
                           </p>
                         ) : (
                           <p className="text-[10px] text-muted-foreground">{bal.pendingCount} month{bal.pendingCount !== 1 ? 's' : ''} pending</p>
@@ -673,9 +881,9 @@ export default function FeeVouchers() {
                     )}
                   </div>
                   <div className="flex gap-1.5 justify-end">
-                    {v.status !== 'paid' && v.status !== 'cancelled' && (
-                      <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v)}>
-                        <DollarSign className="h-3 w-3 mr-1" /> Collect
+                    {v.status !== 'cancelled' && bal.totalOutstanding > 0 && (
+                      <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v, bal.totalOutstanding)}>
+                        <DollarSign className="h-3 w-3 mr-1" /> {v.status === 'paid' ? 'Collect Due' : 'Collect'}
                       </Button>
                     )}
                     <Button
@@ -983,9 +1191,9 @@ export default function FeeVouchers() {
                 <div className="flex gap-1.5 flex-wrap">
                   <button
                     className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors"
-                    onClick={() => setPayForm({ ...payForm, amount: String(remaining) })}
+                    onClick={() => setPayForm({ ...payForm, amount: String(quickPayFull) })}
                   >
-                    Full — PKR {remaining.toLocaleString()}
+                    Full — PKR {quickPayFull.toLocaleString()}
                   </button>
                   {remaining > 0 && (
                     <button
@@ -1581,8 +1789,8 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   return `<div class="vc">
   <div class="vc-head">
     <div class="vc-school">${schoolName}</div>
-    <div class="vc-title">Fee Challan Voucher</div>
-    <div class="vc-sub">Month: <b>${v.month || '—'} ${v.year || ''}</b> &nbsp;&nbsp; Session: <b>${session}</b></div>
+    <div class="vc-title">${v.isAdvanceProjection ? 'Advance Fee Receipt' : 'Fee Challan Voucher'}</div>
+    <div class="vc-sub">${v.isAdvanceProjection ? '<span style="font-weight:600">Paid in advance</span> · ' : ''}Month: <b>${v.month || '—'} ${v.year || ''}</b> &nbsp;&nbsp; Session: <b>${session}</b></div>
   </div>
   <table class="vc-info">
     <tr>

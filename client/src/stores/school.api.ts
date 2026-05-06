@@ -783,8 +783,11 @@ export const schoolApi = createApi({
       providesTags: ['FeeVoucher'],
     }),
     getReceivableSummary: builder.query({
-      query: (params: { month: string; year: number }) =>
-        ({ url: '/school-reports-engine/fee-collection/receivable', params }),
+      query: (params: { month: string; year: number; classId?: string }) => {
+        const q: Record<string, string | number> = { month: params.month, year: params.year };
+        if (params.classId) q.classId = params.classId;
+        return { url: '/school-reports-engine/fee-collection/receivable', params: q };
+      },
       providesTags: ['FeeVoucher'],
     }),
     getYearlyFeeReport: builder.query({

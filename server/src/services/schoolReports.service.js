@@ -3,6 +3,7 @@ const {
   FeeVoucher,
   SchoolTransaction,
   Student,
+  StudentCreditLedger,
   Teacher,
   SchoolClass,
   Section,
@@ -1091,23 +1092,28 @@ const getYearlyFeeReport = async (scope, year, classId) => {
  * - totalReceivedThisMonth  : paidAmount collected on this month's vouchers
  * - paidVouchersThisMonth   : count of fully-paid vouchers this month
  * - totalCreditBalance      : advance wallet balance across active students
+ *
+ * When classId is set, all totals are restricted to that school class (vouchers + students).
  */
-const getReceivableSummary = async (scope, year, month) => {
+const getReceivableSummary = async (scope, year, month, classId) => {
   const af = aggFilter(scope);
   const monthIdx = MONTH_NAMES.indexOf(month);
   const previousMonths = MONTH_NAMES.slice(0, monthIdx);
+  const classMatch = classId ? { classId: new mongoose.Types.ObjectId(classId) } : {};
 
   const [
     thisMonthResult,
     arrearsResult,
     receivedResult,
     creditResult,
+    walletAppliedResult,
   ] = await Promise.all([
     // Pending (receivable) for this month
     FeeVoucher.aggregate([
       {
         $match: {
           ...af,
+          ...classMatch,
           year: Number(year),
           month,
           status: { $in: ['unpaid', 'partial', 'overdue'] },
@@ -1130,6 +1136,7 @@ const getReceivableSummary = async (scope, year, month) => {
           {
             $match: {
               ...af,
+              ...classMatch,
               year: Number(year),
               month: { $in: previousMonths },
               status: { $in: ['unpaid', 'partial', 'overdue'] },
@@ -1152,6 +1159,7 @@ const getReceivableSummary = async (scope, year, month) => {
       {
         $match: {
           ...af,
+          ...classMatch,
           year: Number(year),
           month,
         },
@@ -1167,11 +1175,58 @@ const getReceivableSummary = async (scope, year, month) => {
       },
     ]),
 
-    // Student advance/credit wallet
+    // Student advance/credit wallet (optionally scoped to a class)
     Student.aggregate([
-      { $match: { ...af, status: 'active', creditBalance: { $gt: 0 } } },
+      {
+        $match: {
+          ...af,
+          ...classMatch,
+          status: 'active',
+          creditBalance: { $gt: 0 },
+        },
+      },
       { $group: { _id: null, totalCreditBalance: { $sum: '$creditBalance' } } },
     ]),
+    // Credit consumed from wallet in this month
+    (classId
+      ? StudentCreditLedger.aggregate([
+          {
+            $match: {
+              ...af,
+              type: 'applied',
+              amount: { $lt: 0 },
+              date: {
+                $gte: new Date(Number(year), monthIdx >= 0 ? monthIdx : 0, 1),
+                $lte: new Date(Number(year), monthIdx >= 0 ? monthIdx + 1 : 1, 0, 23, 59, 59, 999),
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: 'students',
+              localField: 'studentId',
+              foreignField: '_id',
+              as: 'student',
+            },
+          },
+          { $unwind: { path: '$student', preserveNullAndEmptyArrays: false } },
+          { $match: { 'student.classId': new mongoose.Types.ObjectId(classId) } },
+          { $group: { _id: null, totalWalletAppliedThisMonth: { $sum: { $multiply: ['$amount', -1] } } } },
+        ])
+      : StudentCreditLedger.aggregate([
+          {
+            $match: {
+              ...af,
+              type: 'applied',
+              amount: { $lt: 0 },
+              date: {
+                $gte: new Date(Number(year), monthIdx >= 0 ? monthIdx : 0, 1),
+                $lte: new Date(Number(year), monthIdx >= 0 ? monthIdx + 1 : 1, 0, 23, 59, 59, 999),
+              },
+            },
+          },
+          { $group: { _id: null, totalWalletAppliedThisMonth: { $sum: { $multiply: ['$amount', -1] } } } },
+        ])),
   ]);
 
   const thisMonthReceivable = thisMonthResult[0]?.thisMonthReceivable || 0;
@@ -1188,6 +1243,7 @@ const getReceivableSummary = async (scope, year, month) => {
     totalReceivedThisMonth: receivedResult[0]?.totalReceivedThisMonth || 0,
     paidVouchersThisMonth:  receivedResult[0]?.paidVouchersThisMonth  || 0,
     totalCreditBalance:     creditResult[0]?.totalCreditBalance       || 0,
+    totalWalletAppliedThisMonth: walletAppliedResult[0]?.totalWalletAppliedThisMonth || 0,
   };
 };
 

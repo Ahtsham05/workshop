@@ -48,7 +48,7 @@ const bulkGenerateVouchers = catchAsync(async (req, res) => {
     classId,
     status: 'active',
   })
-    .select('_id sectionId classId feeStructure')
+    .select('_id sectionId classId feeStructure creditBalance')
     .lean();
 
   if (!students.length) throw new ApiError(httpStatus.BAD_REQUEST, 'No active students found in this class');
@@ -59,6 +59,9 @@ const bulkGenerateVouchers = catchAsync(async (req, res) => {
     message: `Vouchers generated successfully`,
     generated: result.insertedCount ?? 0,
     skipped: result.skipped ?? 0,
+    skippedDuplicates: result.skippedDuplicates ?? 0,
+    autoAppliedCount: result.autoAppliedCount ?? 0,
+    autoAppliedAmount: result.autoAppliedAmount ?? 0,
     total: students.length,
   });
 });

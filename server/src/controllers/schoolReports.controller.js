@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { schoolReportsService } = require('../services');
 
@@ -94,12 +95,14 @@ const getYearlyFeeReport = catchAsync(async (req, res) => {
   res.send(await schoolReportsService.getYearlyFeeReport(scope, year, classId));
 });
 
-/** Fee Collection: Receivable summary (arrears + wallet) */
+/** Fee Collection: Receivable summary (arrears + wallet). Optional ?classId= for per-class totals */
 const getReceivableSummary = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
   const year = parseInt(req.query.year || new Date().getFullYear(), 10);
   const month = req.query.month || new Date().toLocaleString('default', { month: 'long' });
-  res.send(await schoolReportsService.getReceivableSummary(scope, year, month));
+  const raw = req.query.classId;
+  const classId = raw && mongoose.Types.ObjectId.isValid(raw) ? raw : null;
+  res.send(await schoolReportsService.getReceivableSummary(scope, year, month, classId));
 });
 
 module.exports = {
