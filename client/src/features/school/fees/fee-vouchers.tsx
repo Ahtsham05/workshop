@@ -192,6 +192,7 @@ export default function FeeVouchers() {
     status: 'all',
     search: '',
     page: 1,
+    limit: 25,
   });
   const [searchInput, setSearchInput] = useState('');
   const [generateDialog, setGenerateDialog] = useState(false);
@@ -215,7 +216,7 @@ export default function FeeVouchers() {
   );
 
   const voucherParams: any = {
-    page: filters.page, limit: 25,
+    page: filters.page, limit: filters.limit,
     month: filters.month, year: filters.year,
   };
   if (filters.classId !== 'all') voucherParams.classId = filters.classId;
@@ -908,11 +909,29 @@ export default function FeeVouchers() {
       {vouchersData && vouchersData.totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Page {filters.page} of {vouchersData.totalPages} · {vouchersData.totalResults} vouchers
+            Showing {Math.max(1, (filters.page - 1) * filters.limit + 1)}–
+            {Math.min(filters.page * filters.limit, vouchersData.totalResults)} of {vouchersData.totalResults} vouchers
+            {' · '}
+            Page {filters.page} of {vouchersData.totalPages}
           </p>
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-2">
+            <Select
+              value={String(filters.limit)}
+              onValueChange={(v) => setFilters({ ...filters, limit: Number(v), page: 1 })}
+            >
+              <SelectTrigger className="h-7 w-28 text-xs">
+                <SelectValue placeholder="Rows" />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-1.5">
             <Button variant="outline" size="sm" className="h-7" disabled={filters.page === 1} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>← Prev</Button>
             <Button variant="outline" size="sm" className="h-7" disabled={filters.page >= vouchersData.totalPages} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next →</Button>
+            </div>
           </div>
         </div>
       )}
