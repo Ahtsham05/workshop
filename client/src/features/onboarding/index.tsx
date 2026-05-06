@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -48,6 +48,7 @@ export default function OnboardingPage() {
   const navigate = useNavigate()
   const dispatch = useDispatch<AppDispatch>()
   const [step, setStep] = useState(1)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
   const [setupOrganization, { isLoading }] = useSetupOrganizationMutation()
   const authData = useSelector((state: RootState) => state.auth.data)
 
@@ -67,9 +68,14 @@ export default function OnboardingPage() {
     },
   })
 
+  const logoPreviewUrl = useMemo(() => (logoFile ? URL.createObjectURL(logoFile) : ''), [logoFile])
+  useEffect(() => () => {
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+  }, [logoPreviewUrl])
+
   async function onSubmit(data: FormValues) {
     try {
-      const result = await setupOrganization(data).unwrap()
+      const result = await setupOrganization({ ...data, logoFile }).unwrap()
 
       // Update user in localStorage and Redux store with onboardingComplete = true
       const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
@@ -227,6 +233,24 @@ export default function OnboardingPage() {
                         </FormItem>
                       )}
                     />
+                    <div className="space-y-2">
+                      <FormLabel>Company Logo</FormLabel>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null
+                          setLogoFile(file)
+                        }}
+                      />
+                      {logoPreviewUrl ? (
+                        <img
+                          src={logoPreviewUrl}
+                          alt="Company logo preview"
+                          className="h-20 w-20 rounded-md border object-cover"
+                        />
+                      ) : null}
+                    </div>
                   </>
                 )}
 

@@ -10,9 +10,12 @@ interface Props {
   student: IdCardStudent;
   schoolName?: string;
   schoolPhone?: string;
+  design?: {
+    backMessage?: string;
+  };
 }
 
-export default function IDCardBack({ student, schoolName = 'School Name', schoolPhone }: Props) {
+export default function IDCardBack({ student, schoolName = 'School Name', schoolPhone, design }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -38,6 +41,8 @@ export default function IDCardBack({ student, schoolName = 'School Name', school
       }
     }
   }, [student.admissionNumber]);
+
+  const backMessage = design?.backMessage || 'If found, please return to school';
 
   return (
     <div
@@ -74,7 +79,7 @@ export default function IDCardBack({ student, schoolName = 'School Name', school
       {/* Bottom text */}
       <div style={{ textAlign: 'center', paddingBottom: '0.5mm' }}>
         <div style={{ fontSize: '2mm', color: '#475569', fontStyle: 'italic', letterSpacing: '0.1mm' }}>
-          If found, please return to school
+          {backMessage}
         </div>
         {schoolPhone && (
           <div style={{ fontSize: '2mm', color: '#2563eb', fontWeight: '600', marginTop: '0.5mm' }}>

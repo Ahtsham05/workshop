@@ -1,8 +1,13 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { PermissionWrapper } from '@/context/permission-wrapper'
 import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { Button } from '@/components/ui/button'
 
 /**
  * Authenticated layout component.
@@ -16,12 +21,26 @@ import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
  * propagated, showing a persistent "Checking Authentication" spinner.
  */
 function AuthenticatedLayout() {
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
+
   return (
     <TrialExpirationBoundary>
       <PermissionWrapper>
         <SidebarProvider>
           <AppSidebar />
           <main className="min-w-0 flex-1 overflow-hidden">
+            {showLogoReminder && (
+              <div className="m-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between">
+                <span className="text-blue-900">
+                  Add your company logo to show it on receipts for all branches.
+                </span>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/branches">Set Logo</Link>
+                </Button>
+              </div>
+            )}
             <Outlet />
           </main>
         </SidebarProvider>

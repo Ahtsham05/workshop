@@ -18,6 +18,16 @@ interface Props {
   student: IdCardStudent;
   schoolName?: string;
   schoolLogo?: string;
+  design?: {
+    headerStartColor?: string;
+    headerEndColor?: string;
+    titleText?: string;
+    footerText?: string;
+    showLogo?: boolean;
+    showClass?: boolean;
+    showRollNo?: boolean;
+    showAdmissionNo?: boolean;
+  };
 }
 
 import StudentAvatar from '../components/student-avatar';
@@ -26,11 +36,19 @@ export default function IDCardFront({
   student,
   schoolName = 'School Name',
   schoolLogo,
+  design,
 }: Props) {
   const fullName = `${student.firstName} ${student.lastName || ''}`.trim();
   const className = student.classId?.name ?? '—';
   const section = student.sectionId?.name;
   const classLabel = section ? `${className} - ${section}` : className;
+
+  const titleText = design?.titleText || 'STUDENT IDENTITY CARD';
+  const footerText = design?.footerText || 'Valid Academic Year 2025-26';
+  const showLogo = design?.showLogo ?? true;
+  const showClass = design?.showClass ?? true;
+  const showRollNo = design?.showRollNo ?? true;
+  const showAdmissionNo = design?.showAdmissionNo ?? true;
 
   return (
     <div
@@ -47,7 +65,7 @@ export default function IDCardFront({
       {/* ── Header ────────────────────────────────────── */}
       <div
         style={{
-          background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%)',
+          background: `linear-gradient(135deg, ${design?.headerStartColor || '#1e3a8a'} 0%, ${design?.headerEndColor || '#3b82f6'} 100%)`,
           padding: '2.5mm 3mm',
           display: 'flex',
           alignItems: 'center',
@@ -57,7 +75,7 @@ export default function IDCardFront({
         }}
       >
         {/* Logo */}
-        {schoolLogo ? (
+        {showLogo && schoolLogo ? (
           <img
             src={schoolLogo}
             alt="logo"
@@ -81,7 +99,7 @@ export default function IDCardFront({
             {schoolName}
           </div>
           <div style={{ color: '#bfdbfe', fontSize: '2.2mm', letterSpacing: '0.3mm' }}>
-            STUDENT IDENTITY CARD
+            {titleText}
           </div>
         </div>
       </div>
@@ -108,18 +126,18 @@ export default function IDCardFront({
           </div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <tbody>
-              <tr>
+              {showClass && <tr>
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', paddingBottom: '1mm', letterSpacing: '0.2mm', width: '20mm' }}>Class</td>
                 <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#1e293b', paddingBottom: '1mm' }}>{classLabel}</td>
-              </tr>
-              <tr>
+              </tr>}
+              {showRollNo && <tr>
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', paddingBottom: '1mm', letterSpacing: '0.2mm' }}>Roll No.</td>
                 <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#1e293b', paddingBottom: '1mm' }}>{student.rollNumber || '—'}</td>
-              </tr>
-              <tr>
+              </tr>}
+              {showAdmissionNo && <tr>
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Adm. No.</td>
                 <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#2563eb' }}>{student.admissionNumber}</td>
-              </tr>
+              </tr>}
             </tbody>
           </table>
         </div>
@@ -134,7 +152,7 @@ export default function IDCardFront({
           flexShrink: 0,
         }}
       >
-        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>Valid Academic Year 2025–26</span>
+        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>{footerText}</span>
         <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>&#9679; &#9679; &#9679;</span>
       </div>
     </div>

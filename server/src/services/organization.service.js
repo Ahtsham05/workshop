@@ -140,10 +140,17 @@ const updateOrganization = async (orgId, updateBody) => {
   if (!org) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
   }
+  const removeLogo = updateBody.removeLogo === true || updateBody.removeLogo === 'true';
   const normalizedUpdateBody = {
     ...updateBody,
     ...(updateBody.businessType && { businessType: normalizeBusinessType(updateBody.businessType) }),
   };
+
+  if (removeLogo) {
+    org.logo = undefined;
+    delete normalizedUpdateBody.removeLogo;
+    delete normalizedUpdateBody.logo;
+  }
 
   Object.assign(org, normalizedUpdateBody);
   await org.save();

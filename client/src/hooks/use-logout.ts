@@ -1,42 +1,29 @@
 import { useDispatch } from 'react-redux'
 import { useNavigate } from '@tanstack/react-router'
 import { AppDispatch } from '@/stores/store'
-import { logout } from '@/stores/auth.slice'
+import { setActiveBranch, setUser } from '@/stores/auth.slice'
 import toast from 'react-hot-toast'
 
 export function useLogout() {
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
 
-  const handleLogout = async () => {
-    try {
-      // Call logout API if needed
-      const refreshToken = localStorage.getItem('refreshToken')
-      await dispatch(logout({ refreshToken }))
-      
-      // Clear local storage
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      localStorage.removeItem('user')
-      localStorage.removeItem('activeBranchId')
-      localStorage.removeItem('activeBranchName')
-      
-      // Show success message
-      toast.success('Logged out successfully')
-      
-      // Redirect to login
-      navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
-    } catch (error) {
-      console.error('Logout error:', error)
-      // Even if API call fails, clear local data
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      localStorage.removeItem('user')
-      localStorage.removeItem('activeBranchId')
-      localStorage.removeItem('activeBranchName')
-      
-      navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
-    }
+  const handleLogout = () => {
+    // Clear client auth state immediately (no API dependency).
+    dispatch(setUser(null))
+    dispatch(setActiveBranch(null))
+
+    // Clear persisted auth data.
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('user')
+    localStorage.removeItem('activeBranchId')
+    localStorage.removeItem('activeBranchName')
+    toast.success('Logged out successfully')
+
+    // Force hard navigation to break out of any pending guarded route state.
+    navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
+    window.location.assign('/sign-in')
   }
 
   return { logout: handleLogout }

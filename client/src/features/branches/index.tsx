@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { ChangeEvent, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation, Branch, CreateBranchRequest } from '@/stores/branch.api'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { usePlanLimits } from '@/hooks/use-plan-limits'
+import { useGetMyOrganizationQuery, useUpdateOrganizationMutation } from '@/stores/organization.api'
 
 export default function BranchesPage() {
   const [page] = useState(1)
@@ -54,6 +55,10 @@ export default function BranchesPage() {
   const [createBranch, { isLoading: isCreating }] = useCreateBranchMutation()
   const [updateBranch, { isLoading: isUpdating }] = useUpdateBranchMutation()
   const [deleteBranch, { isLoading: isDeleting }] = useDeleteBranchMutation()
+  const { data: orgData } = useGetMyOrganizationQuery()
+  const [updateOrganization, { isLoading: isUpdatingLogo }] = useUpdateOrganizationMutation()
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
   const {
     branchesUsed,
@@ -121,6 +126,51 @@ export default function BranchesPage() {
   }
 
   const branches = data?.results || []
+  const effectiveLogoPreview = logoPreview || orgData?.logo?.url || null
+
+  const handleLogoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setLogoFile(file)
+    if (file) {
+      setLogoPreview(URL.createObjectURL(file))
+    } else {
+      setLogoPreview(null)
+    }
+  }
+
+  const handleSaveSharedLogo = async () => {
+    if (!orgData?.id || !logoFile) {
+      toast.error('Please select a logo first')
+      return
+    }
+    try {
+      await updateOrganization({
+        orgId: orgData.id,
+        body: {},
+        logoFile,
+      }).unwrap()
+      toast.success('Company logo updated. This shared logo will show for all branches.')
+      setLogoFile(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to update logo')
+    }
+  }
+
+  const handleRemoveSharedLogo = async () => {
+    if (!orgData?.id) return
+    try {
+      await updateOrganization({
+        orgId: orgData.id,
+        body: {},
+        removeLogo: true,
+      }).unwrap()
+      toast.success('Company logo removed')
+      setLogoFile(null)
+      setLogoPreview(null)
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to remove logo')
+    }
+  }
 
   const maxBranchesDisplay = maxBranches === Infinity ? '∞' : maxBranches
 
@@ -183,6 +233,42 @@ export default function BranchesPage() {
           </TooltipProvider>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Company Logo (Shared)</CardTitle>
+          <CardDescription>
+            This is the main organization logo and is used across all branches. Branches do not use separate logos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-md border bg-muted flex items-center justify-center overflow-hidden">
+              {effectiveLogoPreview ? (
+                <img src={effectiveLogoPreview} alt="Organization logo" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs text-muted-foreground">No logo</span>
+              )}
+            </div>
+            <div className="flex-1">
+              <Input type="file" accept="image/*" onChange={handleLogoFileChange} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload your main branch/company logo once. It will appear on receipts for all branches.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleSaveSharedLogo} disabled={!logoFile || isUpdatingLogo}>
+                {isUpdatingLogo ? 'Saving...' : 'Save Shared Logo'}
+              </Button>
+              {orgData?.logo?.url && (
+                <Button variant="destructive" onClick={handleRemoveSharedLogo} disabled={isUpdatingLogo}>
+                  Remove Logo
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

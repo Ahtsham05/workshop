@@ -375,7 +375,7 @@ export default function RepairPage() {
       advanceAmount: printRepair.advanceAmount ?? 0,
       paymentMethod: printRepair.paymentMethod ?? 'cash',
       date: printRepair.date,
-      companyName: branchData?.name,
+      companyName: orgData?.name || branchData?.name,
       companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
         .filter(Boolean)
         .join(', ') || undefined,

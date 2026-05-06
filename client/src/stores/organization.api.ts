@@ -52,6 +52,7 @@ export interface SetupOrganizationRequest {
   taxNumber?: string;
   website?: string;
   description?: string;
+  logoFile?: File | null;
 }
 
 export const organizationApi = createApi({
@@ -60,11 +61,26 @@ export const organizationApi = createApi({
   tagTypes: ['Organization'],
   endpoints: (builder) => ({
     setupOrganization: builder.mutation<{ organization: Organization; branch: any }, SetupOrganizationRequest>({
-      query: (body) => ({
-        url: '/organizations/setup',
-        method: 'POST',
-        body,
-      }),
+      query: (body) => {
+        const formData = new FormData();
+        formData.append('name', body.name);
+        formData.append('businessType', body.businessType);
+        if (body.email) formData.append('email', body.email);
+        if (body.phone) formData.append('phone', body.phone);
+        if (body.address) formData.append('address', body.address);
+        if (body.city) formData.append('city', body.city);
+        if (body.country) formData.append('country', body.country);
+        if (body.taxNumber) formData.append('taxNumber', body.taxNumber);
+        if (body.website) formData.append('website', body.website);
+        if (body.description) formData.append('description', body.description);
+        if (body.logoFile) formData.append('logo', body.logoFile);
+
+        return {
+          url: '/organizations/setup',
+          method: 'POST',
+          body: formData,
+        };
+      },
       invalidatesTags: ['Organization'],
     }),
     getMyOrganization: builder.query<Organization, void>({
@@ -72,12 +88,31 @@ export const organizationApi = createApi({
       providesTags: ['Organization'],
       keepUnusedDataFor: 60, // Re-fetch after 60s so plan changes propagate quickly
     }),
-    updateOrganization: builder.mutation<Organization, { orgId: string; body: Partial<SetupOrganizationRequest> }>({
-      query: ({ orgId, body }) => ({
-        url: `/organizations/${orgId}`,
-        method: 'PATCH',
-        body,
-      }),
+    updateOrganization: builder.mutation<
+      Organization,
+      { orgId: string; body: Partial<SetupOrganizationRequest>; logoFile?: File | null; removeLogo?: boolean }
+    >({
+      query: ({ orgId, body, logoFile, removeLogo }) => {
+        const formData = new FormData();
+        if (body.name) formData.append('name', body.name);
+        if (body.businessType) formData.append('businessType', body.businessType);
+        if (body.email) formData.append('email', body.email);
+        if (body.phone) formData.append('phone', body.phone);
+        if (body.address) formData.append('address', body.address);
+        if (body.city) formData.append('city', body.city);
+        if (body.country) formData.append('country', body.country);
+        if (body.taxNumber) formData.append('taxNumber', body.taxNumber);
+        if (body.website) formData.append('website', body.website);
+        if (body.description) formData.append('description', body.description);
+        if (logoFile) formData.append('logo', logoFile);
+        if (removeLogo) formData.append('removeLogo', 'true');
+
+        return {
+          url: `/organizations/${orgId}`,
+          method: 'PATCH',
+          body: formData,
+        };
+      },
       invalidatesTags: ['Organization'],
     }),
     getSubscriptionUsage: builder.query<SubscriptionUsage, void>({

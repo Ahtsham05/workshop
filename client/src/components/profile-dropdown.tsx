@@ -13,32 +13,25 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
-import { logout } from '@/stores/auth.slice'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { Building2, Download } from 'lucide-react'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
+import { useLogout } from '@/hooks/use-logout'
 
 export function ProfileDropdown() {
   const user = useSelector((state: any) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branch } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const dispatch = useDispatch<AppDispatch>()
-  const navigate = useNavigate()
   const { t } = useLanguage()
   const { isInstallable, install } = usePWAInstall()
+  const { logout: safeLogout } = useLogout()
   
   const logoutHandler = async () => {
-    const refreshToken = localStorage.getItem('refreshToken')
-    await dispatch(logout({refreshToken})).then(()=>{
-      toast.success(t('logout_success'))
-      navigate({ 
-        to: '/sign-in', 
-        search: { redirect: "/" },
-        replace: true 
-      })
-    })
+    safeLogout()
+    toast.success(t('logout_success'))
   }
 
   const handleInstallApp = async () => {

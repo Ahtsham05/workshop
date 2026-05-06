@@ -8,20 +8,34 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useGetStudentsQuery, useGetSchoolClassesQuery } from '@/stores/school.api';
+import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { Printer, Search, CheckSquare, Square, CreditCard, Users, FlipHorizontal } from 'lucide-react';
 import IDCardFront, { type IdCardStudent } from './IDCardFront';
 import IDCardBack from './IDCardBack';
 import type { RootState } from '@/stores/store';
 
 // ─── Off-screen print content ────────────────────────────────────────────────
+interface CardDesign {
+  headerStartColor: string;
+  headerEndColor: string;
+  titleText: string;
+  footerText: string;
+  backMessage: string;
+  showLogo: boolean;
+  showClass: boolean;
+  showRollNo: boolean;
+  showAdmissionNo: boolean;
+}
 
 interface PrintContentProps {
   students: IdCardStudent[];
   schoolName: string;
+  schoolLogo?: string;
+  design: CardDesign;
   showBothSides: boolean;
 }
 
-function PrintContent({ students, schoolName, showBothSides }: PrintContentProps) {
+function PrintContent({ students, schoolName, schoolLogo, design, showBothSides }: PrintContentProps) {
   return (
     <div
       style={{
@@ -34,8 +48,8 @@ function PrintContent({ students, schoolName, showBothSides }: PrintContentProps
     >
       {students.map((student) => (
         <div key={student.id} style={{ display: 'flex', flexDirection: 'column', gap: '3mm', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-          <IDCardFront student={student} schoolName={schoolName} />
-          {showBothSides && <IDCardBack student={student} schoolName={schoolName} />}
+          <IDCardFront student={student} schoolName={schoolName} schoolLogo={schoolLogo} design={design} />
+          {showBothSides && <IDCardBack student={student} schoolName={schoolName} design={design} />}
         </div>
       ))}
     </div>
@@ -46,12 +60,15 @@ function PrintContent({ students, schoolName, showBothSides }: PrintContentProps
 
 interface CardPreviewProps {
   student: IdCardStudent;
+  schoolName: string;
+  schoolLogo?: string;
+  design: CardDesign;
   selected: boolean;
   onToggle: () => void;
   onPrintSingle: () => void;
 }
 
-function CardPreview({ student, selected, onToggle, onPrintSingle }: CardPreviewProps) {
+function CardPreview({ student, schoolName, schoolLogo, design, selected, onToggle, onPrintSingle }: CardPreviewProps) {
   const [showBack, setShowBack] = useState(false);
 
   return (
@@ -79,7 +96,7 @@ function CardPreview({ student, selected, onToggle, onPrintSingle }: CardPreview
         }`}
         style={{ display: 'inline-block' }}
       >
-        {showBack ? <IDCardBack student={student} /> : <IDCardFront student={student} />}
+        {showBack ? <IDCardBack student={student} schoolName={schoolName} design={design} /> : <IDCardFront student={student} schoolName={schoolName} schoolLogo={schoolLogo} design={design} />}
       </div>
 
       <div className="text-center mt-1">
@@ -94,14 +111,28 @@ function CardPreview({ student, selected, onToggle, onPrintSingle }: CardPreview
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function IdCardsPage() {
+  const defaultCardDesign: CardDesign = {
+    headerStartColor: '#1e3a8a',
+    headerEndColor: '#3b82f6',
+    titleText: 'STUDENT IDENTITY CARD',
+    footerText: 'Valid Academic Year 2025-26',
+    backMessage: 'If found, please return to school',
+    showLogo: true,
+    showClass: true,
+    showRollNo: true,
+    showAdmissionNo: true,
+  };
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showBothSides, setShowBothSides] = useState(true);
   const [printQueue, setPrintQueue] = useState<IdCardStudent[]>([]);
+  const [cardDesign, setCardDesign] = useState<CardDesign>(defaultCardDesign);
 
   const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName);
-  const SCHOOL_NAME = activeBranchName || 'School Name';
+  const { data: orgData } = useGetMyOrganizationQuery();
+  const SCHOOL_NAME = orgData?.name || activeBranchName || 'School Name';
+  const SCHOOL_LOGO = orgData?.logo?.url;
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -212,6 +243,50 @@ export default function IdCardsPage() {
         </CardContent>
       </Card>
 
+      {/* Designer */}
+      <Card className="shadow-none border">
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Card Designer</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCardDesign(defaultCardDesign)}
+            >
+              Reset Design
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Header Start</p>
+              <Input type="color" value={cardDesign.headerStartColor} onChange={(e) => setCardDesign((prev) => ({ ...prev, headerStartColor: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Header End</p>
+              <Input type="color" value={cardDesign.headerEndColor} onChange={(e) => setCardDesign((prev) => ({ ...prev, headerEndColor: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Card Title</p>
+              <Input value={cardDesign.titleText} onChange={(e) => setCardDesign((prev) => ({ ...prev, titleText: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Front Footer</p>
+              <Input value={cardDesign.footerText} onChange={(e) => setCardDesign((prev) => ({ ...prev, footerText: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2 lg:col-span-4">
+              <p className="text-xs text-muted-foreground mb-1">Back Message</p>
+              <Input value={cardDesign.backMessage} onChange={(e) => setCardDesign((prev) => ({ ...prev, backMessage: e.target.value }))} />
+            </div>
+            <div className="flex flex-wrap items-center gap-4 md:col-span-2 lg:col-span-4">
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showLogo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showLogo: Boolean(v) }))} /> Show Logo</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showClass} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showClass: Boolean(v) }))} /> Show Class</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showRollNo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showRollNo: Boolean(v) }))} /> Show Roll No.</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showAdmissionNo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showAdmissionNo: Boolean(v) }))} /> Show Admission No.</label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Card grid */}
       {isLoading ? (
         <div className="text-center py-16 text-muted-foreground">Loading students…</div>
@@ -223,6 +298,9 @@ export default function IdCardsPage() {
             <CardPreview
               key={student.id}
               student={student}
+              schoolName={SCHOOL_NAME}
+              schoolLogo={SCHOOL_LOGO}
+              design={cardDesign}
               selected={selected.has(student.id)}
               onToggle={() => toggleOne(student.id)}
               onPrintSingle={() => enqueuePrint([student])}
@@ -235,7 +313,7 @@ export default function IdCardsPage() {
       <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', pointerEvents: 'none' }}>
         <div ref={printRef}>
           {printQueue.length > 0 && (
-            <PrintContent students={printQueue} schoolName={SCHOOL_NAME} showBothSides={showBothSides} />
+            <PrintContent students={printQueue} schoolName={SCHOOL_NAME} schoolLogo={SCHOOL_LOGO} design={cardDesign} showBothSides={showBothSides} />
           )}
         </div>
       </div>

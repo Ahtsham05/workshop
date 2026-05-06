@@ -16,6 +16,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { useGetBankDetailsQuery, useSubmitPaymentMutation, useGetTrialStatusQuery } from '@/stores/subscription.api'
 import Axios from '@/utils/Axios'
+import { useLogout } from '@/hooks/use-logout'
 
 const MONTH_OPTIONS = [
   { value: 1, label: '1 Month' },
@@ -33,6 +34,15 @@ interface PaymentSearch {
 }
 
 const PLAN_ORDER: PlanTypeKey[] = ['starter', 'growth', 'business']
+const PLAN_LABELS: Record<string, string> = {
+  trial: 'Trial',
+  single: 'Starter Plan',
+  multi: 'Growth Plan',
+  starter: 'Starter Plan',
+  growth: 'Growth Plan',
+  business: 'Business Plan',
+  enterprise: 'Enterprise Plan',
+}
 
 export default function PaymentFormPage() {
   const search = useSearch({ from: '/_authenticated/subscription/payment' }) as PaymentSearch
@@ -41,6 +51,7 @@ export default function PaymentFormPage() {
   const { data: bankData, isLoading: bankLoading } = useGetBankDetailsQuery()
     const { data: trialStatus } = useGetTrialStatusQuery()
   const [submitPayment, { isLoading: isSubmitting }] = useSubmitPaymentMutation()
+  const { logout } = useLogout()
 
   const [planType, setPlanType] = useState<PlanTypeKey>(search.planType ?? 'starter')
   const [months, setMonths] = useState(1)
@@ -56,6 +67,7 @@ export default function PaymentFormPage() {
   const amount = selectedPlan?.pricePerMonth ? selectedPlan.pricePerMonth * months : 0
 
   const bankDetails = bankData?.bankDetails
+  const previousPlanLabel = PLAN_LABELS[trialStatus?.subscription?.planType || ''] || trialStatus?.subscription?.planType || 'Previous Plan'
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -145,8 +157,8 @@ export default function PaymentFormPage() {
           <div className='bg-red-950 border border-red-500 rounded-lg p-4 flex gap-3'>
             <AlertTriangle className='h-5 w-5 text-red-500 flex-shrink-0 mt-0.5' />
             <div>
-              <p className='font-semibold text-red-100'>Trial Expired</p>
-              <p className='text-sm text-red-50'>Your trial has expired. Renew your plan to regain full access to the application.</p>
+              <p className='font-semibold text-red-100'>{previousPlanLabel} Expired</p>
+              <p className='text-sm text-red-50'>Your {previousPlanLabel.toLowerCase()} has expired. Renew your plan to regain full access to the application.</p>
             </div>
           </div>
         )}
@@ -162,10 +174,17 @@ export default function PaymentFormPage() {
         )}
 
       <div>
-        <h1 className='text-2xl font-bold'>Payment — Bank Transfer</h1>
-        <p className='text-muted-foreground'>
-          Transfer the plan amount to the account below and submit proof of payment.
-        </p>
+        <div className='flex items-start justify-between gap-3'>
+          <div>
+            <h1 className='text-2xl font-bold'>Payment — Bank Transfer</h1>
+            <p className='text-muted-foreground'>
+              Transfer the plan amount to the account below and submit proof of payment.
+            </p>
+          </div>
+          <Button type='button' variant='outline' onClick={logout}>
+            Log out
+          </Button>
+        </div>
       </div>
 
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>

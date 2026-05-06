@@ -1,8 +1,7 @@
-import { useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useGetTrialStatusQuery } from '@/stores/subscription.api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertTriangle, XCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { AlertTriangle } from 'lucide-react'
 
 interface TrialExpirationBoundaryProps {
   children: React.ReactNode
@@ -10,82 +9,36 @@ interface TrialExpirationBoundaryProps {
 
 export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryProps) {
   const navigate = useNavigate()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { data: trialStatus, isLoading } = useGetTrialStatusQuery()
+
+  const expiredAccessAllowedPaths = ['/subscription/payment', '/subscription/pricing', '/payments', '/subscription']
+  const canAccessExpiredPath = expiredAccessAllowedPaths.some(
+    (allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`)
+  )
 
   const handleNavigateToPayment = () => {
     navigate({ to: '/subscription/payment' as any })
   }
 
-  const handleViewPaymentHistory = () => {
-    navigate({ to: '/payments' as any })
-  }
+  // Expired users should land directly on renew/payment flow.
+  useEffect(() => {
+    if (!isLoading && trialStatus?.trialExpired && !canAccessExpiredPath) {
+      navigate({ to: '/subscription/payment' as any, replace: true })
+    }
+  }, [isLoading, trialStatus?.trialExpired, canAccessExpiredPath, navigate])
 
   // If loading, show nothing
   if (isLoading) {
     return <div>{children}</div>
   }
 
-  // If trial is expired, show expiration screen
+  // Block rendering while redirecting off non-payment routes.
   if (trialStatus?.trialExpired) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
-        <Card className="w-full max-w-md border-red-500 bg-slate-950">
-          <CardHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <XCircle className="h-8 w-8 text-red-500" />
-              <CardTitle className="text-red-500">Trial Expired</CardTitle>
-            </div>
-            <CardDescription>
-              Your trial or subscription has ended
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="bg-red-950 border border-red-500 rounded-lg p-4">
-              <p className="text-sm text-red-100">
-                Your trial or subscription period has ended. To continue using the application and access all features, 
-                please renew your subscription.
-              </p>
-            </div>
-
-            {trialStatus?.subscription && (
-              <div className="space-y-2 text-sm">
-                <p className="text-slate-300">
-                  <span className="font-semibold">Plan:</span> {trialStatus.subscription.planType || 'Trial'}
-                </p>
-                <p className="text-slate-300">
-                  <span className="font-semibold">Status:</span> {trialStatus.subscription.status || 'Expired'}
-                </p>
-                {trialStatus.subscription.endDate && (
-                  <p className="text-slate-300">
-                    <span className="font-semibold">Ended:</span> {new Date(trialStatus.subscription.endDate).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <Button 
-                onClick={handleNavigateToPayment}
-                className="w-full bg-blue-600 hover:bg-blue-700"
-              >
-                Renew Subscription
-              </Button>
-              <Button 
-                onClick={handleViewPaymentHistory}
-                variant="outline"
-                className="w-full"
-              >
-                View Payment History
-              </Button>
-            </div>
-
-            <p className="text-xs text-slate-400 text-center">
-              Contact support if you need assistance with your subscription.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    if (!canAccessExpiredPath) {
+      return <div className="min-h-screen bg-background" />
+    }
+    return <div>{children}</div>
   }
 
   // If trial is ending soon (less than 3 days), show warning
