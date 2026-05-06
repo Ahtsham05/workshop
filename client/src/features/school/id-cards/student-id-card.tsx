@@ -11,6 +11,11 @@ export interface IdCardStudent {
   photoUrl?: { url?: string };
   classId?: { name?: string } | null;
   sectionId?: { name?: string } | null;
+  parent?: {
+    phone?: string;
+    guardianName?: string;
+    fatherName?: string;
+  } | null;
 }
 
 interface Props {
@@ -109,6 +114,10 @@ export default function StudentIdCard({ student, schoolName = 'School Name', sch
             <div className="col-span-2">
               <p className="text-[8px] text-gray-400 uppercase tracking-wide">Admission No.</p>
               <p className="text-[10px] font-semibold text-slate-700">{student.admissionNumber}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Guardian #</p>
+              <p className="text-[10px] font-semibold text-slate-700">{student.parent?.phone || '—'}</p>
             </div>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useGetStudentsQuery, useGetSchoolClassesQuery } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { Printer, Search, CheckSquare, Square, CreditCard, Users, FlipHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
 import IDCardFront, { type IdCardStudent } from './IDCardFront';
 import IDCardBack from './IDCardBack';
 import type { RootState } from '@/stores/store';
@@ -20,12 +21,25 @@ interface CardDesign {
   headerEndColor: string;
   titleText: string;
   footerText: string;
+  footerStartColor: string;
+  footerEndColor: string;
+  footerTextColor: string;
   backMessage: string;
+  backgroundImage: string;
   showLogo: boolean;
   showClass: boolean;
   showRollNo: boolean;
   showAdmissionNo: boolean;
 }
+
+interface SavedDesignPreset {
+  id: string;
+  name: string;
+  design: CardDesign;
+  updatedAt: string;
+}
+
+const DESIGN_STORAGE_KEY = 'school.idCardDesignPresets.v1';
 
 interface PrintContentProps {
   students: IdCardStudent[];
@@ -116,7 +130,11 @@ export default function IdCardsPage() {
     headerEndColor: '#3b82f6',
     titleText: 'STUDENT IDENTITY CARD',
     footerText: 'Valid Academic Year 2025-26',
+    footerStartColor: '#1e3a8a',
+    footerEndColor: '#2563eb',
+    footerTextColor: '#bfdbfe',
     backMessage: 'If found, please return to school',
+    backgroundImage: '',
     showLogo: true,
     showClass: true,
     showRollNo: true,
@@ -128,6 +146,9 @@ export default function IdCardsPage() {
   const [showBothSides, setShowBothSides] = useState(true);
   const [printQueue, setPrintQueue] = useState<IdCardStudent[]>([]);
   const [cardDesign, setCardDesign] = useState<CardDesign>(defaultCardDesign);
+  const [savedDesigns, setSavedDesigns] = useState<SavedDesignPreset[]>([]);
+  const [designName, setDesignName] = useState('');
+  const [activeDesignId, setActiveDesignId] = useState('');
 
   const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName);
   const { data: orgData } = useGetMyOrganizationQuery();
@@ -145,6 +166,70 @@ export default function IdCardsPage() {
 
   const allStudents: IdCardStudent[] = studentsData?.results ?? [];
   const classes = classesData?.results ?? [];
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DESIGN_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) setSavedDesigns(parsed);
+    } catch {
+      // Ignore corrupted local settings
+    }
+  }, []);
+
+  const persistDesigns = (next: SavedDesignPreset[]) => {
+    setSavedDesigns(next);
+    localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const handleBgImageUpload = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setCardDesign((prev) => ({ ...prev, backgroundImage: String(reader.result || '') }));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveNewDesign = () => {
+    const trimmed = designName.trim();
+    if (!trimmed) {
+      toast.error('Please enter a design name');
+      return;
+    }
+    const id = crypto.randomUUID();
+    const next: SavedDesignPreset[] = [
+      { id, name: trimmed, design: cardDesign, updatedAt: new Date().toISOString() },
+      ...savedDesigns,
+    ];
+    persistDesigns(next);
+    setActiveDesignId(id);
+    toast.success('Design saved');
+  };
+
+  const handleUpdateDesign = () => {
+    if (!activeDesignId) {
+      toast.error('Select a saved design first');
+      return;
+    }
+    const next = savedDesigns.map((d) =>
+      d.id === activeDesignId ? { ...d, design: cardDesign, name: designName.trim() || d.name, updatedAt: new Date().toISOString() } : d
+    );
+    persistDesigns(next);
+    toast.success('Design updated');
+  };
+
+  const handleLoadDesign = (id: string) => {
+    setActiveDesignId(id);
+    if (id === 'none') return;
+    const found = savedDesigns.find((d) => d.id === id);
+    if (!found) return;
+    setCardDesign(found.design);
+    setDesignName(found.name);
+  };
 
   const filtered = allStudents.filter((s) => {
     if (!search) return true;
@@ -251,10 +336,36 @@ export default function IdCardsPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setCardDesign(defaultCardDesign)}
+              onClick={() => {
+                setCardDesign(defaultCardDesign);
+                setActiveDesignId('');
+                setDesignName('');
+              }}
             >
               Reset Design
             </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+            <div className="md:col-span-2">
+              <p className="text-xs text-muted-foreground mb-1">Design Name</p>
+              <Input value={designName} onChange={(e) => setDesignName(e.target.value)} placeholder="e.g. Blue 2026 Theme" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Saved Designs</p>
+              <Select value={activeDesignId || 'none'} onValueChange={handleLoadDesign}>
+                <SelectTrigger><SelectValue placeholder="Load saved design" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {savedDesigns.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end gap-2">
+              <Button size="sm" variant="outline" onClick={handleSaveNewDesign}>Save New</Button>
+              <Button size="sm" onClick={handleUpdateDesign} disabled={!activeDesignId}>Update</Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
@@ -273,9 +384,42 @@ export default function IdCardsPage() {
               <p className="text-xs text-muted-foreground mb-1">Front Footer</p>
               <Input value={cardDesign.footerText} onChange={(e) => setCardDesign((prev) => ({ ...prev, footerText: e.target.value }))} />
             </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Footer Start</p>
+              <Input type="color" value={cardDesign.footerStartColor} onChange={(e) => setCardDesign((prev) => ({ ...prev, footerStartColor: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Footer End</p>
+              <Input type="color" value={cardDesign.footerEndColor} onChange={(e) => setCardDesign((prev) => ({ ...prev, footerEndColor: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Footer Text Color</p>
+              <Input type="color" value={cardDesign.footerTextColor} onChange={(e) => setCardDesign((prev) => ({ ...prev, footerTextColor: e.target.value }))} />
+            </div>
             <div className="md:col-span-2 lg:col-span-4">
               <p className="text-xs text-muted-foreground mb-1">Back Message</p>
               <Input value={cardDesign.backMessage} onChange={(e) => setCardDesign((prev) => ({ ...prev, backMessage: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2 lg:col-span-3">
+              <p className="text-xs text-muted-foreground mb-1">Background Image URL</p>
+              <Input
+                value={cardDesign.backgroundImage}
+                onChange={(e) => setCardDesign((prev) => ({ ...prev, backgroundImage: e.target.value }))}
+                placeholder="https://... or upload image below"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="w-full">
+                <p className="text-xs text-muted-foreground mb-1">Upload Background</p>
+                <Input type="file" accept="image/*" onChange={(e) => handleBgImageUpload(e.target.files?.[0])} />
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setCardDesign((prev) => ({ ...prev, backgroundImage: '' }))}
+              >
+                Clear
+              </Button>
             </div>
             <div className="flex flex-wrap items-center gap-4 md:col-span-2 lg:col-span-4">
               <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showLogo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showLogo: Boolean(v) }))} /> Show Logo</label>

@@ -12,6 +12,11 @@ export interface IdCardStudent {
   photoUrl?: { url?: string };
   classId?: { name?: string } | null;
   sectionId?: { name?: string } | null;
+  parent?: {
+    phone?: string;
+    guardianName?: string;
+    fatherName?: string;
+  } | null;
 }
 
 interface Props {
@@ -23,6 +28,10 @@ interface Props {
     headerEndColor?: string;
     titleText?: string;
     footerText?: string;
+    footerStartColor?: string;
+    footerEndColor?: string;
+    footerTextColor?: string;
+    backgroundImage?: string;
     showLogo?: boolean;
     showClass?: boolean;
     showRollNo?: boolean;
@@ -60,6 +69,9 @@ export default function IDCardFront({
         border: '1px solid #bfdbfe',
         borderRadius: '3mm',
         boxSizing: 'border-box',
+        backgroundImage: design?.backgroundImage ? `url(${design.backgroundImage})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
       {/* ── Header ────────────────────────────────────── */}
@@ -138,6 +150,10 @@ export default function IDCardFront({
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Adm. No.</td>
                 <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#2563eb' }}>{student.admissionNumber}</td>
               </tr>}
+              <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Guardian #</td>
+                <td style={{ fontSize: '2.4mm', fontWeight: '700', color: '#1e293b' }}>{student.parent?.phone || '—'}</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -146,14 +162,14 @@ export default function IDCardFront({
       {/* ── Footer strip ──────────────────────────────── */}
       <div
         style={{
-          background: 'linear-gradient(90deg, #1e3a8a, #2563eb)',
+          background: `linear-gradient(90deg, ${design?.footerStartColor || '#1e3a8a'}, ${design?.footerEndColor || '#2563eb'})`,
           padding: '0.8mm 3mm',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           flexShrink: 0,
         }}
       >
-        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>{footerText}</span>
-        <span style={{ color: '#bfdbfe', fontSize: '1.8mm' }}>&#9679; &#9679; &#9679;</span>
+        <span style={{ color: design?.footerTextColor || '#bfdbfe', fontSize: '1.8mm' }}>{footerText}</span>
+        <span style={{ color: design?.footerTextColor || '#bfdbfe', fontSize: '1.8mm' }}>&#9679; &#9679; &#9679;</span>
       </div>
     </div>
   );

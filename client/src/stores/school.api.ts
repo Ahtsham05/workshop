@@ -726,6 +726,10 @@ export const schoolApi = createApi({
       query: (studentId) => `/fee-vouchers/student/${studentId}/summary`,
       providesTags: ['FeeVoucher'],
     }),
+    getStudentFeeLedger: builder.query({
+      query: (studentId) => `/fee-vouchers/student/${studentId}/ledger`,
+      providesTags: ['FeeVoucher'],
+    }),
     getFeeVoucherStats: builder.query({
       query: (params) => ({ url: '/fee-vouchers/stats', params }),
       providesTags: ['FeeVoucher', 'FeeAccountingDashboard'],
@@ -1270,6 +1274,7 @@ export const {
   useGetFeeVoucherQuery,
   useGetStudentFeeVouchersQuery,
   useGetStudentFeeSummaryQuery,
+  useGetStudentFeeLedgerQuery,
   useGetFeeVoucherStatsQuery,
   useCreateFeeVoucherMutation,
   useBulkGenerateFeeVouchersMutation,

@@ -26,6 +26,10 @@ router
   .get(feeVoucherController.getStudentFeeSummary);
 
 router
+  .route('/student/:studentId/ledger')
+  .get(validate(feeVoucherValidation.getStudentVouchers), feeVoucherController.getStudentFeeLedger);
+
+router
   .route('/student/:studentId/pay-all')
   .post(validate(feeVoucherValidation.bulkPayStudentVouchers), feeVoucherController.bulkPayStudentVouchers);
 

@@ -116,6 +116,12 @@ const getStudentFeeSummary = catchAsync(async (req, res) => {
   res.send(summary);
 });
 
+const getStudentFeeLedger = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const result = await feeVoucherService.getStudentFeeLedger(req.params.studentId, scope);
+  res.send(result);
+});
+
 const payVoucher = catchAsync(async (req, res) => {
   const scope = {
     organizationId: req.user.organizationId,
@@ -250,6 +256,7 @@ module.exports = {
   getVoucher,
   getStudentVouchers,
   getStudentFeeSummary,
+  getStudentFeeLedger,
   payVoucher,
   bulkPayStudentVouchers,
   recordAdvancePayment,

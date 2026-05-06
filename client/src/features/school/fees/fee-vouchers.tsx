@@ -15,6 +15,7 @@ import {
   usePayFeeVoucherMutation,
   useGetFeeVouchersForPrintMutation,
   useGetStudentFeeSummaryQuery,
+  useGetStudentFeeLedgerQuery,
   useReconcileFeeVouchersMutation,
   useBulkPayStudentFeeVouchersMutation,
   useRecordStudentAdvancePaymentMutation,
@@ -234,6 +235,7 @@ export default function FeeVouchers() {
 
   // ── New voucher dialog state ──────────────────────────────────────────────
   const [newVoucherDialog, setNewVoucherDialog] = useState(false);
+  const [ledgerDialog, setLedgerDialog] = useState(false);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [debouncedStudentSearch, setDebouncedStudentSearch] = useState('');
   const [selectedStudentForVoucher, setSelectedStudentForVoucher] = useState<any>(null);
@@ -265,6 +267,10 @@ export default function FeeVouchers() {
   const { data: studentSummary, isLoading: loadingSummary } = useGetStudentFeeSummaryQuery(
     summaryStudentId,
     { skip: !payDialog || !summaryStudentId },
+  );
+  const { data: studentLedger, isLoading: loadingLedger } = useGetStudentFeeLedgerQuery(
+    summaryStudentId,
+    { skip: !ledgerDialog || !summaryStudentId },
   );
 
   const vouchers = vouchersData?.results || [];
@@ -825,6 +831,11 @@ export default function FeeVouchers() {
                       <span className="text-[11px] text-muted-foreground">
                         {v.voucherNumber || '—'} · {v.month} {v.year} · Due {v.dueDate ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                       </span>
+                      {v.studentId?.parent?.phone && (
+                        <span className="text-[11px] text-muted-foreground">
+                          Guardian: {v.studentId.parent.phone}
+                        </span>
+                      )}
                       {net > 0 && (
                         <div className="flex items-center gap-1">
                           <div className="h-1 w-16 rounded-full bg-muted overflow-hidden">
@@ -1160,6 +1171,16 @@ export default function FeeVouchers() {
                         <span className="text-sm font-bold text-emerald-700">PKR {(studentSummary.lastPaid.paidAmount || 0).toLocaleString()}</span>
                       </div>
                     )}
+                    <div className="px-3 py-2 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setLedgerDialog(true)}
+                      >
+                        <History className="h-3 w-3 mr-1" /> View Complete Fee Ledger
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1295,6 +1316,77 @@ export default function FeeVouchers() {
                 : <><CheckCircle2 className="mr-2 h-3.5 w-3.5" />Confirm PKR {Number(payForm.amount || 0).toLocaleString()}</>
               }
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Student Fee Ledger Dialog ─────────────────────────────── */}
+      <Dialog open={ledgerDialog} onOpenChange={setLedgerDialog}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" /> Student Fee Ledger
+            </DialogTitle>
+          </DialogHeader>
+          {loadingLedger ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <RefreshCcw className="h-4 w-4 animate-spin" /> Loading ledger...
+            </div>
+          ) : studentLedger ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="rounded border p-2">
+                  <p className="text-[10px] text-muted-foreground">Student</p>
+                  <p className="text-sm font-semibold">{studentLedger.student?.name || '—'}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-[10px] text-muted-foreground">Total Billed</p>
+                  <p className="text-sm font-semibold">PKR {(studentLedger.summary?.totalBilled || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-[10px] text-muted-foreground">Total Paid/Credit</p>
+                  <p className="text-sm font-semibold text-emerald-700">PKR {(studentLedger.summary?.totalPaid || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-[10px] text-muted-foreground">Outstanding</p>
+                  <p className="text-sm font-semibold text-red-600">PKR {(studentLedger.summary?.outstanding || 0).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="rounded border overflow-hidden">
+                <div className="grid grid-cols-[8rem_1fr_7rem_7rem_7rem] gap-2 px-3 py-2 bg-muted/50 text-[11px] font-medium text-muted-foreground border-b">
+                  <span>Date</span>
+                  <span>Particular</span>
+                  <span className="text-right">Debit</span>
+                  <span className="text-right">Credit</span>
+                  <span className="text-right">Balance</span>
+                </div>
+                <div className="max-h-[50vh] overflow-y-auto divide-y">
+                  {(studentLedger.entries || []).map((e: any, idx: number) => (
+                    <div key={idx} className="grid grid-cols-[8rem_1fr_7rem_7rem_7rem] gap-2 px-3 py-2 text-xs items-start">
+                      <span className="text-muted-foreground">
+                        {e.date ? new Date(e.date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                      <div>
+                        <p className="font-medium">{e.label}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {e.voucherNumber ? `${e.voucherNumber}` : '—'}
+                          {e.paymentMethod ? ` · ${e.paymentMethod}` : ''}
+                        </p>
+                      </div>
+                      <span className="text-right text-red-600">{(e.debit || 0) > 0 ? (e.debit || 0).toLocaleString() : '—'}</span>
+                      <span className="text-right text-emerald-700">{(e.credit || 0) > 0 ? (e.credit || 0).toLocaleString() : '—'}</span>
+                      <span className="text-right font-semibold">{(e.runningBalance || 0).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-6">No ledger data available.</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLedgerDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1568,22 +1660,16 @@ export default function FeeVouchers() {
   );
 }
 
-// ── Professional Print HTML (4 vouchers per A4 page, 2×2 grid) ──────────────────
+// ── Professional Print HTML (auto-pack max vouchers per page) ─────────────────────
 function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: string): string {
-  // Layout: 3 students per A4 page, each row = Student Copy (left) | cut | Office Copy (right)
-  const PER_PAGE = 3;
-  const pages: string[] = [];
-  for (let i = 0; i < vouchers.length; i += PER_PAGE) {
-    const group = vouchers.slice(i, i + PER_PAGE);
-    const rows = group.map((v, ri) => `
-      <div class="row${ri < group.length - 1 ? ' has-cut' : ''}">
+  // Let browser paginate naturally so each page contains maximum possible rows.
+  const rows = vouchers.map((v, ri) => `
+      <div class="row${ri < vouchers.length - 1 ? ' has-cut' : ''}">
         <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote)}</div>
         <div class="vcut"><span>✂</span></div>
         <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote)}</div>
       </div>`).join('');
-    pages.push(`<div class="page">${rows}</div>`);
-  }
-  const pageHTML = pages.join('');
+  const pageHTML = `<div class="sheet">${rows}</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1595,17 +1681,17 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
   body { font-family: Arial, sans-serif; background: #fff; color: #000; font-size: 9px; }
 
   /* ── A4 Page ─────────────────────────── */
-  .page {
+  .sheet {
     width: 210mm;
     padding: 5mm 6mm;
-    page-break-after: always;
   }
-  .page:last-child { page-break-after: auto; }
 
   /* ── Student row (one student = 2 copies) */
   .row {
     display: flex;
     align-items: stretch;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .row.has-cut {
     border-bottom: 1.5px dashed #666;
@@ -1771,6 +1857,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
     : '—';
   const session = `${v.year || ''}–${(v.year || 0) + 1}`;
+  const guardianPhone = v.studentId?.parent?.phone || '—';
 
   const itemRows = feeItems
     .map(
@@ -1829,6 +1916,10 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       <td class="sep"></td>
       <td class="lbl">Class</td>
       <td class="val">${v.classId?.name || '—'}${v.sectionId?.name ? ' / ' + v.sectionId.name : ''}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Guardian #</td>
+      <td class="val" colspan="4">${guardianPhone}</td>
     </tr>
   </table>
   <table class="vc-fee">

@@ -5,7 +5,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { Student, Mark, SchoolAttendance, SchoolFee, Exam } = require('../models');
+const { Student, Mark, SchoolAttendance, FeeVoucher, Exam } = require('../models');
 const { schoolReportService } = require('../services');
 
 const getScope = (req) => ({
@@ -99,11 +99,44 @@ const getMyChildFees = catchAsync(async (req, res) => {
   const scope = getScope(req);
   const filter = { ...scope, studentId: studentId ? studentId : { $in: studentIds } };
 
-  const fees = await SchoolFee.find(filter)
+  const vouchers = await FeeVoucher.find(filter)
     .populate('studentId', 'firstName lastName admissionNumber')
     .sort({ dueDate: -1 })
     .lean();
-  res.send(fees);
+
+  // Normalize FeeVoucher shape so the parent portal UI can keep using:
+  // - f.amount
+  // - f.paidAmount
+  // - f.status (pending/paid/partial/overdue)
+  // - f.dueDate
+  const effectiveNetAmount = (v) => {
+    if (v.netAmount && v.netAmount > 0) return v.netAmount;
+    const sumItems = (v.feeItems || []).reduce((s, fi) => s + (fi.amount || 0), 0);
+    return Math.max(0, sumItems - (v.discount || 0) + (v.fine || 0));
+  };
+
+  const normalized = vouchers.map((v) => {
+    const amount = effectiveNetAmount(v);
+    const status =
+      v.status === 'unpaid' ? 'pending' :
+        // FeeVoucher already uses partial/overdue/paid as-is
+        v.status === 'pending' ? 'pending' :
+          v.status;
+
+    return {
+      id: v._id,
+      // Keep UI stable
+      amount,
+      paidAmount: v.paidAmount || 0,
+      status,
+      dueDate: v.dueDate || null,
+      // Used as label in the statement table
+      feeType: 'tuition',
+      description: `Voucher ${v.month} ${v.year} (${v.voucherNumber || v._id})`,
+    };
+  });
+
+  res.send(normalized);
 });
 
 /** GET /parent-portal/report/:studentId — full progress report */

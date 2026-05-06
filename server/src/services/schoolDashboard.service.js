@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Student, Teacher, SchoolClass, SchoolAttendance, SchoolFee, Exam, TeacherAttendance, SchoolTransaction, TeacherPayroll } = require('../models');
+const { Student, Teacher, SchoolClass, SchoolAttendance, FeeVoucher, Exam, TeacherAttendance, SchoolTransaction, TeacherPayroll } = require('../models');
 
 const getTenantFilter = (data = {}) => {
   const filter = {};
@@ -146,13 +146,40 @@ const getDashboardStats = async (scope = {}) => {
         },
       },
     ]),
-    // --- SchoolFee $facet: count + total amount ---
-    SchoolFee.aggregate([
-      { $match: { ...atf, status: { $in: ['pending', 'overdue'] } } },
+    // --- FeeVoucher $facet: pending/outstanding count + total amount ---
+    // We consider all vouchers that still have an outstanding balance as "pending fees".
+    FeeVoucher.aggregate([
+      // Compute effective net (mirrors FeeVoucher effectiveNet logic used elsewhere)
+      {
+        $addFields: {
+          effectiveNet: {
+            $cond: {
+              if: { $gt: ['$netAmount', 0] },
+              then: '$netAmount',
+              else: {
+                $subtract: [
+                  {
+                    $reduce: {
+                      input: { $ifNull: ['$feeItems', []] },
+                      initialValue: 0,
+                      in: { $add: ['$$value', { $ifNull: ['$$this.amount', 0] }] },
+                    },
+                  },
+                  { $ifNull: ['$discount', 0] },
+                ],
+              },
+            },
+          },
+          outstanding: {
+            $max: [0, { $subtract: ['$effectiveNet', { $ifNull: ['$paidAmount', 0] }] }],
+          },
+        },
+      },
+      { $match: { ...atf, status: { $in: ['unpaid', 'partial', 'overdue'] }, outstanding: { $gt: 0 } } },
       {
         $facet: {
           count: [{ $count: 'count' }],
-          amount: [{ $group: { _id: null, total: { $sum: '$netAmount' } } }],
+          amount: [{ $group: { _id: null, total: { $sum: '$outstanding' } } }],
         },
       },
     ]),

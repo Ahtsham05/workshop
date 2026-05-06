@@ -12,6 +12,7 @@ interface Props {
   schoolPhone?: string;
   design?: {
     backMessage?: string;
+    backgroundImage?: string;
   };
 }
 
@@ -55,6 +56,9 @@ export default function IDCardBack({ student, schoolName = 'School Name', school
         borderRadius: '3mm',
         boxSizing: 'border-box',
         padding: '2mm 3mm',
+        backgroundImage: design?.backgroundImage ? `url(${design.backgroundImage})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
       {/* Top: school name small */}

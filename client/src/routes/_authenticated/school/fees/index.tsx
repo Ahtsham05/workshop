@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import FeeManagement from '@/features/school/fees/fee-management';
+import FeeVouchers from '@/features/school/fees/fee-vouchers';
 
 export const Route = createFileRoute('/_authenticated/school/fees/')({
-  component: FeeManagement,
+  // Voucher-based fee system (single source of truth for fee amounts)
+  component: FeeVouchers,
 });

@@ -296,7 +296,7 @@ const queryVouchers = async (filter, options) => {
   return FeeVoucher.paginate(filter, {
     ...options,
     populate: [
-      { path: 'studentId', select: 'firstName lastName admissionNumber rollNumber' },
+      { path: 'studentId', select: 'firstName lastName admissionNumber rollNumber parent.phone parent.guardianName parent.fatherName' },
       { path: 'classId', select: 'name' },
       { path: 'sectionId', select: 'name' },
     ],
@@ -426,7 +426,7 @@ const deleteVoucherById = async (id, scope = {}) => {
  */
 const getVouchersForPrint = async (ids, scope = {}) => {
   return FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
-    .populate('studentId', 'firstName lastName admissionNumber rollNumber parent')
+    .populate('studentId', 'firstName lastName admissionNumber rollNumber parent.phone parent.guardianName parent.fatherName')
     .populate('classId', 'name')
     .populate('sectionId', 'name')
     .lean();
@@ -521,6 +521,169 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
           voucherNumber: lastPaidVoucher.voucherNumber,
         }
       : null,
+  };
+};
+
+/**
+ * Student fee ledger timeline:
+ * - voucher_generated (debit)
+ * - voucher_payment (credit)
+ * - wallet movements (advance/overpayment/applied/refunded)
+ */
+const getStudentFeeLedger = async (studentId, scope = {}) => {
+  const student = await Student.findOne({ _id: studentId, ...getTenantFilter(scope) })
+    .select('firstName lastName admissionNumber rollNumber creditBalance')
+    .lean();
+  if (!student) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
+
+  const vouchers = await FeeVoucher.find({ ...getTenantFilter(scope), studentId })
+    .select('voucherNumber month year netAmount feeItems discount fine paidAmount dueDate paidDate paymentMethod remarks createdAt')
+    .sort({ year: 1, createdAt: 1 })
+    .lean();
+  const voucherIds = vouchers.map((v) => v._id);
+
+  const [paymentTxns, walletRows] = await Promise.all([
+    voucherIds.length
+      ? SchoolTransaction.find({
+          ...getTenantFilter(scope),
+          referenceModel: 'FeeVoucher',
+          referenceId: { $in: voucherIds },
+          type: 'INCOME',
+        })
+          .select('referenceId amount paymentMethod date description createdAt')
+          .sort({ date: 1, createdAt: 1 })
+          .lean()
+      : [],
+    StudentCreditLedger.find({ ...getTenantFilter(scope), studentId })
+      .select('type amount balanceAfter voucherId description paymentMethod date createdAt')
+      .sort({ date: 1, createdAt: 1 })
+      .lean(),
+  ]);
+
+  const voucherMap = {};
+  vouchers.forEach((v) => {
+    voucherMap[v._id.toString()] = v;
+  });
+
+  const paymentCountByVoucher = {};
+  const entries = [];
+
+  for (const v of vouchers) {
+    const net = effectiveNet(v);
+    entries.push({
+      date: v.createdAt,
+      type: 'voucher_generated',
+      label: `Voucher generated — ${v.month} ${v.year}`,
+      voucherId: v._id,
+      voucherNumber: v.voucherNumber || '—',
+      month: v.month,
+      year: v.year,
+      debit: net,
+      credit: 0,
+      paymentMethod: '',
+      meta: {
+        dueDate: v.dueDate || null,
+        remarks: v.remarks || '',
+      },
+    });
+  }
+
+  for (const t of paymentTxns) {
+    const vid = t.referenceId?.toString?.() || '';
+    paymentCountByVoucher[vid] = (paymentCountByVoucher[vid] || 0) + 1;
+    const v = voucherMap[vid];
+    entries.push({
+      date: t.date || t.createdAt,
+      type: 'voucher_payment',
+      label: `Payment received${v ? ` — ${v.month} ${v.year}` : ''}`,
+      voucherId: v?._id || null,
+      voucherNumber: v?.voucherNumber || '—',
+      month: v?.month || '',
+      year: v?.year || null,
+      debit: 0,
+      credit: t.amount || 0,
+      paymentMethod: t.paymentMethod || '',
+      meta: {
+        description: t.description || '',
+      },
+    });
+  }
+
+  // Fallback for legacy records where paidAmount exists but no transaction rows
+  for (const v of vouchers) {
+    const vid = v._id.toString();
+    if ((v.paidAmount || 0) > 0 && !paymentCountByVoucher[vid]) {
+      entries.push({
+        date: v.paidDate || v.createdAt,
+        type: 'voucher_payment',
+        label: `Payment received (legacy) — ${v.month} ${v.year}`,
+        voucherId: v._id,
+        voucherNumber: v.voucherNumber || '—',
+        month: v.month,
+        year: v.year,
+        debit: 0,
+        credit: v.paidAmount || 0,
+        paymentMethod: v.paymentMethod || '',
+        meta: {
+          remarks: v.remarks || '',
+        },
+      });
+    }
+  }
+
+  for (const w of walletRows) {
+    const v = w.voucherId ? voucherMap[w.voucherId.toString()] : null;
+    const isCredit = Number(w.amount) > 0;
+    const absAmount = Math.abs(Number(w.amount || 0));
+    entries.push({
+      date: w.date || w.createdAt,
+      type: 'wallet',
+      label: `Wallet ${w.type}`,
+      voucherId: w.voucherId || null,
+      voucherNumber: v?.voucherNumber || '—',
+      month: v?.month || '',
+      year: v?.year || null,
+      debit: isCredit ? 0 : absAmount,
+      credit: isCredit ? absAmount : 0,
+      paymentMethod: w.paymentMethod || '',
+      meta: {
+        walletType: w.type,
+        balanceAfter: w.balanceAfter,
+        description: w.description || '',
+      },
+    });
+  }
+
+  entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  let runningBalance = 0;
+  for (const e of entries) {
+    runningBalance += (e.debit || 0) - (e.credit || 0);
+    e.runningBalance = runningBalance;
+  }
+
+  const totalBilled = entries
+    .filter((e) => e.type === 'voucher_generated')
+    .reduce((s, e) => s + (e.debit || 0), 0);
+  const totalPaid = entries
+    .filter((e) => e.type === 'voucher_payment' || e.type === 'wallet')
+    .reduce((s, e) => s + (e.credit || 0), 0);
+
+  return {
+    student: {
+      id: student._id,
+      name: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+      admissionNumber: student.admissionNumber || '',
+      rollNumber: student.rollNumber || '',
+      creditBalance: student.creditBalance || 0,
+    },
+    summary: {
+      totalBilled,
+      totalPaid,
+      outstanding: Math.max(0, totalBilled - totalPaid),
+      totalEntries: entries.length,
+    },
+    entries,
   };
 };
 
@@ -1032,6 +1195,7 @@ module.exports = {
   getVoucherById,
   getStudentVouchers,
   getStudentFeeSummary,
+  getStudentFeeLedger,
   payVoucher,
   bulkPayStudentVouchers,
   recordAdvancePayment,
