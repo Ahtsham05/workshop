@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,8 +11,8 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useDispatch, useSelector } from 'react-redux'
-import { AppDispatch, RootState } from '@/stores/store'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -24,7 +24,6 @@ export function ProfileDropdown() {
   const user = useSelector((state: any) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branch } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
-  const dispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
   const { isInstallable, install } = usePWAInstall()
   const { logout: safeLogout } = useLogout()
