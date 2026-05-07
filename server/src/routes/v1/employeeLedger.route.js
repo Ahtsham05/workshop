@@ -13,6 +13,10 @@ router
   .get(validate(employeeLedgerValidation.getLedgerEntries), employeeLedgerController.getLedgerEntries);
 
 router
+  .route('/:ledgerId')
+  .patch(validate(employeeLedgerValidation.updateLedgerEntry), employeeLedgerController.updateLedgerEntry);
+
+router
   .route('/employees-with-balances')
   .get(employeeLedgerController.getEmployeesWithBalances);
 

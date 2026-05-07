@@ -3,6 +3,20 @@ const { Payroll, Employee, Attendance, Leave } = require('../models');
 const ApiError = require('../utils/ApiError');
 const employeeLedgerService = require('./employeeLedger.service');
 
+const getOverlappingLeaveDays = (leave, periodStart, periodEnd) => {
+  const leaveStart = new Date(leave.startDate);
+  const leaveEnd = new Date(leave.endDate);
+  const overlapStart = leaveStart > periodStart ? leaveStart : periodStart;
+  const overlapEnd = leaveEnd < periodEnd ? leaveEnd : periodEnd;
+
+  if (overlapStart > overlapEnd) return 0;
+
+  const diffTime = overlapEnd.getTime() - overlapStart.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  if (leave.isHalfDay) return Math.min(0.5, diffDays);
+  return diffDays;
+};
+
 const createPayroll = async (payrollBody) => {
   const employee = await Employee.findById(payrollBody.employee);
   if (!employee) {
@@ -65,6 +79,10 @@ const updatePayrollById = async (payrollId, updateBody) => {
   
   Object.assign(payroll, updateBody);
   await payroll.save();
+  await employeeLedgerService.upsertSalaryPayableFromPayroll(
+    payroll,
+    payroll.updatedBy || payroll.processedBy || payroll.createdBy
+  );
   return payroll;
 };
 
@@ -115,7 +133,7 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
     endDate: { $gte: startDate },
   });
   
-  const leaveDays = leaves.reduce((sum, leave) => sum + leave.totalDays, 0);
+  const leaveDays = leaves.reduce((sum, leave) => sum + getOverlappingLeaveDays(leave, startDate, endDate), 0);
   
   // Calculate overtime
   const overtimeHours = attendances.reduce((sum, a) => sum + (a.overtime || 0), 0);
@@ -124,6 +142,7 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
   const basicSalary = employee.salary.basicSalary;
   const perDaySalary = basicSalary / daysInMonth;
   const absentDeduction = perDaySalary * absentDays;
+  const leaveDeduction = perDaySalary * leaveDays;
   const currentLedgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, {
     organizationId: scope.organizationId || employee.organizationId,
     branchId: scope.branchId || employee.branchId,
@@ -143,6 +162,7 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
     },
     deductions: {
       absent: absentDeduction,
+      other: leaveDeduction,
       advance: carryForwardAdvance,
     },
     workingDays: daysInMonth,

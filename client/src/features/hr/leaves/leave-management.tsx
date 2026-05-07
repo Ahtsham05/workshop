@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLanguage } from '@/context/language-context';
 import {
   useGetLeavesQuery,
   useCreateLeaveMutation,
   useApproveLeaveMutation,
   useRejectLeaveMutation,
+  useUpdateLeaveMutation,
+  useDeleteLeaveMutation,
+  useGetAttendancesQuery,
   useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,9 +46,11 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
@@ -53,8 +58,15 @@ export default function LeaveManagement() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [showApplyDialog, setShowApplyDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<any>(null);
+  const [editingLeave, setEditingLeave] = useState<any>(null);
+  const [leaveToDelete, setLeaveToDelete] = useState<any>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [reportEmployeeId, setReportEmployeeId] = useState('');
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
 
   const { data, isLoading, refetch } = useGetLeavesQuery({
     page,
@@ -71,6 +83,8 @@ export default function LeaveManagement() {
   const [createLeave, { isLoading: isCreating }] = useCreateLeaveMutation();
   const [approveLeave, { isLoading: isApproving }] = useApproveLeaveMutation();
   const [rejectLeave, { isLoading: isRejecting }] = useRejectLeaveMutation();
+  const [updateLeave, { isLoading: isUpdating }] = useUpdateLeaveMutation();
+  const [deleteLeave, { isLoading: isDeleting }] = useDeleteLeaveMutation();
 
   const [formData, setFormData] = useState({
     employee: '',
@@ -80,6 +94,37 @@ export default function LeaveManagement() {
     reason: '',
     isHalfDay: false,
   });
+
+  const reportStartDate = useMemo(
+    () => format(startOfMonth(new Date(reportYear, reportMonth - 1, 1)), 'yyyy-MM-dd'),
+    [reportMonth, reportYear]
+  );
+  const reportEndDate = useMemo(
+    () => format(endOfMonth(new Date(reportYear, reportMonth - 1, 1)), 'yyyy-MM-dd'),
+    [reportMonth, reportYear]
+  );
+
+  const { data: monthlyAttendanceData } = useGetAttendancesQuery(
+    {
+      employee: reportEmployeeId || undefined,
+      startDate: reportStartDate,
+      endDate: reportEndDate,
+      limit: 1000,
+      sortBy: 'date:asc',
+    },
+    { skip: !reportEmployeeId }
+  );
+
+  const { data: monthlyLeavesData } = useGetLeavesQuery(
+    {
+      employee: reportEmployeeId || undefined,
+      startDate: reportStartDate,
+      endDate: reportEndDate,
+      limit: 1000,
+      sortBy: 'startDate:asc',
+    },
+    { skip: !reportEmployeeId }
+  );
 
   const handleApplyLeave = async () => {
     try {
@@ -121,6 +166,113 @@ export default function LeaveManagement() {
       toast.error(error?.data?.message || t('Failed to reject leave'));
     }
   };
+
+  const handleUpdateLeave = async () => {
+    if (!editingLeave) return;
+    try {
+      await updateLeave({
+        id: editingLeave.id,
+        leaveType: formData.leaveType,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        reason: formData.reason.trim(),
+        isHalfDay: formData.isHalfDay,
+      }).unwrap();
+      toast.success(t('Leave updated'));
+      setShowEditDialog(false);
+      setEditingLeave(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to update leave'));
+    }
+  };
+
+  const handleDeleteLeave = async () => {
+    if (!leaveToDelete) return;
+    try {
+      await deleteLeave(leaveToDelete.id).unwrap();
+      toast.success(t('Leave deleted'));
+      setShowDeleteDialog(false);
+      setLeaveToDelete(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to delete leave'));
+    }
+  };
+
+  const monthlyProgress = useMemo(() => {
+    const attendances = monthlyAttendanceData?.results || [];
+    const leaves = monthlyLeavesData?.results || [];
+    const presentDays = attendances.filter((a: any) => a.status === 'Present').length;
+    const lateDays = attendances.filter((a: any) => a.status === 'Late').length;
+    const absentDays = attendances.filter((a: any) => a.status === 'Absent').length;
+    const leaveDays = attendances.filter((a: any) => a.status === 'On Leave').length;
+    const halfDays = attendances.filter((a: any) => a.status === 'Half-Day').length;
+    const workingHours = attendances.reduce((sum: number, a: any) => sum + Number(a.workingHours || 0), 0);
+    const overtimeHours = attendances.reduce((sum: number, a: any) => sum + Number(a.overtime || 0), 0);
+    const approvedLeaves = leaves.filter((l: any) => l.status === 'Approved').length;
+    const rejectedLeaves = leaves.filter((l: any) => l.status === 'Rejected').length;
+    return {
+      attendanceCount: attendances.length,
+      presentDays,
+      lateDays,
+      absentDays,
+      leaveDays,
+      halfDays,
+      workingHours,
+      overtimeHours,
+      approvedLeaves,
+      rejectedLeaves,
+    };
+  }, [monthlyAttendanceData?.results, monthlyLeavesData?.results]);
+
+  const dateWiseProgressRows = useMemo(() => {
+    const rowsByDate = new Map<string, any>();
+    const attendances = monthlyAttendanceData?.results || [];
+    const leaves = monthlyLeavesData?.results || [];
+
+    attendances.forEach((attendance: any) => {
+      const dateKey = format(new Date(attendance.date), 'yyyy-MM-dd');
+      rowsByDate.set(dateKey, {
+        date: dateKey,
+        status: attendance.status || '-',
+        checkIn: attendance.checkIn ? format(new Date(attendance.checkIn), 'p') : '-',
+        checkOut: attendance.checkOut ? format(new Date(attendance.checkOut), 'p') : '-',
+        workingHours: Number(attendance.workingHours || 0),
+        overtime: Number(attendance.overtime || 0),
+        leaveType: '-',
+        leaveStatus: '-',
+      });
+    });
+
+    leaves.forEach((leave: any) => {
+      const start = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        const dateKey = format(cursor, 'yyyy-MM-dd');
+        const existing = rowsByDate.get(dateKey) || {
+          date: dateKey,
+          status: '-',
+          checkIn: '-',
+          checkOut: '-',
+          workingHours: 0,
+          overtime: 0,
+          leaveType: '-',
+          leaveStatus: '-',
+        };
+        existing.leaveType = leave.leaveType || '-';
+        existing.leaveStatus = leave.status || '-';
+        if (leave.status === 'Approved' && (existing.status === '-' || existing.status === 'Absent')) {
+          existing.status = 'On Leave';
+        }
+        rowsByDate.set(dateKey, existing);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+
+    return Array.from(rowsByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [monthlyAttendanceData?.results, monthlyLeavesData?.results]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
@@ -299,33 +451,68 @@ export default function LeaveManagement() {
                         <Badge {...getStatusBadge(leave.status)}>{leave.status}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {leave.status === 'Pending' && (
-                          <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2">
+                          {leave.status === 'Pending' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600"
+                                onClick={() => handleApprove(leave.id)}
+                                disabled={isApproving}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                {t('Approve')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600"
+                                onClick={() => {
+                                  setSelectedLeave(leave);
+                                  setRejectionReason('');
+                                }}
+                                disabled={isRejecting}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                {t('Reject')}
+                              </Button>
+                            </>
+                          )}
+                          {(leave.status === 'Pending' || leave.status === 'Rejected') && (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-green-600"
-                              onClick={() => handleApprove(leave.id)}
-                              disabled={isApproving}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              {t('Approve')}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600"
                               onClick={() => {
-                                setSelectedLeave(leave);
-                                setRejectionReason('');
+                                setEditingLeave(leave);
+                                setFormData({
+                                  employee: leave.employee?.id || leave.employee?._id || '',
+                                  leaveType: leave.leaveType,
+                                  startDate: format(new Date(leave.startDate), 'yyyy-MM-dd'),
+                                  endDate: format(new Date(leave.endDate), 'yyyy-MM-dd'),
+                                  reason: leave.reason || '',
+                                  isHalfDay: !!leave.isHalfDay,
+                                });
+                                setShowEditDialog(true);
                               }}
-                              disabled={isRejecting}
                             >
-                              <X className="h-4 w-4 mr-1" />
-                              {t('Reject')}
+                              <Pencil className="h-4 w-4 mr-1" />
+                              {t('Edit')}
                             </Button>
-                          </div>
-                        )}
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600"
+                            onClick={() => {
+                              setLeaveToDelete(leave);
+                              setShowDeleteDialog(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {t('Delete')}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -362,6 +549,118 @@ export default function LeaveManagement() {
                 </Button>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Monthly Progress Report */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('Employee Monthly Progress Report')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label>{t('Employee')}</Label>
+              <Select value={reportEmployeeId} onValueChange={setReportEmployeeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Select employee')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeesData?.results?.map((emp: any) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName} ({emp.employeeId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('Month')}</Label>
+              <Select value={String(reportMonth)} onValueChange={(v) => setReportMonth(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                    <SelectItem key={month} value={String(month)}>
+                      {format(new Date(2026, month - 1, 1), 'MMMM')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('Year')}</Label>
+              <Select value={String(reportYear)} onValueChange={(v) => setReportYear(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {reportEmployeeId && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="p-3 rounded bg-blue-50"><p className="text-xs text-muted-foreground">{t('Present')}</p><p className="font-semibold">{monthlyProgress.presentDays}</p></div>
+                <div className="p-3 rounded bg-yellow-50"><p className="text-xs text-muted-foreground">{t('Late')}</p><p className="font-semibold">{monthlyProgress.lateDays}</p></div>
+                <div className="p-3 rounded bg-red-50"><p className="text-xs text-muted-foreground">{t('Absent')}</p><p className="font-semibold">{monthlyProgress.absentDays}</p></div>
+                <div className="p-3 rounded bg-gray-100"><p className="text-xs text-muted-foreground">{t('On Leave')}</p><p className="font-semibold">{monthlyProgress.leaveDays}</p></div>
+                <div className="p-3 rounded bg-purple-50"><p className="text-xs text-muted-foreground">{t('Half Day')}</p><p className="font-semibold">{monthlyProgress.halfDays}</p></div>
+                <div className="p-3 rounded bg-green-50"><p className="text-xs text-muted-foreground">{t('Working Hours')}</p><p className="font-semibold">{monthlyProgress.workingHours.toFixed(2)}</p></div>
+                <div className="p-3 rounded bg-orange-50"><p className="text-xs text-muted-foreground">{t('Overtime Hours')}</p><p className="font-semibold">{monthlyProgress.overtimeHours.toFixed(2)}</p></div>
+                <div className="p-3 rounded bg-emerald-50"><p className="text-xs text-muted-foreground">{t('Approved Leaves')}</p><p className="font-semibold">{monthlyProgress.approvedLeaves}</p></div>
+                <div className="p-3 rounded bg-rose-50"><p className="text-xs text-muted-foreground">{t('Rejected Leaves')}</p><p className="font-semibold">{monthlyProgress.rejectedLeaves}</p></div>
+                <div className="p-3 rounded bg-slate-100"><p className="text-xs text-muted-foreground">{t('Attendance Records')}</p><p className="font-semibold">{monthlyProgress.attendanceCount}</p></div>
+              </div>
+
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('Date')}</TableHead>
+                      <TableHead>{t('Status')}</TableHead>
+                      <TableHead>{t('Check In')}</TableHead>
+                      <TableHead>{t('Check Out')}</TableHead>
+                      <TableHead>{t('Working Hours')}</TableHead>
+                      <TableHead>{t('Overtime')}</TableHead>
+                      <TableHead>{t('Leave Type')}</TableHead>
+                      <TableHead>{t('Leave Status')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dateWiseProgressRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                          {t('No monthly records found')}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      dateWiseProgressRows.map((row: any) => (
+                        <TableRow key={row.date}>
+                          <TableCell>{format(new Date(row.date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell>{row.status}</TableCell>
+                          <TableCell>{row.checkIn}</TableCell>
+                          <TableCell>{row.checkOut}</TableCell>
+                          <TableCell>{Number(row.workingHours || 0).toFixed(2)}</TableCell>
+                          <TableCell>{Number(row.overtime || 0).toFixed(2)}</TableCell>
+                          <TableCell>{row.leaveType}</TableCell>
+                          <TableCell>{row.leaveStatus}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -488,6 +787,94 @@ export default function LeaveManagement() {
               disabled={isRejecting || !rejectionReason.trim()}
             >
               {isRejecting ? t('Rejecting...') : t('Reject')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Leave Dialog */}
+      <Dialog
+        open={showEditDialog}
+        onOpenChange={(open) => {
+          setShowEditDialog(open);
+          if (!open) setEditingLeave(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Edit Leave')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Leave Type')}</Label>
+              <Select
+                value={formData.leaveType}
+                onValueChange={(value) => setFormData({ ...formData, leaveType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {leaveTypes.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {t(type.label)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('Start Date')}</Label>
+                <Input
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('End Date')}</Label>
+                <Input
+                  type="date"
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Reason')}</Label>
+              <Textarea
+                value={formData.reason}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleUpdateLeave} disabled={isUpdating || !formData.reason.trim()}>
+              {isUpdating ? t('Saving...') : t('Save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Leave Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Delete Leave')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t('Are you sure you want to delete this leave request?')}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteLeave} disabled={isDeleting}>
+              {isDeleting ? t('Deleting...') : t('Delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

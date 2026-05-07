@@ -190,25 +190,21 @@ const approveLeave = async (leaveId, approvedBy) => {
   return leave;
 };
 
-const rejectLeave = async (leaveId, rejectionReason, approvedBy) => {
+const rejectLeave = async (leaveId, rejectionReason, _approvedBy) => {
   const leave = await getLeaveById(leaveId);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
-  
+
   if (leave.status !== 'Pending') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Leave is not in pending status');
   }
-  
-  const wasApproved = leave.status === 'Approved';
+
   leave.status = 'Rejected';
   leave.rejectionReason = rejectionReason;
-  leave.approvedBy = approvedBy;
-  leave.approvalDate = new Date();
+  leave.approvedBy = null;
+  leave.approvalDate = null;
   await leave.save();
-  if (wasApproved) {
-    await cleanupAttendanceForLeave(leave);
-  }
   return leave;
 };
 

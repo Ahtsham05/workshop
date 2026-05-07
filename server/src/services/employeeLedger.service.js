@@ -32,6 +32,22 @@ const createLedgerEntry = async (ledgerBody) => {
   return EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
 };
 
+const updateLedgerEntryById = async (ledgerId, updateBody) => {
+  const entry = await EmployeeLedger.findById(ledgerId);
+  if (!entry) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
+  }
+
+  const oldDate = new Date(entry.transactionDate);
+  Object.assign(entry, updateBody);
+  await entry.save();
+
+  const newDate = new Date(entry.transactionDate);
+  const fromDate = oldDate < newDate ? oldDate : newDate;
+  await recalculateBalances(entry.employee, fromDate);
+  return EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
+};
+
 const queryLedgerEntries = async (filter, options) => {
   if (options.search) {
     filter.$or = [
@@ -134,38 +150,40 @@ const payEmployee = async (paymentBody) => {
   let advanceEntry = null;
 
   if (salaryPaymentAmount > 0) {
+    const normalizedNotes = String(notes || '').trim();
     salaryEntry = await createLedgerEntry({
       organizationId,
       branchId,
       employee,
       transactionType: 'salary_payment',
       transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-      reference: 'MANUAL-PAYMENT',
+      reference: normalizedNotes || 'MANUAL-PAYMENT',
       referenceModel: 'EmployeeLedger',
       description: 'Salary payment to employee',
       debit: 0,
       credit: salaryPaymentAmount,
       paymentMethod: paymentMethod || 'Cash',
-      notes: notes || '',
+      notes: normalizedNotes,
       createdBy,
       updatedBy,
     });
   }
 
   if (extraAdvanceAmount > 0) {
+    const normalizedNotes = String(notes || '').trim();
     advanceEntry = await createLedgerEntry({
       organizationId,
       branchId,
       employee,
       transactionType: 'advance_payment',
       transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-      reference: 'MANUAL-ADVANCE',
+      reference: normalizedNotes || 'MANUAL-ADVANCE',
       referenceModel: 'EmployeeLedger',
       description: 'Advance paid to employee',
       debit: 0,
       credit: extraAdvanceAmount,
       paymentMethod: paymentMethod || 'Cash',
-      notes: notes || '',
+      notes: normalizedNotes,
       createdBy,
       updatedBy,
     });
@@ -294,6 +312,7 @@ const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMeth
 
 module.exports = {
   createLedgerEntry,
+  updateLedgerEntryById,
   queryLedgerEntries,
   getEmployeeLedgerSummary,
   getAllEmployeesWithBalances,

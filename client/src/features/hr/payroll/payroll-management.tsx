@@ -4,6 +4,8 @@ import {
   useGetPayrollsQuery,
   useGeneratePayrollMutation,
   useProcessPayrollMutation,
+  useUpdatePayrollMutation,
+  useUpdateEmployeeLedgerEntryMutation,
   useGetEmployeesQuery,
   useGetEmployeeLedgerEntriesQuery,
   useGetEmployeeLedgerSummaryQuery,
@@ -43,6 +45,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -53,12 +56,29 @@ export default function PayrollManagement() {
   const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showLedgerPayDialog, setShowLedgerPayDialog] = useState(false);
+  const [showLedgerEditDialog, setShowLedgerEditDialog] = useState(false);
   const [selectedEmployeeLedger, setSelectedEmployeeLedger] = useState('');
+  const [selectedLedgerEntry, setSelectedLedgerEntry] = useState<any>(null);
+  const [selectedPayroll, setSelectedPayroll] = useState<any>(null);
+  const [editPayrollData, setEditPayrollData] = useState({
+    basicSalary: '',
+    absentDeduction: '',
+    advanceDeduction: '',
+    leaveDeduction: '',
+    notes: '',
+  });
   const [ledgerPaymentData, setLedgerPaymentData] = useState({
     amount: '',
     paymentDate: new Date().toISOString().split('T')[0],
     notes: '',
+  });
+  const [ledgerEditData, setLedgerEditData] = useState({
+    transactionDate: new Date().toISOString().split('T')[0],
+    reference: '',
+    debit: '',
+    credit: '',
   });
 
   const { data, isLoading, refetch } = useGetPayrollsQuery({
@@ -71,6 +91,8 @@ export default function PayrollManagement() {
 
   const [generatePayroll, { isLoading: isGenerating }] = useGeneratePayrollMutation();
   const [processPayroll, { isLoading: isProcessing }] = useProcessPayrollMutation();
+  const [updatePayroll, { isLoading: isUpdatingPayroll }] = useUpdatePayrollMutation();
+  const [updateEmployeeLedgerEntry, { isLoading: isUpdatingLedgerEntry }] = useUpdateEmployeeLedgerEntryMutation();
   const [createEmployeePayment, { isLoading: isPayingEmployee }] = useCreateEmployeePaymentMutation();
 
   const [generateData, setGenerateData] = useState({
@@ -155,6 +177,75 @@ export default function PayrollManagement() {
       refetchEmployeeLedgerSummary();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to save payment'));
+    }
+  };
+
+  const openEditDialog = (payroll: any) => {
+    setSelectedPayroll(payroll);
+    setEditPayrollData({
+      basicSalary: String(Number(payroll.basicSalary || 0)),
+      absentDeduction: String(Number(payroll?.deductions?.absent || 0)),
+      advanceDeduction: String(Number(payroll?.deductions?.advance || 0)),
+      leaveDeduction: String(Number(payroll?.deductions?.other || 0)),
+      notes: payroll.notes || '',
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleEditPayroll = async () => {
+    if (!selectedPayroll) return;
+    try {
+      await updatePayroll({
+        id: selectedPayroll.id,
+        basicSalary: Number(editPayrollData.basicSalary || 0),
+        deductions: {
+          ...(selectedPayroll.deductions || {}),
+          absent: Number(editPayrollData.absentDeduction || 0),
+          advance: Number(editPayrollData.advanceDeduction || 0),
+          other: Number(editPayrollData.leaveDeduction || 0),
+        },
+        notes: editPayrollData.notes.trim(),
+      }).unwrap();
+      toast.success(t('Payroll updated successfully'));
+      setShowEditDialog(false);
+      setSelectedPayroll(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to update payroll'));
+    }
+  };
+
+  const openLedgerEditDialog = (entry: any) => {
+    setSelectedLedgerEntry(entry);
+    setLedgerEditData({
+      transactionDate: entry?.transactionDate
+        ? new Date(entry.transactionDate).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      reference: String(entry?.reference || ''),
+      debit: String(Number(entry?.debit || 0)),
+      credit: String(Number(entry?.credit || 0)),
+    });
+    setShowLedgerEditDialog(true);
+  };
+
+  const handleLedgerEntryEdit = async () => {
+    if (!selectedLedgerEntry) return;
+    try {
+      await updateEmployeeLedgerEntry({
+        id: selectedLedgerEntry.id,
+        transactionDate: ledgerEditData.transactionDate,
+        reference: ledgerEditData.reference.trim(),
+        debit: Number(ledgerEditData.debit || 0),
+        credit: Number(ledgerEditData.credit || 0),
+      }).unwrap();
+      toast.success(t('Ledger entry updated'));
+      setShowLedgerEditDialog(false);
+      setSelectedLedgerEntry(null);
+      refetchEmployeeLedger();
+      refetchEmployeeLedgerSummary();
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to update ledger entry'));
     }
   };
 
@@ -405,6 +496,14 @@ export default function PayrollManagement() {
                                   {t('Process')}
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditDialog(payroll)}
+                              >
+                                <Pencil className="h-4 w-4 mr-1" />
+                                {t('Edit')}
+                              </Button>
                               <Button size="sm" variant="outline">
                                 <Download className="h-4 w-4" />
                               </Button>
@@ -509,11 +608,11 @@ export default function PayrollManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('Date')}</TableHead>
-                      <TableHead>{t('Type')}</TableHead>
                       <TableHead>{t('Reference')}</TableHead>
                       <TableHead>{t('Debit')}</TableHead>
                       <TableHead>{t('Credit')}</TableHead>
                       <TableHead>{t('Balance')}</TableHead>
+                      <TableHead className="text-right">{t('Actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -527,11 +626,16 @@ export default function PayrollManagement() {
                       (employeeLedgerData?.results || []).map((entry: any) => (
                         <TableRow key={entry.id}>
                           <TableCell>{new Date(entry.transactionDate).toLocaleDateString()}</TableCell>
-                          <TableCell className="capitalize">{String(entry.transactionType || '').replace(/_/g, ' ')}</TableCell>
-                          <TableCell>{entry.reference || '-'}</TableCell>
+                          <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
                           <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
                           <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
                           <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                              <Pencil className="h-4 w-4 mr-1" />
+                              {t('Edit')}
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -671,6 +775,127 @@ export default function PayrollManagement() {
             </Button>
             <Button onClick={handleLedgerPay} disabled={isPayingEmployee || !ledgerPaymentData.amount}>
               {isPayingEmployee ? t('Processing...') : t('Pay')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ledger Edit Dialog */}
+      <Dialog open={showLedgerEditDialog} onOpenChange={setShowLedgerEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Edit Ledger Entry')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Date')}</Label>
+              <Input
+                type="date"
+                value={ledgerEditData.transactionDate}
+                onChange={(e) => setLedgerEditData({ ...ledgerEditData, transactionDate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Reference')}</Label>
+              <Input
+                value={ledgerEditData.reference}
+                onChange={(e) => setLedgerEditData({ ...ledgerEditData, reference: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{t('Debit')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={ledgerEditData.debit}
+                  onChange={(e) => setLedgerEditData({ ...ledgerEditData, debit: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('Credit')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={ledgerEditData.credit}
+                  onChange={(e) => setLedgerEditData({ ...ledgerEditData, credit: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLedgerEditDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleLedgerEntryEdit} disabled={isUpdatingLedgerEntry}>
+              {isUpdatingLedgerEntry ? t('Saving...') : t('Save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Payroll Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Edit Payroll')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Basic Salary')}</Label>
+              <Input
+                type="number"
+                min="0"
+                value={editPayrollData.basicSalary}
+                onChange={(e) => setEditPayrollData({ ...editPayrollData, basicSalary: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>{t('Absent Deduction')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editPayrollData.absentDeduction}
+                  onChange={(e) => setEditPayrollData({ ...editPayrollData, absentDeduction: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('Leave Deduction')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editPayrollData.leaveDeduction}
+                  onChange={(e) => setEditPayrollData({ ...editPayrollData, leaveDeduction: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('Advance Deduction')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editPayrollData.advanceDeduction}
+                  onChange={(e) => setEditPayrollData({ ...editPayrollData, advanceDeduction: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Notes')}</Label>
+              <Input
+                value={editPayrollData.notes}
+                onChange={(e) => setEditPayrollData({ ...editPayrollData, notes: e.target.value })}
+                placeholder={t('Optional notes')}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleEditPayroll} disabled={isUpdatingPayroll}>
+              {isUpdatingPayroll ? t('Saving...') : t('Save')}
             </Button>
           </DialogFooter>
         </DialogContent>

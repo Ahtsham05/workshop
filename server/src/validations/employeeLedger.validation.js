@@ -41,9 +41,25 @@ const getEmployeeSummary = {
   }),
 };
 
+const updateLedgerEntry = {
+  params: Joi.object().keys({
+    ledgerId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object()
+    .keys({
+      transactionDate: Joi.date(),
+      reference: Joi.string().allow('', null),
+      debit: Joi.number().min(0),
+      credit: Joi.number().min(0),
+      paymentMethod: Joi.string().allow('', null),
+    })
+    .min(1),
+};
+
 module.exports = {
   createAdvancePayment,
   payEmployee,
   getLedgerEntries,
   getEmployeeSummary,
+  updateLedgerEntry,
 };

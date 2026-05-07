@@ -14,6 +14,11 @@ const createAdvancePayment = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(entry);
 });
 
+const updateLedgerEntry = catchAsync(async (req, res) => {
+  const entry = await employeeLedgerService.updateLedgerEntryById(req.params.ledgerId, req.body);
+  res.send(entry);
+});
+
 const payEmployee = catchAsync(async (req, res) => {
   const result = await employeeLedgerService.payEmployee({
     ...req.body,
@@ -44,6 +49,7 @@ const getEmployeesWithBalances = catchAsync(async (req, res) => {
 
 module.exports = {
   createAdvancePayment,
+  updateLedgerEntry,
   payEmployee,
   getLedgerEntries,
   getEmployeeLedgerSummary,

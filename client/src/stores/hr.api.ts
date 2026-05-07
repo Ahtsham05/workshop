@@ -215,6 +215,10 @@ export const hrApi = createApi({
       query: (data) => ({ url: '/employee-ledger/pay', method: 'POST', body: data }),
       invalidatesTags: ['EmployeeLedger', 'Payroll'],
     }),
+    updateEmployeeLedgerEntry: builder.mutation({
+      query: ({ id, ...data }) => ({ url: `/employee-ledger/${id}`, method: 'PATCH', body: data }),
+      invalidatesTags: ['EmployeeLedger', 'Payroll'],
+    }),
   }),
 });
 
@@ -258,4 +262,5 @@ export const {
   useGetEmployeeLedgerSummaryQuery,
   useCreateEmployeeAdvancePaymentMutation,
   useCreateEmployeePaymentMutation,
+  useUpdateEmployeeLedgerEntryMutation,
 } = hrApi;
