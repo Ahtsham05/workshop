@@ -136,7 +136,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
         </Card>
 
         {/* Top KPI row */}
-        <div className='grid gap-4 md:grid-cols-3'>
+        <div className='grid gap-4 md:grid-cols-4'>
           <Card className={kpiCardClass(isProfit ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Net Profit / Loss</CardTitle>
@@ -185,6 +185,23 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               <Badge variant={isPositiveRoi ? 'default' : 'destructive'} className='mt-1 text-xs'>
                 {isPositiveRoi ? 'Return on Investment' : 'Loss on Investment'}
               </Badge>
+            </CardContent>
+          </Card>
+
+          <Card className={kpiCardClass('slate')}>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Expenses</CardTitle>
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <TrendingDown className='h-4 w-4' />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold text-rose-200'>
+                {fmt(data?.expenses ?? 0)}
+              </div>
+              <p className='text-xs text-white/75 mt-1'>
+                Total expenses for selected period
+              </p>
             </CardContent>
           </Card>
         </div>

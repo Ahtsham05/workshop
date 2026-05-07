@@ -49,6 +49,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const toLocalDateInputValue = (value = new Date()) => {
+  const d = value instanceof Date ? value : new Date(value);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function PayrollManagement() {
   const { t } = useLanguage();
   const [page, setPage] = useState(1);
@@ -71,11 +79,11 @@ export default function PayrollManagement() {
   });
   const [ledgerPaymentData, setLedgerPaymentData] = useState({
     amount: '',
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: toLocalDateInputValue(),
     notes: '',
   });
   const [ledgerEditData, setLedgerEditData] = useState({
-    transactionDate: new Date().toISOString().split('T')[0],
+    transactionDate: toLocalDateInputValue(),
     reference: '',
     debit: '',
     credit: '',
@@ -169,7 +177,7 @@ export default function PayrollManagement() {
       setShowLedgerPayDialog(false);
       setLedgerPaymentData({
         amount: '',
-        paymentDate: new Date().toISOString().split('T')[0],
+        paymentDate: toLocalDateInputValue(),
         notes: '',
       });
       refetch();
@@ -219,8 +227,8 @@ export default function PayrollManagement() {
     setSelectedLedgerEntry(entry);
     setLedgerEditData({
       transactionDate: entry?.transactionDate
-        ? new Date(entry.transactionDate).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0],
+        ? toLocalDateInputValue(new Date(entry.transactionDate))
+        : toLocalDateInputValue(),
       reference: String(entry?.reference || ''),
       debit: String(Number(entry?.debit || 0)),
       credit: String(Number(entry?.credit || 0)),

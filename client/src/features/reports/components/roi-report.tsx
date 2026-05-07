@@ -183,7 +183,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         </Card>
 
         {/* KPI Cards */}
-        <div className='grid gap-4 md:grid-cols-3'>
+        <div className='grid gap-4 md:grid-cols-4'>
           {/* ROI % */}
           <Card className={kpiCardClass(isPositiveRoi ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
@@ -247,6 +247,24 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
               </div>
               <p className='text-xs text-muted-foreground mt-1'>
                 Net profit after expenses &amp; returns
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Total Expenses */}
+          <Card className={kpiCardClass('slate')}>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Expenses</CardTitle>
+              <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
+                <TrendingDown className='h-4 w-4' />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold text-rose-200'>
+                {fmt(roiData?.breakdown?.investment?.expenses ?? 0)}
+              </div>
+              <p className='text-xs text-white/75 mt-1'>
+                Total expenses for selected period
               </p>
             </CardContent>
           </Card>

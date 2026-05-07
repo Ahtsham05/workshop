@@ -1,6 +1,55 @@
 const httpStatus = require('http-status');
 const { EmployeeLedger, Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
+const cashBookService = require('./cashBook.service');
+
+const PAYMENT_TRANSACTION_TYPES = new Set(['salary_payment', 'advance_payment']);
+
+const shouldSyncCashBook = (entry) => {
+  if (!entry) return false;
+  return PAYMENT_TRANSACTION_TYPES.has(String(entry.transactionType || '').toLowerCase());
+};
+
+const getCashBookAmount = (entry) => {
+  if (!entry) return 0;
+  return Number(entry.credit || 0);
+};
+
+const syncCashBookFromEmployeeLedger = async (entry) => {
+  if (!entry) return null;
+
+  if (!shouldSyncCashBook(entry)) {
+    await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+    return null;
+  }
+
+  const amount = getCashBookAmount(entry);
+  if (amount <= 0) {
+    await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+    return null;
+  }
+
+  const employeeName = entry.employee?.firstName
+    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
+    : 'Employee';
+  const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
+  const referenceText = entry.reference ? ` (${entry.reference})` : '';
+
+  return cashBookService.upsertReferenceEntry({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    type: 'expense',
+    source: 'expense',
+    amount,
+    paymentMethod: entry.paymentMethod || 'cash',
+    referenceId: entry._id,
+    referenceModel: 'EmployeeLedger',
+    description: `${label} to ${employeeName}${referenceText}`,
+    notes: entry.notes || '',
+    date: entry.transactionDate || new Date(),
+    createdBy: entry.updatedBy || entry.createdBy,
+  });
+};
 
 const recalculateBalances = async (employeeId, fromTransactionDate) => {
   const entries = await EmployeeLedger.find({ employee: employeeId }).sort({ transactionDate: 1, createdAt: 1 });
@@ -29,11 +78,13 @@ const createLedgerEntry = async (ledgerBody) => {
     balance: 0,
   });
   await recalculateBalances(ledgerBody.employee, ledgerBody.transactionDate || new Date());
-  return EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
+  const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
+  await syncCashBookFromEmployeeLedger(updatedEntry);
+  return updatedEntry;
 };
 
 const updateLedgerEntryById = async (ledgerId, updateBody) => {
-  const entry = await EmployeeLedger.findById(ledgerId);
+  const entry = await EmployeeLedger.findById(ledgerId).populate('employee', 'firstName lastName employeeId');
   if (!entry) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
@@ -42,10 +93,13 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
   Object.assign(entry, updateBody);
   await entry.save();
 
+  const employeeId = entry.employee?._id || entry.employee;
   const newDate = new Date(entry.transactionDate);
   const fromDate = oldDate < newDate ? oldDate : newDate;
-  await recalculateBalances(entry.employee, fromDate);
-  return EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
+  await recalculateBalances(employeeId, fromDate);
+  const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
+  await syncCashBookFromEmployeeLedger(updatedEntry);
+  return updatedEntry;
 };
 
 const queryLedgerEntries = async (filter, options) => {
@@ -296,6 +350,7 @@ const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMeth
   if (existing) {
     const fromDate = existing.transactionDate;
     if (payload.credit <= 0) {
+      await cashBookService.deleteEntriesByReference(existing._id, 'EmployeeLedger');
       await existing.deleteOne();
       await recalculateBalances(payroll.employee, fromDate);
       return null;
