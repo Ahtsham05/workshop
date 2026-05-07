@@ -293,6 +293,15 @@ export default function PayrollManagement() {
     );
   }, [data?.results, payrollLinkedLedgerData?.results]);
 
+  const sortedLedgerEntries = useMemo(() => {
+    const entries = [...(employeeLedgerData?.results || [])];
+    return entries.sort((a: any, b: any) => {
+      const dateDiff = new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    });
+  }, [employeeLedgerData?.results]);
+
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
@@ -623,21 +632,23 @@ export default function PayrollManagement() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      (employeeLedgerData?.results || []).map((entry: any) => (
-                        <TableRow key={entry.id}>
-                          <TableCell>{new Date(entry.transactionDate).toLocaleDateString()}</TableCell>
-                          <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
-                          <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
-                          <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
-                              <Pencil className="h-4 w-4 mr-1" />
-                              {t('Edit')}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      sortedLedgerEntries.map((entry: any) => {
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
+                            <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
+                            <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
+                            <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                <Pencil className="h-4 w-4 mr-1" />
+                                {t('Edit')}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
