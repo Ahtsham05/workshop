@@ -82,10 +82,27 @@ const getVouchers = catchAsync(async (req, res) => {
   if (req.query.search && req.query.search.trim()) {
     const term = req.query.search.trim();
     const regex = new RegExp(term, 'i');
+    const termParts = term.split(/\s+/).filter(Boolean);
+    const fullNameClauses = [];
+    if (termParts.length >= 2) {
+      const first = new RegExp(termParts[0], 'i');
+      const last = new RegExp(termParts.slice(1).join(' '), 'i');
+      fullNameClauses.push({ $and: [{ firstName: first }, { lastName: last }] });
+      fullNameClauses.push({ $and: [{ firstName: last }, { lastName: first }] });
+    }
     const matchingStudents = await Student.find({
       organizationId: req.user.organizationId,
       branchId: req.branchId,
-      $or: [{ firstName: regex }, { lastName: regex }, { admissionNumber: regex }],
+      $or: [
+        { firstName: regex },
+        { lastName: regex },
+        { admissionNumber: regex },
+        { rollNumber: regex },
+        { 'parent.phone': regex },
+        { 'parent.guardianName': regex },
+        { 'parent.fatherName': regex },
+        ...fullNameClauses,
+      ],
     }).select('_id').lean();
     filter.studentId = { $in: matchingStudents.map((s) => s._id) };
   }

@@ -36,6 +36,10 @@ interface Props {
     showClass?: boolean;
     showRollNo?: boolean;
     showAdmissionNo?: boolean;
+    showFatherName?: boolean;
+    showGuardianName?: boolean;
+    showGuardianPhone?: boolean;
+    showGender?: boolean;
   };
 }
 
@@ -58,6 +62,12 @@ export default function IDCardFront({
   const showClass = design?.showClass ?? true;
   const showRollNo = design?.showRollNo ?? true;
   const showAdmissionNo = design?.showAdmissionNo ?? true;
+  const showFatherName = design?.showFatherName ?? true;
+  const showGuardianName = design?.showGuardianName ?? false;
+  const showGuardianPhone = design?.showGuardianPhone ?? true;
+  const showGender = design?.showGender ?? false;
+  const fatherName = student.parent?.fatherName || student.parent?.guardianName || '—';
+  const guardianName = student.parent?.guardianName || student.parent?.fatherName || '—';
 
   return (
     <div
@@ -150,10 +160,22 @@ export default function IDCardFront({
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Adm. No.</td>
                 <td style={{ fontSize: '2.6mm', fontWeight: '700', color: '#2563eb' }}>{student.admissionNumber}</td>
               </tr>}
-              <tr>
+              {showFatherName && <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Father</td>
+                <td style={{ fontSize: '2.4mm', fontWeight: '700', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '0' }}>{fatherName}</td>
+              </tr>}
+              {showGuardianName && <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Guardian</td>
+                <td style={{ fontSize: '2.4mm', fontWeight: '700', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '0' }}>{guardianName}</td>
+              </tr>}
+              {showGuardianPhone && <tr>
                 <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Guardian #</td>
                 <td style={{ fontSize: '2.4mm', fontWeight: '700', color: '#1e293b' }}>{student.parent?.phone || '—'}</td>
-              </tr>
+              </tr>}
+              {showGender && <tr>
+                <td style={{ fontSize: '2mm', color: '#94a3b8', textTransform: 'uppercase', paddingRight: '1.5mm', letterSpacing: '0.2mm' }}>Gender</td>
+                <td style={{ fontSize: '2.4mm', fontWeight: '700', color: '#1e293b' }}>{student.gender || '—'}</td>
+              </tr>}
             </tbody>
           </table>
         </div>

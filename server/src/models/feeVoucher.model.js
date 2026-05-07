@@ -168,8 +168,16 @@ feeVoucherSchema.pre('save', async function (next) {
         { upsert: true, returnDocument: 'after' }
       );
 
-      const seq = result.seq;
-      const candidate = `VCH-${datePart}-${String(seq).padStart(5, '0')}`;
+      // Mongo driver shape can vary by version:
+      // - direct document with { seq }
+      // - wrapper with { value: { seq } }
+      const seq = Number(result?.seq ?? result?.value?.seq);
+      if (!Number.isFinite(seq) || seq <= 0) {
+        // Counter returned an invalid value; retry next attempt.
+        continue;
+      }
+      // Numeric-only human-friendly voucher number: YY + 6-digit sequence
+      const candidate = `${datePart}${String(seq).padStart(6, '0')}`;
 
       // Guard: make sure no existing doc already has this number
       const exists = await this.constructor.exists({ voucherNumber: candidate });
@@ -180,8 +188,8 @@ feeVoucherSchema.pre('save', async function (next) {
       // Collision (e.g. sequences collection was out of sync) — loop and fetch next seq
     }
 
-    // Ultimate fallback: hex suffix from ObjectId — always unique
-    this.voucherNumber = `VCH-${datePart}-${this._id.toString().slice(-6).toUpperCase()}`;
+    // Ultimate fallback: timestamp suffix — always numeric and unique-enough
+    this.voucherNumber = `${datePart}${Date.now().toString().slice(-6)}`;
     next();
   } catch (err) {
     next(err);

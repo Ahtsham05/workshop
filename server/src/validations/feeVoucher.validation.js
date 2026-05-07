@@ -45,6 +45,7 @@ const getVouchers = {
     month: Joi.string().valid(...MONTHS),
     year: Joi.number().integer(),
     status: Joi.string().valid('unpaid', 'partial', 'paid', 'overdue', 'cancelled'),
+    search: Joi.string().allow(''),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),

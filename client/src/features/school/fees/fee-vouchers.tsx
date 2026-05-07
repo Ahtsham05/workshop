@@ -197,6 +197,8 @@ export default function FeeVouchers() {
   });
   const [searchInput, setSearchInput] = useState('');
   const [generateDialog, setGenerateDialog] = useState(false);
+  const [printLayout, setPrintLayout] = useState<'auto' | 'large' | 'medium' | 'compact'>('auto');
+  const [rowsPerPage, setRowsPerPage] = useState<'auto' | '2' | '3' | '4' | '5' | '6'>('auto');
   const [payDialog, setPayDialog] = useState(false);
   const [advanceDialog, setAdvanceDialog] = useState(false);
   const [advanceStudent, setAdvanceStudent] = useState<any>(null);
@@ -320,9 +322,16 @@ export default function FeeVouchers() {
     };
   }, [vouchers, vouchersData]);
 
-  const handleSearchSubmit = () => {
-    setFilters((f) => ({ ...f, search: searchInput.trim(), page: 1 }));
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const normalized = searchInput.trim();
+      setFilters((prev) => {
+        if (prev.search === normalized) return prev;
+        return { ...prev, search: normalized, page: 1 };
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const clearSearch = () => {
     setSearchInput('');
@@ -587,10 +596,19 @@ export default function FeeVouchers() {
       openPrintWindow(overrideVouchers);
       return;
     }
-    const ids = selectedIds.length ? selectedIds : vouchers.map((v: any) => v.id);
+    const printableVouchers = selectedIds.length
+      ? vouchers.filter((v: any) => selectedIds.includes(v.id))
+      : vouchers.filter((v: any) => v.status !== 'paid');
+    const ids = printableVouchers.map((v: any) => v.id);
     if (!ids.length) return toast.error('No vouchers to print');
     try {
       const data = await getForPrint(ids).unwrap();
+      if (!selectedIds.length) {
+        const skippedPaid = vouchers.length - printableVouchers.length;
+        if (skippedPaid > 0) {
+          toast.info(`Skipped ${skippedPaid} paid voucher${skippedPaid > 1 ? 's' : ''} in Print All`);
+        }
+      }
       openPrintWindow(data);
     } catch { toast.error('Could not load print data'); }
   };
@@ -604,7 +622,12 @@ export default function FeeVouchers() {
 
   const openPrintWindow = (data: any[]) => {    const win = window.open('', '_blank');
     if (!win) return toast.error('Allow pop-ups to print');
-    win.document.write(buildPrintHTML(data, org?.name || 'School', branchData?.invoiceNote));
+    win.document.write(
+      buildPrintHTML(data, org?.name || 'School', branchData?.invoiceNote, {
+        layout: printLayout,
+        rowsPerPage,
+      })
+    );
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 600);
@@ -632,6 +655,26 @@ export default function FeeVouchers() {
               {selectedIds.length > 0 ? `Print (${selectedIds.length})` : 'Print All'}
             </Button>
           )}
+          <Select value={printLayout} onValueChange={(v: any) => setPrintLayout(v)}>
+            <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Print Size" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Size: Auto</SelectItem>
+              <SelectItem value="large">Size: Large</SelectItem>
+              <SelectItem value="medium">Size: Medium</SelectItem>
+              <SelectItem value="compact">Size: Compact</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={rowsPerPage} onValueChange={(v: any) => setRowsPerPage(v)}>
+            <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Rows/Page" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Rows/Page: Auto</SelectItem>
+              <SelectItem value="2">Rows/Page: 2</SelectItem>
+              <SelectItem value="3">Rows/Page: 3</SelectItem>
+              <SelectItem value="4">Rows/Page: 4</SelectItem>
+              <SelectItem value="5">Rows/Page: 5</SelectItem>
+              <SelectItem value="6">Rows/Page: 6</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={handleReconcile} disabled={reconciling} title="Fix vouchers showing PKR 0">
             {reconciling ? <RefreshCcw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wrench className="mr-1.5 h-3.5 w-3.5" />}
             Fix Amounts
@@ -726,8 +769,10 @@ export default function FeeVouchers() {
             placeholder="Search student / adm#…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
           />
+          {isFetching && (
+            <RefreshCcw className="absolute right-8 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
           {searchInput && (
             <button className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground" onClick={clearSearch}>
               <X className="h-4 w-4" />
@@ -765,6 +810,12 @@ export default function FeeVouchers() {
       </div>
 
       {/* Voucher Table */}
+      {isFetching && !isLoading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+          Updating results...
+        </div>
+      )}
       {isLoading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <RefreshCcw className="mr-2 h-4 w-4 animate-spin" /> Loading vouchers…
@@ -811,6 +862,9 @@ export default function FeeVouchers() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">
                         {v.studentId?.firstName} {v.studentId?.lastName}
+                        {(v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName)
+                          ? ` (S/O ${v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName})`
+                          : ''}
                       </span>
                       {v.studentId?.admissionNumber && (
                         <span className="text-xs text-muted-foreground">#{v.studentId.admissionNumber}</span>
@@ -1661,15 +1715,40 @@ export default function FeeVouchers() {
 }
 
 // ── Professional Print HTML (auto-pack max vouchers per page) ─────────────────────
-function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: string): string {
-  // Let browser paginate naturally so each page contains maximum possible rows.
-  const rows = vouchers.map((v, ri) => `
-      <div class="row${ri < vouchers.length - 1 ? ' has-cut' : ''}">
-        <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote)}</div>
-        <div class="vcut"><span>✂</span></div>
-        <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote)}</div>
-      </div>`).join('');
-  const pageHTML = `<div class="sheet">${rows}</div>`;
+function buildPrintHTML(
+  vouchers: any[],
+  schoolName: string,
+  invoiceNote?: string,
+  settings?: { layout?: 'auto' | 'large' | 'medium' | 'compact'; rowsPerPage?: 'auto' | '2' | '3' | '4' | '5' | '6' }
+): string {
+  const autoLayout = vouchers.length <= 2 ? 'large' : vouchers.length <= 4 ? 'medium' : 'compact';
+  const layout = settings?.layout && settings.layout !== 'auto' ? settings.layout : autoLayout;
+  const rowsPerPage = settings?.rowsPerPage && settings.rowsPerPage !== 'auto' ? Number(settings.rowsPerPage) : 0;
+  const sizeMap = {
+    large: { baseFont: 10, schoolFont: 14, rowGap: 3.8, scale: 1.08 },
+    medium: { baseFont: 9, schoolFont: 13, rowGap: 2.8, scale: 1.03 },
+    compact: { baseFont: 8.5, schoolFont: 12, rowGap: 1.8, scale: 0.98 },
+  } as const;
+  const selectedSize = sizeMap[layout];
+
+  const rowHtml = (v: any, ri: number, total: number) => `
+    <div class="row${ri < total - 1 ? ' has-cut' : ''}">
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote)}</div>
+      <div class="vcut"><span>✂</span></div>
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote)}</div>
+    </div>
+  `;
+
+  let pageHTML = '';
+  if (rowsPerPage > 0) {
+    for (let i = 0; i < vouchers.length; i += rowsPerPage) {
+      const chunk = vouchers.slice(i, i + rowsPerPage);
+      pageHTML += `<div class="sheet forced-page">${chunk.map((v, idx) => rowHtml(v, idx, chunk.length)).join('')}</div>`;
+    }
+  } else {
+    const rows = vouchers.map((v, ri) => rowHtml(v, ri, vouchers.length)).join('');
+    pageHTML = `<div class="sheet">${rows}</div>`;
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1678,13 +1757,15 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
 <title>Fee Vouchers — ${schoolName}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; background: #fff; color: #000; font-size: 9px; }
+  body { font-family: Arial, sans-serif; background: #fff; color: #000; font-size: ${selectedSize.baseFont}px; }
 
   /* ── A4 Page ─────────────────────────── */
   .sheet {
     width: 210mm;
     padding: 5mm 6mm;
   }
+  .sheet.forced-page { page-break-after: always; }
+  .sheet.forced-page:last-child { page-break-after: auto; }
 
   /* ── Student row (one student = 2 copies) */
   .row {
@@ -1695,8 +1776,8 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
   }
   .row.has-cut {
     border-bottom: 1.5px dashed #666;
-    padding-bottom: 2.5mm;
-    margin-bottom: 2.5mm;
+    padding-bottom: ${selectedSize.rowGap}mm;
+    margin-bottom: ${selectedSize.rowGap}mm;
   }
 
   /* ── Half (one copy) ──────────────────── */
@@ -1723,7 +1804,8 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
     border: 1.5px solid #000;
     display: flex;
     flex-direction: column;
-    font-size: 8.5px;
+    font-size: ${selectedSize.baseFont}px;
+    line-height: 1.2;
   }
 
   /* ── Header ───────────────────────────── */
@@ -1733,14 +1815,14 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
     padding: 3px 4px 2px;
   }
   .vc-school {
-    font-size: 12px;
+    font-size: ${selectedSize.schoolFont}px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     line-height: 1.2;
   }
   .vc-title {
-    font-size: 9px;
+    font-size: calc(9px * ${selectedSize.scale});
     font-weight: 700;
     border-top: 1px solid #000;
     border-bottom: 1px solid #000;
@@ -1749,18 +1831,25 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
     letter-spacing: 1px;
     text-transform: uppercase;
   }
-  .vc-sub { font-size: 7.5px; }
+  .vc-sub { font-size: calc(8px * ${selectedSize.scale}); }
 
   /* ── Info rows ────────────────────────── */
   .vc-info { width: 100%; border-collapse: collapse; }
   .vc-info td {
-    padding: 2px 5px;
+    padding: 2.5px 5px;
     border-bottom: 1px solid #ddd;
     vertical-align: middle;
-    font-size: 8.5px;
+    font-size: calc(9px * ${selectedSize.scale});
   }
-  .vc-info .lbl { color: #000; font-size: 7.5px; white-space: nowrap; padding-right: 2px; }
-  .vc-info .val { border-bottom: 1px dotted #555; font-weight: 700; }
+  .vc-info .lbl { color: #000; font-size: calc(8px * ${selectedSize.scale}); white-space: nowrap; padding-right: 2px; width: 34px; }
+  .vc-info .val {
+    border-bottom: 1px dotted #555;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+  }
   .vc-info .sep { width: 4px; }
 
   /* ── Fee items table ──────────────────── */
@@ -1768,7 +1857,7 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
   .vc-fee thead tr { background: #efefef; }
   .vc-fee th {
     padding: 3px 5px;
-    font-size: 7.5px;
+    font-size: calc(8px * ${selectedSize.scale});
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1777,23 +1866,23 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
   }
   .vc-fee th.r, .vc-fee td.r { text-align: right; }
   .vc-fee td {
-    padding: 2.5px 5px;
-    font-size: 8.5px;
+    padding: 3px 5px;
+    font-size: calc(9px * ${selectedSize.scale});
     border: 1px solid #ddd;
   }
-  .vc-fee td.sno { text-align: center; width: 18px; color: #555; font-size: 7.5px; }
+  .vc-fee td.sno { text-align: center; width: 18px; color: #555; font-size: calc(8px * ${selectedSize.scale}); }
   .vc-fee td.r { font-weight: 600; width: 30%; }
 
   /* ── Totals ───────────────────────────── */
   .vc-total { width: 100%; border-collapse: collapse; border-top: 2px solid #000; }
-  .vc-total td { padding: 3px 5px; font-size: 9px; }
+  .vc-total td { padding: 3.5px 5px; font-size: calc(9.2px * ${selectedSize.scale}); }
   .vc-total td.tlbl { width: 70%; font-weight: 600; }
-  .vc-total td.tamt { text-align: right; font-weight: 800; font-size: 10px; }
+  .vc-total td.tamt { text-align: right; font-weight: 800; font-size: calc(10.5px * ${selectedSize.scale}); }
 
   /* ── PAID stamp (B&W) ─────────────────── */
   .paid-stamp {
     text-align: center;
-    font-size: 9px;
+    font-size: calc(9.5px * ${selectedSize.scale});
     font-weight: 900;
     letter-spacing: 3px;
     border: 2px solid #000;
@@ -1806,17 +1895,18 @@ function buildPrintHTML(vouchers: any[], schoolName: string, invoiceNote?: strin
   .vc-sigs {
     display: flex;
     justify-content: space-between;
-    padding: 3px 5px 2px;
-    font-size: 7px;
+    padding: 4px 5px 3px;
+    font-size: calc(7.8px * ${selectedSize.scale});
     border-top: 1px solid #aaa;
     margin-top: auto;
+    gap: 6px;
   }
 
   /* ── Copy label ───────────────────────── */
   .vc-copy-label {
     text-align: center;
     font-weight: 800;
-    font-size: 8px;
+    font-size: calc(8.5px * ${selectedSize.scale});
     text-transform: uppercase;
     letter-spacing: 1.5px;
     padding: 2px 0;
@@ -1858,6 +1948,10 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     : '—';
   const session = `${v.year || ''}–${(v.year || 0) + 1}`;
   const guardianPhone = v.studentId?.parent?.phone || '—';
+  const fatherName = v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName || '—';
+  const otherPendingMonths: any[] = v.pendingDetails?.months || [];
+  const otherPendingTotal = Number(v.pendingDetails?.totalPending || 0);
+  const grandWithPending = netPayable + otherPendingTotal;
 
   const itemRows = feeItems
     .map(
@@ -1878,6 +1972,16 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     fine > 0
       ? `<tr><td class="sno"></td><td>Late Fine</td><td class="r">${fine.toLocaleString()}/-</td></tr>`
       : '';
+  const pendingRows = otherPendingMonths
+    .map(
+      (p: any) =>
+        `<tr>
+          <td class="sno"></td>
+          <td>Pending Fee (${p.month} ${p.year})</td>
+          <td class="r">${Number(p.remaining || 0).toLocaleString()}/-</td>
+        </tr>`
+    )
+    .join('');
 
   const paidStamp =
     v.status === 'paid'
@@ -1908,7 +2012,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     </tr>
     <tr>
       <td class="lbl">Name</td>
-      <td class="val" colspan="4">${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''}</td>
+      <td class="val" colspan="4">${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''} ${fatherName !== '—' ? `(S/O ${fatherName})` : ''}</td>
     </tr>
     <tr>
       <td class="lbl">Adm #</td>
@@ -1934,14 +2038,24 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       ${itemRows}
       ${discountRow}
       ${fineRow}
+      ${pendingRows}
       ${paidStamp}
     </tbody>
   </table>
   <table class="vc-total">
     ${paidRows}
+    ${
+      otherPendingTotal > 0
+        ? `<tr><td class="tlbl">Pending Amount (${otherPendingMonths.length} month${otherPendingMonths.length > 1 ? 's' : ''}):</td><td class="tamt">${otherPendingTotal.toLocaleString()}/-</td></tr>`
+        : ''
+    }
     <tr>
-      <td class="tlbl">Total (Rs.):</td>
+      <td class="tlbl">Current Voucher (Rs.):</td>
       <td class="tamt">${netPayable.toLocaleString()}/-</td>
+    </tr>
+    <tr>
+      <td class="tlbl">Total with Pending (Rs.):</td>
+      <td class="tamt">${grandWithPending.toLocaleString()}/-</td>
     </tr>
   </table>
   <div class="vc-sigs">

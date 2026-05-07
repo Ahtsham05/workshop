@@ -425,11 +425,50 @@ const deleteVoucherById = async (id, scope = {}) => {
  * Get vouchers for printing (populated with student, class, org details)
  */
 const getVouchersForPrint = async (ids, scope = {}) => {
-  return FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
+  const vouchers = await FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
     .populate('studentId', 'firstName lastName admissionNumber rollNumber parent.phone parent.guardianName parent.fatherName')
     .populate('classId', 'name')
     .populate('sectionId', 'name')
     .lean();
+
+  const studentIds = [...new Set(vouchers.map((v) => String(v.studentId?._id || v.studentId)).filter(Boolean))];
+  if (!studentIds.length) return vouchers;
+
+  const allPending = await FeeVoucher.find({
+    ...getTenantFilter(scope),
+    studentId: { $in: studentIds },
+    status: { $in: ['unpaid', 'partial', 'overdue'] },
+  })
+    .select('_id studentId month year netAmount feeItems discount fine paidAmount')
+    .lean();
+
+  const pendingByStudent = new Map();
+  allPending.forEach((p) => {
+    const sid = String(p.studentId);
+    if (!pendingByStudent.has(sid)) pendingByStudent.set(sid, []);
+    pendingByStudent.get(sid).push({
+      id: String(p._id),
+      month: p.month,
+      year: p.year,
+      remaining: Math.max(0, effectiveNet(p) - (p.paidAmount || 0)),
+    });
+  });
+
+  return vouchers.map((v) => {
+    const sid = String(v.studentId?._id || v.studentId || '');
+    const pendingList = (pendingByStudent.get(sid) || [])
+      .filter((p) => p.id !== String(v._id) && p.remaining > 0)
+      .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
+    const pendingTotal = pendingList.reduce((sum, p) => sum + p.remaining, 0);
+    return {
+      ...v,
+      pendingDetails: {
+        months: pendingList,
+        totalPending: pendingTotal,
+        pendingCount: pendingList.length,
+      },
+    };
+  });
 };
 
 /**
@@ -940,8 +979,8 @@ const reconcileVouchers = async (scope = {}) => {
 
     let maxSeq = 0;
     for (const v of highest) {
-      const parts = (v.voucherNumber || '').split('-');
-      const num = parseInt(parts[parts.length - 1], 10);
+      const digitsOnly = String(v.voucherNumber || '').replace(/\D/g, '');
+      const num = parseInt(digitsOnly, 10);
       if (!isNaN(num) && num > maxSeq) maxSeq = num;
     }
 

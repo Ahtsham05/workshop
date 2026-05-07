@@ -30,6 +30,10 @@ interface CardDesign {
   showClass: boolean;
   showRollNo: boolean;
   showAdmissionNo: boolean;
+  showFatherName: boolean;
+  showGuardianName: boolean;
+  showGuardianPhone: boolean;
+  showGender: boolean;
 }
 
 interface SavedDesignPreset {
@@ -139,6 +143,10 @@ export default function IdCardsPage() {
     showClass: true,
     showRollNo: true,
     showAdmissionNo: true,
+    showFatherName: true,
+    showGuardianName: false,
+    showGuardianPhone: true,
+    showGender: false,
   };
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -426,6 +434,10 @@ export default function IdCardsPage() {
               <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showClass} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showClass: Boolean(v) }))} /> Show Class</label>
               <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showRollNo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showRollNo: Boolean(v) }))} /> Show Roll No.</label>
               <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showAdmissionNo} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showAdmissionNo: Boolean(v) }))} /> Show Admission No.</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showFatherName} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showFatherName: Boolean(v) }))} /> Show Father Name</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showGuardianName} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showGuardianName: Boolean(v) }))} /> Show Guardian Name</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showGuardianPhone} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showGuardianPhone: Boolean(v) }))} /> Show Guardian Phone</label>
+              <label className="text-xs flex items-center gap-2"><Checkbox checked={cardDesign.showGender} onCheckedChange={(v) => setCardDesign((prev) => ({ ...prev, showGender: Boolean(v) }))} /> Show Gender</label>
             </div>
           </div>
         </CardContent>
