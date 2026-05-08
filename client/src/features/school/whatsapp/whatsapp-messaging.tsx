@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import {
   useSendWhatsAppToAllMutation,
   useSendWhatsAppFeeAlertsMutation,
   useGetSchoolClassesQuery,
+  useGetStudentsQuery,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import {
@@ -148,7 +149,10 @@ export default function WhatsAppMessaging() {
   const [sendFeeAlerts, { isLoading: sendingFeeAlerts }] = useSendWhatsAppFeeAlertsMutation();
 
   // ── Bulk custom ───────────────────────────────────────────────────────────
-  const [bulkText, setBulkText] = useState('');
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkDebouncedSearch, setBulkDebouncedSearch] = useState('');
+  const [bulkClassFilter, setBulkClassFilter] = useState<string>('all');
+  const [bulkSelectedStudents, setBulkSelectedStudents] = useState<any[]>([]);
   const [bulkMsg, setBulkMsg] = useState('');
   const [sendBulk, { isLoading: sendingBulk }] = useSendWhatsAppBulkMutation();
 
@@ -160,9 +164,112 @@ export default function WhatsAppMessaging() {
     name: String(c.name ?? ''),
   }));
 
+  const onlyDigits = (value: string) => String(value ?? '').replace(/\D+/g, '');
+  const normalizePhoneCandidates = (phone: string) => {
+    const digits = onlyDigits(phone);
+    if (!digits) return [] as string[];
+    const candidates = new Set<string>([digits]);
+    if (digits.startsWith('0')) candidates.add(`92${digits.slice(1)}`);
+    if (digits.startsWith('92')) candidates.add(`0${digits.slice(2)}`);
+    if (digits.length > 10) candidates.add(digits.slice(-10));
+    return Array.from(candidates);
+  };
+
+  const getStudentName = (student: any) =>
+    [student?.firstName, student?.lastName].filter(Boolean).join(' ').trim() || undefined;
+
+  const mapFailedWithStudentDetails = (failedList: any[], studentPhoneMap: Map<string, any>) =>
+    (failedList ?? []).map((f: any) => {
+      const phoneDigits = onlyDigits(String(f?.phone ?? ''));
+      const matchedStudent =
+        studentPhoneMap.get(phoneDigits)
+        || studentPhoneMap.get(`92${phoneDigits.slice(-10)}`)
+        || studentPhoneMap.get(`0${phoneDigits.slice(-10)}`)
+        || null;
+
+      return {
+        ...f,
+        name: f?.name || getStudentName(matchedStudent),
+        admissionNo: matchedStudent?.admissionNo || undefined,
+        className: matchedStudent?.class?.name || matchedStudent?.classId?.name || undefined,
+        sectionName: matchedStudent?.section?.name || matchedStudent?.sectionId?.name || undefined,
+        fatherName: matchedStudent?.parent?.fatherName || undefined,
+        parentPhone: matchedStudent?.parent?.phone || f?.phone || undefined,
+      };
+    });
+
+  const broadcastLookupParams = useMemo(() => {
+    const params: Record<string, any> = { limit: 5000 };
+    if (broadcastClass !== 'all') params.classId = broadcastClass;
+    return params;
+  }, [broadcastClass]);
+
+  const feeAlertLookupParams = useMemo(() => {
+    const params: Record<string, any> = { limit: 5000 };
+    if (feeAlertClass !== 'all') params.classId = feeAlertClass;
+    return params;
+  }, [feeAlertClass]);
+
+  const { data: broadcastLookupData } = useGetStudentsQuery(broadcastLookupParams, { skip: !isReady });
+  const { data: feeAlertLookupData } = useGetStudentsQuery(feeAlertLookupParams, { skip: !isReady });
+
+  const broadcastStudentPhoneMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const students: any[] = broadcastLookupData?.results ?? [];
+    students.forEach((student) => {
+      const phone = String(student?.parent?.phone ?? '').trim();
+      normalizePhoneCandidates(phone).forEach((k) => map.set(k, student));
+    });
+    return map;
+  }, [broadcastLookupData]);
+
+  const feeAlertStudentPhoneMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const students: any[] = feeAlertLookupData?.results ?? [];
+    students.forEach((student) => {
+      const phone = String(student?.parent?.phone ?? '').trim();
+      normalizePhoneCandidates(phone).forEach((k) => map.set(k, student));
+    });
+    return map;
+  }, [feeAlertLookupData]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setBulkDebouncedSearch(bulkSearch.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [bulkSearch]);
+
+  const bulkStudentQueryParams = useMemo(() => {
+    const params: Record<string, any> = { search: bulkDebouncedSearch, limit: 12 };
+    if (bulkClassFilter !== 'all') params.classId = bulkClassFilter;
+    return params;
+  }, [bulkDebouncedSearch, bulkClassFilter]);
+
+  const { data: bulkStudentSearchData, isFetching: bulkSearching } = useGetStudentsQuery(
+    bulkStudentQueryParams,
+    { skip: bulkDebouncedSearch.length < 2 }
+  );
+
+  const searchedStudents: any[] = bulkStudentSearchData?.results ?? [];
+  const selectedIds = new Set(
+    bulkSelectedStudents.map((s) => String(s?._id ?? s?.id ?? ''))
+  );
+
   // ── Result state ───────────────────────────────────────────────────────────
   const [lastResult, setLastResult] = useState<{
-    total: number; sent: number; failed: { phone: string; reason: string; name?: string }[];
+    total: number;
+    sent: number;
+    failed: {
+      phone: string;
+      reason: string;
+      name?: string;
+      admissionNo?: string;
+      className?: string;
+      sectionName?: string;
+      fatherName?: string;
+      parentPhone?: string;
+    }[];
+    successfulRecipients?: { phone: string; name?: string }[];
+    source?: string;
   } | null>(null);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -197,12 +304,20 @@ export default function WhatsAppMessaging() {
   }
 
   async function handleSendSingle() {
+    setLastResult(null);
     if (!singlePhone.trim() || !singleMsg.trim()) {
       toast.error('Enter phone number and message');
       return;
     }
     try {
       await sendSingle({ phone: singlePhone.trim(), message: singleMsg.trim() }).unwrap();
+      setLastResult({
+        total: 1,
+        sent: 1,
+        failed: [],
+        successfulRecipients: [{ phone: singlePhone.trim() }],
+        source: 'Single Message',
+      });
       toast.success('Message sent!');
       setSinglePhone('');
       setSingleMsg('');
@@ -212,6 +327,7 @@ export default function WhatsAppMessaging() {
   }
 
   async function handleBroadcast() {
+    setLastResult(null);
     if (!broadcastMsg.trim()) { toast.error('Enter a message'); return; }
     try {
       let result;
@@ -223,7 +339,12 @@ export default function WhatsAppMessaging() {
       if (result.total === 0) {
         toast.error('No students with parent phone numbers found');
       } else {
-        setLastResult(result);
+        const failedWithDetails = mapFailedWithStudentDetails(result.failed ?? [], broadcastStudentPhoneMap);
+        setLastResult({
+          ...result,
+          failed: failedWithDetails,
+          source: broadcastClass === 'all' ? 'Broadcast (All Classes)' : 'Broadcast (Class)',
+        });
         toast.success(`Sent to ${result.sent} of ${result.total} students`);
       }
     } catch (e: any) {
@@ -232,6 +353,7 @@ export default function WhatsAppMessaging() {
   }
 
   async function handleFeeAlerts() {
+    setLastResult(null);
     try {
       const payload: Record<string, any> = { message: feeAlertMsg.trim() || undefined };
       if (feeAlertClass !== 'all') payload.classId = feeAlertClass;
@@ -240,7 +362,12 @@ export default function WhatsAppMessaging() {
       if (result.total === 0) {
         toast.error('No matching fee vouchers with parent phone numbers found');
       } else {
-        setLastResult(result);
+        const failedWithDetails = mapFailedWithStudentDetails(result.failed ?? [], feeAlertStudentPhoneMap);
+        setLastResult({
+          ...result,
+          failed: failedWithDetails,
+          source: 'Fee Alerts',
+        });
         toast.success(`Sent fee alerts to ${result.sent} of ${result.total} parents`);
       }
     } catch (e: any) {
@@ -249,26 +376,65 @@ export default function WhatsAppMessaging() {
   }
 
   async function handleBulkCustom() {
-    if (!bulkText.trim() || !bulkMsg.trim()) {
-      toast.error('Add at least one phone number and a message');
+    setLastResult(null);
+    if (bulkSelectedStudents.length === 0 || !bulkMsg.trim()) {
+      toast.error('Select at least one student and enter a message');
       return;
     }
-    const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean);
-    const recipients = lines.map((line) => {
-      const [phone, ...rest] = line.split(',');
-      return { phone: phone.trim(), name: rest.join(',').trim() || undefined };
+    const recipients = bulkSelectedStudents
+      .map((student) => ({
+        phone: String(student?.parent?.phone ?? '').trim(),
+        name: [student?.firstName, student?.lastName].filter(Boolean).join(' ').trim() || undefined,
+      }))
+      .filter((r) => !!r.phone);
+
+    const studentByPhoneKey = new Map<string, any>();
+    bulkSelectedStudents.forEach((student) => {
+      const phone = String(student?.parent?.phone ?? '').trim();
+      normalizePhoneCandidates(phone).forEach((k) => studentByPhoneKey.set(k, student));
     });
     try {
       const result = await sendBulk({ recipients, message: bulkMsg.trim() }).unwrap();
       if (result.total === 0) {
-        toast.error('No valid recipients found');
+        toast.error('Selected students do not have valid parent phone numbers');
       } else {
-        setLastResult(result);
+        const failedPhones = new Set(
+          (result.failed ?? []).map((f: any) => String(f.phone ?? '').replace(/\s+/g, ''))
+        );
+        const successfulRecipients = recipients.filter(
+          (r) => !failedPhones.has(String(r.phone ?? '').replace(/\s+/g, ''))
+        );
+        const failedWithDetails = mapFailedWithStudentDetails(result.failed ?? [], studentByPhoneKey);
+        setLastResult({
+          ...result,
+          failed: failedWithDetails,
+          successfulRecipients,
+          source: 'Bulk Custom',
+        });
         toast.success(`Sent to ${result.sent} of ${result.total} recipients`);
       }
     } catch (e: any) {
       toast.error(e?.data?.message || 'Bulk send failed');
     }
+  }
+
+  function handleToggleStudent(student: any) {
+    const id = String(student?._id ?? student?.id ?? '');
+    if (!id) return;
+    const phone = String(student?.parent?.phone ?? '').trim();
+    if (!phone) {
+      toast.error('This student does not have a parent phone number');
+      return;
+    }
+    setBulkSelectedStudents((prev) => {
+      const exists = prev.some((s) => String(s?._id ?? s?.id ?? '') === id);
+      if (exists) return prev.filter((s) => String(s?._id ?? s?.id ?? '') !== id);
+      return [...prev, student];
+    });
+  }
+
+  function removeSelectedStudent(studentId: string) {
+    setBulkSelectedStudents((prev) => prev.filter((s) => String(s?._id ?? s?.id ?? '') !== studentId));
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -618,22 +784,121 @@ export default function WhatsAppMessaging() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                Bulk Custom Send
+                Bulk Custom Send to Selected Students
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>Phone Numbers <span className="text-xs text-gray-400">(one per line — optionally: phone, name)</span></Label>
-                <Textarea
-                  rows={6}
-                  placeholder={"03001234567, Ahmed\n03009876543, Sara\n923331234567"}
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                />
-                <p className="text-xs text-gray-400">
-                  {bulkText.split('\n').filter((l) => l.trim()).length} numbers entered
-                </p>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Filter by Class</Label>
+                  <Select value={bulkClassFilter} onValueChange={setBulkClassFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Classes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Classes</SelectItem>
+                      {classes.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Search Students</Label>
+                  <Input
+                    placeholder="Type student name, admission no, or phone..."
+                    value={bulkSearch}
+                    onChange={(e) => setBulkSearch(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-400">Type at least 2 characters to search and select multiple students.</p>
+                </div>
+
+                {bulkSearch.trim().length >= 2 && (
+                  <div className="border rounded-md max-h-56 overflow-y-auto divide-y">
+                    {bulkSearching ? (
+                      <div className="px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Searching students...
+                      </div>
+                    ) : searchedStudents.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">No students found</div>
+                    ) : (
+                      searchedStudents.map((student) => {
+                        const studentId = String(student?._id ?? student?.id ?? '');
+                        const fullName = [student?.firstName, student?.lastName].filter(Boolean).join(' ').trim() || 'Unnamed';
+                        const parentPhone = String(student?.parent?.phone ?? '').trim();
+                        const fatherName = String(student?.parent?.fatherName ?? '').trim();
+                        const className = String(student?.class?.name ?? student?.classId?.name ?? '').trim();
+                        const sectionName = String(student?.section?.name ?? student?.sectionId?.name ?? '').trim();
+                        const admissionNo = String(student?.admissionNo ?? '').trim();
+                        return (
+                          <button
+                            key={studentId}
+                            type="button"
+                            onClick={() => handleToggleStudent(student)}
+                            className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-start justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{fullName}</p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {admissionNo ? `Adm: ${admissionNo}` : 'Adm: -'} · Class: {className || '-'}{sectionName ? `-${sectionName}` : ''} · Father: {fatherName || '-'}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                Parent Phone: {parentPhone || '-'}
+                              </p>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded border ${selectedIds.has(studentId) ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-600 border-gray-300'}`}>
+                              {selectedIds.has(studentId) ? 'Selected' : 'Select'}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
+
+              <div className="space-y-1.5">
+                <Label>Selected Students</Label>
+                {bulkSelectedStudents.length === 0 ? (
+                  <p className="text-sm text-gray-500">No students selected yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {bulkSelectedStudents.map((student) => {
+                      const studentId = String(student?._id ?? student?.id ?? '');
+                      const fullName = [student?.firstName, student?.lastName].filter(Boolean).join(' ').trim() || 'Unnamed';
+                      const fatherName = String(student?.parent?.fatherName ?? '').trim();
+                      const parentPhone = String(student?.parent?.phone ?? '').trim();
+                      const className = String(student?.class?.name ?? student?.classId?.name ?? '').trim();
+                      const sectionName = String(student?.section?.name ?? student?.sectionId?.name ?? '').trim();
+                      const admissionNo = String(student?.admissionNo ?? '').trim();
+                      return (
+                        <div key={studentId} className="rounded-md border border-green-200 bg-green-50 px-3 py-2 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-green-900 truncate">{fullName}</p>
+                            <p className="text-xs text-green-800 truncate">
+                              {admissionNo ? `Adm: ${admissionNo}` : 'Adm: -'} · Class: {className || '-'}{sectionName ? `-${sectionName}` : ''} · Father: {fatherName || '-'}
+                            </p>
+                            <p className="text-xs text-green-800 truncate">Parent Phone: {parentPhone || '-'}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSelectedStudent(studentId)}
+                            className="h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-100"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">{bulkSelectedStudents.length} students selected</p>
+              </div>
+
               <div className="space-y-1.5">
                 <Label>Message <span className="text-gray-400 text-xs">(use {'{name}'} for personalised greeting)</span></Label>
                 <Textarea
@@ -645,11 +910,11 @@ export default function WhatsAppMessaging() {
               </div>
               <Button
                 onClick={handleBulkCustom}
-                disabled={sendingBulk}
+                disabled={sendingBulk || bulkSelectedStudents.length === 0 || !bulkMsg.trim()}
                 className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
               >
                 {sendingBulk ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                Send to All
+                Send to Selected Students
               </Button>
             </CardContent>
           </Card>
@@ -660,7 +925,9 @@ export default function WhatsAppMessaging() {
       {lastResult && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Send Result</CardTitle>
+            <CardTitle className="text-base">
+              Send Result{lastResult.source ? ` - ${lastResult.source}` : ''}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-4 flex-wrap">
@@ -674,25 +941,46 @@ export default function WhatsAppMessaging() {
               </Badge>
               <Badge variant="outline">Total: {lastResult.total}</Badge>
             </div>
-            {lastResult.failed.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-red-600">Failed numbers:</p>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {lastResult.failed.map((f, i) => (
-                      <div key={i} className="text-xs text-gray-600 bg-red-50 rounded px-2 py-1 flex justify-between">
-                        <span className="font-mono">{f.phone}{f.name ? ` (${f.name})` : ''}</span>
-                        <span className="text-red-500">{f.reason}</span>
+            <Separator />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-md border border-green-200 bg-green-50 p-3 space-y-2">
+                <p className="text-sm font-semibold text-green-700">Successful</p>
+                <p className="text-xs text-green-700">
+                  {lastResult.sent} message{lastResult.sent === 1 ? '' : 's'} sent successfully.
+                </p>
+                {(lastResult.successfulRecipients?.length ?? 0) > 0 && (
+                  <div className="max-h-80 overflow-y-auto space-y-1">
+                    {lastResult.successfulRecipients?.map((s, i) => (
+                      <div key={`${s.phone}-${i}`} className="text-xs text-green-800 bg-white rounded px-2 py-1 border border-green-100">
+                        <span className="font-mono">{s.phone}</span>{s.name ? ` (${s.name})` : ''}
                       </div>
                     ))}
                   </div>
-                </div>
-              </>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => setLastResult(null)}>
-              Dismiss
-            </Button>
+                )}
+              </div>
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-2">
+                <p className="text-sm font-semibold text-red-700">Failed</p>
+                <p className="text-xs text-red-700">
+                  {lastResult.failed.length} message{lastResult.failed.length === 1 ? '' : 's'} failed.
+                </p>
+                {lastResult.failed.length > 0 ? (
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    {lastResult.failed.map((f, i) => (
+                      <div key={i} className="text-xs text-red-800 bg-white rounded px-2 py-1 border border-red-100 space-y-0.5">
+                        <p className="font-medium">{f.name || `Student (${f.parentPhone || f.phone || 'Unknown Number'})`}</p>
+                        <p>
+                          {f.admissionNo ? `Adm: ${f.admissionNo}` : 'Adm: -'} · Class: {f.className || '-'}{f.sectionName ? `-${f.sectionName}` : ''} · Father: {f.fatherName || '-'}
+                        </p>
+                        <p>Parent Phone: {f.parentPhone || f.phone || '-'}</p>
+                        <p className="text-red-600">Reason: {f.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-700">No failed messages.</p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
