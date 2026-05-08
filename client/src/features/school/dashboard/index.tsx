@@ -1,9 +1,11 @@
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Users, GraduationCap, BookOpen, Calendar, DollarSign, Clock, UserPlus, ClipboardCheck, ArrowRight, CheckCircle2, XCircle, Timer, Umbrella, CalendarMinus, LayoutList, Layers, UserCheck, TrendingUp, AlertCircle, Banknote, Wallet, FileText } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
-import { useGetSchoolDashboardQuery, useGetSchoolAccountingDashboardQuery } from '@/stores/school.api';
+import { useGetSchoolDashboardQuery, useGetSchoolAccountingDashboardQuery, useGetStudentsQuery } from '@/stores/school.api';
 
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
 
@@ -16,13 +18,35 @@ const QUICK_ACTIONS = [
 
 export default function SchoolDashboard() {
   const navigate = useNavigate();
+  const [classStrengthOpen, setClassStrengthOpen] = useState(false);
   const { data: stats, isLoading } = useGetSchoolDashboardQuery({});
+  const { data: allStudentsData, isLoading: studentsLoading } = useGetStudentsQuery({ limit: 5000, status: 'active' });
 
   const now = new Date();
   const currentMonth = now.toLocaleString('default', { month: 'long' });
   const currentYear = now.getFullYear();
   const { data: acctDashboard, isLoading: isLoadingAcct } = useGetSchoolAccountingDashboardQuery({ month: currentMonth, year: currentYear });
   const fc = acctDashboard?.feeCollection;
+  const allStudents: any[] = allStudentsData?.results || [];
+
+  const classWiseStrength = useMemo(() => {
+    const grouped = new Map<string, { className: string; students: any[] }>();
+    allStudents.forEach((student) => {
+      const className = String(student?.classId?.name || student?.class?.name || 'Unassigned');
+      if (!grouped.has(className)) grouped.set(className, { className, students: [] });
+      grouped.get(className)!.students.push(student);
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        className: group.className,
+        total: group.students.length,
+        students: group.students.sort((a, b) =>
+          `${a?.firstName || ''} ${a?.lastName || ''}`.localeCompare(`${b?.firstName || ''} ${b?.lastName || ''}`)
+        ),
+      }))
+      .sort((a, b) => b.total - a.total || a.className.localeCompare(b.className));
+  }, [allStudents]);
 
   // total = all enrolled students; marked = those with any attendance record today
   const totalStudents = stats?.todayAttendance?.total || 0;
@@ -86,7 +110,13 @@ export default function SchoolDashboard() {
           <Card
             key={stat.title}
             className="cursor-pointer hover:shadow-md transition-all group overflow-hidden"
-            onClick={() => navigate({ to: stat.to } as NavigateOptions)}
+            onClick={() => {
+              if (stat.title === 'Total Students') {
+                setClassStrengthOpen(true);
+                return;
+              }
+              navigate({ to: stat.to } as NavigateOptions);
+            }}
           >
             <CardContent className="p-5 relative">
               <div className={`absolute top-0 right-0 h-16 w-16 opacity-5 rounded-bl-3xl bg-gradient-to-br ${stat.gradient}`} />
@@ -110,6 +140,48 @@ export default function SchoolDashboard() {
           </Card>
         ))}
       </div>
+
+      <Dialog open={classStrengthOpen} onOpenChange={setClassStrengthOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Class-wise Student Strength</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto pr-1 space-y-3 max-h-[70vh]">
+            {studentsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => <div key={i} className="h-20 bg-muted animate-pulse rounded" />)}
+              </div>
+            ) : classWiseStrength.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No students found.</p>
+            ) : (
+              classWiseStrength.map((group) => (
+                <Card key={group.className}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{group.className}</CardTitle>
+                      <Badge variant="secondary">{group.total} students</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {group.students.map((student: any) => {
+                        const name = `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || 'Unnamed Student';
+                        return (
+                          <div key={student?._id || student?.id || `${group.className}-${name}`} className="rounded-md border px-2.5 py-2 text-xs">
+                            <p className="font-medium text-sm truncate">{name}</p>
+                            <p className="text-muted-foreground truncate">Adm: {student?.admissionNo || '-'}</p>
+                            <p className="text-muted-foreground truncate">Parent: {student?.parent?.fatherName || '-'}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Quick actions */}
       <div>
