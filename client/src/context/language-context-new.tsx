@@ -81,8 +81,8 @@ const translations: Translations = {
     "product_name": "Product Name",
     "description": "Description",
     "barcode": "Barcode",
-    "price": "Price",
-    "cost": "Cost",
+    "price": "Sale Price",
+    "cost": "Purchase Price",
     "stock_quantity": "Stock Quantity",
     
     // Common fields

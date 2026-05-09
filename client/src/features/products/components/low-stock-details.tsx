@@ -81,7 +81,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
   };
 
   const exportToCSV = () => {
-    const headers = ['Product Name', 'Barcode', 'Current Stock', 'Price', 'Cost', 'Status'];
+    const headers = ['Product Name', 'Barcode', 'Current Stock', 'Sale Price', 'Purchase Price', 'Status'];
     const rows = filteredProducts.map(product => [
       product.name,
       product.barcode || '-',

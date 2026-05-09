@@ -127,7 +127,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
                 Service: r._id,
                 Quantity: r.totalQuantity,
                 'Total Amount': r.totalAmount,
-                'Avg Unit Price': r.avgUnitPrice,
+                'Avg Unit Sale Price': r.avgUnitPrice,
                 'Revenue Share %': data.summary.totalAmount
                   ? ((r.totalAmount / data.summary.totalAmount) * 100).toFixed(1)
                   : '0',
@@ -279,7 +279,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
 
                       {/* Avg unit price */}
                       <p className='text-xs text-muted-foreground mt-3'>
-                        Avg price: <span className='font-medium text-foreground'>{fmt(svc.avgUnitPrice)}</span>
+                        Avg sale price: <span className='font-medium text-foreground'>{fmt(svc.avgUnitPrice)}</span>
                       </p>
                     </CardContent>
                   </Card>
@@ -382,7 +382,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
                     <p className='text-lg font-bold text-emerald-600'>{fmt(selectedService.totalAmount)}</p>
                   </div>
                   <div className='rounded-lg border p-3 text-center'>
-                    <p className='text-xs text-muted-foreground mb-1'>Avg Price</p>
+                    <p className='text-xs text-muted-foreground mb-1'>Avg Sale Price</p>
                     <p className='text-lg font-bold'>{fmt(selectedService.avgUnitPrice)}</p>
                   </div>
                 </div>

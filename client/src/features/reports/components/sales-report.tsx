@@ -122,7 +122,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   Balance:        idx === 0 ? inv.balance : '',
                   Product:        item.name,
                   Qty:            item.quantity,
-                  'Unit Price':   item.unitPrice,
+                  'Unit Sale Price':   item.unitPrice,
                   Subtotal:       item.subtotal,
                 })
               })
@@ -140,7 +140,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               Balance:        '',
               Product:        '',
               Qty:            detailData.summary.totalItems,
-              'Unit Price':   '',
+              'Unit Sale Price':   '',
               Subtotal:       detailData.summary.totalSales,
             })
             const detailSheet = XLSX.utils.json_to_sheet(rows)
@@ -363,7 +363,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       <TableHead>Invoice #</TableHead>
                       <TableHead>Product</TableHead>
                       <TableHead className='text-right'>Qty</TableHead>
-                      <TableHead className='text-right'>Unit Price</TableHead>
+                      <TableHead className='text-right'>Unit Sale Price</TableHead>
                       <TableHead className='text-right'>Subtotal</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -628,7 +628,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                         <TableHead>#</TableHead>
                         <TableHead>Product</TableHead>
                         <TableHead className='text-right'>Qty</TableHead>
-                        <TableHead className='text-right'>Unit Price</TableHead>
+                        <TableHead className='text-right'>Unit Sale Price</TableHead>
                         <TableHead className='text-right'>Subtotal</TableHead>
                       </TableRow>
                     </TableHeader>

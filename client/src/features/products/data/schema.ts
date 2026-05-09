@@ -15,8 +15,8 @@ export const productSchema = z.object({
   name: z.string().min(1, { message: 'Product name is required.' }), // product name is required
   description: z.string().optional(), // product description is optional
   barcode: z.string().optional(), // product barcode is optional
-  price: z.number().min(0, { message: 'Price must be a positive number.' }), // product price as number
-  cost: z.number().min(0, { message: 'Cost must be a positive number.' }), // product cost as number
+  price: z.number().min(0, { message: 'Sale price must be a positive number.' }), // product price as number
+  cost: z.number().min(0, { message: 'Purchase price must be a positive number.' }), // product cost as number
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }), // stock quantity cannot be negative
   unit: z.string().optional(), // unit of measurement (pcs, kg, etc.)
   unitConversions: z.array(unitConversionSchema).optional(),

@@ -65,8 +65,8 @@ const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   description: z.string(),
   barcode: z.string().optional(),
-  price: z.number().min(1, { message: 'Price is required.' }),
-  cost: z.number().min(1, { message: 'Cost is required.' }),
+  price: z.number().min(1, { message: 'Sale price is required.' }),
+  cost: z.number().min(1, { message: 'Purchase price is required.' }),
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }),
   unit: z.string().optional(),
   unitConversions: z.array(z.object({
@@ -511,7 +511,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
               />
               </ProductFormSection>
 
-              <ProductFormSection title='Pricing & inventory' description='Costs, sell price, and stock on hand.'>
+              <ProductFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
               <FormField
                 control={form.control}
                 name='price'

@@ -111,7 +111,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
             <TableRow>
               <TableHead>{t('Product')}</TableHead>
               <TableHead>{t('Quantity')}</TableHead>
-              <TableHead>{t('Price')}</TableHead>
+              <TableHead>{t('price')}</TableHead>
               <TableHead className="text-right">{t('Total')}</TableHead>
             </TableRow>
           </TableHeader>

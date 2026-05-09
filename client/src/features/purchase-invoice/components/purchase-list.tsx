@@ -517,7 +517,7 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
             <TableRow>
               <TableHead>{t('Product')}</TableHead>
               <TableHead>{t('Quantity')}</TableHead>
-              <TableHead>{t('Unit Price')}</TableHead>
+              <TableHead>{t('unit_price')}</TableHead>
               <TableHead>{t('Total')}</TableHead>
             </TableRow>
           </TableHeader>

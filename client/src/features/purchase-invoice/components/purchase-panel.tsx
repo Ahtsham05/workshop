@@ -766,7 +766,7 @@ export default function PurchasePanel({
                                             <div className="font-medium text-sm truncate">{product.name}</div>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                               {product.barcode && <span>{product.barcode}</span>}
-                                              <span className="text-amber-600">Cost: Rs{product.cost?.toFixed(2) || '0.00'}</span>
+                                              <span className="text-amber-600">Purchase Price: Rs{product.cost?.toFixed(2) || '0.00'}</span>
                                               <span className={product.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
                                                 Stock: {product.stockQuantity}
                                               </span>
@@ -934,9 +934,9 @@ export default function PurchasePanel({
                       {/* × separator */}
                       <span className='text-muted-foreground/60 text-sm select-none'>×</span>
 
-                      {/* Cost Price Input */}
+                      {/* Purchase Price Input */}
                       <div className='flex flex-col gap-0.5'>
-                        <span className='text-[10px] text-muted-foreground leading-none'>Cost</span>
+                        <span className='text-[10px] text-muted-foreground leading-none'>Purchase Price</span>
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
                           <Input
@@ -953,9 +953,9 @@ export default function PurchasePanel({
                       {/* → separator */}
                       <span className='text-muted-foreground/60 text-sm select-none'>→</span>
 
-                      {/* Sell Price Input */}
+                      {/* Sale Price Input */}
                       <div className='flex flex-col gap-0.5'>
-                        <span className='text-[10px] text-blue-500 leading-none font-medium'>Sell</span>
+                        <span className='text-[10px] text-blue-500 leading-none font-medium'>Sale Price</span>
                         <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
                           <Input

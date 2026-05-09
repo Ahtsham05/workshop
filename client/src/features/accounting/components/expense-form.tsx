@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandSeparator } from '@/components/ui/command'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command'
 import { CalendarIcon, Loader2, Save, X, Plus, Check, ChevronsUpDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
@@ -141,10 +141,11 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0" align="start">
-                  <Command>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command className="max-h-80 overflow-hidden">
                     <CommandInput placeholder={t('Search or create category...')} />
                     <CommandEmpty>{t('No categories found')}</CommandEmpty>
+                    <CommandList className="max-h-52 overflow-y-auto">
                     <CommandGroup heading={t('Categories')}>
                       {categories.map((cat) => (
                         <CommandItem
@@ -189,6 +190,7 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
                         </Button>
                       </div>
                     </CommandGroup>
+                    </CommandList>
                   </Command>
                 </PopoverContent>
               </Popover>

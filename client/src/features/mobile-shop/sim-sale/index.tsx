@@ -198,7 +198,7 @@ export default function SimSalePage() {
 
   const handleSubmit = async () => {
     if (!form.simAmount || Number(form.simAmount) < 0) {
-      toast.error('Please enter SIM cost')
+      toast.error('Please enter SIM purchase price')
       return
     }
     if (!form.saleAmount || Number(form.saleAmount) <= 0) {
@@ -246,9 +246,9 @@ export default function SimSalePage() {
           { label: 'Load A/C', value: record.walletType || '—' },
           { label: 'Customer', value: record.customerName || '—' },
           { label: 'Mobile', value: record.customerMobile || '—' },
-          { label: 'Cost (SIM)', value: fmtRs(record.simAmount) },
+          { label: 'Purchase Price (SIM)', value: fmtRs(record.simAmount) },
           { label: 'Load amount', value: fmtRs(record.loadAmount) },
-          { label: 'Price (sale)', value: fmtRs(record.saleAmount) },
+          { label: 'Sale Price', value: fmtRs(record.saleAmount) },
           {
             label: 'Payment',
             value: `${record.paymentMethod}${record.paymentWalletType ? ` (${record.paymentWalletType})` : ''}`,
@@ -483,9 +483,9 @@ export default function SimSalePage() {
 
               {/* Right-side amounts */}
               <div className='mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-                {/* SIM cost (purchase / inventory cost) */}
+                {/* SIM purchase price (inventory cost) */}
                 <div className='space-y-2'>
-                  <Label>Cost (SIM)</Label>
+                  <Label>Purchase Price (SIM)</Label>
                   <Input
                     type='number'
                     min={0}
@@ -493,7 +493,7 @@ export default function SimSalePage() {
                     value={form.simAmount}
                     onChange={e => handleChange('simAmount', e.target.value)}
                   />
-                  <p className='text-xs text-muted-foreground'>Your cost per unit (defaults from product cost).</p>
+                  <p className='text-xs text-muted-foreground'>Your purchase price per unit (defaults from product purchase price).</p>
                 </div>
 
                 {/* Load Amount */}
@@ -521,7 +521,7 @@ export default function SimSalePage() {
 
                 {/* Sale price to customer */}
                 <div className='space-y-2'>
-                  <Label>Price (sale)</Label>
+                  <Label>Sale Price</Label>
                   <Input
                     type='number'
                     min={0.01}
@@ -529,7 +529,7 @@ export default function SimSalePage() {
                     value={form.saleAmount}
                     onChange={e => handleChange('saleAmount', e.target.value)}
                   />
-                  <p className='text-xs text-muted-foreground'>Selling price (defaults from product retail price).</p>
+                  <p className='text-xs text-muted-foreground'>Sale price (defaults from product retail price).</p>
                 </div>
 
                 {/* Commission (read-only) */}
@@ -577,10 +577,10 @@ export default function SimSalePage() {
                         <TableHead>Item</TableHead>
                         <TableHead>Load A/C</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead>Cost</TableHead>
+                        <TableHead>Purchase Price</TableHead>
                         <TableHead>Load</TableHead>
                         <TableHead>Cost + load</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Sale Price</TableHead>
                         <TableHead>Commission</TableHead>
                         <TableHead>Payment Method</TableHead>
                         <TableHead>Payment Wallet</TableHead>
