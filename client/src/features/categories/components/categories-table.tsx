@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { ReactNode } from 'react'
 import {
   ColumnFiltersState,
   RowData,
@@ -27,6 +28,7 @@ import { useLanguage } from '@/context/language-context'
 import { Category } from '@/stores/category.slice'
 import { useCategoryColumns } from './categories-columns'
 import { DataTablePagination } from './data-table-pagination'
+import { DataTableToolbar } from './data-table-toolbar'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -38,9 +40,10 @@ declare module '@tanstack/react-table' {
 interface CategoriesTableProps {
   categories: Category[]
   paggination: any
+  toolbarLeading?: ReactNode
 }
 
-export function CategoriesTable({ categories, paggination }: CategoriesTableProps) {
+export function CategoriesTable({ categories, paggination, toolbarLeading }: CategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -71,6 +74,7 @@ export function CategoriesTable({ categories, paggination }: CategoriesTableProp
 
   return (
     <div className="space-y-4">
+      <DataTableToolbar table={table} leading={toolbarLeading} />
       <div className="rounded-md border">
         <Table>
           <TableHeader>

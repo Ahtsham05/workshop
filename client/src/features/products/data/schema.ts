@@ -13,6 +13,7 @@ export const productSchema = z.object({
   id: z.string().optional(),
   _id: z.string().optional(), // optional, for existing products (not required when adding)
   name: z.string().min(1, { message: 'Product name is required.' }), // product name is required
+  nameUrdu: z.string().optional(),
   description: z.string().optional(), // product description is optional
   barcode: z.string().optional(), // product barcode is optional
   price: z.number().min(0, { message: 'Sale price must be a positive number.' }), // product price as number

@@ -12,6 +12,8 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { ProductDetailDialog } from './product-detail-dialog'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 interface ProductReportProps {
   startDate: string
@@ -20,7 +22,7 @@ interface ProductReportProps {
 
 export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetProductReportQuery({ startDate, endDate })
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
 
@@ -33,7 +35,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
           }
 
           const excelData = data.data.map((product) => ({
-            [t('product')]: product.productName,
+            [t('product')]: reportEntityName(language, product.productName, product.productNameUrdu),
             [t('category')]: product.category || 'N/A',
             [t('quantity_sold')]: product.totalQuantitySold,
             [t('revenue')]: product.totalRevenue,
@@ -151,9 +153,11 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.data?.map((product) => (
+                {data?.data?.map((product) => {
+                  const label = reportEntityName(language, product.productName, product.productNameUrdu)
+                  return (
                   <TableRow key={product._id}>
-                    <TableCell className='font-medium'>{product.productName}</TableCell>
+                    <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
                     <TableCell className='text-right'>{product.totalQuantitySold} {product.unit || 'pcs'}</TableCell>
                     <TableCell className='text-right'>{formatCurrency(product.totalRevenue)}</TableCell>
                     <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>
@@ -172,7 +176,8 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </CardContent>

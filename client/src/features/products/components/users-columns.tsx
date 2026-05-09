@@ -8,7 +8,7 @@ import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
-import { getTextClasses } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
 
 export const useProductColumns = (): ColumnDef<Product>[] => {
@@ -41,20 +41,36 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     header: ({ column }) => <DataTableColumnHeader column={column} title='product_name' />,
     cell: ({ row }) => {
       const product = row.original
+      const urdu = product.nameUrdu?.trim()
       return (
-        <div className="flex items-center gap-2">
+        <div className='flex min-w-0 items-center gap-2'>
           {product.image?.url ? (
-            <img 
-              src={product.image.url} 
+            <img
+              src={product.image.url}
               alt={product.name}
-              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              className='h-8 w-8 flex-shrink-0 rounded-full object-cover'
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center flex-shrink-0">
-              <Package className="h-4 w-4 text-gray-400" />
+            <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200'>
+              <Package className='h-4 w-4 text-gray-400' />
             </div>
           )}
-          <LongText className={getTextClasses(row.getValue('name'), 'max-w-36')}>{row.getValue('name')}</LongText>
+          <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+            <LongText className={getTextClasses(row.getValue('name'), 'max-w-36 shrink-0')}>
+              {row.getValue('name')}
+            </LongText>
+            {urdu ? (
+              <span
+                dir='rtl'
+                className={cn(
+                  getUrduSecondaryNameClasses(urdu),
+                  'min-w-0 max-w-[min(12rem,100%)] truncate sm:max-w-[14rem]',
+                )}
+              >
+                {urdu}
+              </span>
+            ) : null}
+          </div>
         </div>
       )
     },

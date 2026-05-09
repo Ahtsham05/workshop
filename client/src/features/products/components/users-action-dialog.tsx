@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -60,9 +60,12 @@ import { Camera } from 'lucide-react'
 import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { EntityFormSection } from '@/components/entity-form-section'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
+  nameUrdu: z.string().optional(),
   description: z.string(),
   barcode: z.string().optional(),
   price: z.number().min(1, { message: 'Sale price is required.' }),
@@ -91,28 +94,6 @@ const formSchema = z.object({
 })
 
 type productForm = z.infer<typeof formSchema>
-
-function ProductFormSection({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: ReactNode
-}) {
-  return (
-    <section className='rounded-xl border border-border/80 bg-gradient-to-b from-card/80 to-muted/15 p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.05] sm:p-5'>
-      <header className='mb-4 space-y-1 border-b border-border/60 pb-3'>
-        <h3 className='text-sm font-semibold tracking-tight text-foreground'>{title}</h3>
-        {description ? (
-          <p className='text-xs leading-relaxed text-muted-foreground'>{description}</p>
-        ) : null}
-      </header>
-      <div className='space-y-4'>{children}</div>
-    </section>
-  )
-}
 
 interface Props {
   currentRow?: any
@@ -147,6 +128,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
     defaultValues: isEdit
       ? {
         name: currentRow?.name || '',
+        nameUrdu: currentRow?.nameUrdu || '',
         description: currentRow?.description || '',
         barcode: currentRow?.barcode || '',
         price: currentRow?.price || 0,
@@ -159,6 +141,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
       }
       : {
         name: '',
+        nameUrdu: '',
         description: '',
         barcode: '',
         stockQuantity: 0,
@@ -170,6 +153,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         categories: [],
       },
   })
+
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
 
   const onSubmit = async (values: productForm) => {
     if (isEdit) {
@@ -231,7 +216,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
         <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
             <form id='user-form' onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
-              <ProductFormSection
+              <EntityFormSection
                 title={isEdit ? 'Product details' : 'New product'}
                 description='Name, description, and categories shoppers see in menus and lists.'
               >
@@ -254,6 +239,30 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                       />
                     </FormControl>
                     <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='nameUrdu'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
+                      {t('name_in_urdu')}
+                    </FormLabel>
+                    <div className='col-span-4 space-y-1'>
+                      <FormControl>
+                        <Input
+                          dir='rtl'
+                          placeholder={t('name_in_urdu_placeholder')}
+                          autoComplete='off'
+                          className='text-right'
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                      <FormMessage />
+                    </div>
                   </FormItem>
                 )}
               />
@@ -418,100 +427,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   </FormItem>
                 )}
               />
-              </ProductFormSection>
+              </EntityFormSection>
 
-              <ProductFormSection title='Barcode & scanning'>
-              <FormField
-                control={form.control}
-                name='barcode'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right items-start mt-3'>
-                      {t('barcode')}
-                    </FormLabel>
-                    <FormControl>
-                      <div className='col-span-4 space-y-2'>
-                        <div className="flex gap-2">
-                          <InlineBarcodeInput
-                            onBarcodeEntered={(barcode) => {
-                              field.onChange(barcode)
-                            }}
-                            placeholder={t('enter_or_scan_barcode')}
-                            value={field.value}
-                            onChange={field.onChange}
-                            className="flex-1"
-                          />
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={generateBarcode}
-                            className="whitespace-nowrap"
-                          >
-                            {t('generate')}
-                          </Button>
-                        </div>
-                        <div className="text-center">
-                          <MobileCameraScanner
-                            onScanResult={(barcode) => {
-                              field.onChange(barcode)
-                            }}
-                            trigger={
-                              <Button type="button" variant="outline" size="sm" className="w-full text-xs sm:text-sm">
-                                <Camera className="h-4 w-4 mr-2 text-xs sm:text-sm" />
-                                {t('scan_with_camera')}
-                              </Button>
-                            }
-                          />
-                        </div>
-                      </div>
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              </ProductFormSection>
-
-              <ProductFormSection
-                title='Product photo'
-                description='Optional — fetch a stock match from the product name, or upload your own.'
-              >
-              <FormField
-                control={form.control}
-                name='image'
-                render={({ field }) => (
-                  <FormItem className='space-y-0'>
-                    <FormControl>
-                      <ImageUpload
-                        key={`product-image-${imageKey}`}
-                        onImageUpload={(imageData) => {
-                          setImageRemoved(false)
-                          field.onChange(imageData)
-                          setImageKey((k) => k + 1)
-                        }}
-                        onImageRemove={() => {
-                          setImageRemoved(true)
-                          field.onChange(undefined)
-                          form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
-                          form.resetField('image', { defaultValue: undefined })
-                          form.trigger('image')
-                          setImageKey((prev) => prev + 1)
-                        }}
-                        currentImageUrl={imageRemoved ? undefined : field.value?.url}
-                        className='w-full'
-                        layout='comfortable'
-                        autoSearchFromText={nameWatch}
-                        getSearchQuery={() => String(form.getValues('name') ?? '').trim()}
-                        searchContext='product'
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              </ProductFormSection>
-
-              <ProductFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
+              <EntityFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
               <FormField
                 control={form.control}
                 name='price'
@@ -738,7 +656,95 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
                   }}
                 />
               )}
-              </ProductFormSection>
+              </EntityFormSection>
+              <EntityFormSection title='Barcode & scanning'>
+              <FormField
+                control={form.control}
+                name='barcode'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 md:text-right items-start mt-3'>
+                      {t('barcode')}
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4 space-y-2'>
+                        <div className="flex gap-2">
+                          <InlineBarcodeInput
+                            onBarcodeEntered={(barcode) => {
+                              field.onChange(barcode)
+                            }}
+                            placeholder={t('enter_or_scan_barcode')}
+                            value={field.value}
+                            onChange={field.onChange}
+                            className="flex-1"
+                          />
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={generateBarcode}
+                            className="whitespace-nowrap"
+                          >
+                            {t('generate')}
+                          </Button>
+                        </div>
+                        <div className="text-center">
+                          <MobileCameraScanner
+                            onScanResult={(barcode) => {
+                              field.onChange(barcode)
+                            }}
+                            trigger={
+                              <Button type="button" variant="outline" size="sm" className="w-full text-xs sm:text-sm">
+                                <Camera className="h-4 w-4 mr-2 text-xs sm:text-sm" />
+                                {t('scan_with_camera')}
+                              </Button>
+                            }
+                          />
+                        </div>
+                      </div>
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              </EntityFormSection>
+
+              <EntityFormSection title={t('product_photo_section_title')}>
+              <FormField
+                control={form.control}
+                name='image'
+                render={({ field }) => (
+                  <FormItem className='space-y-0'>
+                    <FormControl>
+                      <ImageUpload
+                        key={`product-image-${imageKey}`}
+                        onImageUpload={(imageData) => {
+                          setImageRemoved(false)
+                          field.onChange(imageData)
+                          setImageKey((k) => k + 1)
+                        }}
+                        onImageRemove={() => {
+                          setImageRemoved(true)
+                          field.onChange(undefined)
+                          form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
+                          form.resetField('image', { defaultValue: undefined })
+                          form.trigger('image')
+                          setImageKey((prev) => prev + 1)
+                        }}
+                        currentImageUrl={imageRemoved ? undefined : field.value?.url}
+                        className='w-full'
+                        layout='comfortable'
+                        autoSearchFromText={nameWatch}
+                        getSearchQuery={() => String(form.getValues('name') ?? '').trim()}
+                        searchContext='product'
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              </EntityFormSection>
+
             </form>
           </Form>
         </div>

@@ -39,7 +39,7 @@ export function DataTableViewOptions<TData>({
         <Button
           variant='outline'
           size='sm'
-          className={cn('ml-auto hidden h-8 lg:flex', isUrdu && 'flex-row-reverse')}
+          className={cn('h-8 shrink-0', isUrdu && 'flex-row-reverse')}
         >
           <MixerHorizontalIcon className={cn('h-4 w-4', isUrdu ? 'ml-2' : 'mr-2')} />
           {t('view')}

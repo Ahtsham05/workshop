@@ -1,6 +1,9 @@
-import { ChangeEvent, useState } from 'react'
+import { ChangeEvent, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation, Branch, CreateBranchRequest } from '@/stores/branch.api'
+import { z } from 'zod'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation, Branch } from '@/stores/branch.api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -16,8 +19,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +46,25 @@ import {
 } from '@/components/ui/tooltip'
 import { usePlanLimits } from '@/hooks/use-plan-limits'
 import { useGetMyOrganizationQuery, useUpdateOrganizationMutation } from '@/stores/organization.api'
+import { fetchUrduNameSuggestion, useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { cn } from '@/lib/utils'
+import { getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+
+const branchDialogSchema = z.object({
+  name: z.string().min(1, 'Branch name is required'),
+  nameUrdu: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  invoiceNote: z.string().optional(),
+  location: z.object({
+    address: z.string().optional(),
+    addressUrdu: z.string().optional(),
+    city: z.string().optional(),
+    country: z.string().optional(),
+  }),
+})
+
+type BranchDialogValues = z.infer<typeof branchDialogSchema>
 
 export default function BranchesPage() {
   const [page] = useState(1)
@@ -43,20 +72,28 @@ export default function BranchesPage() {
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null)
-  const [formData, setFormData] = useState<CreateBranchRequest>({
-    name: '',
-    location: { address: '', city: '', country: '' },
-    phone: '',
-    email: '',
-    invoiceNote: '',
+
+  const branchForm = useForm<BranchDialogValues>({
+    resolver: zodResolver(branchDialogSchema),
+    defaultValues: {
+      name: '',
+      nameUrdu: '',
+      location: { address: '', addressUrdu: '', city: '', country: '' },
+      phone: '',
+      email: '',
+      invoiceNote: '',
+    },
   })
+
+  useAutoUrduNameFromEnglish(branchForm, 'name', 'nameUrdu')
+  useAutoUrduNameFromEnglish(branchForm, 'location.address', 'location.addressUrdu')
 
   const { data, isLoading, refetch } = useGetBranchesQuery({ page, limit: 20 })
   const [createBranch, { isLoading: isCreating }] = useCreateBranchMutation()
   const [updateBranch, { isLoading: isUpdating }] = useUpdateBranchMutation()
   const [deleteBranch, { isLoading: isDeleting }] = useDeleteBranchMutation()
   const { data: orgData } = useGetMyOrganizationQuery()
-  const [updateOrganization, { isLoading: isUpdatingLogo }] = useUpdateOrganizationMutation()
+  const [updateOrganization, { isLoading: isUpdatingOrganization }] = useUpdateOrganizationMutation()
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
@@ -68,21 +105,59 @@ export default function BranchesPage() {
     isLoading: limitsLoading,
   } = usePlanLimits()
 
+  useEffect(() => {
+    if (!dialogOpen) return
+
+    if (selectedBranch) {
+      branchForm.reset({
+        name: selectedBranch.name,
+        nameUrdu: selectedBranch.nameUrdu || '',
+        location: {
+          address: selectedBranch.location?.address || '',
+          addressUrdu: selectedBranch.location?.addressUrdu || '',
+          city: selectedBranch.location?.city || '',
+          country: selectedBranch.location?.country || '',
+        },
+        phone: selectedBranch.phone || '',
+        email: selectedBranch.email || '',
+        invoiceNote: selectedBranch.invoiceNote || '',
+      })
+    } else {
+      branchForm.reset({
+        name: '',
+        nameUrdu: '',
+        location: { address: '', addressUrdu: '', city: '', country: '' },
+        phone: '',
+        email: '',
+        invoiceNote: '',
+      })
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      if (cancelled) return
+      const name = String(branchForm.getValues('name') ?? '').trim()
+      const urdu = String(branchForm.getValues('nameUrdu') ?? '').trim()
+      if (name.length < 2 || urdu) return
+      const suggestion = await fetchUrduNameSuggestion(name)
+      if (!cancelled && suggestion) {
+        branchForm.setValue('nameUrdu', suggestion)
+      }
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [dialogOpen, selectedBranch?.id])
+
   const handleCreate = () => {
     setSelectedBranch(null)
-    setFormData({ name: '', location: { address: '', city: '', country: '' }, phone: '', email: '', invoiceNote: '' })
     setDialogOpen(true)
   }
 
   const handleEdit = (branch: Branch) => {
     setSelectedBranch(branch)
-    setFormData({
-      name: branch.name,
-      location: branch.location || { address: '', city: '', country: '' },
-      phone: branch.phone || '',
-      email: branch.email || '',
-      invoiceNote: branch.invoiceNote || '',
-    })
     setDialogOpen(true)
   }
 
@@ -91,17 +166,13 @@ export default function BranchesPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleSubmit = async () => {
-    if (!formData.name.trim()) {
-      toast.error('Branch name is required')
-      return
-    }
+  const onBranchDialogSubmit = async (values: BranchDialogValues) => {
     try {
       if (selectedBranch) {
-        await updateBranch({ branchId: selectedBranch.id, body: formData }).unwrap()
+        await updateBranch({ branchId: selectedBranch.id, body: values }).unwrap()
         toast.success('Branch updated successfully')
       } else {
-        await createBranch(formData).unwrap()
+        await createBranch(values).unwrap()
         toast.success('Branch created successfully')
       }
       setDialogOpen(false)
@@ -257,11 +328,11 @@ export default function BranchesPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={handleSaveSharedLogo} disabled={!logoFile || isUpdatingLogo}>
-                {isUpdatingLogo ? 'Saving...' : 'Save Shared Logo'}
+              <Button onClick={handleSaveSharedLogo} disabled={!logoFile || isUpdatingOrganization}>
+                {isUpdatingOrganization ? 'Saving...' : 'Save Shared Logo'}
               </Button>
               {orgData?.logo?.url && (
-                <Button variant="destructive" onClick={handleRemoveSharedLogo} disabled={isUpdatingLogo}>
+                <Button variant="destructive" onClick={handleRemoveSharedLogo} disabled={isUpdatingOrganization}>
                   Remove Logo
                 </Button>
               )}
@@ -299,7 +370,20 @@ export default function BranchesPage() {
               <TableBody>
                 {branches.map((branch) => (
                   <TableRow key={branch.id}>
-                    <TableCell className="font-medium">{branch.name}</TableCell>
+                    <TableCell className="font-medium max-w-[14rem]">
+                      <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                        <span className="shrink-0">{branch.name}</span>
+                        {branch.nameUrdu?.trim() ? (
+                          <span
+                            className={cn('min-w-0 truncate text-sm rtl', getUrduSecondaryNameClasses(branch.nameUrdu))}
+                            dir="rtl"
+                            title={branch.nameUrdu.trim()}
+                          >
+                            {branch.nameUrdu.trim()}
+                          </span>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {branch.location?.city || branch.location?.country ? (
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -352,86 +436,166 @@ export default function BranchesPage() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedBranch ? 'Edit Branch' : 'Create Branch'}</DialogTitle>
             <DialogDescription>
               {selectedBranch ? 'Update branch details' : 'Add a new branch to your organization'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Branch Name *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g. Downtown Branch"
+          <Form {...branchForm}>
+            <form id="branch-dialog-form" onSubmit={branchForm.handleSubmit(onBranchDialogSubmit)} className="space-y-4">
+              <FormField
+                control={branchForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Branch Name *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Downtown Branch" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>City</Label>
-                <Input
-                  value={formData.location?.city || ''}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, location: { ...prev.location, city: e.target.value } }))}
-                  placeholder="City"
-                />
-              </div>
-              <div>
-                <Label>Country</Label>
-                <Input
-                  value={formData.location?.country || ''}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, location: { ...prev.location, country: e.target.value } }))}
-                  placeholder="Country"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Address</Label>
-              <Input
-                value={formData.location?.address || ''}
-                onChange={(e) => setFormData((prev) => ({ ...prev, location: { ...prev.location, address: e.target.value } }))}
-                placeholder="Street address"
+              <FormField
+                control={branchForm.control}
+                name="nameUrdu"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Branch Name (Urdu)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  value={formData.phone || ''}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="+1 555 000 0000"
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  value={formData.email || ''}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="branch@company.com"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="branch-invoice-note">Invoice / receipt note</Label>
-              <Textarea
-                id="branch-invoice-note"
-                value={formData.invoiceNote || ''}
-                onChange={(e) => setFormData((prev) => ({ ...prev, invoiceNote: e.target.value }))}
-                placeholder="Optional message printed at the bottom of invoices and receipts for this branch (e.g. thank-you, terms, return policy)."
-                rows={4}
-                className="resize-y min-h-[88px]"
+              <FormField
+                control={branchForm.control}
+                name="location.address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Street, area…"
+                        rows={2}
+                        className="resize-y min-h-[72px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Urdu is suggested automatically when you type English (you can edit it below).
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Shown on sales invoices, purchase slips, mobile shop receipts, repair tickets, bills, and restaurant prints when this branch is active.
-              </p>
-            </div>
-          </div>
+              <FormField
+                control={branchForm.control}
+                name="location.addressUrdu"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address (Urdu)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="اردو میں پتہ"
+                        rows={2}
+                        dir="rtl"
+                        className="resize-y min-h-[72px] text-right"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={branchForm.control}
+                  name="location.city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl>
+                        <Input placeholder="City" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={branchForm.control}
+                  name="location.country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Country</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Country" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={branchForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+1 555 000 0000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={branchForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="branch@company.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={branchForm.control}
+                name="invoiceNote"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="branch-invoice-note">Invoice / receipt note</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        id="branch-invoice-note"
+                        placeholder="Optional message printed at the bottom of invoices and receipts for this branch (e.g. thank-you, terms, return policy)."
+                        rows={4}
+                        className="resize-y min-h-[88px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Shown on sales invoices, purchase slips, mobile shop receipts, repair tickets, bills, and restaurant prints when this branch is active.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </form>
+          </Form>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isCreating || isUpdating}>
+            <Button type="submit" form="branch-dialog-form" disabled={isCreating || isUpdating}>
               {selectedBranch ? 'Save Changes' : 'Create Branch'}
             </Button>
           </DialogFooter>

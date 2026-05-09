@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote } from 'lucide-react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
-import { Invoice } from '../index'
+import { Invoice, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
@@ -19,15 +19,13 @@ import SmartInput from '@/components/smart-input.tsx'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
-import { getTextClasses } from '@/utils/urdu-text-utils'
+import { cn } from '@/lib/utils'
+import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
-import { useDispatch, useSelector } from 'react-redux'
-import { AppDispatch, RootState } from '@/stores/store'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { useUpdateLanguageMutation } from '@/stores/user-preferences.api'
-import { setPreferredLanguage } from '@/stores/auth.slice'
-import { resolveInvoiceLanguage, type InvoiceLanguage } from '../utils/language'
 import {
   Command,
   CommandEmpty,
@@ -42,10 +40,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
+import { BilingualName } from '@/components/bilingual-name'
+import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
-
-const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -61,6 +59,7 @@ interface InvoicePanelProps {
   setTaxRate: (rate: number) => void
   customers: any[]
   customersLoading?: boolean
+  productsLoading?: boolean
   products: any[]
   setProducts: React.Dispatch<React.SetStateAction<any[]>>
   calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
@@ -81,6 +80,7 @@ export function InvoicePanel({
   // setTaxRate,
   customers,
   customersLoading = false,
+  productsLoading = false,
   products,
   setProducts,
   calculateTotals,
@@ -90,7 +90,6 @@ export function InvoicePanel({
   editingInvoice
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
-  const dispatch = useDispatch<AppDispatch>()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
   const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
   const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
@@ -108,6 +107,25 @@ export function InvoicePanel({
   // Refs for quantity inputs to focus after product selection
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const itemsScrollRef = useRef<HTMLDivElement>(null)
+  const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (isEditing) {
+      autoOpenedInvoiceItemIdRef.current = null
+      return
+    }
+    const first = invoice.items[0]
+    if (
+      invoice.items.length === 1 &&
+      first?.isManualEntry &&
+      !first?.productId &&
+      first?.id &&
+      autoOpenedInvoiceItemIdRef.current !== first.id
+    ) {
+      autoOpenedInvoiceItemIdRef.current = first.id
+      queueMicrotask(() => setProductSelectOpen(first.id))
+    }
+  }, [invoice.items, isEditing])
 
   // Auto-scroll items list when items change
   useEffect(() => {
@@ -123,7 +141,6 @@ export function InvoicePanel({
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
-  const [updateLanguagePreference, { isLoading: isUpdatingLanguage }] = useUpdateLanguageMutation()
   
   // Fetch active branch data for invoice printing
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -132,11 +149,8 @@ export function InvoicePanel({
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
-  const resolvedInvoiceLanguage = resolveInvoiceLanguage({
-    language: invoice.language,
-    isUrduOnly: invoice.isUrduOnly,
-    userPreferredLanguage: preferredLanguage,
-  })
+
+  const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   // Print functionality using utility
   const printInvoice = useCallback((invoiceData: any) => {
     try {
@@ -147,6 +161,7 @@ export function InvoicePanel({
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
+          nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.quantity * item.unitPrice
@@ -161,13 +176,15 @@ export function InvoicePanel({
         total: invoiceData.total,
         paidAmount: invoiceData.paidAmount,
         balance: invoiceData.balance,
-        dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
         companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
@@ -178,9 +195,18 @@ export function InvoicePanel({
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
         invoiceNote: branchData?.invoiceNote,
+        customerNameUrdu: (() => {
+          const cid = invoiceData.customerId ?? invoice.customerId
+          if (!cid || cid === 'walk-in') return undefined
+          if (typeof cid === 'object' && cid != null && 'nameUrdu' in cid) {
+            const u = String((cid as { nameUrdu?: string }).nameUrdu || '').trim()
+            return u || undefined
+          }
+          return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
+        })(),
+        printInUrdu: getInvoicePrintInUrdu(),
       }
 
-      // Force Urdu/RTL for print
       const htmlContent = generateInvoiceHTML(printData)
       openPrintWindow(htmlContent)
       
@@ -194,7 +220,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, branchData, customerBalance, preferredLanguage, orgData])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback((invoiceData: any) => {
@@ -206,6 +232,7 @@ export function InvoicePanel({
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
+          nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.quantity * item.unitPrice
@@ -220,13 +247,15 @@ export function InvoicePanel({
         total: invoiceData.total,
         paidAmount: invoiceData.paidAmount,
         balance: invoiceData.balance,
-        dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoiceData.deliveryCharge,
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
         companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
@@ -237,9 +266,18 @@ export function InvoicePanel({
         isUrduOnly: invoiceData.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
         invoiceNote: branchData?.invoiceNote,
+        customerNameUrdu: (() => {
+          const cid = invoiceData.customerId ?? invoice.customerId
+          if (!cid || cid === 'walk-in') return undefined
+          if (typeof cid === 'object' && cid != null && 'nameUrdu' in cid) {
+            const u = String((cid as { nameUrdu?: string }).nameUrdu || '').trim()
+            return u || undefined
+          }
+          return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
+        })(),
+        printInUrdu: getInvoicePrintInUrdu(),
       }
 
-      // Force Urdu/RTL for print
       const htmlContent = generateA4InvoiceHTML(printData)
       openA4PrintWindow(htmlContent)
       
@@ -253,60 +291,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, branchData, preferredLanguage, orgData])
-
-  const handleInvoiceLanguageChange = useCallback(async (language: InvoiceLanguage) => {
-    const previousPreferredLanguage = preferredLanguage as InvoiceLanguage
-    const previousInvoiceLanguage = (invoice.language || preferredLanguage) as InvoiceLanguage
-
-    setInvoice((prev) => ({
-      ...prev,
-      language,
-    }))
-    dispatch(setPreferredLanguage(language))
-
-    try {
-      await updateLanguagePreference({ language }).unwrap()
-    } catch (error) {
-      dispatch(setPreferredLanguage(previousPreferredLanguage))
-      setInvoice((prev) => ({
-        ...prev,
-        language: previousInvoiceLanguage,
-      }))
-      toast.error(t('Failed to update invoice language preference'))
-    }
-  }, [dispatch, invoice.language, preferredLanguage, setInvoice, t, updateLanguagePreference])
-
-  const handleUrduOnlyToggle = useCallback(async (checked: boolean) => {
-    const previousPreferredLanguage = preferredLanguage as InvoiceLanguage
-    const previousInvoiceLanguage = (invoice.language || preferredLanguage) as InvoiceLanguage
-    const previousIsUrduOnly = Boolean(invoice.isUrduOnly)
-
-    const nextLanguage: InvoiceLanguage = checked
-      ? 'ur'
-      : ((invoice.language || preferredLanguage || 'en') as InvoiceLanguage)
-
-    setInvoice((prev) => ({
-      ...prev,
-      isUrduOnly: checked,
-      language: checked ? 'ur' : prev.language || preferredLanguage,
-    }))
-    localStorage.setItem(INVOICE_URDU_ONLY_PREF_KEY, checked ? 'true' : 'false')
-    dispatch(setPreferredLanguage(nextLanguage))
-
-    try {
-      await updateLanguagePreference({ language: nextLanguage }).unwrap()
-    } catch (error) {
-      dispatch(setPreferredLanguage(previousPreferredLanguage))
-      localStorage.setItem(INVOICE_URDU_ONLY_PREF_KEY, previousIsUrduOnly ? 'true' : 'false')
-      setInvoice((prev) => ({
-        ...prev,
-        isUrduOnly: previousIsUrduOnly,
-        language: previousInvoiceLanguage,
-      }))
-      toast.error(t('Failed to update invoice language preference'))
-    }
-  }, [dispatch, invoice.isUrduOnly, invoice.language, preferredLanguage, setInvoice, t, updateLanguagePreference])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -324,16 +309,6 @@ export function InvoicePanel({
     }
   }, [isEditing, editingInvoice, setInvoice])
 
-  // Auto-set due date when invoice type changes to credit
-  useEffect(() => {
-    if (invoice.type === 'credit' && !invoice.dueDate) {
-      setInvoice(prev => ({ 
-        ...prev, 
-        dueDate: new Date().toISOString().split('T')[0] 
-      }))
-    }
-  }, [invoice.type, setInvoice])
-
   // Handle walk-in customer business rules
   useEffect(() => {
     if (invoice.customerId === 'walk-in') {
@@ -346,18 +321,6 @@ export function InvoicePanel({
       }
     }
   }, [invoice.customerId, invoice.type, setInvoice])
-
-  // Set default date when customer is selected or type is pending
-  useEffect(() => {
-    if ((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') {
-      if (!invoice.dueDate) {
-        setInvoice(prev => ({ 
-          ...prev, 
-          dueDate: new Date().toISOString().split('T')[0] 
-        }))
-      }
-    }
-  }, [invoice.customerId, invoice.type, invoice.dueDate, setInvoice])
 
   // Fetch customer balance when customer is selected
   useEffect(() => {
@@ -382,23 +345,21 @@ export function InvoicePanel({
     fetchCustomerBalance()
   }, [invoice.customerId])
 
-  // Filter customers by name or phone number
-  const filteredCustomers = customers.filter(customer => {
-    if (!customerSearchQuery) return true
-    const query = customerSearchQuery.toLowerCase()
-    const name = customer.name?.toLowerCase() || ''
-    const phone = customer.phone?.toLowerCase() || ''
-    return name.includes(query) || phone.includes(query)
-  })
+  // Filter customers by name, Urdu name, or phone
+  const filteredCustomers = customers.filter((customer) =>
+    matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
+  )
 
-  // Filter products by name or barcode
-  const filteredProducts = products.filter(product => {
-    if (!productSearchQuery) return true
-    const query = productSearchQuery.toLowerCase()
-    const name = product.name?.toLowerCase() || ''
-    const barcode = product.barcode?.toLowerCase() || ''
-    return name.includes(query) || barcode.includes(query)
-  })
+  // Filter products by name, Urdu name, barcode, description (description may be non-string from API)
+  const filteredProducts = products.filter((product) =>
+    matchesBilingualSearch(
+      productSearchQuery,
+      product.name,
+      product.nameUrdu,
+      product.barcode,
+      typeof product.description === 'string' ? product.description : undefined,
+    ),
+  )
 
   // Handle product selection for manual entries
   const handleProductSelect = useCallback((itemId: string, product: any) => {
@@ -464,6 +425,7 @@ export function InvoicePanel({
             ...item, 
             productId: productId,
             name: product.name,
+            nameUrdu: product.nameUrdu,
             image: product.image,
             unit: lineValues.lineUnit,
             conversionFactor: lineValues.conversionFactor,
@@ -549,24 +511,13 @@ export function InvoicePanel({
         setProductSelectOpen(nextEmptyRow.id)
       } else {
         // Add a new empty row and open its product selector
-        const newItemId = `manual-${Date.now()}`
-        setInvoice(prev => ({
+        const newItem = createEmptyManualInvoiceItem()
+        setInvoice((prev) => ({
           ...prev,
-          items: [...prev.items, {
-            id: newItemId,
-            productId: '',
-            name: '',
-            image: undefined,
-            quantity: 1,
-            unitPrice: 0,
-            cost: 0,
-            subtotal: 0,
-            profit: 0,
-            isManualEntry: true
-          }]
+          items: [...prev.items, newItem],
         }))
         setTimeout(() => {
-          setProductSelectOpen(newItemId)
+          setProductSelectOpen(newItem.id)
         }, 150)
       }
     }
@@ -635,6 +586,7 @@ export function InvoicePanel({
         items: validItems.map(item => ({
           productId: item.productId,
           name: item.name,
+          nameUrdu: item.nameUrdu,
           image: item.image,
           quantity: item.quantity,
           unit: item.unit,
@@ -658,7 +610,7 @@ export function InvoicePanel({
         totalCost: invoice.totalCost,
         paidAmount: invoice.paidAmount,
         balance: invoice.balance,
-        dueDate: invoice.dueDate,
+        notes: invoice.notes,
         deliveryCharge: invoice.deliveryCharge,
         serviceCharge: invoice.serviceCharge,
         roundingAdjustment: invoice.roundingAdjustment,
@@ -668,7 +620,6 @@ export function InvoicePanel({
         loyaltyPoints: invoice.loyaltyPoints,
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
-        notes: invoice.notes,
         invoiceDate: invoice.invoiceDate,
         language: invoice.language,
         isUrduOnly: invoice.isUrduOnly,
@@ -730,6 +681,17 @@ export function InvoicePanel({
                                  ? customers.find(c => (c._id || c.id) === (result.customerId || invoice.customerId || editingInvoice?.customerId))?.name 
                                  : null)
         }
+
+        let resolvedCustomerUrdu = ''
+        const cidForUrdu = result.customerId ?? invoice.customerId ?? editingInvoice?.customerId
+        if (cidForUrdu && cidForUrdu !== 'walk-in') {
+          if (typeof cidForUrdu === 'object' && cidForUrdu != null && 'nameUrdu' in cidForUrdu) {
+            resolvedCustomerUrdu = String((cidForUrdu as { nameUrdu?: string }).nameUrdu || '').trim()
+          } else {
+            const idStr = String(cidForUrdu)
+            resolvedCustomerUrdu = customers.find((c) => String(c._id || c.id) === idStr)?.nameUrdu?.trim() || ''
+          }
+        }
         
         // Calculate previous balance before current invoice:
         // server returned `updatedBalance` which likely includes this invoice.
@@ -745,11 +707,13 @@ export function InvoicePanel({
           items: validItems,
           customerId: result.customerId || invoice.customerId || editingInvoice?.customerId,
           customerName: resolvedCustomerName,
+          customerNameUrdu: resolvedCustomerUrdu || undefined,
           walkInCustomerName: resolvedWalkInCustomerName,
           previousBalance: previousBalanceBeforeInvoice, // balance before this invoice
           newBalance: updatedBalance, // balance after this invoice (server value)
           language: result.language || invoice.language,
           isUrduOnly: result.isUrduOnly ?? invoice.isUrduOnly,
+          printInUrdu: getInvoicePrintInUrdu(),
         }
         
         if (printType === 'receipt') {
@@ -802,7 +766,7 @@ export function InvoicePanel({
       {/* Customer and Type Selection */}
       <Card>
         <CardHeader>
-          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+          <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
             <CardTitle className='flex items-center gap-2'>
               {onBackToList && (
                 <Button variant="ghost" size="sm" onClick={onBackToList}>
@@ -813,35 +777,19 @@ export function InvoicePanel({
               {t('invoice_details')}
             </CardTitle>
 
-            <div className='flex flex-col gap-3 sm:items-end'>
-              <div className='flex items-center gap-2 rounded-lg border p-1'>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={resolvedInvoiceLanguage === 'en' && !invoice.isUrduOnly ? 'default' : 'ghost'}
-                  disabled={Boolean(invoice.isUrduOnly) || isUpdatingLanguage}
-                  onClick={() => handleInvoiceLanguageChange('en')}
-                >
-                  English
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={resolvedInvoiceLanguage === 'ur' ? 'default' : 'ghost'}
-                  disabled={isUpdatingLanguage}
-                  onClick={() => handleInvoiceLanguageChange('ur')}
-                >
-                  اردو
-                </Button>
-              </div>
-
-              <div className='flex items-center gap-2'>
+            <div className='flex w-full flex-col gap-3 sm:max-w-[min(100%,20rem)] lg:w-auto lg:max-w-xs'>
+              <div className='flex items-center justify-between gap-3'>
+                <Label htmlFor='invoice-print-urdu-header' className='text-sm font-normal'>
+                  {t('urdu_print')}
+                </Label>
                 <Switch
-                  checked={Boolean(invoice.isUrduOnly)}
-                  disabled={isUpdatingLanguage}
-                  onCheckedChange={handleUrduOnlyToggle}
+                  id='invoice-print-urdu-header'
+                  checked={printReceiptInUrdu}
+                  onCheckedChange={(v) => {
+                    setPrintReceiptInUrdu(v)
+                    setInvoicePrintInUrdu(v)
+                  }}
                 />
-                <Label className='text-sm'>Urdu-only invoice</Label>
               </div>
             </div>
           </div>
@@ -900,15 +848,23 @@ export function InvoicePanel({
                               })
                               
                               if (selectedCustomer) {
+                                const urdu = selectedCustomer.nameUrdu?.trim()
                                 return (
-                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full min-w-0">
                                     <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                                       <span className="text-[10px] font-medium text-white">
                                         {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
                                       </span>
                                     </div>
-                                    <span className={getTextClasses(selectedCustomer.name, "text-xs truncate")} title={selectedCustomer.name}>
-                                      {selectedCustomer.name}
+                                    <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
+                                      <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate shrink-0')} title={selectedCustomer.name}>
+                                        {selectedCustomer.name}
+                                      </span>
+                                      {urdu ? (
+                                        <span dir="rtl" className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))} title={urdu}>
+                                          {urdu}
+                                        </span>
+                                      ) : null}
                                     </span>
                                   </Badge>
                                 )
@@ -1023,10 +979,21 @@ export function InvoicePanel({
                                     {customer.name?.charAt(0).toUpperCase() || 'C'}
                                   </span>
                                 </div>
-                                <div className="flex flex-col flex-1 min-w-0">
-                                  <span className={getTextClasses(customer.name, "truncate font-medium")} title={customer.name}>
-                                    {customer.name}
-                                  </span>
+                                <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                                  <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                    <span className={getTextClasses(customer.name, 'truncate font-medium shrink-0')} title={customer.name}>
+                                      {customer.name}
+                                    </span>
+                                    {customer.nameUrdu?.trim() ? (
+                                      <span
+                                        dir="rtl"
+                                        className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(customer.nameUrdu))}
+                                        title={customer.nameUrdu.trim()}
+                                      >
+                                        {customer.nameUrdu.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   {customer.phone && (
                                     <span className="text-xs text-muted-foreground truncate" title={customer.phone}>
                                       {customer.phone}
@@ -1098,17 +1065,6 @@ export function InvoicePanel({
             />
           </div>
 
-          {(invoice.type === 'credit' || (invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') && (
-            <div>
-              <Label htmlFor="dueDate">{t('due_date')}</Label>
-              <Input
-                type="date"
-                value={invoice.dueDate || new Date().toISOString().split('T')[0]}
-                onChange={(e) => setInvoice(prev => ({ ...prev, dueDate: e.target.value }))}
-              />
-            </div>
-          )}
-
           {invoice.customerId === 'walk-in' && (
             <div>
               <Label htmlFor="walkInCustomerName">{t('customer_name')}</Label>
@@ -1150,25 +1106,10 @@ export function InvoicePanel({
               size="sm"
               variant="outline"
               onClick={() => {
-                // Add a new empty row for manual product selection
-                const newItem = {
-                  id: `manual-${Date.now()}`,
-                  productId: '',
-                  name: '',
-                  image: undefined,
-                  quantity: 1,
-                  unit: 'pcs',
-                  conversionFactor: 1,
-                  stockQuantity: 1,
-                  unitPrice: 0,
-                  cost: 0,
-                  subtotal: 0,
-                  profit: 0,
-                  isManualEntry: true
-                }
+                const newItem = createEmptyManualInvoiceItem()
                 setInvoice(prev => ({
                   ...prev,
-                  items: [...prev.items, newItem]
+                  items: [...prev.items, newItem],
                 }))
               }}
               className='flex items-center gap-1'
@@ -1209,26 +1150,40 @@ export function InvoicePanel({
                           <div className='space-y-1'>
                             <Popover
                               open={productSelectOpen === item.id}
-                              onOpenChange={(open) => setProductSelectOpen(open ? item.id : '')}
+                              onOpenChange={(open) => {
+                                setProductSelectOpen(open ? item.id : '')
+                                setProductSearchQuery('')
+                              }}
                             >
                               <PopoverTrigger asChild>
                                 <Button
                                   variant="outline"
                                   role="combobox"
-                                  className={`w-full justify-between h-8 text-xs ${
+                                  className={`w-full justify-between min-h-8 h-auto py-1 text-xs ${
                                     !item.productId ? 'border-red-500 bg-red-50' : ''
                                   }`}
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <Search className="w-3 h-3 flex-shrink-0" />
-                                    <span
-                                      className={getTextClasses(item.name || t('select_product'), `truncate ${
-                                        !item.productId ? 'text-red-500' : 'text-muted-foreground'
-                                      }`)}
-                                      title={item.name || t('select_product')}
-                                    >
-                                      {item.name || t('select_product')}
-                                      {!item.productId && ' *'}
+                                    <span className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0 text-left'>
+                                      <span
+                                        className={getTextClasses(item.name || t('select_product'), `truncate shrink-0 ${
+                                          !item.productId ? 'text-red-500' : 'text-muted-foreground'
+                                        }`)}
+                                        title={item.name || t('select_product')}
+                                      >
+                                        {item.name || t('select_product')}
+                                        {!item.productId && ' *'}
+                                      </span>
+                                      {item.nameUrdu?.trim() ? (
+                                        <span
+                                          className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
+                                          dir='rtl'
+                                          title={item.nameUrdu.trim()}
+                                        >
+                                          {item.nameUrdu.trim()}
+                                        </span>
+                                      ) : null}
                                     </span>
                                   </div>
                                   <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
@@ -1242,20 +1197,32 @@ export function InvoicePanel({
                                       value={productSearchQuery}
                                       onValueChange={setProductSearchQuery}
                                     />
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                                      <VoiceInputButton
-                                        onTranscript={setProductSearchQuery}
-                                        language={voiceLanguage}
-                                        size="sm"
-                                      />
-                                    </div>
+                                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                                    <VoiceInputButton
+                                      onTranscript={setProductSearchQuery}
+                                      language={voiceLanguage}
+                                      size="sm"
+                                    />
                                   </div>
-                                  <CommandEmpty>{t('no_products_found')}</CommandEmpty>
-                                  <CommandList className="max-h-[300px] overflow-y-auto">
+                                </div>
+                                <CommandList className="max-h-[300px] overflow-y-auto">
+                                  {productsLoading && products.length === 0 ? (
+                                    <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
+                                      <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
+                                      {t('loading_products')}
+                                    </div>
+                                  ) : filteredProducts.length === 0 ? (
+                                    <div className="py-6 text-center text-sm text-muted-foreground">
+                                      {t('no_products_found')}
+                                    </div>
+                                  ) : (
                                     <CommandGroup>
-                                      {filteredProducts.map((product) => (
+                                      {filteredProducts.map((product) => {
+                                        const pid = product._id || product.id
+                                        return (
                                         <CommandItem
-                                          key={product._id}
+                                          key={String(pid)}
+                                          value={`${String(pid)}-${String(product.name ?? '')}`}
                                           onSelect={() => handleProductSelect(item.id, product)}
                                           className="flex items-center gap-2 cursor-pointer p-3"
                                         >
@@ -1272,9 +1239,20 @@ export function InvoicePanel({
                                               </div>
                                             )}
                                             <div className="flex flex-col flex-1 min-w-0">
-                                              <span className={getTextClasses(product.name, "text-sm font-medium truncate")} title={product.name}>
-                                                {product.name}
-                                              </span>
+                                              <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                                <span className={getTextClasses(product.name, 'text-sm font-medium truncate shrink-0')} title={product.name}>
+                                                  {product.name}
+                                                </span>
+                                                {product.nameUrdu?.trim() ? (
+                                                  <span
+                                                    dir="rtl"
+                                                    className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(product.nameUrdu))}
+                                                    title={product.nameUrdu.trim()}
+                                                  >
+                                                    {product.nameUrdu.trim()}
+                                                  </span>
+                                                ) : null}
+                                              </div>
                                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                 <span key={`price-${product._id}`}>Rs{product.price}</span>
                                                 <span
@@ -1296,16 +1274,18 @@ export function InvoicePanel({
                                             </div>
                                           </div>
                                         </CommandItem>
-                                      ))}
+                                        )
+                                      })}
                                     </CommandGroup>
-                                  </CommandList>
+                                  )}
+                                </CommandList>
                                 </Command>
                               </PopoverContent>
                             </Popover>
                           </div>
                         ) : (
                           <div className='min-w-0 flex-1'>
-                            <p className={getTextClasses(item.name, 'font-semibold text-sm truncate')} title={item.name}>{item.name}</p>
+                            <BilingualName primary={item.name} secondary={item.nameUrdu} primaryClassName='font-semibold text-sm' />
                             <div className='flex items-center gap-2 mt-0.5 flex-wrap'>
                               <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
                               {remainingStock !== undefined && (

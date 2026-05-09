@@ -21,6 +21,7 @@ const ProductSchema = new mongoose.Schema({
         ref: 'User',
     },
     name: { type: String, required: true },
+    nameUrdu: { type: String },
     description: { type: String },
     barcode: { 
         type: String, 

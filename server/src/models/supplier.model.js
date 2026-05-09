@@ -19,6 +19,19 @@ const SupplierSchema = new mongoose.Schema({
     ref: 'User',
   },
   name: { type: String, required: true },
+  nameUrdu: { type: String },
+  picture: {
+    url: { type: String },
+    publicId: { type: String },
+  },
+  idCardFront: {
+    url: { type: String },
+    publicId: { type: String },
+  },
+  idCardBack: {
+    url: { type: String },
+    publicId: { type: String },
+  },
   email: { type: String, unique: false, required: false },
   phone: { type: String },
   whatsapp: { type: String },

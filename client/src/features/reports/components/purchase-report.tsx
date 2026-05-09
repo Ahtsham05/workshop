@@ -9,6 +9,8 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 interface PurchaseReportProps {
   startDate: string
@@ -17,7 +19,7 @@ interface PurchaseReportProps {
 
 export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, PurchaseReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetPurchaseReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
@@ -30,7 +32,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
 
           const excelData = data.data.map((row) => ({
             [t('date')]: row._id.date,
-            [t('supplier')]: row._id.supplier,
+            [t('supplier')]: reportEntityName(language, row._id.supplier, row.supplierNameUrdu),
             [t('count')]: row.purchaseCount,
             [t('amount')]: row.totalAmount,
             [t('cash_paid')]: row.cashPaid,
@@ -138,17 +140,20 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.data?.map((row, index) => (
+              {data?.data?.map((row, index) => {
+                const supLabel = reportEntityName(language, row._id.supplier, row.supplierNameUrdu)
+                return (
                 <TableRow key={index}>
                   <TableCell>{row._id.date}</TableCell>
-                  <TableCell>{row._id.supplier}</TableCell>
+                  <TableCell className={cn(reportEntityNameClass(language, supLabel))}>{supLabel}</TableCell>
                   <TableCell className='text-right'>{row.purchaseCount}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(row.totalAmount)}</TableCell>
                   <TableCell className='text-right text-green-600'>{formatCurrency(row.cashPaid || 0)}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(row.paidAmount)}</TableCell>
                   <TableCell className='text-right text-red-600'>{formatCurrency(row.balance)}</TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

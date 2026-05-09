@@ -41,3 +41,28 @@ export const getTextClassesWithDirection = (text: string | undefined | null, add
   
   return [fontClass, dirClass, additionalClasses].filter(Boolean).join(' ')
 }
+
+/**
+ * Urdu line under an English name (tables, lists: products, categories, customers, suppliers).
+ * Intentionally does **not** use `font-urdu` (Nastaliq / Jameel stack in index.css) so script matches
+ * the app default UI font: `var(--font-ui)` → Noto Naskh Arabic for Arabic/Urdu glyphs (clearer in dense tables).
+ */
+export function getUrduSecondaryNameClasses(_text: string | undefined | null): string {
+  return 'text-sm font-medium leading-normal text-foreground/90'
+}
+
+/** Match search against Latin (case-insensitive) and scripts such as Urdu (substring). */
+export function matchesBilingualSearch(
+  query: string,
+  ...fields: (string | undefined | null)[]
+): boolean {
+  const q = query.trim()
+  if (!q) return true
+  const lower = q.toLowerCase()
+  return fields.some((field) => {
+    if (field == null || field === '') return false
+    const s = String(field)
+    if (s.toLowerCase().includes(lower)) return true
+    return s.includes(q)
+  })
+}

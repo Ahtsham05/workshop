@@ -11,6 +11,7 @@ const unitConversionSchema = Joi.object().keys({
 const createProduct = {
   body: Joi.object().keys({
     name: Joi.string().required(),
+    nameUrdu: Joi.string().allow('').optional(),
     price: Joi.number().required(),
     cost: Joi.number().required(),
     stockQuantity: Joi.number().required(),
@@ -71,6 +72,7 @@ const updateProduct = {
   body: Joi.object().keys({
     _id: Joi.string(),
     name: Joi.string(),
+    nameUrdu: Joi.string().allow('').optional(),
     price: Joi.number(),
     description: Joi.string().allow(''),
     barcode: Joi.string().allow(''),
@@ -122,6 +124,7 @@ const bulkAddProducts = {
     products: Joi.array().items(
       Joi.object().keys({
         name: Joi.string().required(),
+        nameUrdu: Joi.string().allow('').optional(),
         price: Joi.number().required(),
         cost: Joi.number().required(),
         stockQuantity: Joi.number().required(),

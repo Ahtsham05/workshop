@@ -155,6 +155,11 @@ const en: Record<string, string> = {
     "edit_supplier": "Edit Supplier",
     "delete_supplier": "Delete Supplier",
     "supplier_name": "Supplier Name",
+    "supplier_dialog_section_primary_new": "New supplier",
+    "supplier_dialog_section_primary_edit": "Supplier details",
+    "supplier_dialog_section_primary_desc": "English and Urdu name, contact details, address, and opening balance.",
+    "supplier_dialog_section_photos_title": "Photos & ID",
+    "supplier_dialog_section_photos_desc": "Optional profile photo and CNIC front and back.",
     
     // Customers page
     "customers_list": "Customers List",
@@ -166,7 +171,22 @@ const en: Record<string, string> = {
     "edit_customer": "Edit Customer",
     "delete_customer": "Delete Customer",
     "customer_name": "Customer Name",
+    "customer_dialog_section_primary_new": "New customer",
+    "customer_dialog_section_primary_edit": "Customer details",
+    "customer_dialog_section_primary_desc": "English and Urdu name, contact details, address, and opening balance.",
+    "customer_dialog_section_photos_title": "Photos & ID",
+    "customer_dialog_section_photos_desc": "Optional profile photo and CNIC front and back.",
     "enter_customer_name": "Enter customer name",
+    "name_in_urdu": "Name (Urdu)",
+    "name_in_urdu_placeholder": "Urdu name",
+    "name_in_urdu_hint": "Filled automatically when you type in English; you can edit it anytime.",
+    "profile_picture": "Profile photo",
+    "photo": "Photo",
+    "view_full_photo": "View full photo",
+    "id_short": "ID",
+    "id_card_front": "CNIC / ID — front (optional)",
+    "id_card_back": "CNIC / ID — back (optional)",
+    "photos_section_label": "Photos & documents",
     "no_customers_found": "No customers found",
     
     // Products page
@@ -462,6 +482,8 @@ const en: Record<string, string> = {
     "cancelled": "Cancelled",
     "refunded": "Refunded",
     "clear_filters": "Clear Filters",
+    "urdu_print": "Urdu print",
+    "urdu_print_hint": "When on, receipt and A4 use Urdu headings and Urdu names",
     "invoices_list": "Invoices List",
     "search_invoices_placeholder": "Invoice #, Phone #, Customer...",
     "show": "Show",
@@ -585,6 +607,9 @@ const en: Record<string, string> = {
     
     // Image upload functionality
     "product_image": "Product Image",
+    "product_photo_section_title": "Product photo",
+    "product_photo_section_description":
+      "Optional — use Find from name to search Pexels manually from the product name, or upload from your device, drag and drop, or use the camera.",
     "upload_image": "Upload Image",
     "remove_image": "Remove Image",
     "drag_drop_image": "Drag & drop an image here",
@@ -597,6 +622,17 @@ const en: Record<string, string> = {
     "image_removed_successfully": "Image removed successfully",
     "image_load_failed": "Failed to load image",
     "select_file": "Select File",
+    "choose_photo_from_device": "Choose photo",
+    "find_image_from_name": "Find from name",
+    "searching_stock_photo": "Searching stock photos…",
+    "stock_search_need_name": "Enter at least 2 characters in the name field above first.",
+    "stock_search_failed": "Could not fetch a stock photo. Try different wording or upload an image.",
+    "local_photo_banner_title": "Stock photo or your own file",
+    "local_photo_banner_hint_product":
+      "Click Find from name to search Pexels once using the product name (your server needs PEXELS_API_KEY). Or choose a photo from your device — drag-and-drop and camera work too. Nothing runs until you click a button.",
+    "local_photo_banner_hint_category":
+      "Click Find from name to search Pexels once using the category name (your server needs PEXELS_API_KEY). Or upload from your device — no automatic search.",
+    "or_upload": "Or upload",
     "take_photo": "Take Photo",
     "capture": "Capture",
     "switch_camera": "Switch Camera",

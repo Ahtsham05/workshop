@@ -9,6 +9,8 @@ import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { TrendingUp, TrendingDown, Users, Package } from 'lucide-react'
 import { getUnitLabel } from '@/lib/units'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -18,7 +20,7 @@ interface ProductDetailDialogProps {
 }
 
 export function ProductDetailDialog({ productId, startDate, endDate, onClose }: ProductDetailDialogProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { data, isLoading } = useGetProductDetailReportQuery(
     { productId: productId!, startDate, endDate },
     { skip: !productId }
@@ -42,7 +44,14 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
           <div className='space-y-4'>
             {/* Product Info */}
             <div className='bg-muted/50 p-4 rounded-lg'>
-              <h3 className='font-semibold text-lg mb-3'>{data?.product?.name}</h3>
+              <h3
+                className={cn(
+                  'font-semibold text-lg mb-3',
+                  reportEntityNameClass(language, reportEntityName(language, data?.product?.name, data?.product?.nameUrdu)),
+                )}
+              >
+                {reportEntityName(language, data?.product?.name, data?.product?.nameUrdu)}
+              </h3>
               <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
                 <div>
                   <p className='text-xs text-muted-foreground mb-1'>{t('barcode')}</p>
@@ -143,7 +152,17 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell>
                                 <Badge variant='outline'>{sale.invoiceNumber}</Badge>
                               </TableCell>
-                              <TableCell className='font-medium'>{sale.customerName}</TableCell>
+                              <TableCell
+                                className={cn(
+                                  'font-medium',
+                                  reportEntityNameClass(
+                                    language,
+                                    reportEntityName(language, sale.customerName, sale.customerNameUrdu),
+                                  ),
+                                )}
+                              >
+                                {reportEntityName(language, sale.customerName, sale.customerNameUrdu)}
+                              </TableCell>
                               {/* <TableCell>{sale.customerPhone || 'N/A'}</TableCell> */}
                               <TableCell className='text-right'>{sale.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(sale.unit)}</TableCell>
@@ -191,7 +210,17 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell>
                                 <Badge variant='outline'>{purchase.purchaseNumber}</Badge>
                               </TableCell>
-                              <TableCell className='font-medium'>{purchase.supplierName}</TableCell>
+                              <TableCell
+                                className={cn(
+                                  'font-medium',
+                                  reportEntityNameClass(
+                                    language,
+                                    reportEntityName(language, purchase.supplierName, purchase.supplierNameUrdu),
+                                  ),
+                                )}
+                              >
+                                {reportEntityName(language, purchase.supplierName, purchase.supplierNameUrdu)}
+                              </TableCell>
                               <TableCell>{purchase.supplierPhone || 'N/A'}</TableCell>
                               <TableCell className='text-right'>{purchase.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(purchase.unit)}</TableCell>

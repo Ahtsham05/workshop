@@ -4,6 +4,8 @@ const { customerService } = require('../services');
 const pick = require('../utils/pick');
 const { Sale, Transaction } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const ApiError = require('../utils/ApiError');
+const { uploadToCloudinary } = require('../middlewares/upload');
 
 const createCustomer = catchAsync(async (req, res) => {
   const customer = await customerService.createCustomer({ ...req.body, ...getBranchContext(req) });
@@ -63,6 +65,26 @@ const bulkAddCustomers = catchAsync(async (req, res) => {
   }
 });
 
+const uploadCustomerImage = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
+  }
+
+  try {
+    const result = await uploadToCloudinary(req.file.buffer, {
+      public_id: `customer_${Date.now()}`,
+      folder: 'customers',
+    });
+
+    res.send({
+      url: result.secure_url,
+      publicId: result.public_id,
+    });
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Image upload failed');
+  }
+});
+
 module.exports = {
   createCustomer,
   getCustomers,
@@ -71,4 +93,5 @@ module.exports = {
   deleteCustomer,
   getAllCustomers,
   bulkAddCustomers,
+  uploadCustomerImage,
 };

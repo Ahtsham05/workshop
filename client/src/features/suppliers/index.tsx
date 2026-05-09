@@ -5,84 +5,63 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
-import { useSupplierColumns } from './components/users-columns' // Adjusted for users
-import SupplierDialogs from './components/users-dialogs' // Adjusted for users
-import SupplierPrimaryButtons from './components/users-primary-buttons' // Adjusted for users
-import { SupplierTable } from './components/users-table' // Adjusted for users
-import SupplierProvider from './context/users-context' // Adjusted for suppliers
+import { useSupplierColumns } from './components/users-columns'
+import SupplierDialogs from './components/users-dialogs'
+import SupplierPrimaryButtons from './components/users-primary-buttons'
+import { SupplierTable } from './components/users-table'
+import SupplierProvider from './context/users-context'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useCallback, useEffect, useState } from 'react'
-import { fetchSuppliers } from '@/stores/supplier.slice' // Adjusted to supplier slice
+import { useEffect, useState } from 'react'
+import { fetchSuppliers } from '@/stores/supplier.slice'
 import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+
+const SEARCH_DEBOUNCE_MS = 400
 
 export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState([]) // Changed from customers to suppliers
+  const [suppliers, setSuppliers] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const { t } = useLanguage()
   const columns = useSupplierColumns()
 
   const dispatch = useDispatch<AppDispatch>()
 
-  // Use a callback to fetch suppliers to allow manual fetching when needed
-  const fetchSupplierData = useCallback(async (page = currentPage, pageLimit = limit, searchTerm = search) => {
-    setLoading(true)
-    
-    // Convert limit to number to ensure it's properly passed to the API
-    const limitValue = parseInt(String(pageLimit), 10) || 10;
-    
-    const params = {
-      page: page,
-      limit: limitValue,  // Make sure limit is passed as a number
-      sortBy: 'createdAt:desc',
-      ...(searchTerm && { search: searchTerm }),
-      ...(searchTerm && { fieldName: 'name' })
-    };
-    
-    console.log('Fetching suppliers with params:', params); // Debug log
-    
-    try {
-      const result = await dispatch(fetchSuppliers(params));
-      const data = result.payload;
-      const results = data?.results || [];
-      console.log(`Received ${results.length} suppliers from API with page size ${limitValue}`); // Debug log
-      
-      setSuppliers(results);
-      setTotalPage(data?.totalPages || 1);
-      setLoading(false);
-      return results;
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      setLoading(false);
-      return [];
-    }
-  }, [dispatch]);
-
-  // Handle page size change explicitly
-  const handleLimitChange = useCallback((newLimit: number) => {
-    console.log(`Changing page size to ${newLimit}`);
-    setLimit(newLimit);
-    setCurrentPage(1); // Reset to first page
-    fetchSupplierData(1, newLimit, search);
-  }, [fetchSupplierData, search]);
-
-  // Handle page change explicitly
-  const handlePageChange = useCallback((newPage: number) => {
-    console.log(`Changing page to ${newPage}`);
-    setCurrentPage(newPage);
-    fetchSupplierData(newPage, limit, search);
-  }, [fetchSupplierData, limit, search]);
-
-  // Initial data fetch and when fetch flag changes
   useEffect(() => {
-    fetchSupplierData();
-  }, [fetch]) // Only depends on the fetch flag for manual refreshes
+    setCurrentPage(1)
+  }, [debouncedSearch])
+
+  useEffect(() => {
+    setLoading(true)
+    const limitValue = parseInt(String(limit), 10) || 10
+    const q = debouncedSearch.trim()
+    const params = {
+      page: currentPage,
+      limit: limitValue,
+      sortBy: 'createdAt:desc',
+      ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.supplier } : {}),
+    }
+
+    dispatch(fetchSuppliers(params))
+      .then((result) => {
+        const data = result.payload as { results?: unknown[]; totalPages?: number } | undefined
+        const results = data?.results || []
+        setSuppliers(results as never[])
+        setTotalPage(data?.totalPages || 1)
+        setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+      })
+  }, [dispatch, currentPage, limit, fetch, debouncedSearch])
 
   return (
     <SupplierProvider>
@@ -105,18 +84,6 @@ export default function Suppliers() {
           </div>
           <SupplierPrimaryButtons />
         </div>
-        <Input
-          placeholder={t('search_suppliers')}
-          className='h-8 w-[150px] lg:w-[250px]'
-          value={search ?? ''}
-          onChange={(event) => {
-            const newSearch = event.target.value;
-            setSearch(newSearch);
-            // Reset to first page and use the new search term
-            setCurrentPage(1);
-            fetchSupplierData(1, limit, newSearch);
-          }}
-        />
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
           {
             loading ? (
@@ -128,12 +95,25 @@ export default function Suppliers() {
               <SupplierTable
                 data={suppliers}
                 columns={columns}
-                paggination={{ 
-                  totalPage, 
-                  currentPage, 
-                  setCurrentPage: handlePageChange, 
-                  limit, 
-                  setLimit: handleLimitChange 
+                toolbarLeading={
+                  <Input
+                    autoFocus
+                    placeholder={t('search_suppliers')}
+                    className='h-9 w-full'
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    aria-label={t('search_suppliers')}
+                  />
+                }
+                paggination={{
+                  totalPage,
+                  currentPage,
+                  setCurrentPage,
+                  limit,
+                  setLimit: (n: number) => {
+                    setLimit(n)
+                    setCurrentPage(1)
+                  },
                 }}
               />
             )

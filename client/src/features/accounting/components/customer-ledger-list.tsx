@@ -12,17 +12,41 @@ import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { ContactMediaNameCell } from '@/components/contact-media-name-cell';
 
 interface CustomerWithBalance {
   _id: string;
   name: string;
+  nameUrdu?: string;
   phone?: string;
+  email?: string;
   balance: number;
   lastTransactionDate?: string;
+  picture?: { url?: string; publicId?: string };
+  idCardFront?: { url?: string; publicId?: string };
+  idCardBack?: { url?: string; publicId?: string };
 }
 
 interface CustomerLedgerListProps {
   onSelectCustomer: (customer: CustomerWithBalance) => void;
+}
+
+function ledgerRowMatchesSearch(
+  term: string,
+  row: { name?: string; nameUrdu?: string; phone?: string },
+): boolean {
+  const q = term.trim();
+  if (!q) return true;
+  const lower = q.toLowerCase();
+  const name = row.name ?? '';
+  const phone = (row.phone ?? '').toLowerCase();
+  const urdu = row.nameUrdu ?? '';
+  return (
+    name.toLowerCase().includes(lower) ||
+    phone.includes(lower) ||
+    urdu.includes(q) ||
+    urdu.toLowerCase().includes(lower)
+  );
 }
 
 export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps) {
@@ -81,12 +105,9 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
     }
   };
 
-  const filteredCustomers = customers.filter((customer) => {
-    const query = searchTerm.toLowerCase();
-    const name = customer.name?.toLowerCase() || '';
-    const phone = customer.phone?.toLowerCase() || '';
-    return name.includes(query) || phone.includes(query);
-  });
+  const filteredCustomers = customers.filter((customer) =>
+    ledgerRowMatchesSearch(searchTerm, customer),
+  );
 
   const getBalanceColor = (balance: number) => {
     if (balance > 0) return 'text-red-600'; // Customer owes us
@@ -101,20 +122,14 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>{t('Customer Ledger')}</CardTitle>
-            <CardDescription>{t('View all customer balances and transactions')}</CardDescription>
-          </div>
-          <Button variant="outline" onClick={exportToExcel}>
-            <Download className="w-4 h-4 mr-2" />
-            {t('Export to Excel')}
-          </Button>
+        <div>
+          <CardTitle>{t('Customer Ledger')}</CardTitle>
+          <CardDescription>{t('View all customer balances and transactions')}</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
+        <div className="mb-4 flex flex-wrap items-center gap-3 justify-between">
+          <div className="relative min-w-0 flex-1 max-w-lg">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
               type="text"
@@ -124,19 +139,10 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
               className="pl-10"
             />
           </div>
-          {/* <div className="space-y-2">
-            <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div> */}
+          <Button variant="outline" onClick={exportToExcel} className="shrink-0">
+            <Download className="w-4 h-4 mr-2" />
+            {t('Export to Excel')}
+          </Button>
         </div>
 
         {loading ? (
@@ -165,7 +171,16 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => onSelectCustomer(customer)}
                   >
-                    <TableCell className="font-medium">{customer.name}</TableCell>
+                    <TableCell>
+                      <ContactMediaNameCell
+                        compact
+                        name={customer.name}
+                        nameUrdu={customer.nameUrdu}
+                        picture={customer.picture}
+                        idCardFront={customer.idCardFront}
+                        idCardBack={customer.idCardBack}
+                      />
+                    </TableCell>
                     <TableCell className={getBalanceColor(customer.balance)}>
                       Rs{formatBalance(customer.balance)}
                     </TableCell>

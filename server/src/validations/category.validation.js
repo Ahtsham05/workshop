@@ -3,6 +3,7 @@ const Joi = require('joi');
 const createCategory = {
   body: Joi.object().keys({
     name: Joi.string().required(),
+    nameUrdu: Joi.string().allow('').optional(),
     image: Joi.object().keys({
       url: Joi.string(),
       publicId: Joi.string(),
@@ -41,6 +42,7 @@ const updateCategory = {
   body: Joi.object()
     .keys({
       name: Joi.string(),
+      nameUrdu: Joi.string().allow('').optional(),
       image: Joi.object().keys({
         url: Joi.string(),
         publicId: Joi.string(),

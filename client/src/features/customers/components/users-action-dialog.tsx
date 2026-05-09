@@ -22,20 +22,34 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import SmartInput from '@/components/smart-input.tsx'
+import ImageUpload from '@/components/image-upload'
+import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addCustomer, updateCustomer } from '@/stores/customer.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import { useEffect } from 'react'
+import { EntityFormSection } from '@/components/entity-form-section'
+
+const imageRefSchema = z
+  .object({
+    url: z.string(),
+    publicId: z.string(),
+  })
+  .optional()
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
+  nameUrdu: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
   whatsapp: z.string().optional(),
   address: z.string().optional(),
   balance: z.coerce.number().optional(),
+  picture: imageRefSchema,
+  idCardFront: imageRefSchema,
+  idCardBack: imageRefSchema,
 })
 
 type customerForm = z.infer<typeof formSchema>
@@ -49,7 +63,7 @@ interface Props {
 
 export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
   const isEdit = !!currentRow
-  const { t } = useLanguage()
+  const { t, isRTL } = useLanguage()
   const form = useForm<customerForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
@@ -58,13 +72,19 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         }
       : {
           name: '',
+          nameUrdu: '',
           email: 'customer@gmail.com',
           phone: '03',
           whatsapp: '03',
           address: 'address',
           balance: 0,
+          picture: undefined,
+          idCardFront: undefined,
+          idCardBack: undefined,
         },
   })
+
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
 
   const dispatch = useDispatch<AppDispatch>()
 
@@ -79,13 +99,27 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
   }, [form])
 
   const onSubmit = async (values: customerForm) => {
+    const { picture, idCardFront, idCardBack, ...rest } = values
+    const payload = isEdit
+      ? {
+          ...rest,
+          picture: picture ?? null,
+          idCardFront: idCardFront ?? null,
+          idCardBack: idCardBack ?? null,
+        }
+      : {
+          ...rest,
+          ...(picture ? { picture } : {}),
+          ...(idCardFront ? { idCardFront } : {}),
+          ...(idCardBack ? { idCardBack } : {}),
+        }
     if (isEdit) {
-      await dispatch(updateCustomer({ ...values, _id: currentRow?.id })).then(() => {
+      await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).then(() => {
         toast.success(t('customer_updated_success'))
         setFetch((prev: any) => !prev)
       })
     } else {
-      await dispatch(addCustomer(values)).then(() => {
+      await dispatch(addCustomer(payload)).then(() => {
         toast.success(t('customer_created_success'))
         setFetch((prev: any) => !prev)
       })
@@ -102,26 +136,32 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         onOpenChange(state)
       }}
     >
-      <DialogContent className='sm:max-w-lg'>
-        <DialogHeader className='text-left'>
-          <DialogTitle className='mb-2'>{isEdit ? t('edit_customer') : t('add_customer')}</DialogTitle>
+      <DialogContent className='flex max-h-[90vh] w-[calc(100vw-1.25rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0'>
+        <DialogHeader className='shrink-0 space-y-2 border-b border-border/60 px-6 pb-4 pt-6 text-left'>
+          <DialogTitle className='text-xl'>
+            {isEdit ? t('edit_customer') : t('add_customer')}
+          </DialogTitle>
           <DialogDescription>
             {isEdit ? t('update_customer') : t('create_customer')} {t('click_save')}
           </DialogDescription>
         </DialogHeader>
-        <div className='-mr-4 h-[26.25rem] w-full overflow-y-auto py-1 pr-4'>
+        <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
             <form
               id='customer-form'
               onSubmit={form.handleSubmit(onSubmit)}
-              className='space-y-4 p-0.5'
+              className='space-y-6'
             >
+              <EntityFormSection
+                title={isEdit ? t('customer_dialog_section_primary_edit') : t('customer_dialog_section_primary_new')}
+                description={t('customer_dialog_section_primary_desc')}
+              >
               <FormField
                 control={form.control}
                 name='name'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('customer_name')}
                     </FormLabel>
                     <FormControl>
@@ -130,7 +170,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                         showVoiceInput={true}
                         voiceInputSize="sm"
                         autoComplete='off'
-                        className='col-span-4'
+                        className='col-span-4 min-h-11 text-base'
                         {...field}
                       />
                     </FormControl>
@@ -140,10 +180,32 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
               />
               <FormField
                 control={form.control}
+                name='nameUrdu'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>{t('name_in_urdu')}</FormLabel>
+                    <div className='col-span-4 space-y-1'>
+                      <FormControl>
+                        <Input
+                          dir='rtl'
+                          placeholder={t('name_in_urdu_placeholder')}
+                          autoComplete='off'
+                          className='text-right'
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                      <FormMessage />
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name='email'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('email')}
                     </FormLabel>
                     <FormControl>
@@ -163,7 +225,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='phone'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('phone')}
                     </FormLabel>
                     <FormControl>
@@ -183,7 +245,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='whatsapp'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('whatsapp')}
                     </FormLabel>
                     <FormControl>
@@ -203,7 +265,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='balance'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('balance')}
                     </FormLabel>
                     <FormControl>
@@ -224,7 +286,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                 name='address'
                 render={({ field }) => (
                   <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 text-right'>
+                    <FormLabel className='col-span-2 md:text-right'>
                       {t('address')}
                     </FormLabel>
                     <FormControl>
@@ -241,10 +303,56 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              </EntityFormSection>
+
+              <EntityFormSection
+                title={t('customer_dialog_section_photos_title')}
+                description={t('customer_dialog_section_photos_desc')}
+              >
+                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
+                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>{t('profile_picture')}</FormLabel>
+                  <div className='col-span-4'>
+                    <ImageUpload
+                      uploadSlug='customers/upload-image'
+                      previewAlt={t('profile_picture')}
+                      currentImageUrl={form.watch('picture')?.url}
+                      onImageUpload={(img) => form.setValue('picture', img)}
+                      onImageRemove={() => form.setValue('picture', undefined)}
+                      layout='comfortable'
+                    />
+                  </div>
+                </FormItem>
+                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
+                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>{t('id_card_front')}</FormLabel>
+                  <div className='col-span-4'>
+                    <ImageUpload
+                      uploadSlug='customers/upload-image'
+                      previewAlt={t('id_card_front')}
+                      currentImageUrl={form.watch('idCardFront')?.url}
+                      onImageUpload={(img) => form.setValue('idCardFront', img)}
+                      onImageRemove={() => form.setValue('idCardFront', undefined)}
+                      layout='comfortable'
+                    />
+                  </div>
+                </FormItem>
+                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
+                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>{t('id_card_back')}</FormLabel>
+                  <div className='col-span-4'>
+                    <ImageUpload
+                      uploadSlug='customers/upload-image'
+                      previewAlt={t('id_card_back')}
+                      currentImageUrl={form.watch('idCardBack')?.url}
+                      onImageUpload={(img) => form.setValue('idCardBack', img)}
+                      onImageRemove={() => form.setValue('idCardBack', undefined)}
+                      layout='comfortable'
+                    />
+                  </div>
+                </FormItem>
+              </EntityFormSection>
             </form>
           </Form>
         </div>
-        <DialogFooter>
+        <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80'>
           <Button type='submit' form='customer-form'>
             {t('save_changes')}
           </Button>

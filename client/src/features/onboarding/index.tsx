@@ -28,9 +28,11 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
+import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 
 const formSchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
+  nameUrdu: z.string().optional(),
   businessType: z.string().min(1, 'Please select a business type'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   phone: z.string().optional(),
@@ -56,6 +58,7 @@ export default function OnboardingPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
+      nameUrdu: '',
       businessType: '',
       email: '',
       phone: '',
@@ -68,6 +71,8 @@ export default function OnboardingPage() {
     },
   })
 
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+
   const logoPreviewUrl = useMemo(() => (logoFile ? URL.createObjectURL(logoFile) : ''), [logoFile])
   useEffect(() => () => {
     if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
@@ -75,7 +80,9 @@ export default function OnboardingPage() {
 
   async function onSubmit(data: FormValues) {
     try {
-      const result = await setupOrganization({ ...data, logoFile }).unwrap()
+      const nu = data.nameUrdu?.trim()
+      const defaultBranchNameUrdu = nu ? `${nu} — مین برانچ` : ''
+      const result = await setupOrganization({ ...data, defaultBranchNameUrdu, logoFile }).unwrap()
 
       // Update user in localStorage and Redux store with onboardingComplete = true
       const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
@@ -178,6 +185,19 @@ export default function OnboardingPage() {
                           <FormLabel>Company Name *</FormLabel>
                           <FormControl>
                             <Input placeholder="e.g. Acme Corporation" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="nameUrdu"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Company Name (Urdu)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

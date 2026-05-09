@@ -54,6 +54,7 @@ export interface SalesReportSummary {
 
 export interface SalesInvoiceItem {
   name: string
+  nameUrdu?: string
   quantity: number
   unitPrice: number
   subtotal: number
@@ -69,6 +70,7 @@ export interface SalesInvoiceDetail {
   paidAmount: number
   balance: number
   customerName: string
+  customerNameUrdu?: string
   customerPhone: string
   items: SalesInvoiceItem[]
 }
@@ -84,6 +86,7 @@ export interface PurchaseReportData {
     date: string
     supplier: string
   }
+  supplierNameUrdu?: string
   totalAmount: number
   paidAmount: number
   balance: number
@@ -96,6 +99,7 @@ export interface PurchaseReportData {
 export interface ProductReportData {
   _id: string
   productName: string
+  productNameUrdu?: string
   category: string
   totalQuantitySold: number
   totalRevenue: number
@@ -109,6 +113,7 @@ export interface ProductReportData {
 export interface CustomerReportData {
   _id: string
   customerName: string
+  customerNameUrdu?: string
   phone?: string
   email?: string
   totalPurchases: number
@@ -122,6 +127,7 @@ export interface CustomerReportData {
 export interface SupplierReportData {
   _id: string
   supplierName: string
+  supplierNameUrdu?: string
   phone?: string
   email?: string
   totalPurchases: number
@@ -182,6 +188,7 @@ export interface ProfitLossReport {
 export interface InventoryReportData {
   _id: string
   name: string
+  nameUrdu?: string
   barcode: string
   category: string
   stockQuantity: number
@@ -204,6 +211,7 @@ export interface TaxReportData {
 export interface ReturnReportItem {
   _id: string
   productName: string
+  productNameUrdu?: string
   totalQty: number
   totalValue: number
   returnCount: number
@@ -522,6 +530,7 @@ export interface SimSaleReportSummary {
 }
 export interface SimSaleByProduct {
   _id: string
+  productNameUrdu?: string
   count: number
   totalSaleAmount: number
   totalSimAmount: number
@@ -543,7 +552,9 @@ export interface SimSaleDatewise {
 export interface SimSaleRecentRecord {
   _id: string
   productName: string
+  productNameUrdu?: string
   customerName?: string
+  customerNameUrdu?: string
   customerMobile?: string
   customerCNIC?: string
   simAmount: number

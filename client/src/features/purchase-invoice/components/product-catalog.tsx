@@ -13,7 +13,8 @@ import { useLanguage } from '@/context/language-context'
 import type { Category, Product } from '../../invoice/index'
 import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
-import { getTextClasses } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { cn } from '@/lib/utils'
 // import { toast } from 'sonner'
 
 interface ProductCatalogProps {
@@ -65,11 +66,15 @@ export function ProductCatalog({
     if (searchTerm.trim()) {
       filtered = categorizedProducts.map(category => ({
         ...category,
-        products: category.products.filter(product =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.barcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.description?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+        products: category.products.filter((product) =>
+          matchesBilingualSearch(
+            searchTerm,
+            product.name,
+            product.nameUrdu,
+            product.barcode,
+            product.description,
+          ),
+        ),
       })).filter(category => category.products.length > 0)
     } else {
       // Only filter by selected category when there's no search term
@@ -243,17 +248,20 @@ export function ProductCatalog({
                   <Separator />
 
                   {/* Products Grid/List */}
-                  <div className={showImages 
-                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'
-                    : 'space-y-1'
-                  }>
+                  <div
+                    className={
+                      showImages
+                        ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 [&>*]:min-w-0'
+                        : 'space-y-1'
+                    }
+                  >
                     {category.products.map((product) => (
                       <div
                         key={product._id}
                         onClick={() => handleQuickAdd(product, 1)}
                         className={showImages
-                          ? 'border rounded-lg p-2 space-y-2 transition-shadow bg-white hover:shadow-sm cursor-pointer'
-                          : 'border rounded-lg p-2 flex items-center gap-2 transition-colors hover:bg-muted/30 cursor-pointer'
+                          ? 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white hover:shadow-sm cursor-pointer'
+                          : 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors hover:bg-muted/30 cursor-pointer'
                         }
                       >
                         {/* Product Image */}
@@ -278,11 +286,50 @@ export function ProductCatalog({
                         )}
 
                         {/* Product Info */}
-                        <div className={showImages ? 'space-y-1' : 'flex-1 min-w-0'}>
-                          <h4 className={getTextClasses(product.name, `font-medium text-sm ${showImages ? 'text-center truncate' : 'truncate'}`)}>
-                            {product.name}
-                          </h4>
-                          <div className={`flex ${showImages ? 'flex-col items-center gap-0' : 'items-center gap-2'} text-xs text-muted-foreground`}>
+                        <div
+                          className={cn(
+                            'w-full min-w-0 max-w-full overflow-hidden',
+                            showImages ? 'space-y-1' : 'flex-1 min-w-0',
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              'flex w-full min-w-0 max-w-full flex-col gap-0.5 overflow-hidden',
+                              showImages && 'items-center text-center',
+                            )}
+                          >
+                            <p
+                              className={getTextClasses(
+                                product.name,
+                                cn(
+                                  'w-full min-w-0 max-w-full font-medium text-sm leading-snug line-clamp-2 break-words',
+                                  showImages && 'text-center',
+                                ),
+                              )}
+                              title={product.name}
+                            >
+                              {product.name}
+                            </p>
+                            {product.nameUrdu?.trim() ? (
+                              <p
+                                dir="rtl"
+                                className={cn(
+                                  'w-full min-w-0 max-w-full text-xs leading-snug line-clamp-2 break-words',
+                                  getUrduSecondaryNameClasses(product.nameUrdu),
+                                  showImages && 'text-center',
+                                )}
+                                title={product.nameUrdu.trim()}
+                              >
+                                {product.nameUrdu.trim()}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div
+                            className={cn(
+                              'flex w-full min-w-0 max-w-full flex-wrap gap-x-1 gap-y-0.5 text-xs text-muted-foreground',
+                              showImages ? 'flex-col items-center' : 'items-center',
+                            )}
+                          >
                             <span className='font-medium text-foreground text-sm'>
                               Rs{product.price.toFixed(2)}
                             </span>

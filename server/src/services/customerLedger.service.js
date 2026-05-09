@@ -426,7 +426,9 @@ const deleteLedgerEntry = async (id) => {
  * @returns {Promise<Array>}
  */
 const getAllCustomersWithBalances = async (filter = {}) => {
-  const customers = await Customer.find(filter).select('name phone email balance');
+  const customers = await Customer.find(filter).select(
+    'name nameUrdu phone email balance picture idCardFront idCardBack',
+  );
   
   const customersWithBalances = await Promise.all(
     customers.map(async (customer) => {
@@ -438,9 +440,13 @@ const getAllCustomersWithBalances = async (filter = {}) => {
         _id: customer._id,
         id: customer.id,
         name: customer.name,
+        nameUrdu: customer.nameUrdu,
         phone: customer.phone,
         email: customer.email,
         balance: customer.balance || 0,
+        picture: customer.picture,
+        idCardFront: customer.idCardFront,
+        idCardBack: customer.idCardBack,
         lastTransactionDate: lastTransaction ? lastTransaction.transactionDate : null,
       };
     })

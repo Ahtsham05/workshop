@@ -16,28 +16,36 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Input } from '@/components/ui/input'
 import { Loader2 } from 'lucide-react'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+
+const SEARCH_DEBOUNCE_MS = 400
 
 export default function CategoriesIndex() {
   const { t, language } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
   
-  // State management similar to products
   const [categories, setCategories] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch])
 
   useEffect(() => {
     setLoading(true)
+    const q = debouncedSearch.trim()
     const params = {
       page: currentPage,
       limit: limit,
       sortBy: 'createdAt:desc',
-      ...(search && { search: search }),
-      ...(search && { fieldName: 'name' })
+      ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.category } : {}),
     }
     
     dispatch(fetchCategories(params)).then((data) => {
@@ -45,8 +53,8 @@ export default function CategoriesIndex() {
       setTotalPage(data.payload?.totalPages || 1)
       setLimit(data.payload?.limit || 10)
       setLoading(false)
-    })
-  }, [totalPage, currentPage, limit, fetch, search, dispatch])
+    }).catch(() => setLoading(false))
+  }, [dispatch, currentPage, limit, fetch, debouncedSearch])
 
   return (
     <CategoriesProvider>
@@ -71,13 +79,6 @@ export default function CategoriesIndex() {
             <CategoriesPrimaryButtons />
           </div>
           
-          <Input
-            placeholder={t('search_categories')}
-            className='h-8 w-[150px] lg:w-[250px]'
-            value={search ?? ''}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             {loading ? (
               <div className='flex h-[50vh] items-center justify-center'>
@@ -86,13 +87,31 @@ export default function CategoriesIndex() {
             ) : (
               <CategoriesTable 
                 categories={categories}
-                paggination={{ totalPage, currentPage, setCurrentPage, limit, setLimit }}
+                toolbarLeading={
+                  <Input
+                    autoFocus
+                    placeholder={t('search_categories')}
+                    className='h-9 w-full'
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    aria-label={t('search_categories')}
+                  />
+                }
+                paggination={{
+                  totalPage,
+                  currentPage,
+                  setCurrentPage,
+                  limit,
+                  setLimit: (n: number) => {
+                    setLimit(n)
+                    setCurrentPage(1)
+                  },
+                }}
               />
             )}
           </div>
         </Main>
 
-        {/* Dialogs */}
         <CategoriesActionDialog setFetch={setFetch} />
         <CategoriesDeleteDialog setFetch={setFetch} />
       </div>

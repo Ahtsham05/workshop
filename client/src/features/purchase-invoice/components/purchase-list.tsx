@@ -24,6 +24,8 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { BilingualName } from '@/components/bilingual-name'
+import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -76,7 +78,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
       try {
         const printModule = await import('@/utils/purchasePrintUtils')
         const branchDetails = {
-          name: branchData?.name,
+          name: orgData?.name || branchData?.name,
+          nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
           address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
             .filter(Boolean)
             .join(', '),
@@ -89,8 +92,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
 
         const html =
           printType === 'receipt'
-            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage)
-            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage)
+            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
+            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
 
         const printWindow = window.open('', '_blank')
         if (printWindow) {
@@ -250,8 +253,11 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                     <TableCell className="font-medium">
                       {purchase.invoiceNumber}
                     </TableCell>
-                    <TableCell>
-                      {purchase.supplier?.name || 'N/A'}
+                    <TableCell className='max-w-[12rem]'>
+                      <BilingualName
+                        primary={purchase.supplier?.name || 'N/A'}
+                        secondary={purchase.supplier?.nameUrdu}
+                      />
                     </TableCell>
                     {/* <TableCell>
                       {purchase.supplier?.phone || '-'}
@@ -499,7 +505,12 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
         </div>
         <div>
           <Label>{t('Supplier')}</Label>
-          <p className="font-medium">{purchase.supplier?.name || 'N/A'}</p>
+          <div className='mt-1'>
+            <BilingualName
+              primary={purchase.supplier?.name || 'N/A'}
+              secondary={purchase.supplier?.nameUrdu}
+            />
+          </div>
         </div>
         <div>
           <Label>{t('Status')}</Label>
@@ -523,9 +534,8 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
           </TableHeader>
           <TableBody>
             {purchase.items?.map((item: any, index: number) => {
-              // Extract product name with multiple fallbacks
               let productName = 'Unknown Product'
-              
+
               if (typeof item.product === 'string') {
                 // If product is just an ID string, try to use other fields
                 productName = item.productName || item.name || `Product ID: ${item.product.substring(0, 8)}...`
@@ -536,6 +546,11 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                 // Try direct fields on item
                 productName = item.name || item.productName || item.title || 'Unknown Product'
               }
+
+              const productNameUrdu =
+                (item.product && typeof item.product === 'object' && item.product.nameUrdu) ||
+                item.nameUrdu ||
+                ''
               
               // Get price with multiple fallbacks
               const price = item.priceAtPurchase || item.price || item.unitPrice || item?.product?.cost || 0
@@ -552,10 +567,8 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                           className="w-8 h-8 rounded object-cover"
                         />
                       )}
-                      <div>
-                        <div className="font-medium">
-                          {productName}
-                        </div>
+                      <div className='min-w-0'>
+                        <BilingualName primary={productName} secondary={productNameUrdu} primaryClassName='text-sm font-medium' />
                         {(item.product?.barcode || item.barcode) && (
                           <div className="text-xs text-muted-foreground">
                             {item.product?.barcode || item.barcode}

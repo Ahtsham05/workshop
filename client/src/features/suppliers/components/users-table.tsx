@@ -28,6 +28,7 @@ import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
+import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -40,9 +41,10 @@ interface DataTableProps {
   columns: ColumnDef<Supplier>[]  // Changed from Customer to Supplier
   data: Supplier[]  // Changed from Customer to Supplier
   paggination: any
+  toolbarLeading?: ReactNode
 }
 
-export function SupplierTable({ columns, data, paggination }: DataTableProps) {
+export function SupplierTable({ columns, data, paggination, toolbarLeading }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -52,10 +54,6 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
 
   // console.log("data", data)
   // console.log("paggination", paggination)
-
-  // For debugging
-  console.log(`Received ${data.length} suppliers in SupplierTable component`);
-  console.log("Pagination settings:", paggination);
 
   const table = useReactTable({
     data,
@@ -85,7 +83,7 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} />
+      <DataTableToolbar table={table} leading={toolbarLeading} />
       <div className='rounded-md border'>
         <Table>
           <TableHeader>
@@ -119,7 +117,6 @@ export function SupplierTable({ columns, data, paggination }: DataTableProps) {
                   className='group/row cursor-pointer hover:bg-muted/50'
                   onClick={() => {
                     const supplierId = row.original._id || row.original.id;
-                    console.log('Navigating to supplier ledger:', { supplierId, name: row.original.name, original: row.original });
                     navigate({ to: '/accounting', search: { tab: 'supplier-ledger', supplierId, supplierName: row.original.name } })
                   }}
                 >

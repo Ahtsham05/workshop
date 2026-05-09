@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
-import { getTextClasses } from '@/utils/urdu-text-utils'
 import {
   Select,
   SelectContent,
@@ -39,6 +38,7 @@ import {
   Filter,
   Printer,
   Receipt,
+  Info,
   // RotateCcw,
   Clock,
 } from 'lucide-react'
@@ -51,6 +51,14 @@ import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4Prin
 import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
+import { BilingualName } from '@/components/bilingual-name'
+import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -89,6 +97,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
   const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
+  const [printInUrdu, setPrintInUrdu] = useState(() => getInvoicePrintInUrdu())
 
   // Debounce search term
   useEffect(() => {
@@ -183,6 +192,23 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     return t('unknown_customer')
   }
 
+  const getCustomerUrdu = (invoice: any): string => {
+    if (invoice.customerId === 'walk-in') return ''
+    const cid = invoice.customerId
+    if (cid && typeof cid === 'object' && cid.nameUrdu) {
+      return String(cid.nameUrdu).trim()
+    }
+    const idKey =
+      cid && typeof cid === 'object' && cid._id != null ? String(cid._id) : cid != null ? String(cid) : ''
+    if (!idKey || idKey === 'walk-in') return ''
+    if (invoice.customer?.nameUrdu) return String(invoice.customer.nameUrdu).trim()
+    if (customerMap.has(idKey)) {
+      const customer = customerMap.get(idKey)
+      return customer?.nameUrdu?.trim() || ''
+    }
+    return ''
+  }
+
   // Helper function to get customer phone number
   const getCustomerPhone = (invoice: any) => {
     // For walk-in customers, they don't have stored phone numbers
@@ -230,12 +256,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       // Resolve customer name
       const customerName = getCustomerName(invoice)
       const walkInCustomerName = invoice.walkInCustomerName
+      const customerNameUrdu = getCustomerUrdu(invoice)
       
       // Prepare print data
       const printData: PrintInvoiceData = {
         invoiceNumber: invoice.invoiceNumber,
         items: (invoice.items || []).map((item: any) => ({
           name: item.name,
+          nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
@@ -243,6 +271,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         })),
         customerId: invoice.customerId,
         customerName: customerName,
+        customerNameUrdu: customerNameUrdu || undefined,
         walkInCustomerName: walkInCustomerName,
         type: invoice.type,
         subtotal: invoice.subtotal || 0,
@@ -251,11 +280,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         total: invoice.total || 0,
         paidAmount: invoice.paidAmount || 0,
         balance: invoice.balance || 0,
-        dueDate: invoice.dueDate,
         notes: invoice.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge || 0,
         serviceCharge: invoice.serviceCharge || 0,
         companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
@@ -266,6 +297,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         isUrduOnly: invoice.isUrduOnly,
         userPreferredLanguage: preferredLanguage,
         invoiceNote: branchData?.invoiceNote,
+        printInUrdu,
       }
 
       if (format === 'receipt') {
@@ -341,15 +373,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           )}
           <div>
             <h1 className="text-2xl font-bold">{t('invoice_management')}</h1>
-            <p className="text-muted-foreground mt-4">{t('manage_customer_invoices')}</p>
+            <p className="text-muted-foreground mt-1">{t('manage_customer_invoices')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={onConvertPending}>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <Button variant="outline" className="whitespace-nowrap" onClick={onConvertPending}>
             <Clock className="h-4 w-4 mr-2" />
             {t('convert_pending_invoices')}
           </Button>
-          <Button onClick={onCreateNew}>
+          <Button className="whitespace-nowrap" onClick={onCreateNew}>
             <Plus className="h-4 w-4 mr-2" />
             {t('create_invoice')}
           </Button>
@@ -359,7 +391,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <Label htmlFor="search">{t('search')}</Label>
               <div className="relative mt-2">
@@ -407,19 +439,52 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
               </Select>
             </div>
 
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('')
-                  setStatusFilter('all')
-                  setTypeFilter('all')
-                }}
-                className="w-full"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                {t('clear_filters')}
-              </Button>
+            <div>
+              <div className="flex h-5 items-center gap-1.5">
+                <Label htmlFor="invoice-print-urdu">{t('urdu_print')}</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-full text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={t('urdu_print_hint')}
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    {t('urdu_print_hint')}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="mt-2 flex h-10 items-center">
+                <Switch
+                  id="invoice-print-urdu"
+                  checked={printInUrdu}
+                  onCheckedChange={(v) => {
+                    setPrintInUrdu(v)
+                    setInvoicePrintInUrdu(v)
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <div className="hidden h-5 shrink-0 md:block" aria-hidden />
+              <div className="mt-2 flex min-h-10 items-center">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm('')
+                    setStatusFilter('all')
+                    setTypeFilter('all')
+                  }}
+                  className="w-full md:w-auto lg:min-w-[10rem]"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  {t('clear_filters')}
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -469,8 +534,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                     <TableCell className="font-medium">
                       {invoice.invoiceNumber}
                     </TableCell>
-                    <TableCell className={getTextClasses(getCustomerName(invoice), '')}>
-                      {getCustomerName(invoice)}
+                    <TableCell className='max-w-[14rem]'>
+                      <BilingualName primary={getCustomerName(invoice)} secondary={getCustomerUrdu(invoice)} />
                     </TableCell>
                     <TableCell>
                       {getCustomerPhone(invoice)}
@@ -536,7 +601,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                               <DialogTitle>{t('invoice_details')} - {invoice.invoiceNumber}</DialogTitle>
                             </DialogHeader>
                             <div className="overflow-y-auto pr-4">
-                              {selectedInvoice && <InvoiceDetails invoice={selectedInvoice} getCustomerName={getCustomerName} />}
+                              {selectedInvoice && (
+                                <InvoiceDetails
+                                  invoice={selectedInvoice}
+                                  getCustomerName={getCustomerName}
+                                  getCustomerUrdu={getCustomerUrdu}
+                                />
+                              )}
                             </div>
                           </DialogContent>
                         </Dialog>
@@ -715,7 +786,15 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   )
 }
 
-function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustomerName: (invoice: any) => string }) {
+function InvoiceDetails({
+  invoice,
+  getCustomerName,
+  getCustomerUrdu,
+}: {
+  invoice: any
+  getCustomerName: (invoice: any) => string
+  getCustomerUrdu: (invoice: any) => string
+}) {
   const { t } = useLanguage()
   
   return (
@@ -734,9 +813,9 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
         </div>
         <div>
           <Label>{t('customer')}</Label>
-          <p className={getTextClasses(getCustomerName(invoice), "font-medium")}>
-            {getCustomerName(invoice)}
-          </p>
+          <div className='mt-1'>
+            <BilingualName primary={getCustomerName(invoice)} secondary={getCustomerUrdu(invoice)} />
+          </div>
         </div>
         <div>
           <Label>{t('status')}</Label>
@@ -760,7 +839,12 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
               </TableRow>
             </TableHeader>
             <TableBody>
-              {invoice.items?.map((item: any, index: number) => (
+              {invoice.items?.map((item: any, index: number) => {
+                const productUrdu =
+                  item.nameUrdu ||
+                  (typeof item.productId === 'object' && item.productId?.nameUrdu) ||
+                  ''
+                return (
                 <TableRow key={index} className="hover:bg-muted/50">
                   <TableCell className="whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -771,7 +855,7 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
                           className="w-8 h-8 rounded object-cover"
                         />
                       )}
-                      <span className="truncate max-w-xs">{item.name}</span>
+                      <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
                     </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -780,7 +864,8 @@ function InvoiceDetails({ invoice, getCustomerName }: { invoice: any; getCustome
                   <TableCell className="whitespace-nowrap">Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         </div>

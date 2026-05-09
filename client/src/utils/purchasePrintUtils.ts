@@ -2,14 +2,37 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 
+/** Match sales invoice thermal/A4: Naskh Arabic stack — no Nastaliq / Jameel Noori. */
+const PURCHASE_PRINT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
+
+const PURCHASE_PRINT_GOOGLE_FONTS =
+  'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap'
+
 type BranchPrintDetails = {
+  /** English header title (org or branch) */
   name?: string
+  /** Urdu header when print language is Urdu */
+  nameUrdu?: string
   address?: string
   phone?: string
   email?: string
   logo?: string
   isTrial?: boolean
   invoiceNote?: string
+}
+
+function resolvePurchasePrintLanguage(
+  purchase: any,
+  languageOverride?: InvoiceLanguage,
+  printInUrdu?: boolean,
+): InvoiceLanguage {
+  if (printInUrdu === true) return 'ur'
+  if (printInUrdu === false) return 'en'
+  return resolveInvoiceLanguage({
+    language: languageOverride ?? purchase?.language,
+    isUrduOnly: purchase?.isUrduOnly,
+    userPreferredLanguage: purchase?.userPreferredLanguage,
+  })
 }
 
 const resolveUnitPrice = (item: any): number =>
@@ -40,7 +63,8 @@ export function generatePurchaseInvoiceHTML(
   supplierName: string,
   _t: any,
   branchDetails?: BranchPrintDetails,
-  languageOverride?: InvoiceLanguage
+  languageOverride?: InvoiceLanguage,
+  printInUrdu?: boolean,
 ): string {
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
@@ -48,17 +72,15 @@ export function generatePurchaseInvoiceHTML(
   const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
   const paymentType = resolvePaymentType(purchase)
 
-  const language = resolveInvoiceLanguage({
-    language: languageOverride ?? purchase?.language,
-    isUrduOnly: purchase?.isUrduOnly,
-    userPreferredLanguage: purchase?.userPreferredLanguage,
-  })
+  const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
 
-  const companyName = branchDetails?.name || labels.not_available
+  const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
+  const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
+  const companyName = language === 'ur' ? urduTitle || englishTitle : englishTitle
   const companyAddress = branchDetails?.address || ''
   const companyPhone = branchDetails?.phone || ''
   const companyEmail = branchDetails?.email || ''
@@ -86,13 +108,13 @@ export function generatePurchaseInvoiceHTML(
       .no-print { display: none !important; }
     }
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: ${PURCHASE_PRINT_FONT_STACK};
       font-size: 13px; line-height: 1.4; margin: 0; padding: 8px; width: 300px;
       background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .receipt-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
     .company-logo { max-width: 120px; height: auto; margin: 0 auto 8px; display: block; }
-    .business-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
+    .business-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; text-transform: ${language === 'ur' ? 'none' : 'uppercase'}; }
     .business-info { font-size: 10px; margin-bottom: 1px; }
     .invoice-info { margin-bottom: 12px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
     .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; }
@@ -128,7 +150,7 @@ export function generatePurchaseInvoiceHTML(
     .highlight { background: #ffffcc; padding: 1px 2px; }
     @media screen { body { max-width: 350px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
@@ -210,7 +232,8 @@ export function generatePurchaseInvoiceA4HTML(
   supplierName: string,
   _t: any,
   branchDetails?: BranchPrintDetails,
-  languageOverride?: InvoiceLanguage
+  languageOverride?: InvoiceLanguage,
+  printInUrdu?: boolean,
 ): string {
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
@@ -218,18 +241,16 @@ export function generatePurchaseInvoiceA4HTML(
   const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
   const paymentType = resolvePaymentType(purchase)
 
-  const language = resolveInvoiceLanguage({
-    language: languageOverride ?? purchase?.language,
-    isUrduOnly: purchase?.isUrduOnly,
-    userPreferredLanguage: purchase?.userPreferredLanguage,
-  })
+  const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
   const endAlign = language === 'ur' ? 'left' : 'right'
 
-  const companyName = branchDetails?.name || labels.not_available
+  const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
+  const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
+  const companyName = language === 'ur' ? urduTitle || englishTitle : englishTitle
   const companyAddress = branchDetails?.address || ''
   const companyPhone = branchDetails?.phone || ''
   const companyEmail = branchDetails?.email || ''
@@ -253,7 +274,7 @@ export function generatePurchaseInvoiceA4HTML(
   <style>
     @media print { @page { margin: 1in; size: A4; } body { margin: 0; padding: 0; font-size: 12px; } .no-print { display: none !important; } }
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: ${PURCHASE_PRINT_FONT_STACK};
       font-size: 14px; line-height: 1.4; margin: 0; padding: 20px; background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid black; padding-bottom: 20px; }
@@ -299,7 +320,7 @@ export function generatePurchaseInvoiceA4HTML(
     .status-cash { background: #d4edda; color: #155724; } .status-credit { background: #cce5ff; color: #004085; } .status-pending { background: #fff3cd; color: #856404; }
     @media screen { body { max-width: 800px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 40px; border-radius: 12px; } }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
 </head>
 <body>
   <div class="invoice-header">

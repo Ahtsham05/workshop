@@ -86,6 +86,8 @@ const restaurantPublicRoute = require('./restaurantPublic.route');
 const paymentRoute = require('./payment.route');
 const adminRoute = require('./admin.route');
 
+const translateRoute = require('./translate.route');
+
 const router = express.Router();
 
 const defaultRoutes = [
@@ -108,6 +110,10 @@ const defaultRoutes = [
   {
     path: '/categories',
     route: categoryRoute,
+  },
+  {
+    path: '/translate',
+    route: translateRoute,
   },
   {
     path: '/customers',

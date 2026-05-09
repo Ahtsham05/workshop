@@ -1,10 +1,11 @@
-import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
+import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
 
 export interface PrintInvoiceData {
   invoiceNumber: string
   items: Array<{
     name: string
+    nameUrdu?: string | null
     quantity: number
     unit?: string
     unitPrice: number
@@ -12,6 +13,8 @@ export interface PrintInvoiceData {
   }>
   customerId?: string | { name: string; id: string; _id?: string }
   customerName?: string
+  /** Urdu name for registered customers (walk-in uses walk-in name only). */
+  customerNameUrdu?: string
   walkInCustomerName?: string
   type: 'cash' | 'credit' | 'pending'
   subtotal: number
@@ -34,11 +37,50 @@ export interface PrintInvoiceData {
   companyPhone?: string
   companyEmail?: string
   companyTaxNumber?: string
+  /** When printing in Urdu (`printInUrdu` / resolved language), shown as header title before English fallback. */
+  companyNameUrdu?: string
+  /** Branch street address for the labeled address row on receipts (from Branch Management). */
+  invoiceAddress?: string
+  invoiceAddressUrdu?: string
   companyLogo?: string
   isTrial?: boolean
   language?: InvoiceLanguage
   isUrduOnly?: boolean
   userPreferredLanguage?: InvoiceLanguage
+  /**
+   * Forces print language for labels + name script:
+   * `true` — Urdu headings and Urdu names (fallback to English if missing).
+   * `false` — English headings and English names only.
+   * Omit — follow invoice / user preference (`resolveInvoiceLanguage`).
+   */
+  printInUrdu?: boolean
+}
+
+function resolvePrintLanguage(data: PrintInvoiceData): InvoiceLanguage {
+  if (data.printInUrdu === true) return 'ur'
+  if (data.printInUrdu === false) return 'en'
+  return resolveInvoiceLanguage(data)
+}
+
+/** Receipt/A4 header line: Urdu branch/org name when printing in Urdu, else English. */
+function resolveHeaderBusinessName(data: PrintInvoiceData, lang: InvoiceLanguage): string {
+  const en = (data.companyName ?? '').trim()
+  const ur = (data.companyNameUrdu ?? '').trim()
+  if (lang === 'ur') return ur || en
+  return en || ur
+}
+
+/** Customer / invoice address line for print (Urdu-first when printing in Urdu). */
+function formatPrintInvoiceAddress(
+  en: string | undefined,
+  ur: string | undefined,
+  lang: InvoiceLanguage,
+): string {
+  const e = (en ?? '').trim()
+  const u = (ur ?? '').trim()
+  if (!e && !u) return ''
+  const text = lang === 'ur' ? u || e : e || u
+  return escapeHtml(text)
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -50,12 +92,40 @@ export const formatCurrency = (amount: number): string => {
   return `Rs${amount.toFixed(2)}`
 }
 
+/** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). */
+function formatPrintItemCell(
+  item: { name: string; nameUrdu?: string | null },
+  lang: InvoiceLanguage,
+): string {
+  const text = lang === 'ur' ? item.nameUrdu?.trim() || item.name : item.name
+  return escapeHtml(text)
+}
+
+/** Single-line customer display for print. Walk-in: stored name as entered. */
+function formatPrintCustomerCell(
+  customerId: unknown,
+  walkInCustomerName: string | undefined,
+  customerName: string | undefined,
+  customerNameUrdu: string | undefined,
+  walkInFallback: string,
+  naFallback: string,
+  lang: InvoiceLanguage,
+): string {
+  if (customerId === 'walk-in') {
+    return escapeHtml(walkInCustomerName?.trim() || walkInFallback)
+  }
+  const en = customerName?.trim() || naFallback
+  const ur = customerNameUrdu?.trim()
+  return escapeHtml(lang === 'ur' ? ur || en : en)
+}
+
 export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   const {
     invoiceNumber,
     items,
     customerId,
     customerName,
+    customerNameUrdu,
     walkInCustomerName,
     type,
     subtotal,
@@ -64,34 +134,21 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     total,
     paidAmount,
     // balance,
-    dueDate,
     notes,
     invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
-    companyName,
     companyAddress,
     companyPhone,
     companyEmail,
-    companyTaxNumber
+    companyTaxNumber,
   } = data
 
-  const language = resolveInvoiceLanguage(data)
+  const language = resolvePrintLanguage(data)
   const labels = receiptLabels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
-
-  const formatDisplayDate = (value?: string) => {
-    if (!value) return labels.not_available
-    try {
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return labels.not_available
-      return date.toLocaleDateString(locale)
-    } catch {
-      return labels.not_available
-    }
-  }
 
   // Resolve balances - prefer explicit fields from `data` when provided
   const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
@@ -106,9 +163,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   //   ? data.netBalance
   //   : totalWithPrev - paid
 
+  const headerBusinessName = resolveHeaderBusinessName(data, language)
+  const invoiceAddrLine = formatPrintInvoiceAddress(data.invoiceAddress, data.invoiceAddressUrdu, language)
+
   const urduTexts = {
     ...labels,
-    business_name: companyName || labels.business_name,
+    business_name: headerBusinessName || labels.business_name,
     business_address: companyAddress || labels.business_address,
     business_phone: companyPhone || labels.business_phone,
     business_email: companyEmail || labels.business_email,
@@ -147,7 +207,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 13px;
       line-height: 1.4;
       margin: 0;
@@ -177,7 +237,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       font-size: 16px;
       font-weight: bold;
       margin-bottom: 4px;
-      text-transform: uppercase;
+      text-transform: ${language === 'ur' ? 'none' : 'uppercase'};
     }
     
     .business-info {
@@ -369,6 +429,18 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       background: #f5f5f5;
       border: 1px solid #ddd;
       border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .print-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
     }
     
     .print-btn {
@@ -406,7 +478,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
@@ -432,12 +504,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.customer}:</span>
-      <span>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || urduTexts.not_available)}</span>
+      <span>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</span>
     </div>
-    ${type === 'credit' && dueDate ? `
+    ${invoiceAddrLine ? `
     <div class="info-row">
-      <span class="info-label">${urduTexts.due_date}:</span>
-      <span>${formatDisplayDate(dueDate)}</span>
+      <span class="info-label">${urduTexts.invoice_address}:</span>
+      <span>${invoiceAddrLine}</span>
     </div>
     ` : ''}
   </div>
@@ -458,7 +530,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
         ${items.map((item, index) => `
         <tr>
           <td>${index + 1}</td>
-          <td>${item.name}</td>
+          <td>${formatPrintItemCell(item, language)}</td>
           <td>${item.unitPrice.toFixed(2)}</td>
           <td>${item.quantity}</td>
           <td>${item.subtotal.toFixed(2)}</td>
@@ -586,6 +658,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="no-print">
     <div style="margin-bottom: 10px; font-weight: bold;">${urduTexts.print_options}</div>
+    <div class="print-actions">
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
@@ -598,6 +671,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     >
       ${urduTexts.close}
     </button>
+    </div>
   </div>
 </body>
 </html>
@@ -611,6 +685,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     items,
     customerId,
     customerName,
+    customerNameUrdu,
     walkInCustomerName,
     type,
     subtotal,
@@ -619,39 +694,29 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     total,
     paidAmount,
     // balance,
-    dueDate,
     notes,
     invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
-    companyName,
     companyAddress,
     companyPhone,
     companyEmail,
-    companyTaxNumber
+    companyTaxNumber,
   } = data
 
-  const language = resolveInvoiceLanguage(data)
+  const language = resolvePrintLanguage(data)
   const labels = a4Labels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
   const endAlign = language === 'ur' ? 'left' : 'right'
 
-  const formatDisplayDate = (value?: string) => {
-    if (!value) return labels.not_available
-    try {
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return labels.not_available
-      return date.toLocaleDateString(locale)
-    } catch {
-      return labels.not_available
-    }
-  }
+  const headerBusinessName = resolveHeaderBusinessName(data, language)
+  const invoiceAddrLine = formatPrintInvoiceAddress(data.invoiceAddress, data.invoiceAddressUrdu, language)
 
   const urduTexts = {
     ...labels,
-    business_name: companyName || labels.business_name,
+    business_name: headerBusinessName || labels.business_name,
     business_address: companyAddress || labels.business_address,
     business_phone: companyPhone || labels.business_phone,
     business_email: companyEmail || labels.business_email,
@@ -703,7 +768,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     }
     
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 14px;
       line-height: 1.4;
       margin: 0;
@@ -976,11 +1041,23 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       background: #f5f5f5;
       border: 1px solid #ddd;
       border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .print-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
     }
     
     .print-btn {
       padding: 10px 20px;
-      margin: 0 10px;
+      margin: 0;
       font-size: 14px;
       border: none;
       border-radius: 5px;
@@ -1032,7 +1109,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="invoice-header">
@@ -1061,13 +1138,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="info-title">${urduTexts.bill_to}:</div>
       <div class="info-row">
         <span class="info-label">${urduTexts.customer}:</span>
-        <span><strong>${customerId === 'walk-in' ? (walkInCustomerName || urduTexts.walk_in_customer) : (customerName || urduTexts.not_available)}</strong></span>
+        <span><strong>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</strong></span>
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
-      ${type === 'credit' && dueDate ? `
+      ${invoiceAddrLine ? `
       <div class="info-row">
-        <span class="info-label">${urduTexts.due_date}:</span>
-        <span><strong style="color: #000;">${formatDisplayDate(dueDate)}</strong></span>
+        <span class="info-label">${urduTexts.invoice_address}:</span>
+        <span><strong>${invoiceAddrLine}</strong></span>
       </div>
       ` : ''}
     </div>
@@ -1094,7 +1171,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       ${items.map((item, index) => `
         <tr>
           <td class="text-center"><strong>${index + 1}</strong></td>
-          <td class="text-left"><strong>${item.name}</strong></td>
+          <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
           <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
@@ -1201,6 +1278,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="no-print">
     <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${urduTexts.print_options}</div>
+    <div class="print-actions">
     <button 
       onclick="window.print()" 
       class="print-btn print-btn-primary"
@@ -1213,6 +1291,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     >
       ${urduTexts.close}
     </button>
+    </div>
   </div>
 </body>
 </html>

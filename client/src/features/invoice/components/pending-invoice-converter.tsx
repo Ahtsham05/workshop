@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-// import { Input } from '@/components/ui/input'
-// import { Label } from '@/components/ui/label'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
@@ -55,6 +55,7 @@ import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -62,6 +63,8 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { cn } from '@/lib/utils'
+import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 interface ConvertedItem {
   id: string
@@ -97,6 +100,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(false)
   
+  const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [createInvoice, { isLoading: isCreating }] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
 
@@ -105,6 +110,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     const defaultDueDate = new Date()
     defaultDueDate.setDate(defaultDueDate.getDate() + 30)
     setDueDate(format(defaultDueDate, 'yyyy-MM-dd'))
+    setPrintReceiptInUrdu(getInvoicePrintInUrdu())
   }, [])
 
   // Fetch customer balance when customer is selected
@@ -246,13 +252,9 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   }, [selectedCustomerId, customers, selectedCustomer])
 
   // Filter customers by search query (like invoice panel)
-  const filteredCustomers = customers.filter(customer => {
-    if (!customerSearchQuery) return true
-    const query = customerSearchQuery.toLowerCase()
-    const name = customer.name?.toLowerCase() || ''
-    const phone = customer.phone?.toLowerCase() || ''
-    return name.includes(query) || phone.includes(query)
-  })
+  const filteredCustomers = customers.filter((customer) =>
+    matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
+  )
 
   // Convert and merge items from selected invoices
   const convertedItems = useMemo(() => {
@@ -369,12 +371,14 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
+          nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.subtotal
         })),
         customerId: selectedCustomer,
         customerName: selectedCustomer?.name,
+        customerNameUrdu: selectedCustomer?.nameUrdu?.trim() || undefined,
         type: 'credit',
         subtotal: invoiceData.subtotal,
         tax: invoiceData.tax,
@@ -382,19 +386,23 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         total: invoiceData.total,
         paidAmount: invoiceData.paidAmount || 0,
         balance: invoiceData.balance || invoiceData.total,
-        dueDate: invoiceData.dueDate,
         notes: invoiceData.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: 0,
         serviceCharge: 0,
         previousBalance: customerBalance,
         newBalance: customerBalance + invoiceData.total,
         companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
         companyLogo: orgData?.logo?.url,
         isTrial: orgData?.subscription?.isTrial,
         invoiceNote: branchData?.invoiceNote,
+        printInUrdu: getInvoicePrintInUrdu(),
+        userPreferredLanguage: preferredLanguage as 'en' | 'ur',
       }
 
       if (printType === 'a4') {
@@ -549,6 +557,18 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   </p>
                 </div>
               </div>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={printReceiptInUrdu}
+                    onCheckedChange={(v) => {
+                      setPrintReceiptInUrdu(v)
+                      setInvoicePrintInUrdu(v)
+                    }}
+                  />
+                  <Label className="text-sm whitespace-nowrap">{t('urdu_print')}</Label>
+                </div>
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -585,8 +605,22 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                   {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
                                 </span>
                               </div>
-                              <span className="text-xs truncate" title={selectedCustomer.name}>
-                                {selectedCustomer.name}
+                              <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0">
+                                <span className="text-xs truncate shrink-0" title={selectedCustomer.name}>
+                                  {selectedCustomer.name}
+                                </span>
+                                {selectedCustomer.nameUrdu?.trim() ? (
+                                  <span
+                                    className={cn(
+                                      'min-w-0 truncate text-xs rtl',
+                                      getUrduSecondaryNameClasses(selectedCustomer.nameUrdu),
+                                    )}
+                                    dir="rtl"
+                                    title={selectedCustomer.nameUrdu.trim()}
+                                  >
+                                    {selectedCustomer.nameUrdu.trim()}
+                                  </span>
+                                ) : null}
                               </span>
                             </Badge>
                           </div>
@@ -615,7 +649,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                             return (
                               <CommandItem
                                 key={customerId}
-                                value={customer.name}
+                                value={`${customerId}-${customer.name ?? ''}`}
                                 onSelect={() => {
                                   setSelectedCustomerId(customerId)
                                   setSelectedInvoices(new Set()) // Reset selections
@@ -630,10 +664,24 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                       {customer.name?.charAt(0).toUpperCase() || 'C'}
                                     </span>
                                   </div>
-                                  <div className="flex flex-col flex-1 min-w-0">
-                                    <span className="truncate font-medium" title={customer.name}>
-                                      {customer.name}
-                                    </span>
+                                  <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                                    <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0 min-w-0">
+                                      <span className="truncate font-medium shrink-0" title={customer.name}>
+                                        {customer.name}
+                                      </span>
+                                      {customer.nameUrdu?.trim() ? (
+                                        <span
+                                          className={cn(
+                                            'min-w-0 truncate text-sm rtl',
+                                            getUrduSecondaryNameClasses(customer.nameUrdu),
+                                          )}
+                                          dir="rtl"
+                                          title={customer.nameUrdu.trim()}
+                                        >
+                                          {customer.nameUrdu.trim()}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     {customer.phone && (
                                       <span className="text-xs text-muted-foreground truncate" title={customer.phone}>
                                         {customer.phone}
@@ -830,14 +878,22 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     total: billGroup.totalAmount,
                                     paidAmount: 0,
                                     balance: billGroup.totalAmount,
-                                    dueDate: billGroup.dueDate,
                                     notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
+                                    invoiceAddress: branchData?.location?.address?.trim() || undefined,
+                                    invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
                                     deliveryCharge: 0,
                                     serviceCharge: 0,
                                     companyName: orgData?.name || branchData?.name,
+                                    companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
+                                    companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+                                    companyPhone: branchData?.phone,
+                                    companyEmail: branchData?.email,
                                     companyLogo: orgData?.logo?.url,
                                     isTrial: orgData?.subscription?.isTrial,
                                     invoiceNote: branchData?.invoiceNote,
+                                    printInUrdu: getInvoicePrintInUrdu(),
+                                    userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+                                    customerNameUrdu: selectedCustomer?.nameUrdu?.trim() || undefined,
                                   }
                                   const htmlContent = generateInvoiceHTML(printData)
                                   openPrintWindow(htmlContent)
@@ -868,14 +924,22 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     total: billGroup.totalAmount,
                                     paidAmount: 0,
                                     balance: billGroup.totalAmount,
-                                    dueDate: billGroup.dueDate,
                                     notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
+                                    invoiceAddress: branchData?.location?.address?.trim() || undefined,
+                                    invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
                                     deliveryCharge: 0,
                                     serviceCharge: 0,
                                     companyName: orgData?.name || branchData?.name,
+                                    companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
+                                    companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+                                    companyPhone: branchData?.phone,
+                                    companyEmail: branchData?.email,
                                     companyLogo: orgData?.logo?.url,
                                     isTrial: orgData?.subscription?.isTrial,
                                     invoiceNote: branchData?.invoiceNote,
+                                    printInUrdu: getInvoicePrintInUrdu(),
+                                    userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+                                    customerNameUrdu: selectedCustomer?.nameUrdu?.trim() || undefined,
                                   }
                                   const htmlContent = generateA4InvoiceHTML(printData)
                                   openA4PrintWindow(htmlContent)

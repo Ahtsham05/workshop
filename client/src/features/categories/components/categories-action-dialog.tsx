@@ -27,9 +27,12 @@ import { createCategory, updateCategory } from '@/stores/category.slice'
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
+import { Input } from '@/components/ui/input'
+import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, 'Category name is required'),
+  nameUrdu: z.string().optional(),
   image: z.object({
     url: z.string(),
     publicId: z.string(),
@@ -52,9 +55,12 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
     resolver: zodResolver(categoryFormSchema),
     defaultValues: {
       name: '',
+      nameUrdu: '',
       image: undefined,
     },
   })
+
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
 
   // Reset form when dialog opens/closes or category changes
   useEffect(() => {
@@ -63,12 +69,14 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
         // Edit mode
         form.reset({
           name: state.currentCategory.name,
+          nameUrdu: state.currentCategory.nameUrdu || '',
           image: state.currentCategory.image || undefined,
         })
       } else {
         // Create mode
         form.reset({
           name: '',
+          nameUrdu: '',
           image: undefined,
         })
       }
@@ -154,6 +162,27 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="nameUrdu"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        dir="rtl"
+                        placeholder={t('name_in_urdu_placeholder')}
+                        autoComplete="off"
+                        className="min-h-11 text-base text-right"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">{t('name_in_urdu_hint')}</p>
                     <FormMessage />
                   </FormItem>
                 )}

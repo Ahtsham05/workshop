@@ -324,7 +324,9 @@ const deleteLedgerEntry = async (id) => {
  * @returns {Promise<Array>}
  */
 const getAllSuppliersWithBalances = async (filter = {}) => {
-  const suppliers = await Supplier.find(filter).select('name phone email balance');
+  const suppliers = await Supplier.find(filter).select(
+    'name nameUrdu phone email balance picture idCardFront idCardBack',
+  );
   
   const suppliersWithBalances = await Promise.all(
     suppliers.map(async (supplier) => {
@@ -336,9 +338,13 @@ const getAllSuppliersWithBalances = async (filter = {}) => {
         _id: supplier._id,
         id: supplier.id,
         name: supplier.name,
+        nameUrdu: supplier.nameUrdu,
         phone: supplier.phone,
         email: supplier.email,
         balance: supplier.balance || 0,
+        picture: supplier.picture,
+        idCardFront: supplier.idCardFront,
+        idCardBack: supplier.idCardBack,
         lastTransactionDate: lastTransaction ? lastTransaction.transactionDate : null,
       };
     })
@@ -515,6 +521,68 @@ const deleteLedgerEntriesByReference = async (referenceId) => {
   }
 };
 
+/**
+ * Keep one opening_balance row in sync with Supplier.balance (positive = payable to supplier).
+ * Mirrors customer ledger opening sync but uses supplier credit/debit convention (credit − debit).
+ */
+const syncOpeningBalanceEntry = async ({
+  supplierId,
+  amount,
+  organizationId,
+  branchId,
+  transactionDate,
+}) => {
+  const numericAmount = Number(amount || 0);
+  const openingDate = transactionDate ? new Date(transactionDate) : new Date();
+
+  const existing = await SupplierLedger.findOne({
+    supplier: supplierId,
+    transactionType: 'opening_balance',
+  }).sort({ transactionDate: 1, createdAt: 1 });
+
+  let recalcFrom = openingDate;
+
+  if (numericAmount === 0) {
+    if (existing) {
+      recalcFrom = existing.transactionDate;
+      await existing.deleteOne();
+      await recalculateBalances(supplierId, recalcFrom);
+    }
+    return;
+  }
+
+  const credit = numericAmount > 0 ? numericAmount : 0;
+  const debit = numericAmount < 0 ? Math.abs(numericAmount) : 0;
+
+  if (existing) {
+    existing.organizationId = existing.organizationId || organizationId;
+    existing.branchId = existing.branchId || branchId;
+    existing.transactionDate = openingDate;
+    existing.description = 'Opening Balance';
+    existing.debit = debit;
+    existing.credit = credit;
+    existing.reference = 'OPENING-BALANCE';
+    recalcFrom = existing.transactionDate;
+    await existing.save();
+  } else {
+    const entry = await SupplierLedger.create({
+      organizationId,
+      branchId,
+      supplier: supplierId,
+      transactionType: 'opening_balance',
+      transactionDate: openingDate,
+      reference: 'OPENING-BALANCE',
+      description: 'Opening Balance',
+      debit,
+      credit,
+      balance: 0,
+    });
+    recalcFrom = entry.transactionDate;
+  }
+
+  await recalculateBalances(supplierId, recalcFrom);
+};
+
 module.exports = {
   createLedgerEntry,
   queryLedgerEntries,
@@ -526,4 +594,5 @@ module.exports = {
   getAllSuppliersWithBalances,
   updateLedgerEntriesByReference,
   deleteLedgerEntriesByReference,
+  syncOpeningBalanceEntry,
 };

@@ -4,9 +4,14 @@ const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const customerValidation = require('../../validations/customer.validation');
 const customerController = require('../../controllers/customer.controller');
+const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
 router.use(auth(), branchScope());
+
+router
+  .route('/upload-image')
+  .post(upload.single('image'), customerController.uploadCustomerImage);
 
 router
   .route('/')

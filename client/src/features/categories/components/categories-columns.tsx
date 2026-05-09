@@ -13,7 +13,8 @@ import { Category } from '@/stores/category.slice'
 import { useCategories } from '../context/categories-context'
 import { useLanguage } from '@/context/language-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { getTextClasses } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { cn } from '@/lib/utils'
 
 export function useCategoryColumns(): ColumnDef<Category>[] {
   const { dispatch } = useCategories()
@@ -58,9 +59,10 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
     },
     cell: ({ row }) => {
       const category = row.original
+      const urdu = category.nameUrdu?.trim()
       return (
-        <div className={`flex items-center ${language === 'ur' ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
-          <Avatar className="h-8 w-8">
+        <div className={`flex items-start gap-3 ${language === 'ur' ? 'flex-row-reverse' : ''}`}>
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage 
               src={category.image?.url || ''} 
               alt={category.name}
@@ -70,7 +72,14 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
               {category.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <span className={getTextClasses(category.name, "font-medium")}>{category.name}</span>
+          <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className={getTextClasses(category.name, 'shrink-0 font-medium')}>{category.name}</span>
+            {urdu ? (
+              <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
+                {urdu}
+              </span>
+            ) : null}
+          </div>
         </div>
       )
     },
@@ -114,6 +123,7 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
         </DropdownMenu>
       )
     },
+    enableHiding: false,
   }
 
   // Return columns in different order based on language

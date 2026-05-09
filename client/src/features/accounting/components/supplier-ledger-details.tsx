@@ -426,7 +426,23 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
       <Card>
         <CardHeader>
           <CardTitle>{supplier.name}</CardTitle>
-          <CardDescription>{t('Transaction History and Balance')}</CardDescription>
+          <CardDescription>
+            <span className='block'>{t('Transaction History and Balance')}</span>
+            {(supplier.phone || supplier.email) && (
+              <span className='mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'>
+                {supplier.phone ? (
+                  <span>
+                    {t('phone')}: {supplier.phone}
+                  </span>
+                ) : null}
+                {supplier.email ? (
+                  <span>
+                    {t('email')}: {supplier.email}
+                  </span>
+                ) : null}
+              </span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">

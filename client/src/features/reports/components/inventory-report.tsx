@@ -10,9 +10,11 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [status, setStatus] = useState<string>('all')
   const { data, isLoading } = useGetInventoryReportQuery({ status: status === 'all' ? '' : status })
 
@@ -25,7 +27,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
         }
 
         const excelData = data.data.map((product) => ({
-          [t('product')]: product.name,
+          [t('product')]: reportEntityName(language, product.name, product.nameUrdu),
           [t('barcode')]: product.barcode || 'N/A',
           [t('category')]: product.category,
           [t('stock')]: product.stockQuantity,
@@ -116,9 +118,11 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.data?.map((product) => (
+              {data?.data?.map((product) => {
+                const label = reportEntityName(language, product.name, product.nameUrdu)
+                return (
                 <TableRow key={product._id}>
-                  <TableCell className='font-medium'>{product.name}</TableCell>
+                  <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
                   <TableCell>{product.barcode || 'N/A'}</TableCell>
                   <TableCell>{product.category}</TableCell>
                   <TableCell className='text-right'>{product.stockQuantity} {product.unit || 'pcs'}</TableCell>
@@ -134,7 +138,8 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                     </Badge>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

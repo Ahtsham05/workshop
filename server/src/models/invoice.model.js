@@ -17,6 +17,7 @@ const splitPaymentSchema = new mongoose.Schema({
 const invoiceItemSchema = new mongoose.Schema({
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     name: { type: String, required: true },
+    nameUrdu: { type: String, default: '' },
     image: {
         url: { type: String },
         publicId: { type: String }
@@ -70,6 +71,9 @@ const InvoiceSchema = new mongoose.Schema({
     paidAmount: { type: Number, default: 0, min: 0 },
     balance: { type: Number, default: 0 },
     dueDate: { type: Date },
+    /** Optional delivery / billing address lines on the invoice (shown on prints when set). */
+    invoiceAddress: { type: String, default: '' },
+    invoiceAddressUrdu: { type: String, default: '' },
     
     // Additional charges
     deliveryCharge: { type: Number, default: 0, min: 0 },

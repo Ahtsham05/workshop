@@ -59,8 +59,16 @@ const updateCustomerById = async (customerId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
   }
 
+  const updates = { ...updateBody };
+  for (const key of ['picture', 'idCardFront', 'idCardBack']) {
+    if (updates[key] === null) {
+      customer.set(key, undefined);
+      delete updates[key];
+    }
+  }
+
   const originalBalance = Number(customer.balance || 0);
-  Object.assign(customer, updateBody);
+  Object.assign(customer, updates);
   await customer.save();
 
   if (Object.prototype.hasOwnProperty.call(updateBody, 'balance')) {
@@ -107,6 +115,7 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}) => {
     // Process each customer to ensure proper data format
     const processedCustomers = customersToAdd.map(customer => ({
       name: customer.name,
+      nameUrdu: customer.nameUrdu || '',
       email: customer.email || '',
       phone: customer.phone || '',
       whatsapp: customer.whatsapp || '',

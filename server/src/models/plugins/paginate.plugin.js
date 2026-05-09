@@ -38,15 +38,25 @@ const paginate = (schema) => {
     const page = options.page && parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
     const skip = (page - 1) * limit;
 
-    // Handle the search functionality
+    // Search: `fieldName` can be comma-separated (e.g. name,nameUrdu,barcode). Regex is escaped for safety.
     if (options.search && options.fieldName) {
-      // Assuming you want to search in all text fields. Modify this filter as needed for specific fields.
-      filter = {
-        ...filter,
-        $or: [
-          { [options.fieldName]: { $regex: options.search, $options: 'i' }}
-        ]
-      };
+      const raw = String(options.search).trim();
+      if (raw) {
+        const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const fields = String(options.fieldName)
+          .split(',')
+          .map((f) => f.trim())
+          .filter(Boolean);
+        const orConditions = fields.map((field) => ({
+          [field]: { $regex: escaped, $options: 'i' },
+        }));
+        if (orConditions.length > 0) {
+          filter = {
+            ...filter,
+            $or: orConditions,
+          };
+        }
+      }
     }
 
     const countPromise = this.countDocuments(filter).exec();

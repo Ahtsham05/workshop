@@ -4,9 +4,14 @@ const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const supplierValidation = require('../../validations/supplier.validation');
 const supplierController = require('../../controllers/supplier.controller');
+const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
 router.use(auth(), branchScope());
+
+router
+  .route('/upload-image')
+  .post(upload.single('image'), supplierController.uploadSupplierImage);
 
 router
   .route('/')

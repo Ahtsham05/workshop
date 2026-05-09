@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/popover'
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -31,10 +30,12 @@ import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
-import type { Purchase, PurchaseItem, Supplier } from '../index'
+import { createEmptyPurchaseManualItem, type Purchase, type PurchaseItem, type Supplier } from '../index'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
-import { isWholesaleRetailBusiness } from '@/lib/business-types'
-import { isMobileShopBusiness } from '@/lib/business-types'
+import { isMobileShopBusiness, isWholesaleRetailBusiness } from '@/lib/business-types'
+import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
+import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { cn } from '@/lib/utils'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -49,6 +50,7 @@ interface PurchasePanelProps {
   isEditing?: boolean
   editingPurchase?: any
   products: any[]
+  productsLoading?: boolean
 }
 
 export default function PurchasePanel({
@@ -64,6 +66,7 @@ export default function PurchasePanel({
   isEditing = false,
   editingPurchase,
   products,
+  productsLoading = false,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
@@ -99,14 +102,20 @@ export default function PurchasePanel({
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
 
-  // Filter suppliers by search query
-  const filteredSuppliers = suppliers.filter(supplier => {
-    if (!supplierSearchQuery) return true
-    const query = supplierSearchQuery.toLowerCase()
-    const name = supplier.name?.toLowerCase() || ''
-    const phone = supplier.phone?.toLowerCase() || ''
-    return name.includes(query) || phone.includes(query)
-  })
+  // Filter suppliers by name, Urdu name, or phone
+  const filteredSuppliers = suppliers.filter((supplier) =>
+    matchesBilingualSearch(supplierSearchQuery, supplier.name, supplier.nameUrdu, supplier.phone),
+  )
+
+  const filteredPurchaseProducts = products.filter((product) =>
+    matchesBilingualSearch(
+      productSearchQuery,
+      product.name,
+      product.nameUrdu,
+      product.barcode,
+      typeof product.description === 'string' ? product.description : undefined,
+    ),
+  )
 
   // RTK Query mutations
   const [createPurchase] = useCreatePurchaseMutation()
@@ -155,6 +164,27 @@ export default function PurchasePanel({
     fetchSupplierBalance()
   }, [purchase.supplier])
 
+  const purchaseAutoOpenDoneRef = useRef(false)
+
+  useEffect(() => {
+    if (isEditing) {
+      purchaseAutoOpenDoneRef.current = false
+      return
+    }
+    const first = purchase.items[0]
+    const oneEmptyManual =
+      purchase.items.length === 1 &&
+      first?.isManualEntry &&
+      !(first.product?.id || (first.product as { _id?: string })?._id)
+    if (oneEmptyManual && !purchaseAutoOpenDoneRef.current) {
+      purchaseAutoOpenDoneRef.current = true
+      queueMicrotask(() => setProductSelectOpen('manual-0'))
+    }
+    if (!oneEmptyManual) {
+      purchaseAutoOpenDoneRef.current = false
+    }
+  }, [isEditing, purchase.items])
+
   useEffect(() => {
     if (purchase.paymentType === 'Cash') {
       const currentTotal = calculateTotals().total
@@ -175,7 +205,8 @@ export default function PurchasePanel({
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
           const branchDetails = {
-            name: branchData?.name,
+            name: orgData?.name || branchData?.name,
+            nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
             address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
               .filter(Boolean)
               .join(', '),
@@ -187,8 +218,8 @@ export default function PurchasePanel({
           }
           const html =
             printType === 'receipt'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage)
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage)
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
 
           const printWindow = window.open('', '_blank')
           if (printWindow) {
@@ -470,8 +501,18 @@ export default function PurchasePanel({
                               {purchase.supplier.name?.charAt(0).toUpperCase() || 'S'}
                             </span>
                           </div>
-                          <span className="text-xs truncate" title={purchase.supplier.name}>
-                            {purchase.supplier.name}
+                          <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
+                            <span className="text-xs truncate shrink-0" title={purchase.supplier.name}>
+                              {purchase.supplier.name}
+                            </span>
+                            {purchase.supplier.nameUrdu?.trim() ? (
+                              <span
+                                dir="rtl"
+                                className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(purchase.supplier.nameUrdu))}
+                              >
+                                {purchase.supplier.nameUrdu.trim()}
+                              </span>
+                            ) : null}
                           </span>
                         </Badge>
                       </div>
@@ -521,13 +562,14 @@ export default function PurchasePanel({
                               e.preventDefault()
                               e.stopPropagation()
                               console.log('Selecting supplier:', supplier)
-                              const selectedSupplier = {
+                              const selectedSupplier: Supplier = {
                                 _id: supplier._id || (supplier as any).id,
                                 name: supplier.name,
+                                nameUrdu: supplier.nameUrdu,
                                 phone: supplier.phone,
                                 email: supplier.email,
                                 address: supplier.address,
-                                balance: supplier.balance
+                                balance: supplier.balance,
                               }
                               console.log('Setting supplier to:', selectedSupplier)
                               setPurchase(prev => ({
@@ -549,10 +591,21 @@ export default function PurchasePanel({
                                   {supplier.name?.charAt(0).toUpperCase() || 'S'}
                                 </span>
                               </div>
-                              <div className="flex flex-col flex-1 min-w-0">
-                                <span className="truncate font-medium" title={supplier.name}>
-                                  {supplier.name}
-                                </span>
+                              <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                                <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                  <span className="truncate font-medium shrink-0" title={supplier.name}>
+                                    {supplier.name}
+                                  </span>
+                                  {supplier.nameUrdu?.trim() ? (
+                                    <span
+                                      dir="rtl"
+                                      className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(supplier.nameUrdu))}
+                                      title={supplier.nameUrdu.trim()}
+                                    >
+                                      {supplier.nameUrdu.trim()}
+                                    </span>
+                                  ) : null}
+                                </div>
                                 {supplier.phone && (
                                   <span className="text-xs text-muted-foreground truncate" title={supplier.phone}>
                                     {supplier.phone}
@@ -668,23 +721,9 @@ export default function PurchasePanel({
               size="sm"
               variant="outline"
               onClick={() => {
-                // Add a new empty row for manual product selection
-                const newItem: PurchaseItem = {
-                  product: {
-                    id: '',
-                    _id: '',
-                    name: '',
-                    price: 0,
-                    cost: 0,
-                    stockQuantity: 0,
-                  } as any,
-                  quantity: 1,
-                  purchasePrice: 0,
-                  isManualEntry: true
-                }
-                setPurchase(prev => ({
+                setPurchase((prev) => ({
                   ...prev,
-                  items: [...prev.items, newItem]
+                  items: [...prev.items, createEmptyPurchaseManualItem()],
                 }))
               }}
               className='flex items-center gap-1'
@@ -717,7 +756,7 @@ export default function PurchasePanel({
                             open={productSelectOpen === `manual-${index}`}
                             onOpenChange={(open) => {
                               setProductSelectOpen(open ? `manual-${index}` : '')
-                              if (!open) setProductSearchQuery('')
+                              setProductSearchQuery('')
                             }}
                           >
                             <PopoverTrigger asChild>
@@ -733,21 +772,24 @@ export default function PurchasePanel({
                                   value={productSearchQuery}
                                   onValueChange={setProductSearchQuery}
                                 />
-                                <CommandEmpty>{t('No products found')}</CommandEmpty>
                                 <CommandList className="max-h-64 overflow-y-auto">
-                                  <CommandGroup>
-                                    {products
-                                      .filter((product: any) => {
-                                        if (!productSearchQuery) return true
-                                        const query = productSearchQuery.toLowerCase()
-                                        return (
-                                          product.name?.toLowerCase().includes(query) ||
-                                          product.barcode?.toLowerCase().includes(query)
-                                        )
-                                      })
-                                      .map((product: any) => (
+                                  {productsLoading && products.length === 0 ? (
+                                    <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
+                                      <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
+                                      {t('loading_products')}
+                                    </div>
+                                  ) : filteredPurchaseProducts.length === 0 ? (
+                                    <div className="py-6 text-center text-sm text-muted-foreground">
+                                      {t('No products found')}
+                                    </div>
+                                  ) : (
+                                    <CommandGroup>
+                                      {filteredPurchaseProducts.map((product: any) => {
+                                          const pid = product.id || product._id
+                                          return (
                                         <CommandItem
-                                          key={product.id || product._id}
+                                          key={String(pid)}
+                                          value={`${String(pid)}-${String(product.name ?? '')}`}
                                           onSelect={() => handleProductSelect(index, product)}
                                           className="flex items-center gap-3 cursor-pointer p-3"
                                         >
@@ -763,7 +805,20 @@ export default function PurchasePanel({
                                             </div>
                                           )}
                                           <div className="flex-1 min-w-0">
-                                            <div className="font-medium text-sm truncate">{product.name}</div>
+                                            <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                              <div className="font-medium text-sm truncate shrink-0">{product.name}</div>
+                                              {product.nameUrdu?.trim() ? (
+                                                <span
+                                                  dir="rtl"
+                                                  className={cn(
+                                                    'min-w-0 truncate text-xs',
+                                                    getUrduSecondaryNameClasses(product.nameUrdu),
+                                                  )}
+                                                >
+                                                  {product.nameUrdu.trim()}
+                                                </span>
+                                              ) : null}
+                                            </div>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                               {product.barcode && <span>{product.barcode}</span>}
                                               <span className="text-amber-600">Purchase Price: Rs{product.cost?.toFixed(2) || '0.00'}</span>
@@ -773,8 +828,10 @@ export default function PurchasePanel({
                                             </div>
                                           </div>
                                         </CommandItem>
-                                      ))}
-                                  </CommandGroup>
+                                          )
+                                        })}
+                                    </CommandGroup>
+                                  )}
                                 </CommandList>
                               </Command>
                             </PopoverContent>

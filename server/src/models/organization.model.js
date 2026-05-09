@@ -9,6 +9,11 @@ const organizationSchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    nameUrdu: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     businessType: {
       type: String,
       enum: BUSINESS_TYPES,

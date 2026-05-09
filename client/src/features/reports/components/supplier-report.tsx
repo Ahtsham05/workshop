@@ -9,6 +9,8 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 interface SupplierReportProps {
   startDate: string
@@ -17,7 +19,7 @@ interface SupplierReportProps {
 
 export const SupplierReport = forwardRef<{ exportToExcel: () => void }, SupplierReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetSupplierReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
@@ -29,7 +31,7 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
           }
 
           const excelData = data.data.map((supplier) => ({
-            [t('supplier')]: supplier.supplierName,
+            [t('supplier')]: reportEntityName(language, supplier.supplierName, supplier.supplierNameUrdu),
             [t('phone')]: supplier.phone || 'N/A',
             [t('purchases')]: supplier.totalPurchases,
             [t('total_amount')]: supplier.totalAmount,
@@ -104,9 +106,11 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.data?.map((supplier) => (
+              {data?.data?.map((supplier) => {
+                const label = reportEntityName(language, supplier.supplierName, supplier.supplierNameUrdu)
+                return (
                 <TableRow key={supplier._id}>
-                  <TableCell className='font-medium'>{supplier.supplierName}</TableCell>
+                  <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
                   <TableCell>{supplier.phone || 'N/A'}</TableCell>
                   <TableCell className='text-right'>{supplier.totalPurchases}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(supplier.totalAmount)}</TableCell>
@@ -119,7 +123,8 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
                     }
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

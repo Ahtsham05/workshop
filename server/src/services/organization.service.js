@@ -69,6 +69,7 @@ const setupOrganization = async (userId, orgData) => {
   const branch = await Branch.create({
     organizationId: organization._id,
     name: `${organization.name} - Main Branch`,
+    nameUrdu: orgData.defaultBranchNameUrdu || '',
     location: {
       address: orgData.address,
       city: orgData.city,

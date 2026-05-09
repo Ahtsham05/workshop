@@ -3,6 +3,8 @@ const catchAsync = require('../utils/catchAsync');
 const { supplierService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const ApiError = require('../utils/ApiError');
+const { uploadToCloudinary } = require('../middlewares/upload');
 
 const createSupplier = catchAsync(async (req, res) => {
   const supplier = await supplierService.createSupplier({ ...req.body, ...getBranchContext(req) });
@@ -62,6 +64,26 @@ const bulkAddSuppliers = catchAsync(async (req, res) => {
   }
 });
 
+const uploadSupplierImage = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
+  }
+
+  try {
+    const result = await uploadToCloudinary(req.file.buffer, {
+      public_id: `supplier_${Date.now()}`,
+      folder: 'suppliers',
+    });
+
+    res.send({
+      url: result.secure_url,
+      publicId: result.public_id,
+    });
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Image upload failed');
+  }
+});
+
 module.exports = {
   createSupplier,
   getSuppliers,
@@ -70,4 +92,5 @@ module.exports = {
   deleteSupplier,
   getAllSuppliers,
   bulkAddSuppliers,
+  uploadSupplierImage,
 };

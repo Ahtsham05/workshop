@@ -8,6 +8,8 @@ import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { cn } from '@/lib/utils'
 
 interface CustomerReportProps {
   startDate: string
@@ -16,7 +18,7 @@ interface CustomerReportProps {
 
 export const CustomerReport = forwardRef<{ exportToExcel: () => void }, CustomerReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetCustomerReportQuery({ startDate, endDate, top: 50 })
 
     useImperativeHandle(ref, () => ({
@@ -28,7 +30,7 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
           }
 
           const excelData = data.data.map((customer) => ({
-            [t('customer')]: customer.customerName,
+            [t('customer')]: reportEntityName(language, customer.customerName, customer.customerNameUrdu),
             [t('phone')]: customer.phone || 'N/A',
             Sales: customer.totalPurchases,
             [t('total_spent')]: customer.totalSpent,
@@ -99,9 +101,11 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.data?.map((customer) => (
+              {data?.data?.map((customer) => {
+                const label = reportEntityName(language, customer.customerName, customer.customerNameUrdu)
+                return (
                 <TableRow key={customer._id}>
-                  <TableCell className='font-medium'>{customer.customerName}</TableCell>
+                  <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
                   <TableCell>{customer.phone || 'N/A'}</TableCell>
                   <TableCell className='text-right'>{customer.totalPurchases}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(customer.totalSpent)}</TableCell>
@@ -110,7 +114,8 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
                     {formatDistanceToNow(new Date(customer.lastPurchase), { addSuffix: true })}
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

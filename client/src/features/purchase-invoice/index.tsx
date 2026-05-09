@@ -26,10 +26,27 @@ export interface PurchaseItem {
 export interface Supplier {
   _id: string;
   name: string;
+  nameUrdu?: string;
   phone?: string;
   email?: string;
   address?: string;
   balance?: number;
+}
+
+export function createEmptyPurchaseManualItem(): PurchaseItem {
+  return {
+    product: {
+      id: '',
+      _id: '',
+      name: '',
+      price: 0,
+      cost: 0,
+      stockQuantity: 0,
+    } as Product,
+    quantity: 1,
+    purchasePrice: 0,
+    isManualEntry: true,
+  };
 }
 
 // Purchase Interface - no types, no payments
@@ -60,7 +77,7 @@ const PurchaseInvoicePage = () => {
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
     supplier: {} as Supplier,
-    items: [],
+    items: [createEmptyPurchaseManualItem()],
     subtotal: 0,
     total: 0,
     paidAmount: 0,
@@ -281,7 +298,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: [],
+      items: [createEmptyPurchaseManualItem()],
       subtotal: 0,
       total: 0,
       paidAmount: 0,
@@ -301,7 +318,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: [],
+      items: [createEmptyPurchaseManualItem()],
       subtotal: 0,
       total: 0,
       paidAmount: 0,
@@ -401,7 +418,7 @@ const PurchaseInvoicePage = () => {
       ) : currentView === 'create' ? (
         <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
           {/* Left Column - Purchase Panel */}
-          <div className="space-y-4 pb-6">
+          <div className="min-w-0 space-y-4 pb-6">
             <PurchasePanel
               purchase={purchase}
               setPurchase={setPurchase}
@@ -415,11 +432,12 @@ const PurchaseInvoicePage = () => {
               isEditing={isEditing}
               editingPurchase={editingPurchase}
               products={products}
+              productsLoading={loading}
             />
           </div>
 
           {/* Right Column - Product Catalog */}
-          <div className="space-y-4 max-h-[2000px] overflow-y-auto pb-6">
+          <div className="min-w-0 space-y-4 max-h-[2000px] overflow-y-auto pb-6">
             <ProductCatalog
               categorizedProducts={categorizedProducts}
               loading={loading}

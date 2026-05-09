@@ -155,6 +155,11 @@ const ur: Record<string, string> = {
     "edit_supplier": "سپلائر میں ترمیم کریں",
     "delete_supplier": "سپلائر حذف کریں",
     "supplier_name": "سپلائر کا نام",
+    "supplier_dialog_section_primary_new": "نیا سپلائر",
+    "supplier_dialog_section_primary_edit": "سپلائر کی تفصیلات",
+    "supplier_dialog_section_primary_desc": "انگریزی و اردو نام، رابطے، پتہ، اور ابتدائی بیلنس۔",
+    "supplier_dialog_section_photos_title": "تصاویر اور شناختی کارڈ",
+    "supplier_dialog_section_photos_desc": "اختیاری پروفائل تصویر اور شناختی کارڈ سامنے/پیچھے۔",
     
     // Customers page
     "customers_list": "کسٹمرز کی فہرست",
@@ -166,7 +171,22 @@ const ur: Record<string, string> = {
     "edit_customer": "کسٹمر میں ترمیم کریں",
     "delete_customer": "کسٹمر حذف کریں",
     "customer_name": "کسٹمر کا نام",
+    "customer_dialog_section_primary_new": "نیا کسٹمر",
+    "customer_dialog_section_primary_edit": "کسٹمر کی تفصیلات",
+    "customer_dialog_section_primary_desc": "انگریزی و اردو نام، رابطے، پتہ، اور ابتدائی بیلنس۔",
+    "customer_dialog_section_photos_title": "تصاویر اور شناختی کارڈ",
+    "customer_dialog_section_photos_desc": "اختیاری پروفائل تصویر اور شناختی کارڈ سامنے/پیچھے۔",
     "enter_customer_name": "کسٹمر کا نام درج کریں",
+    "name_in_urdu": "نام (اردو)",
+    "name_in_urdu_placeholder": "اردو نام",
+    "name_in_urdu_hint": "انگریزی میں لکھنے پر خود بخود بھر جاتا ہے؛ آپ کسی بھی وقت ترمیم کر سکتے ہیں۔",
+    "profile_picture": "پروفائل تصویر",
+    "photo": "تصویر",
+    "view_full_photo": "مکمل تصویر دیکھیں",
+    "id_short": "شناختی",
+    "id_card_front": "شناختی کارڈ / آئی ڈی — سامنے (اختیاری)",
+    "id_card_back": "شناختی کارڈ / آئی ڈی — پیچھے (اختیاری)",
+    "photos_section_label": "تصاویر اور دستاویزات",
     "no_customers_found": "کوئی کسٹمر نہیں ملا",
     
     // Products page
@@ -453,6 +473,8 @@ const ur: Record<string, string> = {
     "cancelled": "منسوخ",
     "refunded": "واپس",
     "clear_filters": "فلٹرز صاف کریں",
+    "urdu_print": "اردو پرنٹ",
+    "urdu_print_hint": "آن ہونے پر رسید اور اے فور میں اردو سرخیاں اور اردو نام",
     "invoices_list": "انوائسز کی فہرست",
     "search_invoices_placeholder": "انوائس #، فون #، کسٹمر...",
     "show": "دکھائیں",
@@ -614,6 +636,9 @@ const ur: Record<string, string> = {
     
     // Image upload functionality
     "product_image": "پروڈکٹ کی تصویر",
+    "product_photo_section_title": "پروڈکٹ کی تصویر",
+    "product_photo_section_description":
+      "اختیاری — نام سے تلاش سے دستی طور پر پروڈکٹ نام سے Pexels، یا ڈیوائس سے اپ لوڈ، ڈریگ این ڈراپ، یا کیمرہ۔",
     "upload_image": "تصویر اپ لوڈ کریں",
     "remove_image": "تصویر ہٹائیں",
     "drag_drop_image": "یہاں تصویر کو گھسیٹ کر چھوڑیں",
@@ -626,6 +651,17 @@ const ur: Record<string, string> = {
     "image_removed_successfully": "تصویر کامیابی سے ہٹا دی گئی",
     "image_load_failed": "تصویر لوڈ کرنے میں ناکام",
     "select_file": "فائل منتخب کریں",
+    "choose_photo_from_device": "تصویر منتخب کریں",
+    "find_image_from_name": "نام سے تلاش",
+    "searching_stock_photo": "اسٹاک تصاویر تلاش ہو رہی ہیں…",
+    "stock_search_need_name": "پہلے اوپر نام کے خانے میں کم از کم 2 حروف درج کریں۔",
+    "stock_search_failed": "اسٹاک تصویر نہیں مل سکی۔ الفاظ بدل کر دوبارہ کوشش کریں یا تصویر اپ لوڈ کریں۔",
+    "local_photo_banner_title": "اسٹاک تصویر یا اپنی فائل",
+    "local_photo_banner_hint_product":
+      "نام سے تلاش پر کلک کریں تاکہ ایک بار پروڈکٹ نام سے Pexels تلاش ہو (سرور پر PEXELS_API_KEY درکار)۔ یا ڈیوائس سے تصویر منتخب کریں — ڈریگ این ڈراپ اور کیمرہ بھی۔ بٹن پر کلک تک کچھ نہیں ہوتا۔",
+    "local_photo_banner_hint_category":
+      "نام سے تلاش سے زمرہ نام پر ایک بار Pexels تلاش (سرور پر PEXELS_API_KEY)۔ یا ڈیوائس سے اپ لوڈ — خودکار تلاش نہیں۔",
+    "or_upload": "یا اپ لوڈ",
     "take_photo": "تصویر لیں",
     "capture": "کیپچر",
     "switch_camera": "کیمرہ تبدیل کریں",

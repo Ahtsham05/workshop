@@ -24,6 +24,7 @@ export interface SubscriptionUsage {
 export interface Organization {
   id: string;
   name: string;
+  nameUrdu?: string;
   businessType: string;
   email?: string;
   phone?: string;
@@ -43,6 +44,9 @@ export interface Organization {
 
 export interface SetupOrganizationRequest {
   name: string;
+  nameUrdu?: string;
+  /** Urdu label for the auto-created default branch (optional). */
+  defaultBranchNameUrdu?: string;
   businessType: string;
   email?: string;
   phone?: string;
@@ -64,6 +68,8 @@ export const organizationApi = createApi({
       query: (body) => {
         const formData = new FormData();
         formData.append('name', body.name);
+        if (body.nameUrdu != null) formData.append('nameUrdu', body.nameUrdu);
+        if (body.defaultBranchNameUrdu != null) formData.append('defaultBranchNameUrdu', body.defaultBranchNameUrdu);
         formData.append('businessType', body.businessType);
         if (body.email) formData.append('email', body.email);
         if (body.phone) formData.append('phone', body.phone);
@@ -95,6 +101,7 @@ export const organizationApi = createApi({
       query: ({ orgId, body, logoFile, removeLogo }) => {
         const formData = new FormData();
         if (body.name) formData.append('name', body.name);
+        if (body.nameUrdu !== undefined) formData.append('nameUrdu', body.nameUrdu);
         if (body.businessType) formData.append('businessType', body.businessType);
         if (body.email) formData.append('email', body.email);
         if (body.phone) formData.append('phone', body.phone);

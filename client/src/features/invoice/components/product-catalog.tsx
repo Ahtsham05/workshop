@@ -13,7 +13,8 @@ import { useLanguage } from '@/context/language-context'
 import { Category, Product } from '../index'
 import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
-import { getTextClasses } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ProductHistoryDialog } from './product-history-dialog'
 
@@ -82,11 +83,15 @@ export function ProductCatalog({
     if (searchTerm.trim()) {
       filtered = categorizedProducts.map(category => ({
         ...category,
-        products: category.products.filter(product =>
-          (product.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (product.barcode?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (product.description?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        )
+        products: category.products.filter((product) =>
+          matchesBilingualSearch(
+            searchTerm,
+            product.name,
+            product.nameUrdu,
+            product.barcode,
+            product.description,
+          ),
+        ),
       })).filter(category => category.products.length > 0)
     } else {
       // Only filter by selected category when there's no search term
@@ -243,6 +248,18 @@ export function ProductCatalog({
                     <span className={getTextClasses(category.name, 'text-xs text-center truncate w-full')}>
                       {category.name}
                     </span>
+                    {category.nameUrdu?.trim() ? (
+                      <span
+                        className={cn(
+                          'w-full truncate text-center text-xs rtl',
+                          getUrduSecondaryNameClasses(category.nameUrdu),
+                        )}
+                        dir='rtl'
+                        title={category.nameUrdu.trim()}
+                      >
+                        {category.nameUrdu.trim()}
+                      </span>
+                    ) : null}
                     <Badge variant="outline" className='text-xs px-1 py-0'>
                       {category.products.length}
                     </Badge>
@@ -268,16 +285,30 @@ export function ProductCatalog({
                 <div key={category._id} className='space-y-2'>
                   {/* Category Header */}
                   <div className='flex items-center gap-2'>
+                  <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
                     <h3 className={getTextClasses(category.name, 'font-semibold text-base')}>{category.name}</h3>
+                    {category.nameUrdu?.trim() ? (
+                      <span
+                        className={cn('text-sm rtl', getUrduSecondaryNameClasses(category.nameUrdu))}
+                        dir='rtl'
+                        title={category.nameUrdu.trim()}
+                      >
+                        {category.nameUrdu.trim()}
+                      </span>
+                    ) : null}
+                  </div>
                     <Badge variant="outline" className='text-xs'>{category.products.length}</Badge>
                   </div>
                   <Separator />
 
-                  {/* Products Grid/List */}
-                  <div className={showImages 
-                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'
-                    : 'space-y-1'
-                  }>
+                  {/* Products Grid/List — [&>*]:min-w-0 lets grid cells shrink below content width */}
+                  <div
+                    className={
+                      showImages
+                        ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 [&>*]:min-w-0'
+                        : 'space-y-1'
+                    }
+                  >
                     {category.products.map((product) => (
                       <div
                         key={product._id}
@@ -290,12 +321,12 @@ export function ProductCatalog({
                           }
                         }}
                         className={showImages
-                          ? `border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
+                          ? `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
                               product.stockQuantity > 0 
                                 ? 'hover:shadow-sm cursor-pointer' 
                                 : 'opacity-60 cursor-not-allowed bg-gray-50'
                             }`
-                          : `border rounded-lg p-2 flex items-center gap-2 transition-colors ${
+                          : `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors ${
                               product.stockQuantity > 0 
                                 ? 'hover:bg-muted/30 cursor-pointer' 
                                 : 'opacity-60 cursor-not-allowed bg-gray-50'
@@ -330,12 +361,51 @@ export function ProductCatalog({
                           </div>
                         )}
 
-                        {/* Product Info */}
-                        <div className={showImages ? 'space-y-1' : 'flex-1 min-w-0'}>
-                          <h4 className={getTextClasses(product.name, `font-medium text-sm ${showImages ? 'text-center truncate' : 'truncate'}`)}>
-                            {product.name}
-                          </h4>
-                          <div className={`flex ${showImages ? 'flex-col items-center gap-0' : 'items-center gap-2'} text-xs text-muted-foreground`}>
+                        {/* Product Info — stacked lines + line-clamp avoid grid overflow (inline EN+UR broke narrow columns) */}
+                        <div
+                          className={cn(
+                            'w-full min-w-0 max-w-full overflow-hidden',
+                            showImages ? 'space-y-1' : 'flex-1 min-w-0',
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              'flex w-full min-w-0 max-w-full flex-col gap-0.5 overflow-hidden',
+                              showImages && 'items-center text-center',
+                            )}
+                          >
+                            <p
+                              className={getTextClasses(
+                                product.name,
+                                cn(
+                                  'w-full min-w-0 max-w-full font-medium text-sm leading-snug line-clamp-2 break-words',
+                                  showImages && 'text-center',
+                                ),
+                              )}
+                              title={product.name}
+                            >
+                              {product.name}
+                            </p>
+                            {product.nameUrdu?.trim() ? (
+                              <p
+                                dir="rtl"
+                                className={cn(
+                                  'w-full min-w-0 max-w-full text-xs leading-snug line-clamp-2 break-words',
+                                  getUrduSecondaryNameClasses(product.nameUrdu),
+                                  showImages && 'text-center',
+                                )}
+                                title={product.nameUrdu.trim()}
+                              >
+                                {product.nameUrdu.trim()}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div
+                            className={cn(
+                              'flex w-full min-w-0 max-w-full flex-wrap gap-x-1 gap-y-0.5 text-xs text-muted-foreground',
+                              showImages ? 'flex-col items-center' : 'items-center',
+                            )}
+                          >
                             <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
                               Rs{product.price.toFixed(2)}
                             </span>

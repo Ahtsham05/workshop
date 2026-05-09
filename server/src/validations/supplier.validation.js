@@ -1,13 +1,24 @@
 const Joi = require('joi');
 
+const cloudinaryImage = Joi.object({
+  url: Joi.string().uri().required(),
+  publicId: Joi.string().required(),
+});
+
+const nullableCloudinaryImage = Joi.alternatives().try(cloudinaryImage, Joi.valid(null));
+
 const createSupplier = {
   body: Joi.object().keys({
     name: Joi.string().required(),
+    nameUrdu: Joi.string().allow(''),
     email: Joi.string().optional().default(""),
     phone: Joi.string().optional(),
     whatsapp: Joi.string().optional(),
     address: Joi.string().optional(),
     balance: Joi.number().optional(),
+    picture: cloudinaryImage,
+    idCardFront: cloudinaryImage,
+    idCardBack: cloudinaryImage,
   }),
 };
 
@@ -37,11 +48,15 @@ const updateSupplier = {
   body: Joi.object().keys({
     _id: Joi.string(),
     name: Joi.string(),
+    nameUrdu: Joi.string().allow(''),
     email: Joi.string().email(),
     phone: Joi.string(),
     whatsapp: Joi.string(),
     address: Joi.string(),
     balance: Joi.number().optional(),
+    picture: nullableCloudinaryImage,
+    idCardFront: nullableCloudinaryImage,
+    idCardBack: nullableCloudinaryImage,
   }),
 };
 
@@ -61,6 +76,7 @@ const bulkAddSuppliers = {
         whatsapp: Joi.string().allow('').optional(),
         address: Joi.string().allow('').optional(),
         balance: Joi.number().optional(),
+        nameUrdu: Joi.string().allow('').optional(),
       })
     ).required().min(1)
   }),

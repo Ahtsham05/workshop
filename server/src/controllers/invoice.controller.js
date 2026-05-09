@@ -213,6 +213,7 @@ const duplicateInvoice = catchAsync(async (req, res) => {
     items: originalInvoice.items.map(item => ({
       productId: item.productId,
       name: item.name,
+      nameUrdu: item.nameUrdu,
       image: item.image,
       quantity: item.quantity,
       unit: item.unit,

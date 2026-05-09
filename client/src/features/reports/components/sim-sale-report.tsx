@@ -10,6 +10,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 
 interface SimSaleReportProps {
   startDate: string
@@ -18,7 +19,7 @@ interface SimSaleReportProps {
 
 export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading, isError } = useGetSimSaleReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
@@ -50,7 +51,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
 
           if (data.byProduct.length > 0) {
             const prodData = data.byProduct.map(r => ({
-              Product: r._id,
+              Product: reportEntityName(language, r._id, r.productNameUrdu),
               Count: r.count,
               'Sale Amount': r.totalSaleAmount,
               'SIM Amount': r.totalSimAmount,
@@ -62,8 +63,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
 
           if (data.recentSales.length > 0) {
             const salesData = data.recentSales.map(r => ({
-              Product: r.productName,
-              Customer: r.customerName ?? '',
+              Product: reportEntityName(language, r.productName, r.productNameUrdu),
+              Customer: reportEntityName(language, r.customerName ?? '', r.customerNameUrdu),
               Mobile: r.customerMobile ?? '',
               CNIC: r.customerCNIC ?? '',
               'SIM Amount': r.simAmount,
@@ -227,22 +228,24 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.byProduct.map(row => (
+                  {data.byProduct.map(row => {
+                    const pn = reportEntityName(language, row._id, row.productNameUrdu)
+                    return (
                     <TableRow key={row._id}>
-                      <TableCell className='font-medium'>{row._id}</TableCell>
+                      <TableCell className={cn('font-medium', reportEntityNameClass(language, pn))}>{pn}</TableCell>
                       <TableCell className='text-right'>{row.count}</TableCell>
                       <TableCell className='text-right'>{fmt(row.totalSaleAmount)}</TableCell>
                       <TableCell className='text-right'>{fmt(row.totalLoadAmount)}</TableCell>
                       <TableCell className='text-right text-green-600'>{fmt(row.totalCommission)}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         )}
 
-        {/* By Wallet */}
         {data && data.byWallet.length > 0 && (
           <Card>
             <CardHeader>
@@ -296,10 +299,13 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.recentSales.map(row => (
+                  {data.recentSales.map(row => {
+                    const prod = reportEntityName(language, row.productName, row.productNameUrdu)
+                    const cust = reportEntityName(language, row.customerName ?? '', row.customerNameUrdu)
+                    return (
                     <TableRow key={row._id}>
-                      <TableCell className='font-medium'>{row.productName}</TableCell>
-                      <TableCell>{row.customerName ?? '—'}</TableCell>
+                      <TableCell className={cn('font-medium', reportEntityNameClass(language, prod))}>{prod}</TableCell>
+                      <TableCell className={reportEntityNameClass(language, cust)}>{cust}</TableCell>
                       <TableCell>{row.customerMobile ?? '—'}</TableCell>
                       <TableCell>{row.customerCNIC ?? '—'}</TableCell>
                       <TableCell className='text-right'>{fmt(row.simAmount)}</TableCell>
@@ -311,7 +317,8 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                       <TableCell>{row.walletType ?? '—'}</TableCell>
                       <TableCell>{row.date ? format(new Date(row.date), 'dd MMM yyyy') : '—'}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

@@ -114,6 +114,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     // Process each product to ensure proper data format
     const processedProducts = productsToAdd.map(product => ({
       name: product.name,
+      nameUrdu: product.nameUrdu || '',
       description: product.description || '',
       barcode: product.barcode || null,
       price: Number(product.price),

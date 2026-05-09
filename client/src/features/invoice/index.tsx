@@ -26,6 +26,7 @@ export interface InvoiceItem {
   id: string
   productId: string
   name: string
+  nameUrdu?: string
   image?: { url: string; publicId: string }
   quantity: number
   unit?: string
@@ -36,6 +37,24 @@ export interface InvoiceItem {
   subtotal: number
   profit: number
   isManualEntry?: boolean
+}
+
+export function createEmptyManualInvoiceItem(): InvoiceItem {
+  return {
+    id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    productId: '',
+    name: '',
+    image: undefined,
+    quantity: 1,
+    unit: 'pcs',
+    conversionFactor: 1,
+    stockQuantity: 1,
+    unitPrice: 0,
+    cost: 0,
+    subtotal: 0,
+    profit: 0,
+    isManualEntry: true,
+  }
 }
 
 export interface Invoice {
@@ -93,16 +112,18 @@ export interface Product {
     isActive?: boolean
   }[]
   image?: { url: string; publicId: string }
-  category?: { _id: string; name: string }
-  categories?: { _id: string; name: string }[]
+  category?: { _id: string; name: string; nameUrdu?: string }
+  categories?: { _id: string; name: string; nameUrdu?: string }[]
   barcode?: string
   description?: string
+  nameUrdu?: string
 }
 
 export interface Category {
   _id: string  // Categories use _id (check if backend also transforms these)
   id?: string
   name: string
+  nameUrdu?: string
   image?: { url: string; publicId: string }
   products: Product[]
 }
@@ -119,7 +140,7 @@ export default function InvoicePage() {
 
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
-    items: [],
+    items: [createEmptyManualInvoiceItem()],
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: 'walk-in',
@@ -244,20 +265,24 @@ export default function InvoicePage() {
     products.forEach(product => {
       let categoryId = 'other'
       let categoryName = 'Other'
+      let categoryNameUrdu: string | undefined
       
       // Check for category in different possible formats
       if (product.category) {
         categoryId = product.category._id
         categoryName = product.category.name
+        categoryNameUrdu = product.category.nameUrdu
       } else if (product.categories && product.categories.length > 0) {
         categoryId = product.categories[0]._id
         categoryName = product.categories[0].name
+        categoryNameUrdu = product.categories[0].nameUrdu
       }
       
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, {
           _id: categoryId,
           name: categoryName,
+          nameUrdu: categoryNameUrdu,
           products: []
         })
       }
@@ -450,6 +475,7 @@ export default function InvoicePage() {
             id: `${productId}_${Date.now()}_${Math.random()}`,
             productId: productId,
             name: product.name,
+            nameUrdu: product.nameUrdu,
             image: product.image,
             quantity: actualQuantityAdded,
             unit: cappedLine.lineUnit,
@@ -474,6 +500,7 @@ export default function InvoicePage() {
           id: `${productId}_${Date.now()}_${Math.random()}`,
           productId: productId,
           name: product.name,
+          nameUrdu: product.nameUrdu,
           image: product.image,
           quantity,
           unit: defaultLine.lineUnit,
@@ -751,7 +778,7 @@ export default function InvoicePage() {
     const preferredUrduOnly = getInitialUrduOnlyPreference()
     // Reset invoice state
     setInvoice({
-      items: [],
+      items: [createEmptyManualInvoiceItem()],
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -772,7 +799,6 @@ export default function InvoicePage() {
       serviceCharge: 0,
       roundingAdjustment: 0,
       notes: '',
-      dueDate: undefined
     })
   }
 
@@ -792,20 +818,6 @@ export default function InvoicePage() {
     setCurrentView('edit')
     setEditingInvoice(invoiceData)
     
-    // Format due date for HTML date input (YYYY-MM-DD)
-    let formattedDueDate = invoiceData.dueDate
-    if (formattedDueDate) {
-      try {
-        const date = new Date(formattedDueDate)
-        if (!isNaN(date.getTime())) {
-          formattedDueDate = date.toISOString().split('T')[0]
-        }
-      } catch (error) {
-        console.warn('Invalid date format:', formattedDueDate)
-        formattedDueDate = undefined
-      }
-    }
-
     // Format invoice date for HTML date input (YYYY-MM-DD)
     let formattedInvoiceDate = invoiceData.invoiceDate
     if (formattedInvoiceDate) {
@@ -821,11 +833,24 @@ export default function InvoicePage() {
     }
     
     // Map invoice data to form state and ensure each item has a unique ID
-    const itemsWithUniqueIds = (invoiceData.items || []).map((item: any, index: number) => ({
+    const itemsWithUniqueIds = (invoiceData.items || []).map((item: any, index: number) => {
+      const rawPid = item.productId
+      const productId =
+        rawPid && typeof rawPid === 'object' && rawPid._id != null
+          ? String(rawPid._id)
+          : rawPid != null && rawPid !== ''
+            ? String(rawPid)
+            : ''
+      const nameUrdu =
+        item.nameUrdu ||
+        (typeof rawPid === 'object' && rawPid != null ? rawPid.nameUrdu : undefined) ||
+        ''
+      return {
       ...item,
       id: item.id || `edit-item-${Date.now()}-${index}`, // Ensure unique ID for each item
-      productId: item.productId || '',
+      productId,
       name: item.name || '',
+      nameUrdu: nameUrdu || undefined,
       quantity: item.quantity || 1,
       unit: item.unit,
       conversionFactor: item.conversionFactor,
@@ -836,7 +861,8 @@ export default function InvoicePage() {
       profit: item.profit || ((item.quantity * (item.unitPrice - item.cost)) || 0),
       image: item.image || undefined,
       isManualEntry: item.isManualEntry || false
-    }))
+    }
+    })
     
     setInvoice({
       items: itemsWithUniqueIds,
@@ -863,7 +889,6 @@ export default function InvoicePage() {
       walkInCustomerName: invoiceData.walkInCustomerName,
       notes: invoiceData.notes || '',
       invoiceDate: formattedInvoiceDate,
-      dueDate: formattedDueDate,
       couponCode: invoiceData.couponCode,
       returnPolicy: invoiceData.returnPolicy,
       status: invoiceData.status
@@ -915,7 +940,7 @@ export default function InvoicePage() {
     
     // Reset invoice state for new invoice
     setInvoice({
-      items: [],
+      items: [createEmptyManualInvoiceItem()],
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -936,7 +961,6 @@ export default function InvoicePage() {
       serviceCharge: 0,
       roundingAdjustment: 0,
       notes: '',
-      dueDate: undefined
     })
     
     // Reset the saved flag for next invoice
@@ -1007,7 +1031,7 @@ export default function InvoicePage() {
       <Main>
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen'>
           {/* Left Panel - Invoice */}
-          <div className='space-y-4 pb-6'>
+          <div className='min-w-0 space-y-4 pb-6'>
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}
@@ -1019,6 +1043,7 @@ export default function InvoicePage() {
               setTaxRate={setTaxRate}
               customers={customers}
               customersLoading={loading}
+              productsLoading={loading}
               products={products}
               setProducts={setProducts}
               calculateTotals={calculateTotals}
@@ -1030,7 +1055,7 @@ export default function InvoicePage() {
           </div>
 
           {/* Right Panel - Product Catalog */}
-          <div className='space-y-4 max-h-[2000px] overflow-y-auto pb-6'>
+          <div className='min-w-0 space-y-4 max-h-[2000px] overflow-y-auto pb-6'>
             <ProductCatalog
               categorizedProducts={categorizedProducts}
               loading={loading}

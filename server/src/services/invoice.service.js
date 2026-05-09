@@ -228,6 +228,7 @@ const createInvoice = async (invoiceBody, userId) => {
     const validatedItem = {
       productId: item.productId,
       name: item.name || product.name,
+      nameUrdu: item.nameUrdu != null && item.nameUrdu !== '' ? item.nameUrdu : product.nameUrdu || '',
       image: item.image || product.image,
       quantity: item.quantity,
       unit: conversion.lineUnit,
@@ -361,13 +362,13 @@ const createInvoice = async (invoiceBody, userId) => {
 
   // Populate references conditionally
   const populateOptions = [
-    { path: 'items.productId', select: 'name barcode category' },
+    { path: 'items.productId', select: 'name nameUrdu barcode category' },
     { path: 'createdBy', select: 'name email' }
   ];
 
   // Only populate customer if it's not a walk-in customer
   if (isValidCustomerObjectId(invoice.customerId)) {
-    populateOptions.unshift({ path: 'customerId', select: 'name phone email' });
+    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone email' });
   }
 
   await invoice.populate(populateOptions);
@@ -382,7 +383,7 @@ const createInvoice = async (invoiceBody, userId) => {
       invoiceObj.customerName = invoiceObj.customerId.name;
     } else {
       // Fallback: fetch customer directly
-      const customer = await Customer.findById(String(invoice.customerId).trim()).select('name');
+      const customer = await Customer.findById(String(invoice.customerId).trim()).select('name nameUrdu');
       if (customer) {
         invoiceObj.customerName = customer.name;
         invoiceObj.customerId = customer; // Also set the populated customer object
@@ -419,7 +420,7 @@ const queryInvoices = async (filter, options) => {
 
     if (customerObjectIds.length > 0) {
       // Fetch all customers in one query
-      const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select('name phone email');
+      const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select('name nameUrdu phone email');
       const customerMap = new Map();
       customers.forEach(customer => {
         customerMap.set(customer._id.toString(), customer);
@@ -470,13 +471,13 @@ const getInvoiceById = async (id) => {
 
   // Populate references conditionally
   const populateOptions = [
-    { path: 'items.productId', select: 'name barcode category description' },
+    { path: 'items.productId', select: 'name nameUrdu barcode category description' },
     { path: 'createdBy updatedBy', select: 'name email' }
   ];
 
   // Only populate customer if it's not a walk-in customer
   if (invoice.customerId && invoice.customerId !== 'walk-in') {
-    populateOptions.unshift({ path: 'customerId', select: 'name phone email address' });
+    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone email address' });
   }
 
   await invoice.populate(populateOptions);
@@ -558,6 +559,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       const validatedItem = {
         productId: item.productId,
         name: item.name || product.name,
+        nameUrdu: item.nameUrdu != null && item.nameUrdu !== '' ? item.nameUrdu : product.nameUrdu || '',
         image: item.image || product.image,
         quantity: item.quantity,
         unit: conversion.lineUnit,

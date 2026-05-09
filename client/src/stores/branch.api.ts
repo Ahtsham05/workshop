@@ -5,8 +5,10 @@ export interface Branch {
   id: string;
   organizationId: string;
   name: string;
+  nameUrdu?: string;
   location?: {
     address?: string;
+    addressUrdu?: string;
     city?: string;
     country?: string;
   };
@@ -23,8 +25,10 @@ export interface Branch {
 
 export interface CreateBranchRequest {
   name: string;
+  nameUrdu?: string;
   location?: {
     address?: string;
+    addressUrdu?: string;
     city?: string;
     country?: string;
   };

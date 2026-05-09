@@ -48,13 +48,10 @@ export function DataTablePagination<TData>({
           <Select
             value={`${limit}`}
             onValueChange={(value) => {
-              // Handle the page size change
               const newLimit = Number(value);
-              
-              console.log(`DataTablePagination: Changing page size from ${limit} to ${newLimit}`);
-              
-              // Call the provided setLimit function which should handle the API fetch
               setLimit(newLimit);
+              setCurrentPage(1);
+              table.setPageSize(Number(value))
             }}
           >
             <SelectTrigger className="h-8 w-[70px]">

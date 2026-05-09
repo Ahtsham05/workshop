@@ -13,8 +13,15 @@ const branchSchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    nameUrdu: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     location: {
       address: { type: String, trim: true },
+      /** Urdu street / area line for receipts when printing in Urdu */
+      addressUrdu: { type: String, trim: true, default: '' },
       city: { type: String, trim: true },
       country: { type: String, trim: true },
     },

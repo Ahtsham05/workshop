@@ -6,6 +6,7 @@ import summery from '../utils/summery'
 export interface Category {
   id: string
   name: string
+  nameUrdu?: string
   image?: {
     url: string
     publicId: string

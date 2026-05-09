@@ -4,6 +4,7 @@ const { objectId } = require('./custom.validation');
 const invoiceItem = Joi.object({
   productId: Joi.string().custom(objectId).required(),
   name: Joi.string().required(),
+  nameUrdu: Joi.string().allow('').optional(),
   image: Joi.object({
     url: Joi.string(),
     publicId: Joi.string()
@@ -44,11 +45,9 @@ const createInvoice = {
     paidAmount: Joi.number().min(0).default(0),
     balance: Joi.number().default(0),
     invoiceDate: Joi.date().optional(),
-    dueDate: Joi.date().when('type', {
-      is: 'credit',
-      then: Joi.required(),
-      otherwise: Joi.optional()
-    }),
+    dueDate: Joi.date().optional(),
+    invoiceAddress: Joi.string().allow('').optional(),
+    invoiceAddressUrdu: Joi.string().allow('').optional(),
     deliveryCharge: Joi.number().min(0).default(0),
     serviceCharge: Joi.number().min(0).default(0),
     roundingAdjustment: Joi.number().default(0),
@@ -117,6 +116,8 @@ const updateInvoice = {
     balance: Joi.number().optional(),
     invoiceDate: Joi.date().optional(),
     dueDate: Joi.date().optional(),
+    invoiceAddress: Joi.string().allow('').optional(),
+    invoiceAddressUrdu: Joi.string().allow('').optional(),
     deliveryCharge: Joi.number().min(0).optional(),
     serviceCharge: Joi.number().min(0).optional(),
     roundingAdjustment: Joi.number().optional(),

@@ -27,6 +27,7 @@ import { Product } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { useLanguage } from '@/context/language-context'
+import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -43,6 +44,7 @@ interface DataTableProps {
   inlineEditMode?: boolean
   editValues?: Record<string, { price?: number; cost?: number; stockQuantity?: number }>
   onEditValueChange?: (productId: string, field: string, value: number) => void
+  toolbarLeading?: ReactNode
 }
 
 export function ProductTable({ 
@@ -52,7 +54,8 @@ export function ProductTable({
   onSelectedRowsChange, 
   inlineEditMode = false,
   editValues = {},
-  onEditValueChange 
+  onEditValueChange,
+  toolbarLeading,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -109,7 +112,7 @@ export function ProductTable({
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} />
+      <DataTableToolbar table={table} leading={toolbarLeading} />
       <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>

@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -19,7 +20,7 @@ interface PurchaseReturnsReportProps {
 
 export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, PurchaseReturnsReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetPurchaseReturnsReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
@@ -43,7 +44,7 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
 
           if (data.productwise.length > 0) {
             const pwData = data.productwise.map(row => ({
-              [t('product')]: row.productName,
+              [t('product')]: reportEntityName(language, row.productName, row.productNameUrdu),
               [t('qty_returned')]: row.totalQty,
               [t('total_value')]: row.totalValue,
               [t('return_count')]: row.returnCount,
@@ -155,16 +156,19 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data!.productwise.map(row => (
+                  {data!.productwise.map(row => {
+                    const pn = reportEntityName(language, row.productName, row.productNameUrdu)
+                    return (
                     <TableRow key={row._id}>
-                      <TableCell className='font-medium'>{row.productName}</TableCell>
+                      <TableCell className={`font-medium ${reportEntityNameClass(language, pn)}`}>{pn}</TableCell>
                       <TableCell className='text-right'>{row.totalQty}</TableCell>
                       <TableCell className='text-right text-blue-600 font-medium'>{fmt(row.totalValue)}</TableCell>
                       <TableCell className='text-right'>
                         <Badge variant='outline'>{row.returnCount}</Badge>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

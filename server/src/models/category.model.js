@@ -19,6 +19,7 @@ const CategorySchema = new mongoose.Schema({
         ref: 'User',
     },
     name: { type: String, required: true },
+    nameUrdu: { type: String },
     image: {
         url: { type: String },
         publicId: { type: String }

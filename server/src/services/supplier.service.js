@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
-const { Supplier, Purchase, Transaction, SupplierLedger } = require('../models');
+const { Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
+const supplierLedgerService = require('./supplierLedger.service');
 
 /**
  * Create a supplier
@@ -8,7 +9,17 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Supplier>}
  */
 const createSupplier = async (supplierBody) => {
-  return Supplier.create(supplierBody);
+  const supplier = await Supplier.create(supplierBody);
+
+  await supplierLedgerService.syncOpeningBalanceEntry({
+    supplierId: supplier._id,
+    amount: supplier.balance || 0,
+    organizationId: supplier.organizationId,
+    branchId: supplier.branchId,
+    transactionDate: supplier.createdAt,
+  });
+
+  return supplier;
 };
 
 /**
@@ -45,8 +56,31 @@ const updateSupplierById = async (supplierId, updateBody) => {
   if (!supplier) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Supplier not found');
   }
-  Object.assign(supplier, updateBody);
+  const updates = { ...updateBody };
+  for (const key of ['picture', 'idCardFront', 'idCardBack']) {
+    if (updates[key] === null) {
+      supplier.set(key, undefined);
+      delete updates[key];
+    }
+  }
+
+  const originalBalance = Number(supplier.balance || 0);
+  Object.assign(supplier, updates);
   await supplier.save();
+
+  if (Object.prototype.hasOwnProperty.call(updateBody, 'balance')) {
+    const newBalance = Number(supplier.balance || 0);
+    if (originalBalance !== newBalance) {
+      await supplierLedgerService.syncOpeningBalanceEntry({
+        supplierId: supplier._id,
+        amount: newBalance,
+        organizationId: supplier.organizationId,
+        branchId: supplier.branchId,
+        transactionDate: supplier.createdAt,
+      });
+    }
+  }
+
   return supplier;
 };
 
@@ -79,6 +113,7 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
     // Process each supplier to ensure proper data format
     const processedSuppliers = suppliersToAdd.map(supplier => ({
       name: supplier.name,
+      nameUrdu: supplier.nameUrdu || '',
       email: supplier.email || '',
       phone: supplier.phone || '',
       whatsapp: supplier.whatsapp || '',
@@ -93,25 +128,14 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
       ordered: false // Continue inserting even if some fail
     });
 
-    // Create opening balance ledger entries for suppliers with balance > 0
-    const ledgerEntries = [];
     for (const supplier of insertedSuppliers) {
-      if (supplier.balance && supplier.balance > 0) {
-        ledgerEntries.push({
-          supplier: supplier._id,
-          transactionType: 'opening_balance',
-          transactionDate: new Date(),
-          description: 'Opening Balance',
-          debit: 0,
-          credit: supplier.balance,
-          balance: supplier.balance,
-        });
-      }
-    }
-
-    // Batch insert ledger entries if any
-    if (ledgerEntries.length > 0) {
-      await SupplierLedger.insertMany(ledgerEntries);
+      await supplierLedgerService.syncOpeningBalanceEntry({
+        supplierId: supplier._id,
+        amount: supplier.balance || 0,
+        organizationId: supplier.organizationId,
+        branchId: supplier.branchId,
+        transactionDate: supplier.createdAt,
+      });
     }
 
     return {

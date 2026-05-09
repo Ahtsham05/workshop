@@ -20,6 +20,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 
 interface SalesReportProps {
   startDate: string
@@ -42,7 +43,7 @@ const typeColors: Record<string, string> = {
 
 export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { t } = useLanguage()
+    const { t, language } = useLanguage()
     const { data, isLoading } = useGetSalesReportQuery({ startDate, endDate, groupBy: 'day' })
     const { data: detailData, isLoading: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
@@ -55,6 +56,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       const dateMap = new Map<string, Array<{
         invoiceNumber: string
         productName: string
+        productNameUrdu?: string
         quantity: number
         unitPrice: number
         subtotal: number
@@ -66,6 +68,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           dateMap.get(dateStr)!.push({
             invoiceNumber: inv.invoiceNumber,
             productName: item.name,
+            productNameUrdu: item.nameUrdu,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
@@ -113,14 +116,14 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 rows.push({
                   'Invoice #':    idx === 0 ? inv.invoiceNumber : '',
                   Date:           idx === 0 ? format(new Date(inv.invoiceDate), 'yyyy-MM-dd') : '',
-                  Customer:       idx === 0 ? inv.customerName : '',
+                  Customer:       idx === 0 ? reportEntityName(language, inv.customerName, inv.customerNameUrdu) : '',
                   'Cust. Phone':  idx === 0 ? inv.customerPhone : '',
                   Type:           idx === 0 ? inv.type : '',
                   Status:         idx === 0 ? inv.status : '',
                   'Invoice Total': idx === 0 ? inv.total : '',
                   'Paid Amount':  idx === 0 ? inv.paidAmount : '',
                   Balance:        idx === 0 ? inv.balance : '',
-                  Product:        item.name,
+                  Product:        reportEntityName(language, item.name, item.nameUrdu),
                   Qty:            item.quantity,
                   'Unit Sale Price':   item.unitPrice,
                   Subtotal:       item.subtotal,
@@ -159,7 +162,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           toast.error(t('Failed to export data'))
         }
       },
-    }))
+    }), [data, detailData, t, language])
 
     const formatCurrency = (value: number) =>
       new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
@@ -390,7 +393,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             <TableCell className='font-mono text-xs text-primary'>
                               {row.invoiceNumber}
                             </TableCell>
-                            <TableCell className='font-medium'>{row.productName}</TableCell>
+                            <TableCell
+                              className={cn(
+                                'font-medium',
+                                reportEntityNameClass(
+                                  language,
+                                  reportEntityName(language, row.productName, row.productNameUrdu),
+                                ),
+                              )}
+                            >
+                              {reportEntityName(language, row.productName, row.productNameUrdu)}
+                            </TableCell>
                             <TableCell className='text-right text-sm'>{row.quantity}</TableCell>
                             <TableCell className='text-right text-sm'>
                               {formatCurrency(row.unitPrice)}
@@ -466,8 +479,16 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             <TableCell className='text-sm text-muted-foreground'>
                               {format(new Date(inv.invoiceDate), 'dd MMM yyyy')}
                             </TableCell>
-                            <TableCell className='font-medium'>
-                              {inv.customerName || 'Walk-in'}
+                            <TableCell
+                              className={cn(
+                                'font-medium',
+                                reportEntityNameClass(
+                                  language,
+                                  reportEntityName(language, inv.customerName || '', inv.customerNameUrdu),
+                                ),
+                              )}
+                            >
+                              {reportEntityName(language, inv.customerName || '', inv.customerNameUrdu) || 'Walk-in'}
                             </TableCell>
                             <TableCell className='text-sm text-muted-foreground'>
                               {inv.customerPhone || '—'}
@@ -525,7 +546,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 colSpan={3}
                                 className='pl-10 text-sm text-muted-foreground py-2'
                               >
-                                <span className='font-medium text-foreground'>{item.name}</span>
+                                <span
+                                  className={cn(
+                                    'font-medium text-foreground',
+                                    reportEntityNameClass(
+                                      language,
+                                      reportEntityName(language, item.name, item.nameUrdu),
+                                    ),
+                                  )}
+                                >
+                                  {reportEntityName(language, item.name, item.nameUrdu)}
+                                </span>
                               </TableCell>
                               {/* Phone */}
                               <TableCell />
@@ -610,7 +641,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   </div>
                   <div className='space-y-1'>
                     <p className='text-muted-foreground'>Customer</p>
-                    <p className='font-medium'>{viewInvoice.customerName || 'Walk-in'}</p>
+                    <p className={cn('font-medium', reportEntityNameClass(language, reportEntityName(language, viewInvoice.customerName || '', viewInvoice.customerNameUrdu)))}>
+                      {reportEntityName(language, viewInvoice.customerName || '', viewInvoice.customerNameUrdu) || 'Walk-in'}
+                    </p>
                     {viewInvoice.customerPhone && (
                       <p className='text-muted-foreground text-xs'>{viewInvoice.customerPhone}</p>
                     )}
@@ -636,7 +669,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       {viewInvoice.items.map((item, idx) => (
                         <TableRow key={idx}>
                           <TableCell className='text-muted-foreground text-sm'>{idx + 1}</TableCell>
-                          <TableCell className='font-medium'>{item.name}</TableCell>
+                          <TableCell
+                            className={cn(
+                              'font-medium',
+                              reportEntityNameClass(
+                                language,
+                                reportEntityName(language, item.name, item.nameUrdu),
+                              ),
+                            )}
+                          >
+                            {reportEntityName(language, item.name, item.nameUrdu)}
+                          </TableCell>
                           <TableCell className='text-right'>{item.quantity}</TableCell>
                           <TableCell className='text-right'>{formatCurrency(item.unitPrice)}</TableCell>
                           <TableCell className='text-right font-semibold'>{formatCurrency(item.subtotal)}</TableCell>

@@ -22,6 +22,10 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { Button } from '@/components/ui/button'
 import { Edit } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+
+const SEARCH_DEBOUNCE_MS = 400
 
 export default function Products() {
   // Parse product list
@@ -33,7 +37,8 @@ export default function Products() {
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingAllProducts, setLoadingAllProducts] = useState(true)
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
   const [inlineEditMode, setInlineEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
@@ -65,20 +70,23 @@ export default function Products() {
       })
   }, [fetch, dispatch])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch])
+
   // Fetch paginated products for table display
   useEffect(() => {
     setLoading(true)
+    const q = debouncedSearch.trim()
     const params = {
       page: currentPage,
       limit: limit,
       sortBy: 'createdAt:desc',
-      ...(search && { search: search }), // Only include 'name' if search exists
-      ...(search && { fieldName: 'name' })
+      ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
     };
     
     dispatch(fetchProducts(params))
-      .then((data) => {
-        console.log('Products fetched:', data)
+        .then((data) => {
         if (data.payload?.results) {
           setProducts(data.payload.results)
           setTotalPage(data.payload.totalPages || 1)
@@ -95,7 +103,7 @@ export default function Products() {
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, search, dispatch])
+  }, [currentPage, limit, fetch, debouncedSearch, dispatch])
 
   // Handle bulk product update with individual values
   const handleBulkUpdate = useCallback(async () => {
@@ -272,12 +280,6 @@ export default function Products() {
               <ProductPrimaryButtons />
             </div>
           </div>
-          <Input
-            placeholder={t('search_products')}
-            className='h-8 w-[150px] lg:w-[250px]'
-            value={search ?? ''}
-            onChange={(event) => setSearch(event.target.value)}
-          />
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             {
               loading ? (
@@ -286,7 +288,26 @@ export default function Products() {
                 <ProductTable
                   data={products}
                   columns={columns}
-                  paggination={{ totalPage, currentPage, setCurrentPage, limit, setLimit }}
+                  toolbarLeading={
+                    <Input
+                      autoFocus
+                      placeholder={t('search_products')}
+                      className='h-9 w-full'
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      aria-label={t('search_products')}
+                    />
+                  }
+                  paggination={{
+                    totalPage,
+                    currentPage,
+                    setCurrentPage,
+                    limit,
+                    setLimit: (n: number) => {
+                      setLimit(n)
+                      setCurrentPage(1)
+                    },
+                  }}
                   onSelectedRowsChange={handleSelectedRowsChange}
                   inlineEditMode={inlineEditMode}
                   editValues={editValues}

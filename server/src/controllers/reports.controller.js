@@ -83,7 +83,7 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
               },
             },
           },
-          { $project: { name: 1, phone: 1 } },
+          { $project: { name: 1, phone: 1, nameUrdu: 1 } },
         ],
         as: 'customerDoc',
       },
@@ -104,6 +104,7 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
             { $ifNull: ['$customerDoc.name', { $ifNull: ['$customerName', 'Walk-in'] }] },
           ],
         },
+        customerNameUrdu: { $ifNull: ['$customerDoc.nameUrdu', ''] },
         customerPhone: { $ifNull: ['$customerDoc.phone', ''] },
         items: {
           $map: {
@@ -111,6 +112,7 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
             as: 'item',
             in: {
               name: '$$item.name',
+              nameUrdu: { $ifNull: ['$$item.nameUrdu', ''] },
               quantity: '$$item.quantity',
               unitPrice: '$$item.unitPrice',
               subtotal: '$$item.subtotal',
@@ -236,6 +238,7 @@ const getPurchaseReport = catchAsync(async (req, res) => {
       {
         $group: {
           _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$purchaseDate' } }, supplier: { $ifNull: ['$supplierDetails.name', 'Unknown'] } },
+          supplierNameUrdu: { $first: { $ifNull: ['$supplierDetails.nameUrdu', ''] } },
           totalAmount: { $sum: '$totalAmount' },
           paidAmount: { $sum: effectivePaid },
           balance: { $sum: effectiveBalance },
@@ -296,6 +299,7 @@ const getProductReport = catchAsync(async (req, res) => {
       { $group: {
         _id: '$items.productId',
         productName: { $first: { $ifNull: ['$product.name', '$items.name'] } },
+        productNameUrdu: { $first: { $ifNull: ['$product.nameUrdu', '$items.nameUrdu', ''] } },
         category: { $first: '$product.category' },
         totalQuantitySold: { $sum: '$items.quantity' },
         totalRevenue: { $sum: { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] } },
@@ -343,13 +347,43 @@ const getProductDetailReport = catchAsync(async (req, res) => {
       { $lookup: {
         from: 'customers',
         let: { cid: '$customerId' },
-        pipeline: [{ $match: { $expr: { $eq: ['$_id', { $cond: [{ $eq: [{ $type: '$$cid' }, 'objectId'] }, '$$cid', { $cond: [{ $regexMatch: { input: { $ifNull: ['$$cid', ''] }, regex: '^[0-9a-fA-F]{24}$' } }, { $toObjectId: '$$cid' }, null] }] }] } } }],
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: [
+                  '$_id',
+                  {
+                    $cond: [
+                      { $eq: [{ $type: '$$cid' }, 'objectId'] },
+                      '$$cid',
+                      {
+                        $cond: [
+                          {
+                            $regexMatch: {
+                              input: { $ifNull: ['$$cid', ''] },
+                              regex: '^[0-9a-fA-F]{24}$',
+                            },
+                          },
+                          { $toObjectId: '$$cid' },
+                          null,
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          { $project: { name: 1, phone: 1, nameUrdu: 1 } },
+        ],
         as: 'customerInfo',
       } },
       { $project: {
         invoiceNumber: 1,
         date: '$invoiceDate',
         customerName: { $ifNull: [{ $arrayElemAt: ['$customerInfo.name', 0] }, '$walkInCustomerName', 'Walk-in Customer'] },
+        customerNameUrdu: { $ifNull: [{ $arrayElemAt: ['$customerInfo.nameUrdu', 0] }, ''] },
         customerPhone: { $arrayElemAt: ['$customerInfo.phone', 0] },
         quantity: '$items.quantity',
         price: { $ifNull: ['$items.price', '$items.unitPrice'] },
@@ -367,6 +401,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         purchaseNumber: { $ifNull: ['$invoiceNumber', 'N/A'] },
         date: '$purchaseDate',
         supplierName: { $arrayElemAt: ['$supplierInfo.name', 0] },
+        supplierNameUrdu: { $ifNull: [{ $arrayElemAt: ['$supplierInfo.nameUrdu', 0] }, ''] },
         supplierPhone: { $arrayElemAt: ['$supplierInfo.phone', 0] },
         quantity: '$items.quantity',
         price: { $ifNull: ['$items.priceAtPurchase', '$items.price'] },
@@ -387,7 +422,16 @@ const getProductDetailReport = catchAsync(async (req, res) => {
   };
 
   res.status(httpStatus.OK).send({
-    product: { _id: product._id, name: product.name, barcode: product.barcode, currentStock: product.stockQuantity, purchasePrice: product.purchasePrice, sellingPrice: product.sellingPrice, minStockLevel: product.minStockLevel },
+    product: {
+      _id: product._id,
+      name: product.name,
+      nameUrdu: product.nameUrdu || '',
+      barcode: product.barcode,
+      currentStock: product.stockQuantity,
+      purchasePrice: product.purchasePrice,
+      sellingPrice: product.sellingPrice,
+      minStockLevel: product.minStockLevel,
+    },
     summary, sales: salesData, purchases: purchaseData,
     period: { startDate: start, endDate: end },
   });
@@ -444,6 +488,7 @@ const getCustomerReport = catchAsync(async (req, res) => {
       { $group: {
         _id: customerGroupExpr,
         customerName: { $first: { $ifNull: ['$customer.name', '$walkInCustomerName', 'Walk-in Customer'] } },
+        customerNameUrdu: { $first: { $ifNull: ['$customer.nameUrdu', ''] } },
         phone: { $first: '$customer.phone' },
         email: { $first: '$customer.email' },
         totalPurchases: { $sum: 1 },
@@ -484,6 +529,7 @@ const getSupplierReport = catchAsync(async (req, res) => {
       { $group: {
         _id: '$supplier',
         supplierName: { $first: { $ifNull: ['$supplierDetails.name', 'Unknown'] } },
+        supplierNameUrdu: { $first: { $ifNull: ['$supplierDetails.nameUrdu', ''] } },
         phone: { $first: '$supplierDetails.phone' },
         email: { $first: '$supplierDetails.email' },
         totalPurchases: { $sum: 1 },
@@ -632,7 +678,9 @@ const getInventoryReport = catchAsync(async (req, res) => {
     Product.aggregate([
       { $match: baseMatch },
       { $project: {
-        name: 1, barcode: 1, unit: 1,
+        name: 1,
+        nameUrdu: { $ifNull: ['$nameUrdu', ''] },
+        barcode: 1, unit: 1,
         category: { $ifNull: ['$category', 'N/A'] },
         stockQuantity: 1, cost: 1, price: 1,
         stockValue: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] },
@@ -1187,6 +1235,7 @@ async function getSalesReturnsReport(req, res) {
         $group: {
           _id: '$items.productId',
           productName: { $first: '$items.name' },
+          productNameUrdu: { $first: { $ifNull: ['$items.nameUrdu', ''] } },
           totalQty: { $sum: '$items.quantity' },
           totalValue: { $sum: '$items.total' },
           returnCount: { $sum: 1 },
@@ -1254,6 +1303,7 @@ async function getPurchaseReturnsReport(req, res) {
         $group: {
           _id: '$items.productId',
           productName: { $first: '$items.name' },
+          productNameUrdu: { $first: { $ifNull: ['$items.nameUrdu', ''] } },
           totalQty: { $sum: '$items.quantity' },
           totalValue: { $sum: '$items.total' },
           returnCount: { $sum: 1 },
@@ -1574,7 +1624,34 @@ const getSimSaleReport = catchAsync(async (req, res) => {
   }
   if (walletType) baseMatch.walletType = walletType;
 
-  const [summary, byProduct, byWallet, datewise, recentSales] = await Promise.all([
+  const orgOid = scope.organizationId;
+  const productUrduStages =
+    orgOid && mongoose.Types.ObjectId.isValid(String(orgOid))
+      ? [
+          {
+            $lookup: {
+              from: 'products',
+              let: { pname: '$_id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$organizationId', orgOid] }, { $eq: ['$name', '$$pname'] }],
+                    },
+                  },
+                },
+                { $project: { nameUrdu: 1 } },
+                { $limit: 1 },
+              ],
+              as: '_pUrdu',
+            },
+          },
+          { $addFields: { productNameUrdu: { $ifNull: [{ $arrayElemAt: ['$_pUrdu.nameUrdu', 0] }, ''] } } },
+          { $project: { _pUrdu: 0 } },
+        ]
+      : [];
+
+  const [summary, byProduct, byWallet, datewise, recentSalesRaw] = await Promise.all([
     SimSale.aggregate([
       { $match: baseMatch },
       {
@@ -1602,6 +1679,7 @@ const getSimSaleReport = catchAsync(async (req, res) => {
         },
       },
       { $sort: { totalSaleAmount: -1 } },
+      ...productUrduStages,
     ]),
     SimSale.aggregate([
       { $match: { ...baseMatch, walletType: { $exists: true, $ne: '' } } },
@@ -1629,6 +1707,23 @@ const getSimSaleReport = catchAsync(async (req, res) => {
     ]),
     SimSale.find(baseMatch).sort({ date: -1 }).limit(20).lean(),
   ]);
+
+  let recentSales = recentSalesRaw;
+  const pids = [...new Set(recentSales.map((s) => s.productId).filter(Boolean).map((id) => String(id)))];
+  const cids = [...new Set(recentSales.map((s) => s.customerId).filter(Boolean).map((id) => String(id)))];
+  if (pids.length || cids.length) {
+    const [prows, crows] = await Promise.all([
+      pids.length ? Product.find({ _id: { $in: pids } }).select('nameUrdu').lean() : [],
+      cids.length ? Customer.find({ _id: { $in: cids } }).select('nameUrdu').lean() : [],
+    ]);
+    const pm = Object.fromEntries(prows.map((p) => [String(p._id), p.nameUrdu || '']));
+    const cm = Object.fromEntries(crows.map((c) => [String(c._id), c.nameUrdu || '']));
+    recentSales = recentSales.map((s) => ({
+      ...s,
+      productNameUrdu: s.productId ? pm[String(s.productId)] || '' : '',
+      customerNameUrdu: s.customerId ? cm[String(s.customerId)] || '' : '',
+    }));
+  }
 
   const sm = summary[0] || {
     totalSales: 0, totalSimAmount: 0, totalLoadAmount: 0,

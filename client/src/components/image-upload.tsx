@@ -7,7 +7,6 @@ import { useLanguage } from '@/context/language-context'
 import { Upload, X, ImageIcon, Loader2, Camera, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import CameraCapture from './camera-capture'
-import { toast } from 'sonner'
 
 interface ImageUploadProps {
   onImageUpload: (imageData: { url: string; publicId: string }) => void
@@ -18,20 +17,18 @@ interface ImageUploadProps {
   /** Larger drop zone and preview */
   layout?: 'default' | 'comfortable'
   /**
-   * When the user types a name, we debounce and fetch a matching stock photo (Pexels → Cloudinary).
-   * Only runs while there is no image yet — remove the image to fetch again for a new name.
+   * When set together with getSearchQuery, shows the top banner for products/categories:
+   * manual “Find from name” (Pexels via API) plus device upload. No automatic fetch.
    */
   autoSearchFromText?: string
-  /**
-   * Prefer this for “Find from name”: reads the latest value from the form (e.g. product name),
-   * so the search never uses a stale watch value or the wrong field.
-   */
+  /** Enables the banner when provided; used with “Find from name” for the search query. */
   getSearchQuery?: () => string
   searchContext?: 'product' | 'category'
+  /** When set, uploads to this path under VITE_BACKEND_URL (e.g. customers/upload-image). */
+  uploadSlug?: string
+  /** Alt text for the preview image */
+  previewAlt?: string
 }
-
-const AUTO_SEARCH_MIN_LEN = 3
-const AUTO_SEARCH_DEBOUNCE_MS = 1100
 
 export default function ImageUpload({
   onImageUpload,
@@ -43,34 +40,73 @@ export default function ImageUpload({
   autoSearchFromText,
   getSearchQuery,
   searchContext = 'product',
+  uploadSlug,
+  previewAlt,
 }: ImageUploadProps) {
   const { t } = useLanguage()
   const [uploading, setUploading] = useState(false)
-  const [stockSearchBusy, setStockSearchBusy] = useState(false)
+  const [stockSearching, setStockSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [imageKey, setImageKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const fetchGeneration = useRef(0)
-  const getSearchQueryRef = useRef(getSearchQuery)
-  getSearchQueryRef.current = getSearchQuery
 
   const isComfortable = layout === 'comfortable'
 
-  /** Prefer live form value via `getSearchQuery` so “Find from name” always uses the current title field. */
-  const effectiveSearchText = useCallback(() => {
-    const fn = getSearchQueryRef.current
-    if (fn) {
-      try {
-        const fromForm = String(fn() ?? '').trim()
-        if (fromForm) return fromForm
-      } catch {
-        /* ignore */
-      }
-    }
-    return (autoSearchFromText ?? '').trim()
-  }, [autoSearchFromText])
+  const showLocalPhotoBanner = Boolean(getSearchQuery) || autoSearchFromText !== undefined
 
-  const showStockPanel = Boolean(getSearchQuery) || autoSearchFromText !== undefined
+  const fetchStockImageFromName = useCallback(async () => {
+    const fromGetter = getSearchQuery?.()
+    const query = (fromGetter ?? autoSearchFromText ?? '').trim()
+    if (query.length < 2) {
+      setError(t('stock_search_need_name'))
+      return
+    }
+
+    setStockSearching(true)
+    setError(null)
+
+    try {
+      const slug =
+        searchContext === 'category'
+          ? 'categories/fetch-image-from-search'
+          : 'products/fetch-image-from-search'
+
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({ query }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        const msg =
+          typeof data.message === 'string' && data.message.trim()
+            ? data.message
+            : t('stock_search_failed')
+        throw new Error(msg)
+      }
+
+      if (data?.url && data?.publicId) {
+        onImageUpload({ url: data.url, publicId: data.publicId })
+      } else {
+        throw new Error(t('stock_search_failed'))
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('stock_search_failed'))
+    } finally {
+      setStockSearching(false)
+    }
+  }, [
+    autoSearchFromText,
+    getSearchQuery,
+    onImageUpload,
+    searchContext,
+    t,
+  ])
 
   useEffect(() => {
     if (currentImageUrl) {
@@ -82,156 +118,46 @@ export default function ImageUpload({
     }
   }, [currentImageUrl])
 
-  const resolveFetchUrl = useCallback(() => {
-    const base = import.meta.env.VITE_BACKEND_URL
-    const path =
-      searchContext === 'category' ? 'categories/fetch-image-from-search' : 'products/fetch-image-from-search'
-    return `${base}/${path}`
-  }, [searchContext])
-
-  const uploadSearchResultToForm = useCallback(
-    (
-      result: { url: string; publicId: string; photographer?: string },
-      notify: boolean,
-    ) => {
-      onImageUpload({ url: result.url, publicId: result.publicId })
-      if (!notify) return
-      if (result.photographer) {
-        toast.success(`Stock photo applied (${result.photographer} · Pexels)`)
-      } else {
-        toast.success('Stock photo applied')
-      }
-    },
-    [onImageUpload],
-  )
-
-  const fetchStockPhoto = useCallback(
-    async (mode: 'auto' | 'manual') => {
-      const query = effectiveSearchText()
-      if (query.length < 2) {
-        if (mode === 'manual') {
-          toast.error('Enter the product or category name above (at least 2 characters), then try again.')
-        }
-        return
-      }
-
-      if (/^\d{10,}$/.test(query)) {
-        toast.warning(
-          'That looks like a number or barcode. Enter the product title in the name field for a better photo match.',
-        )
-      }
-
-      const gen = ++fetchGeneration.current
+  const uploadImage = useCallback(
+    async (file: File) => {
       setUploading(true)
-      setStockSearchBusy(true)
       setError(null)
 
       try {
-        const res = await fetch(resolveFetchUrl(), {
+        const formData = new FormData()
+        formData.append('image', file)
+
+        const slug =
+          uploadSlug ??
+          (searchContext === 'category' ? 'categories/upload-image' : 'products/upload-image')
+
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
           method: 'POST',
+          body: formData,
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
           },
-          body: JSON.stringify({ query }),
         })
 
-        const data = (await res.json().catch(() => ({}))) as {
-          message?: string
-          url?: string
-          publicId?: string
-          photographer?: string
+        if (!response.ok) {
+          throw new Error('Upload failed')
         }
 
-        if (gen !== fetchGeneration.current) return
+        const result = await response.json()
 
-        if (!res.ok) {
-          throw new Error(data.message || 'Could not find an image')
+        if (result && result.url) {
+          onImageUpload(result)
+        } else {
+          throw new Error('Invalid response format')
         }
-        if (!data.url || !data.publicId) {
-          throw new Error('Invalid response from server')
-        }
-
-        uploadSearchResultToForm(
-          {
-            url: data.url,
-            publicId: data.publicId,
-            photographer: data.photographer,
-          },
-          mode === 'manual',
-        )
-      } catch (e) {
-        if (gen !== fetchGeneration.current) return
-        const msg = e instanceof Error ? e.message : 'Image search failed'
-        setError(msg)
-        toast.error(msg)
+      } catch {
+        setError(t('image_upload_failed') || 'Image upload failed')
       } finally {
-        if (gen === fetchGeneration.current) {
-          setUploading(false)
-          setStockSearchBusy(false)
-        }
+        setUploading(false)
       }
     },
-    [effectiveSearchText, uploadSearchResultToForm, resolveFetchUrl],
+    [uploadSlug, searchContext, t, onImageUpload],
   )
-
-  useEffect(() => {
-    if (!showStockPanel || disabled) return
-    if (currentImageUrl) return
-    const q = effectiveSearchText()
-    if (q.length < AUTO_SEARCH_MIN_LEN) return
-
-    const id = window.setTimeout(() => {
-      void fetchStockPhoto('auto')
-    }, AUTO_SEARCH_DEBOUNCE_MS)
-
-    return () => window.clearTimeout(id)
-  }, [
-    autoSearchFromText,
-    showStockPanel,
-    currentImageUrl,
-    disabled,
-    fetchStockPhoto,
-    effectiveSearchText,
-  ])
-
-  const uploadImage = async (file: File) => {
-    setUploading(true)
-    setStockSearchBusy(false)
-    setError(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('image', file)
-
-      const uploadSlug =
-        searchContext === 'category' ? 'categories/upload-image' : 'products/upload-image'
-
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${uploadSlug}`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error('Upload failed')
-      }
-
-      const result = await response.json()
-
-      if (result && result.url) {
-        onImageUpload(result)
-      } else {
-        throw new Error('Invalid response format')
-      }
-    } catch {
-      setError(t('image_upload_failed') || 'Image upload failed')
-    } finally {
-      setUploading(false)
-    }
-  }
 
   const handleFileSelect = () => {
     fileInputRef.current?.click()
@@ -266,7 +192,7 @@ export default function ImageUpload({
         await uploadImage(file)
       }
     },
-    [onImageUpload],
+    [uploadImage],
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -276,7 +202,7 @@ export default function ImageUpload({
     },
     maxFiles: 1,
     maxSize: 5 * 1024 * 1024,
-    disabled: disabled || uploading,
+    disabled: disabled || uploading || stockSearching,
   })
 
   const handleRemoveImage = () => {
@@ -299,7 +225,7 @@ export default function ImageUpload({
             <img
               key={imageKey}
               src={currentImageUrl}
-              alt={t('product_image') || 'Product image'}
+              alt={(previewAlt ?? t('product_image')) || 'Product image'}
               onLoad={handleImageLoad}
               onError={handleImageError}
               className='block w-full rounded-xl border border-border/60 bg-muted object-cover'
@@ -322,7 +248,7 @@ export default function ImageUpload({
                     }}
                     className='mt-1 text-primary underline'
                   >
-                    Retry
+                    {t('retry') || 'Retry'}
                   </button>
                 </p>
               </div>
@@ -347,10 +273,6 @@ export default function ImageUpload({
     )
   }
 
-  const searchLen = effectiveSearchText().length
-  const canHintSearch =
-    showStockPanel && searchLen > 0 && searchLen < AUTO_SEARCH_MIN_LEN
-
   return (
     <div
       className={cn(
@@ -368,58 +290,34 @@ export default function ImageUpload({
         />
 
         <div className='space-y-5'>
-          {showStockPanel ? (
-            <div className='flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between sm:gap-6'>
-              <div className='flex min-w-0 flex-1 gap-3 sm:gap-4'>
-                <div className='flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner'>
-                  <Sparkles className='h-5 w-5' aria-hidden />
-                </div>
-                <div className='min-w-0 flex-1 space-y-1.5'>
-                  <p className='text-sm font-semibold leading-tight text-foreground'>
-                    Suggested image from name
-                  </p>
-                  <p className='text-xs leading-relaxed text-muted-foreground'>
-                    Uses the{' '}
-                    <span className='font-medium text-foreground/90'>
-                      {searchContext === 'category' ? 'category name' : 'product name'}
-                    </span>{' '}
-                    field above (not the barcode). We search a stock library, save the match to your library,
-                    and show it below. Replace it with your own photo whenever you like.
-                  </p>
-                  {canHintSearch ? (
-                    <p className='text-xs font-medium text-amber-600 dark:text-amber-500'>
-                      Type {AUTO_SEARCH_MIN_LEN - searchLen} more character
-                      {AUTO_SEARCH_MIN_LEN - searchLen === 1 ? '' : 's'} in the name for auto-suggest, or
-                      press the button once the name is ready.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <div className='flex shrink-0 flex-col justify-center sm:max-w-[12rem]'>
-                <Button
-                  type='button'
-                  size='default'
-                  variant='default'
-                  className='h-11 w-full gap-2 shadow-sm sm:w-auto sm:min-w-[11rem]'
-                  disabled={disabled || uploading || searchLen < 2}
-                  onClick={() => void fetchStockPhoto('manual')}
-                >
-                  {uploading && stockSearchBusy ? (
-                    <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
-                  ) : (
-                    <Sparkles className='h-4 w-4 shrink-0' />
-                  )}
-                  Find from name
-                </Button>
-              </div>
+          {showLocalPhotoBanner ? (
+            <div className='flex flex-wrap items-center gap-3'>
+              <Button
+                type='button'
+                size='default'
+                variant='outline'
+                className='h-11 gap-2 shadow-sm sm:min-w-[11rem]'
+                disabled={disabled || uploading || stockSearching}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void fetchStockImageFromName()
+                }}
+              >
+                {stockSearching ? (
+                  <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+                ) : (
+                  <Sparkles className='h-4 w-4 shrink-0' />
+                )}
+                {t('find_image_from_name')}
+              </Button>
             </div>
           ) : null}
 
-          {showStockPanel ? (
+          {showLocalPhotoBanner ? (
             <div className='relative'>
               <div className='absolute inset-x-0 top-1/2 border-t border-border/60' aria-hidden />
               <span className='relative mx-auto block w-fit bg-gradient-to-b from-card to-muted/20 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-                Or upload
+                {t('or_upload')}
               </span>
             </div>
           ) : null}
@@ -430,17 +328,17 @@ export default function ImageUpload({
               'cursor-pointer rounded-xl border-2 border-dashed text-center transition-all duration-200',
               isComfortable ? 'min-h-[12rem] p-6 sm:min-h-[14rem] sm:p-8' : 'min-h-[10rem] p-4 sm:min-h-[11rem] sm:p-6',
               isDragActive ? 'border-primary bg-primary/[0.07] shadow-inner' : 'border-muted-foreground/30 bg-muted/20',
-              disabled || uploading ? 'cursor-not-allowed opacity-50' : 'hover:border-primary/60 hover:bg-primary/[0.04]',
+              disabled || uploading || stockSearching ? 'cursor-not-allowed opacity-50' : 'hover:border-primary/60 hover:bg-primary/[0.04]',
             )}
           >
             <input {...getInputProps()} />
 
-            {uploading ? (
+            {uploading || stockSearching ? (
               <div className='flex flex-col items-center gap-3'>
                 <Loader2 className={cn('animate-spin text-primary', isComfortable ? 'h-10 w-10' : 'h-8 w-8')} />
                 <p className='text-sm font-medium text-muted-foreground'>
-                  {stockSearchBusy
-                    ? 'Searching for a matching photo…'
+                  {stockSearching
+                    ? t('searching_stock_photo')
                     : t('uploading_image') || 'Uploading image…'}
                 </p>
               </div>
@@ -475,7 +373,7 @@ export default function ImageUpload({
                 e.stopPropagation()
                 handleFileSelect()
               }}
-              disabled={disabled || uploading}
+              disabled={disabled || uploading || stockSearching}
               className='h-11 w-full border-border/80 bg-background/80'
             >
               <Upload className='mr-2 h-4 w-4' />
@@ -483,13 +381,13 @@ export default function ImageUpload({
             </Button>
             <CameraCapture
               onCapture={handleCameraCapture}
-              disabled={disabled || uploading}
+              disabled={disabled || uploading || stockSearching}
               trigger={
                 <Button
                   type='button'
                   variant='outline'
                   size={isComfortable ? 'default' : 'sm'}
-                  disabled={disabled || uploading}
+                  disabled={disabled || uploading || stockSearching}
                   className='h-11 w-full border-border/80 bg-background/80'
                 >
                   <Camera className='mr-2 h-4 w-4' />

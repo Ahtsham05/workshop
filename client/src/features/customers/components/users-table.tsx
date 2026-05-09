@@ -27,6 +27,7 @@ import { Customer } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { useLanguage } from '@/context/language-context'
+import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -39,9 +40,10 @@ interface DataTableProps {
   columns: ColumnDef<Customer>[]
   data: Customer[]
   paggination: any
+  toolbarLeading?: ReactNode
 }
 
-export function CustomerTable({ columns, data, paggination }: DataTableProps) {
+export function CustomerTable({ columns, data, paggination, toolbarLeading }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -75,7 +77,7 @@ export function CustomerTable({ columns, data, paggination }: DataTableProps) {
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} />
+      <DataTableToolbar table={table} leading={toolbarLeading} />
       <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>
@@ -111,7 +113,6 @@ export function CustomerTable({ columns, data, paggination }: DataTableProps) {
                   className='group/row cursor-pointer hover:bg-muted/50'
                   onClick={() => {
                     const customerId = row.original._id || row.original.id;
-                    console.log('Navigating to customer ledger:', { customerId, name: row.original.name, original: row.original });
                     navigate({ to: '/accounting', search: { tab: 'customer-ledger', customerId, customerName: row.original.name } })
                   }}
                 >
