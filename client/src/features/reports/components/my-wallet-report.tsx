@@ -76,6 +76,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
         date: string
         title: string
         accountNumber: string
+        accountType: string
         customerName: string
         inAmount: number
         outAmount: number
@@ -91,6 +92,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
             date: item.date,
             title: item.title,
             accountNumber: item.accountNumber || '—',
+            accountType: item.customerAccountType || item.network || '—',
             customerName: item.customerName || '—',
             inAmount: item.walletImpact > 0 ? item.amount : 0,
             outAmount: item.walletImpact < 0 ? item.amount : 0,
@@ -132,6 +134,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
             Date: format(new Date(row.date), 'dd MMM yyyy'),
             Type: row.title,
             'Number / Account': row.accountNumber,
+            'Account Type': row.accountType,
             Customer: row.customerName,
             'In (+)': row.inAmount || '',
             'Out (-)': row.outAmount || '',
@@ -253,6 +256,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Number / Account</TableHead>
+                        <TableHead>Account Type</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead className='text-right'>In (+)</TableHead>
                         <TableHead className='text-right'>Out (-)</TableHead>
@@ -266,6 +270,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                           <TableCell>{format(new Date(row.date), 'dd MMM yyyy')}</TableCell>
                           <TableCell className='font-medium'>{row.title}</TableCell>
                           <TableCell>{row.accountNumber}</TableCell>
+                          <TableCell className='capitalize'>{row.accountType}</TableCell>
                           <TableCell>{row.customerName}</TableCell>
                           <TableCell className='text-right text-green-600'>
                             {row.inAmount > 0 ? `+${fmt(row.inAmount)}` : '—'}

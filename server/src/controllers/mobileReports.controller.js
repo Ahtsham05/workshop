@@ -344,7 +344,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       .lean(),
     CashWithdrawal.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date createdAt transactionType customerNumber customerName amount cashAmount extraCharge profit notes')
+      .select('date createdAt transactionType customerNumber customerName customerAccountType amount cashAmount extraCharge profit notes')
       .lean(),
     SimSale.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
@@ -464,7 +464,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       title: isWithdrawal ? 'Cash Withdrawal' : 'Cash Deposit',
       accountNumber: item.customerNumber || '',
       customerName: item.customerName || '',
-      network: '',
+      network: item.customerAccountType || '',
       amount: Number(item.amount || 0),
       walletImpact: isWithdrawal ? Number(item.amount || 0) : -Number(item.amount || 0),
       cashAmount: Number(item.cashAmount || 0),

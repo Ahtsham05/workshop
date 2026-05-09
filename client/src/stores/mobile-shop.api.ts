@@ -83,6 +83,7 @@ export interface CashWithdrawalRecord {
   customerId?: string
   customerName?: string
   customerNumber?: string
+  customerAccountType?: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
   commissionRate: number
   extraCharge: number
   profit: number
@@ -99,6 +100,7 @@ export interface CreateCashWithdrawalInput {
   customerId?: string
   customerName?: string
   customerNumber?: string
+  customerAccountType?: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
   commissionRate: number
   extraCharge: number
   notes?: string
@@ -109,6 +111,7 @@ export interface CashWithdrawalBatchEntry {
   amount: number
   customerName?: string
   customerNumber?: string
+  customerAccountType?: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
   extraCharge?: number
   notes?: string
 }

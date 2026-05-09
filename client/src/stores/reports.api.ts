@@ -314,6 +314,7 @@ export interface WalletBalanceDetailItem {
   accountNumber: string
   customerName: string
   network: string
+  customerAccountType?: string
   amount: number
   walletImpact: number
   cashAmount: number

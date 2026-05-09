@@ -105,6 +105,7 @@ type WithdrawalFormState = {
   customerId: string
   customerName: string
   customerNumber: string
+  customerAccountType: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
   commissionRate: string
   extraCharge: string
   notes: string
@@ -115,6 +116,7 @@ type BulkWithdrawalEntry = {
   amount: string
   customerName: string
   customerNumber: string
+  customerAccountType: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
   extraCharge: string
   notes: string
 }
@@ -132,9 +134,17 @@ const makeEmptyBulkEntry = (): BulkWithdrawalEntry => ({
   amount: '',
   customerName: '',
   customerNumber: '',
+  customerAccountType: 'other',
   extraCharge: '0',
   notes: '',
 })
+
+const customerAccountTypeOptions: Array<{ value: 'jazzcash' | 'easypaisa' | 'bank' | 'other'; label: string }> = [
+  { value: 'jazzcash', label: 'JazzCash' },
+  { value: 'easypaisa', label: 'EasyPaisa' },
+  { value: 'bank', label: 'Bank' },
+  { value: 'other', label: 'Other' },
+]
 
 const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   walletId: '',
@@ -184,6 +194,7 @@ const initialWithdrawalForm: WithdrawalFormState = {
   customerId: '',
   customerName: '',
   customerNumber: '',
+  customerAccountType: 'other',
   commissionRate: '0',
   extraCharge: '0',
   notes: '',
@@ -595,6 +606,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         customerId: withdrawalForm.customerId || undefined,
         customerName: withdrawalForm.customerName.trim() || undefined,
         customerNumber: withdrawalForm.customerNumber.trim() || undefined,
+        customerAccountType: withdrawalForm.customerAccountType || undefined,
         commissionRate: Number(withdrawalForm.commissionRate),
         extraCharge: Number(withdrawalForm.extraCharge),
         notes: withdrawalForm.notes.trim() || undefined,
@@ -611,6 +623,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           { label: 'Cash', value: fmtRs(cw.cashAmount ?? 0) },
           { label: 'Customer', value: cw.customerName || '—' },
           { label: 'Phone', value: cw.customerNumber || '—' },
+          { label: 'Account Type', value: cw.customerAccountType || '—' },
           ...(cw.notes ? [{ label: 'Notes', value: cw.notes }] : []),
         ],
       })
@@ -628,6 +641,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         customerId: '',
         customerName: '',
         customerNumber: '',
+        customerAccountType: 'other',
         commissionRate: prevCommission,
         extraCharge: '0',
         notes: '',
@@ -726,6 +740,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           amount: Number(e.amount),
           customerName: e.customerName.trim() || undefined,
           customerNumber: e.customerNumber.trim() || undefined,
+          customerAccountType: e.customerAccountType || undefined,
           extraCharge: Number(e.extraCharge) || 0,
           notes: e.notes.trim() || undefined,
         })),
@@ -910,6 +925,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       customerId: w.customerId?.id || w.customerId?._id || w.customerId || '',
       customerName: w.customerName || '',
       customerNumber: w.customerNumber || '',
+      customerAccountType: w.customerAccountType || 'other',
       commissionRate: String(w.commissionRate || 0),
       extraCharge: String(w.extraCharge || 0),
       notes: w.notes || '',
@@ -938,6 +954,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           customerId: withdrawalForm.customerId || undefined,
           customerName: withdrawalForm.customerName.trim() || undefined,
           customerNumber: withdrawalForm.customerNumber.trim() || undefined,
+          customerAccountType: withdrawalForm.customerAccountType || undefined,
           commissionRate: Number(withdrawalForm.commissionRate),
           extraCharge: Number(withdrawalForm.extraCharge),
           notes: withdrawalForm.notes.trim() || undefined,
@@ -1584,6 +1601,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                               <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Amount (Rs) *</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Customer Name</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Account / Phone</th>
+                              <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Account Type</th>
                               <th className='text-left p-2 min-w-[110px] text-muted-foreground font-medium'>Extra Charge</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Notes</th>
                               <th className='p-2 w-10'></th>
@@ -1621,6 +1639,23 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                                     onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
                                     className='h-8'
                                   />
+                                </td>
+                                <td className='p-2'>
+                                  <Select
+                                    value={entry.customerAccountType}
+                                    onValueChange={(v) => handleBulkEntryChange(idx, 'customerAccountType', v)}
+                                  >
+                                    <SelectTrigger className='h-8'>
+                                      <SelectValue placeholder='Type' />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {customerAccountTypeOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </td>
                                 <td className='p-2'>
                                   <Input
@@ -1766,7 +1801,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
                   </div>
 
-                  <div className='grid gap-4 md:grid-cols-2'>
+                  <div className='grid gap-4 md:grid-cols-3'>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-name'>Customer Name - Optional</Label>
                       <Input id='customer-name' placeholder='e.g., Ahmed Khan' value={withdrawalForm.customerName} onChange={(e) => handleWithdrawalChange('customerName', e.target.value)} />
@@ -1774,6 +1809,24 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     <div className='space-y-2'>
                       <Label htmlFor='customer-number'>Customer Account / Phone</Label>
                       <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='customer-account-type'>Account Type</Label>
+                      <Select
+                        value={withdrawalForm.customerAccountType}
+                        onValueChange={(v) => handleWithdrawalChange('customerAccountType', v)}
+                      >
+                        <SelectTrigger id='customer-account-type'>
+                          <SelectValue placeholder='Select account type' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customerAccountTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -1935,6 +1988,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         <TableHead>Wallet</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Account / Phone</TableHead>
+                        <TableHead>Account Type</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Cash Settled</TableHead>
                         <TableHead>Remaining</TableHead>
@@ -1961,6 +2015,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell className='font-medium'>{w.walletType}</TableCell>
                           <TableCell>{w.customerName?.trim() ? w.customerName : 'Walk-in Customer'}</TableCell>
                           <TableCell>{w.customerNumber || '-'}</TableCell>
+                          <TableCell className='capitalize'>{w.customerAccountType || '-'}</TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}>
                             {w.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(w.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
                           </TableCell>

@@ -12,6 +12,7 @@ const createCashWithdrawal = {
     transactionType: Joi.string().valid('withdrawal', 'deposit').default('withdrawal'),
     customerName: Joi.string().trim().allow(''),
     customerNumber: Joi.string().trim().allow(''),
+    customerAccountType: Joi.string().valid('jazzcash', 'easypaisa', 'bank', 'other'),
     commissionRate: Joi.number().min(0).max(100).default(0),
     extraCharge: Joi.number().min(0).default(0),
     notes: Joi.string().allow(''),
@@ -44,6 +45,7 @@ const updateCashWithdrawal = {
     transactionType: Joi.string().valid('withdrawal', 'deposit'),
     customerName: Joi.string().trim().allow(''),
     customerNumber: Joi.string().trim().allow(''),
+    customerAccountType: Joi.string().valid('jazzcash', 'easypaisa', 'bank', 'other'),
     commissionRate: Joi.number().min(0).max(100),
     extraCharge: Joi.number().min(0),
     notes: Joi.string().allow(''),
@@ -72,6 +74,7 @@ const createCashWithdrawalsBatch = {
           cashAmount: Joi.number().min(0),
           customerName: Joi.string().trim().allow(''),
           customerNumber: Joi.string().trim().allow(''),
+          customerAccountType: Joi.string().valid('jazzcash', 'easypaisa', 'bank', 'other'),
           extraCharge: Joi.number().min(0).default(0),
           notes: Joi.string().allow(''),
         })
