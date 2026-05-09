@@ -128,11 +128,41 @@ const resolveLinkedProduct = async ({ productId, organizationId, branchId }) => 
   const normalizedId = sanitizeId(productId);
   if (!normalizedId) return null;
 
-  const product = await Product.findOne({ _id: normalizedId, organizationId, branchId }).select('name price');
+  const product = await Product.findOne({ _id: normalizedId, organizationId, branchId }).select('name price cost stockQuantity');
   if (!product) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Selected product not found in this branch');
   }
   return product;
+};
+
+/** Reserve one unit from inventory (one SIM per sale). */
+const reserveProductStockForSimSale = async ({ productId, organizationId, branchId, productName }) => {
+  const updated = await Product.findOneAndUpdate(
+    {
+      _id: productId,
+      organizationId,
+      branchId,
+      stockQuantity: { $gte: 1 },
+    },
+    { $inc: { stockQuantity: -1 } },
+    { new: true }
+  );
+  if (!updated) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Insufficient stock for ${productName || 'this SIM product'}. Add stock or pick another item.`
+    );
+  }
+  return updated;
+};
+
+const releaseProductStockForSimSale = async ({ productId, organizationId, branchId }) => {
+  if (!productId) return;
+  await Product.findOneAndUpdate(
+    { _id: productId, organizationId, branchId },
+    { $inc: { stockQuantity: 1 } },
+    { new: true }
+  );
 };
 
 const syncCustomerLedgerForSimSale = async (sale) => {
@@ -171,20 +201,43 @@ const createSimSale = async (body) => {
   const purchaseAmount = simAmount + loadAmount;
   const commission = saleAmount - purchaseAmount;
 
-  const sale = await SimSale.create({
-    ...body,
-    jobNumber,
-    productId: linkedProduct ? linkedProduct._id : undefined,
-    productName: body.productName || (linkedProduct ? linkedProduct.name : '') || '',
-    customerId: linkedCustomer ? linkedCustomer._id : undefined,
-    customerName: body.customerName || (linkedCustomer ? linkedCustomer.name : '') || '',
-    simAmount,
-    loadAmount,
-    purchaseAmount,
-    saleAmount,
-    commission,
-    paymentWalletType: body.paymentWalletType || '',
-  });
+  let stockReservedForProductId = null;
+  if (linkedProduct) {
+    await reserveProductStockForSimSale({
+      productId: linkedProduct._id,
+      organizationId,
+      branchId,
+      productName: linkedProduct.name,
+    });
+    stockReservedForProductId = linkedProduct._id;
+  }
+
+  let sale;
+  try {
+    sale = await SimSale.create({
+      ...body,
+      jobNumber,
+      productId: linkedProduct ? linkedProduct._id : undefined,
+      productName: body.productName || (linkedProduct ? linkedProduct.name : '') || '',
+      customerId: linkedCustomer ? linkedCustomer._id : undefined,
+      customerName: body.customerName || (linkedCustomer ? linkedCustomer.name : '') || '',
+      simAmount,
+      loadAmount,
+      purchaseAmount,
+      saleAmount,
+      commission,
+      paymentWalletType: body.paymentWalletType || '',
+    });
+  } catch (err) {
+    if (stockReservedForProductId) {
+      await releaseProductStockForSimSale({
+        productId: stockReservedForProductId,
+        organizationId,
+        branchId,
+      });
+    }
+    throw err;
+  }
 
   // Deduct load amount from wallet if a wallet/load-account is selected
   if (sale.walletType && loadAmount > 0) {
@@ -251,13 +304,17 @@ const updateSimSale = async (saleId, updateBody) => {
   };
 
   const linkedCustomer = await resolveLinkedCustomer({
-    customerId: sanitizeId(updateBody.customerId) !== undefined ? updateBody.customerId : sale.customerId,
+    customerId: Object.prototype.hasOwnProperty.call(updateBody, 'customerId')
+      ? updateBody.customerId
+      : sale.customerId,
     organizationId: sale.organizationId,
     branchId: sale.branchId,
   });
 
   const linkedProduct = await resolveLinkedProduct({
-    productId: sanitizeId(updateBody.productId) !== undefined ? updateBody.productId : sale.productId,
+    productId: Object.prototype.hasOwnProperty.call(updateBody, 'productId')
+      ? updateBody.productId
+      : sale.productId,
     organizationId: sale.organizationId,
     branchId: sale.branchId,
   });
@@ -270,12 +327,34 @@ const updateSimSale = async (saleId, updateBody) => {
   const newWalletType = updateBody.walletType !== undefined ? updateBody.walletType : sale.walletType;
 
   let newProductId = sale.productId;
-  if (sanitizeId(updateBody.productId) !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(updateBody, 'productId')) {
     newProductId = linkedProduct ? linkedProduct._id : undefined;
   }
   let newCustomerId = sale.customerId;
-  if (sanitizeId(updateBody.customerId) !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(updateBody, 'customerId')) {
     newCustomerId = linkedCustomer ? linkedCustomer._id : undefined;
+  }
+
+  const previousProductId = sale.productId ? sale.productId.toString() : '';
+  const nextProductId = newProductId ? newProductId.toString() : '';
+
+  if (previousProductId !== nextProductId) {
+    // Reserve the new SIM first so we never drop stock if inventory is insufficient.
+    if (nextProductId) {
+      await reserveProductStockForSimSale({
+        productId: nextProductId,
+        organizationId: sale.organizationId,
+        branchId: sale.branchId,
+        productName: linkedProduct?.name,
+      });
+    }
+    if (previousProductId) {
+      await releaseProductStockForSimSale({
+        productId: previousProductId,
+        organizationId: sale.organizationId,
+        branchId: sale.branchId,
+      });
+    }
   }
 
   Object.assign(sale, {
@@ -330,6 +409,14 @@ const deleteSimSale = async (saleId) => {
   const sale = await SimSale.findById(saleId);
   if (!sale) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sim sale not found');
+  }
+
+  if (sale.productId) {
+    await releaseProductStockForSimSale({
+      productId: sale.productId,
+      organizationId: sale.organizationId,
+      branchId: sale.branchId,
+    });
   }
 
   // Restore wallet balance

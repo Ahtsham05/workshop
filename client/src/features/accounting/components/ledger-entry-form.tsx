@@ -205,7 +205,7 @@ export function LedgerEntryForm({
         console.log('Update payload:', updatePayload);
 
         await Axios.patch(url, updatePayload);
-        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
+        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard', 'CashBook']));
         toast.success(t('Ledger entry updated successfully'));
         
         if (onSuccess) onSuccess();
@@ -232,7 +232,7 @@ export function LedgerEntryForm({
           : summery.addSupplierLedgerEntry.url;
 
         const response = await Axios.post(url, createPayload);
-        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
+        dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard', 'CashBook']));
         toast.success(t('Ledger entry added successfully'));
         
         // Pass the created entry back if it's a payment received/made

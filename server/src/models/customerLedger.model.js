@@ -8,6 +8,8 @@ const transactionTypes = {
   PAYMENT_MADE: 'payment_made',
   PURCHASE: 'purchase',
   REFUND: 'refund',
+  CREDIT_NOTE: 'credit_note',
+  DEBIT_NOTE: 'debit_note',
   ADJUSTMENT: 'adjustment',
   OPENING_BALANCE: 'opening_balance',
   SALES_RETURN: 'sales_return',

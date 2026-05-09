@@ -134,6 +134,11 @@ export default function SimSalePage() {
 
   const selectedWallet = wallets.find(w => w.type === form.walletType)
   const selectedPaymentWallet = wallets.find(w => w.type === form.paymentWalletType)
+  const selectedProductRow = form.productId
+    ? products.find(
+        (p: any) => p.id === form.productId || p._id === form.productId
+      )
+    : undefined
 
   const handleChange = (field: keyof SimSaleFormState, value: string) => {
     if (field === 'productId') {
@@ -141,11 +146,14 @@ export default function SimSalePage() {
       const selectedProduct = products.find(
         (p: any) => p.id === normalizedValue || p._id === normalizedValue || p.value === normalizedValue
       )
+      const cost = selectedProduct?.cost ?? selectedProduct?.price
+      const price = selectedProduct?.price ?? selectedProduct?.cost
       setForm(prev => ({
         ...prev,
         productId: normalizedValue,
         productName: selectedProduct?.name || '',
-        simAmount: selectedProduct ? String(selectedProduct.price ?? selectedProduct.cost ?? '') : prev.simAmount,
+        simAmount: selectedProduct ? String(Number(cost ?? 0)) : '',
+        saleAmount: selectedProduct ? String(Number(price ?? 0)) : prev.saleAmount,
       }))
       return
     }
@@ -190,11 +198,11 @@ export default function SimSalePage() {
 
   const handleSubmit = async () => {
     if (!form.simAmount || Number(form.simAmount) < 0) {
-      toast.error('Please enter SIM amount')
+      toast.error('Please enter SIM cost')
       return
     }
     if (!form.saleAmount || Number(form.saleAmount) <= 0) {
-      toast.error('Please enter sale amount')
+      toast.error('Please enter sale price')
       return
     }
     if (form.paymentMethod === 'wallet' && !form.paymentWalletType) {
@@ -228,6 +236,7 @@ export default function SimSalePage() {
         record = await createSimSale(payload).unwrap()
         toast.success('Sim sale saved')
       }
+      dispatch(fetchAllProducts({}) as any)
       setSavedReceipt({
         title: 'SIM sale',
         reference: `Job #${record.jobNumber}`,
@@ -237,9 +246,9 @@ export default function SimSalePage() {
           { label: 'Load A/C', value: record.walletType || '—' },
           { label: 'Customer', value: record.customerName || '—' },
           { label: 'Mobile', value: record.customerMobile || '—' },
-          { label: 'SIM amount', value: fmtRs(record.simAmount) },
+          { label: 'Cost (SIM)', value: fmtRs(record.simAmount) },
           { label: 'Load amount', value: fmtRs(record.loadAmount) },
-          { label: 'Sale amount', value: fmtRs(record.saleAmount) },
+          { label: 'Price (sale)', value: fmtRs(record.saleAmount) },
           {
             label: 'Payment',
             value: `${record.paymentMethod}${record.paymentWalletType ? ` (${record.paymentWalletType})` : ''}`,
@@ -278,6 +287,7 @@ export default function SimSalePage() {
     try {
       await deleteSimSale(deleteId).unwrap()
       toast.success('Sim sale deleted')
+      dispatch(fetchAllProducts({}) as any)
       setDeleteId(null)
     } catch {
       toast.error('Failed to delete sim sale')
@@ -328,7 +338,10 @@ export default function SimSalePage() {
                     options={products.map((p: any) => ({
                       value: p.id || p._id,
                       label: p.name,
-                      sublabel: p.barcode || undefined,
+                      sublabel:
+                        [typeof p.stockQuantity === 'number' ? `Stock: ${p.stockQuantity}` : null, p.barcode || null]
+                          .filter(Boolean)
+                          .join(' · ') || undefined,
                     }))}
                     value={form.productId}
                     onValueChange={v => handleChange('productId', v)}
@@ -337,6 +350,9 @@ export default function SimSalePage() {
                     clearLabel='-- None --'
                     emptyText='No products found.'
                   />
+                  {selectedProductRow && typeof selectedProductRow.stockQuantity === 'number' && selectedProductRow.stockQuantity < 1 && (
+                    <p className='text-sm text-destructive'>No stock left for this product. Add inventory or choose another SIM.</p>
+                  )}
                 </div>
 
                 {/* Load A/C */}
@@ -467,9 +483,9 @@ export default function SimSalePage() {
 
               {/* Right-side amounts */}
               <div className='mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-                {/* Sim Amount */}
+                {/* SIM cost (purchase / inventory cost) */}
                 <div className='space-y-2'>
-                  <Label>Sim Amount</Label>
+                  <Label>Cost (SIM)</Label>
                   <Input
                     type='number'
                     min={0}
@@ -477,6 +493,7 @@ export default function SimSalePage() {
                     value={form.simAmount}
                     onChange={e => handleChange('simAmount', e.target.value)}
                   />
+                  <p className='text-xs text-muted-foreground'>Your cost per unit (defaults from product cost).</p>
                 </div>
 
                 {/* Load Amount */}
@@ -502,9 +519,9 @@ export default function SimSalePage() {
                   />
                 </div>
 
-                {/* Sale Amount */}
+                {/* Sale price to customer */}
                 <div className='space-y-2'>
-                  <Label>Sale Amount</Label>
+                  <Label>Price (sale)</Label>
                   <Input
                     type='number'
                     min={0.01}
@@ -512,6 +529,7 @@ export default function SimSalePage() {
                     value={form.saleAmount}
                     onChange={e => handleChange('saleAmount', e.target.value)}
                   />
+                  <p className='text-xs text-muted-foreground'>Selling price (defaults from product retail price).</p>
                 </div>
 
                 {/* Commission (read-only) */}
@@ -559,10 +577,10 @@ export default function SimSalePage() {
                         <TableHead>Item</TableHead>
                         <TableHead>Load A/C</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead>SIM Amt</TableHead>
-                        <TableHead>Load Amt</TableHead>
-                        <TableHead>Purchase Amt</TableHead>
-                        <TableHead>Sale Amt</TableHead>
+                        <TableHead>Cost</TableHead>
+                        <TableHead>Load</TableHead>
+                        <TableHead>Cost + load</TableHead>
+                        <TableHead>Price</TableHead>
                         <TableHead>Commission</TableHead>
                         <TableHead>Payment Method</TableHead>
                         <TableHead>Payment Wallet</TableHead>

@@ -10,6 +10,12 @@ const isWalletLedgerMethod = (paymentMethod) => {
   return method.includes('wallet') || method.includes('jazzcash') || method.includes('easypaisa');
 };
 
+/** On-account / credit sale — no cash movement */
+const isCreditLedgerPayment = (paymentMethod) => {
+  const m = String(paymentMethod || '').trim().toLowerCase();
+  return m === 'credit';
+};
+
 const parseWalletType = (paymentMethod) => {
   const original = String(paymentMethod || '').trim();
   const normalized = original.toLowerCase();
@@ -85,34 +91,130 @@ const syncCashBookFromCustomerLedger = async (entry) => {
     return null;
   }
 
+  await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+
   const transactionType = String(entry.transactionType || '').toLowerCase();
+  const debitAmt = Number(entry.debit) || 0;
+  const creditAmt = Number(entry.credit) || 0;
 
-  if (transactionType !== 'payment_received' && transactionType !== 'payment_made') {
-    await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+  const cashLike =
+    Boolean(entry.paymentMethod && String(entry.paymentMethod).trim()) &&
+    !isWalletLedgerMethod(entry.paymentMethod) &&
+    !isCreditLedgerPayment(entry.paymentMethod);
+
+  const createCashBookLine = ({ type, amount, source }) =>
+    cashBookService.createEntry({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      type,
+      source,
+      amount,
+      paymentMethod: entry.paymentMethod || 'cash',
+      referenceId: entry._id,
+      referenceModel: 'CustomerLedger',
+      description: entry.description || 'Customer ledger',
+      date: entry.transactionDate,
+      createdBy: entry.createdBy,
+    });
+
+  // Invoice-linked sale — invoice / payment lines own cashbook
+  if (transactionType === 'sale' && entry.referenceId) {
     return null;
   }
 
-  const isPaymentReceived = transactionType === 'payment_received';
-  const amount = Number(isPaymentReceived ? entry.credit : entry.debit) || 0;
-
-  if (amount <= 0 || isWalletLedgerMethod(entry.paymentMethod)) {
-    await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+  // Opening balance is not a cash movement
+  if (transactionType === 'opening_balance') {
     return null;
   }
 
-  return cashBookService.upsertReferenceEntry({
-    organizationId: entry.organizationId,
-    branchId: entry.branchId,
-    type: isPaymentReceived ? 'income' : 'expense',
-    source: 'sale',
-    amount,
-    paymentMethod: entry.paymentMethod || 'cash',
-    referenceId: entry._id,
-    referenceModel: 'CustomerLedger',
-    description: entry.description || 'Customer payment entry',
-    date: entry.transactionDate,
-    createdBy: entry.createdBy,
-  });
+  if (!cashLike) {
+    return null;
+  }
+
+  // Manual "Sale" from customer ledger: amount is on the ledger debit column — mirror it as cash book
+  // expense (Cash paid out column). Invoice-linked sales stay excluded; invoice module owns those cash lines.
+  if (transactionType === 'sale') {
+    if (debitAmt <= 0) {
+      return null;
+    }
+    return createCashBookLine({
+      type: 'expense',
+      amount: debitAmt,
+      source: 'other',
+    });
+  }
+
+  if (transactionType === 'payment_received') {
+    if (creditAmt <= 0) {
+      return null;
+    }
+    return createCashBookLine({
+      type: 'income',
+      amount: creditAmt,
+      source: 'sale',
+    });
+  }
+
+  if (transactionType === 'payment_made') {
+    if (debitAmt <= 0) {
+      return null;
+    }
+    return createCashBookLine({
+      type: 'expense',
+      amount: debitAmt,
+      source: 'sale',
+    });
+  }
+
+  // Debit note / adjustments: amount on ledger DEBIT + cash/bank = cash paid out (cash book expense column)
+  if (transactionType === 'debit_note' || transactionType === 'adjustment') {
+    if (debitAmt > 0) {
+      return createCashBookLine({
+        type: 'expense',
+        amount: debitAmt,
+        source: 'other',
+      });
+    }
+    if (creditAmt > 0) {
+      return createCashBookLine({
+        type: 'income',
+        amount: creditAmt,
+        source: 'other',
+      });
+    }
+    return null;
+  }
+
+  if (transactionType === 'credit_note') {
+    if (creditAmt <= 0) {
+      return null;
+    }
+    return createCashBookLine({
+      type: 'income',
+      amount: creditAmt,
+      source: 'other',
+    });
+  }
+
+  if (['refund', 'purchase', 'sales_return'].includes(transactionType)) {
+    if (debitAmt > 0) {
+      return createCashBookLine({
+        type: 'expense',
+        amount: debitAmt,
+        source: 'other',
+      });
+    }
+    if (creditAmt > 0) {
+      return createCashBookLine({
+        type: 'income',
+        amount: creditAmt,
+        source: 'other',
+      });
+    }
+    return null;
+  }
+
+  return null;
 };
 
 /**
