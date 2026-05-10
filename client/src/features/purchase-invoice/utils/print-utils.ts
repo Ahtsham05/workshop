@@ -222,7 +222,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const {
     invoiceNumber, items, customerId, customerName, walkInCustomerName,
     type, subtotal, tax, discount, total, paidAmount, balance,
-    notes, invoiceNote, deliveryCharge = 0, serviceCharge = 0,
+    notes, deliveryCharge = 0, serviceCharge = 0,
     companyName, companyAddress, companyPhone, companyEmail, companyTaxNumber
   } = data
 
