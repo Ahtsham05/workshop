@@ -65,6 +65,7 @@ import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { ContactPhotoCell } from '@/components/contact-photo-cell'
 
 interface ConvertedItem {
   id: string
@@ -599,12 +600,12 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                         <Search className="w-4 h-4 flex-shrink-0" />
                         {selectedCustomer ? (
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
-                              <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                <span className="text-[10px] font-medium text-white">
-                                  {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
-                                </span>
-                              </div>
+                            <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
+                              <ContactPhotoCell
+                                picture={selectedCustomer.picture}
+                                name={selectedCustomer.name || ''}
+                                className="h-5 w-5 shrink-0 rounded-full"
+                              />
                               <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0">
                                 <span className="text-xs truncate shrink-0" title={selectedCustomer.name}>
                                   {selectedCustomer.name}
@@ -659,11 +660,11 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 className="flex items-center gap-3 cursor-pointer p-3"
                               >
                                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-sm font-medium text-white">
-                                      {customer.name?.charAt(0).toUpperCase() || 'C'}
-                                    </span>
-                                  </div>
+                                  <ContactPhotoCell
+                                    picture={customer.picture}
+                                    name={customer.name || ''}
+                                    className="h-8 w-8 shrink-0"
+                                  />
                                   <div className="flex flex-col flex-1 min-w-0 gap-0.5">
                                     <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0 min-w-0">
                                       <span className="truncate font-medium shrink-0" title={customer.name}>

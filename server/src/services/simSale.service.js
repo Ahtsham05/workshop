@@ -182,6 +182,7 @@ const syncCustomerLedgerForSimSale = async (sale) => {
     debit: Number(sale.saleAmount) || 0,
     credit: 0,
     paymentMethod: getLedgerPaymentMethodLabel(sale.paymentMethod),
+    invoiceType: 'cash',
     notes: sale.notes || '',
   });
 };

@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Purchase, Product, SupplierLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { resolvePurchaseLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
@@ -188,6 +189,7 @@ const createPurchase = async (purchaseBody) => {
   if (purchase.supplier) {
     try {
       const ledgerPaymentMethod = resolvePurchaseLedgerPaymentMethod(purchase);
+      const ledgerInvoiceType = resolvePurchaseLedgerInvoiceType(purchase);
       console.log('Creating supplier ledger entry for purchase:', {
         supplier: purchase.supplier,
         invoiceNumber: purchase.invoiceNumber,
@@ -209,6 +211,7 @@ const createPurchase = async (purchaseBody) => {
         debit: 0,
         credit: purchase.totalAmount,
         paymentMethod: ledgerPaymentMethod,
+        invoiceType: ledgerInvoiceType,
         notes: `Purchase of ${purchase.items.length} items`
       });
       console.log('Supplier ledger entry created for purchase:', purchase.invoiceNumber, 'Entry ID:', purchaseEntry._id);
@@ -231,6 +234,7 @@ const createPurchase = async (purchaseBody) => {
           debit: purchase.paidAmount,
           credit: 0,
           paymentMethod: ledgerPaymentMethod,
+          invoiceType: ledgerInvoiceType,
           notes: `Amount paid: Rs${purchase.paidAmount.toFixed(2)}${purchase.balance > 0 ? `, Balance: Rs${purchase.balance.toFixed(2)}` : ''}`
         });
         console.log('Payment ledger entry created for purchase:', purchase.invoiceNumber, 'Amount:', purchase.paidAmount, 'Entry ID:', paymentEntry._id);
@@ -405,6 +409,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   )) {
     try {
       const ledgerPaymentMethod = resolvePurchaseLedgerPaymentMethod(purchase);
+      const ledgerInvoiceType = resolvePurchaseLedgerInvoiceType(purchase);
       console.log('Updating supplier ledger entries for purchase:', {
         purchaseId: purchase._id,
         invoiceNumber: purchase.invoiceNumber,
@@ -433,6 +438,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           debit: 0,
           credit: newTotalAmount,
           paymentMethod: ledgerPaymentMethod,
+          invoiceType: ledgerInvoiceType,
           notes: `Purchase of ${purchase.items.length} items (Updated)`
         });
 
@@ -452,6 +458,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             debit: newPaidAmount,
             credit: 0,
             paymentMethod: ledgerPaymentMethod,
+            invoiceType: ledgerInvoiceType,
             notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
           });
         }
@@ -466,6 +473,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           invoiceNumber: purchase.invoiceNumber,
           purchaseDate: purchase.purchaseDate,
           paymentMethod: ledgerPaymentMethod,
+          invoiceType: ledgerInvoiceType,
           itemsCount: purchase.items.length,
         });
       }

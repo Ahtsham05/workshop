@@ -35,6 +35,18 @@ interface LedgerEntry {
   credit: number;
   balance: number;
   paymentMethod?: string;
+  /** Sale terms from invoice: cash / credit / pending (not payment rail). */
+  invoiceType?: string;
+}
+
+function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string): string {
+  const raw = entry.invoiceType;
+  if (!raw) return '—';
+  const k = String(raw).toLowerCase();
+  if (k === 'cash') return t('Cash');
+  if (k === 'credit') return t('Credit');
+  if (k === 'pending') return t('Pending');
+  return raw;
 }
 
 interface CustomerLedgerDetailsProps {
@@ -194,6 +206,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
         'Type': getTransactionTypeLabel(entry.transactionType),
         'Description': entry.description,
         'Reference': entry.reference || '-',
+        'Invoice Type': formatLedgerInvoiceType(entry, t),
         'Debit': entry.debit > 0 ? entry.debit.toFixed(2) : '-',
         'Credit': entry.credit > 0 ? entry.credit.toFixed(2) : '-',
         'Balance': entry.balance.toFixed(2)
@@ -470,7 +483,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                       <TableHead>{t('Type')}</TableHead>
                       <TableHead>{t('Description')}</TableHead>
                       <TableHead>{t('Reference')}</TableHead>
-                      <TableHead>{t('Payment Method')}</TableHead>
+                      <TableHead>{t('Invoice Type')}</TableHead>
                       <TableHead className="text-right">{t('Debit')}</TableHead>
                       <TableHead className="text-right">{t('Credit')}</TableHead>
                       <TableHead className="text-right">{t('Balance')}</TableHead>
@@ -503,11 +516,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                           )}
                         </TableCell>
                         <TableCell>
-                          {entry.paymentMethod ? (
-                            <Badge variant="outline" className="text-xs">
-                              {entry.paymentMethod}
-                            </Badge>
-                          ) : '-'}
+                          <span className="text-sm text-gray-800">{formatLedgerInvoiceType(entry, t)}</span>
                         </TableCell>
                         <TableCell className="text-right text-red-600">
                           {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '-'}

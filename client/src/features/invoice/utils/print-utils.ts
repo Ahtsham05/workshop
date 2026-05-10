@@ -54,6 +54,8 @@ export interface PrintInvoiceData {
    * Omit — follow invoice / user preference (`resolveInvoiceLanguage`).
    */
   printInUrdu?: boolean
+  /** Max line items per sheet before a continuation page (A4). Default 14. */
+  a4ItemsPerPage?: number
 }
 
 function resolvePrintLanguage(data: PrintInvoiceData): InvoiceLanguage {
@@ -695,7 +697,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     paidAmount,
     // balance,
     notes,
-    invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
     companyAddress,
@@ -741,9 +742,220 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const paid = paidAmount || 0
   const totalWithPrev = previousBalance + currentInvoice
   // const balanceDue = Math.abs(totalWithPrev - paid)
-  // const netBalance = (data.netBalance !== undefined && data.netBalance !== null)
-  //   ? data.netBalance
-  //   : totalWithPrev - paid
+  const pageIndicator = (page: number, total: number) =>
+    urduTexts.page_indicator.replace('{page}', String(page)).replace('{total}', String(total))
+
+  const itemsPerPage =
+    typeof data.a4ItemsPerPage === 'number' && data.a4ItemsPerPage > 0
+      ? Math.min(80, Math.floor(data.a4ItemsPerPage))
+      : 14
+
+  const chunks: typeof items[] = []
+  for (let i = 0; i < items.length; i += itemsPerPage) {
+    chunks.push(items.slice(i, i + itemsPerPage))
+  }
+  if (chunks.length === 0) chunks.push([])
+
+  const headerBlock = `
+<div class="invoice-header">
+    <div class="company-info">
+      ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
+      <div class="company-name">${urduTexts.business_name}</div>
+      <div class="company-details">
+        ${urduTexts.business_address}<br>
+        ${urduTexts.business_phone}<br>
+        ${urduTexts.business_email}<br>
+        ${urduTexts.tax_id}
+      </div>
+    </div>
+    <div class="invoice-details">
+      <div class="invoice-title">${urduTexts.invoice_title}</div>
+      <div class="invoice-meta">
+        <div><strong>#${invoiceNumber}</strong></div>
+        <div>${urduTexts.date}: ${new Date().toLocaleDateString(locale)}</div>
+        <div>${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="invoice-info">
+    <div class="info-section">
+      <div class="info-title">${urduTexts.bill_to}:</div>
+      <div class="info-row">
+        <span class="info-label">${urduTexts.customer}:</span>
+        <span><strong>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</strong></span>
+        <span class="status-badge status-${type}">${getTypeText(type)}</span>
+      </div>
+      ${invoiceAddrLine ? `
+      <div class="info-row">
+        <span class="info-label">${urduTexts.invoice_address}:</span>
+        <span><strong>${invoiceAddrLine}</strong></span>
+      </div>
+      ` : ''}
+    </div>
+    <div class="info-section">
+      <div class="info-title">${urduTexts.invoice_details}:</div>
+      <div class="info-row">
+        <span class="info-label">${urduTexts.issue_date}:</span>
+        <span>${new Date().toLocaleDateString(locale)}</span>
+      </div>
+    </div>
+  </div>
+`
+
+  const totalsBlock = `
+<div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
+    <table class="totals-table" style="width: 400px;">
+      ${subtotal > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.subtotal}:</td>
+        <td class="total-amount">${formatCurrency(subtotal)}</td>
+      </tr>
+      ` : ''}
+      ${discount > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.discount}:</td>
+        <td class="total-amount">-${formatCurrency(discount)}</td>
+      </tr>
+      ` : ''}
+      ${deliveryCharge > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.delivery_charge}:</td>
+        <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
+      </tr>
+      ` : ''}
+      ${serviceCharge > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.service_charge}:</td>
+        <td class="total-amount">${formatCurrency(serviceCharge)}</td>
+      </tr>
+      ` : ''}
+      ${tax > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.tax}:</td>
+        <td class="total-amount">${formatCurrency(tax)}</td>
+      </tr>
+      ` : ''}
+      <tr class="final-total">
+        <td class="total-label">${urduTexts.total}:</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
+      </tr>
+    </table>
+  </div>
+
+  ${type !== 'pending' ? `
+  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
+    <table class="totals-table" style="width: 400px;">
+      <tr>
+        <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
+      </tr>
+      ${(hasPrevious && customerId !== 'walk-in') ? `
+      <tr>
+        <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
+        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 13px;">
+          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
+        </td>
+      </tr>
+      ` : ''}
+      <tr style="border-top: 2px solid #000;">
+        <td class="total-label" style="font-weight: bold;">${urduTexts.total_receivable || 'کل رقم'}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(totalWithPrev)}</td>
+      </tr>
+      <tr>
+        <td class="total-label">${urduTexts.amount_paid}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
+      </tr>
+      <tr>
+        <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
+        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
+      </tr>
+    </table>
+  </div>
+  ` : ''}
+
+  
+  ${notes ? `
+    <div class="notes-section">
+      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.additional_notes}:</div>
+      <div style="font-size: 14px;">${notes}</div>
+    </div>
+  ` : ''}
+  
+  <div class="footer">
+    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
+    <div class="footer-line">${urduTexts.keep_receipt}</div>
+    <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">
+      ${urduTexts.powered_by}
+    </div>
+  </div>
+`
+
+  let runningItemsSum = 0
+  const totalPages = chunks.length
+
+  const pagesHtml = chunks
+    .map((chunk, pi) => {
+      const isLastPage = pi === chunks.length - 1
+      const pageLineSum = chunk.reduce((acc, row) => acc + (Number(row.subtotal) || 0), 0)
+      const prevPagesLineSum = runningItemsSum
+      runningItemsSum += pageLineSum
+
+      const continuationBanner =
+        pi > 0
+          ? `<div class="continuation-banner"><strong>#${invoiceNumber}</strong> — ${urduTexts.continuation} (${pageIndicator(pi + 1, totalPages)})</div>`
+          : ''
+
+      const rowStart = pi * itemsPerPage
+      const tableRows =
+        chunk.length === 0
+          ? `<tr><td colspan="5" class="text-center">${urduTexts.not_available}</td></tr>`
+          : chunk
+              .map((item, idx) => {
+                const index = rowStart + idx
+                return `
+        <tr>
+          <td class="text-center"><strong>${index + 1}</strong></td>
+          <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
+          <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
+          <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
+          <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
+        </tr>`
+              })
+              .join('')
+
+      const multiPageSummary =
+        totalPages > 1
+          ? `<div class="page-items-summary">
+            ${pi > 0 ? `<span>${urduTexts.previous_pages_items_total}: ${formatCurrency(prevPagesLineSum)}</span>` : ''}
+            <span>${urduTexts.this_page_items_total}: ${formatCurrency(pageLineSum)}</span>
+            <span>${urduTexts.running_items_total}: ${formatCurrency(runningItemsSum)}</span>
+            <span>${pageIndicator(pi + 1, totalPages)}</span>
+          </div>`
+          : ''
+
+      const tableBlock = `
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width: 5%;">#</th>
+        <th style="width: 40%;">${urduTexts.product_name}</th>
+        <th style="width: 12%;" class="text-center">${urduTexts.quantity}</th>
+        <th style="width: 15%;" class="text-right">${urduTexts.unit_price}</th>
+        <th style="width: 18%;" class="text-right">${urduTexts.total}</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>`
+
+      const pageClass = !isLastPage ? 'invoice-print-page invoice-print-page-break' : 'invoice-print-page'
+
+      const tail = isLastPage ? totalsBlock : ''
+
+      return `<div class="${pageClass}">${continuationBanner}${headerBlock}${tableBlock}${multiPageSummary}${tail}</div>`
+    })
+    .join('')
+
 
   return `
 <!DOCTYPE html>
@@ -908,6 +1120,43 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .items-table tbody tr:last-child td {
       border-bottom: 2px solid black;
+    }
+
+    .invoice-print-page {
+      position: relative;
+    }
+
+    .invoice-print-page-break {
+      page-break-after: always;
+    }
+
+    .continuation-banner {
+      margin: 0 0 18px;
+      padding: 10px 14px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .page-items-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      align-items: baseline;
+      margin: 14px 0 10px;
+      font-size: 12px;
+      color: #6c757d;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media print {
+      .items-table thead {
+        display: table-header-group;
+      }
+      .items-table tr {
+        page-break-inside: avoid;
+      }
     }
     
     .items-table .text-right {
@@ -1112,170 +1361,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="invoice-header">
-    <div class="company-info">
-      ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
-      <div class="company-name">${urduTexts.business_name}</div>
-      <div class="company-details">
-        ${urduTexts.business_address}<br>
-        ${urduTexts.business_phone}<br>
-        ${urduTexts.business_email}<br>
-        ${urduTexts.tax_id}
-      </div>
-    </div>
-    <div class="invoice-details">
-      <div class="invoice-title">${urduTexts.invoice_title}</div>
-      <div class="invoice-meta">
-        <div><strong>#${invoiceNumber}</strong></div>
-        <div>${urduTexts.date}: ${new Date().toLocaleDateString(locale)}</div>
-        <div>${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="invoice-info">
-    <div class="info-section">
-      <div class="info-title">${urduTexts.bill_to}:</div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.customer}:</span>
-        <span><strong>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</strong></span>
-        <span class="status-badge status-${type}">${getTypeText(type)}</span>
-      </div>
-      ${invoiceAddrLine ? `
-      <div class="info-row">
-        <span class="info-label">${urduTexts.invoice_address}:</span>
-        <span><strong>${invoiceAddrLine}</strong></span>
-      </div>
-      ` : ''}
-    </div>
-    <div class="info-section">
-      <div class="info-title">${urduTexts.invoice_details}:</div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.issue_date}:</span>
-        <span>${new Date().toLocaleDateString(locale)}</span>
-      </div>
-    </div>
-  </div>
-  
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th style="width: 5%;">#</th>
-        <th style="width: 40%;">${urduTexts.product_name}</th>
-        <th style="width: 12%;" class="text-center">${urduTexts.quantity}</th>
-        <th style="width: 15%;" class="text-right">${urduTexts.unit_price}</th>
-        <th style="width: 18%;" class="text-right">${urduTexts.total}</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${items.map((item, index) => `
-        <tr>
-          <td class="text-center"><strong>${index + 1}</strong></td>
-          <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
-          <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
-          <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
-          <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
+  ${pagesHtml}
 
-  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
-    <table class="totals-table" style="width: 400px;">
-      ${subtotal > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.subtotal}:</td>
-        <td class="total-amount">${formatCurrency(subtotal)}</td>
-      </tr>
-      ` : ''}
-      ${discount > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.discount}:</td>
-        <td class="total-amount">-${formatCurrency(discount)}</td>
-      </tr>
-      ` : ''}
-      ${deliveryCharge > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.delivery_charge}:</td>
-        <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
-      </tr>
-      ` : ''}
-      ${serviceCharge > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.service_charge}:</td>
-        <td class="total-amount">${formatCurrency(serviceCharge)}</td>
-      </tr>
-      ` : ''}
-      ${tax > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.tax}:</td>
-        <td class="total-amount">${formatCurrency(tax)}</td>
-      </tr>
-      ` : ''}
-      <tr class="final-total">
-        <td class="total-label">${urduTexts.total}:</td>
-        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
-      </tr>
-    </table>
-  </div>
-
-  ${type !== 'pending' ? `
-  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
-    <table class="totals-table" style="width: 400px;">
-      <tr>
-        <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
-      </tr>
-      ${(hasPrevious && customerId !== 'walk-in') ? `
-      <tr>
-        <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 13px;">
-          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
-        </td>
-      </tr>
-      ` : ''}
-      <tr style="border-top: 2px solid #000;">
-        <td class="total-label" style="font-weight: bold;">${urduTexts.total_receivable || 'کل رقم'}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(totalWithPrev)}</td>
-      </tr>
-      <tr>
-        <td class="total-label">${urduTexts.amount_paid}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
-      </tr>
-      <tr>
-        <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
-      </tr>
-    </table>
-  </div>
-  ` : ''}
-
-  
-  <div class="barcode-section">
-    <div style="font-size: 14px; margin-bottom: 8px; font-weight: bold;">${urduTexts.invoice_barcode}</div>
-    <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
-    <div class="barcode-text">${urduTexts.scan_to_verify}: ${invoiceNumber}</div>
-  </div>
-  
-  ${notes ? `
-    <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.additional_notes}:</div>
-      <div style="font-size: 14px;">${notes}</div>
-    </div>
-  ` : ''}
-
-  ${invoiceNote?.trim() ? `
-    <div class="invoice-branch-note">${invoiceNoteToSafeHtml(invoiceNote)}</div>
-  ` : ''}
-  
-  <div class="footer">
-    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
-    <div class="footer-line">${urduTexts.keep_receipt}</div>
-    <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">
-      ${urduTexts.powered_by}
-    </div>
-  </div>
-  
   <div class="no-print">
     <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${urduTexts.print_options}</div>
     <div class="print-actions">
@@ -1296,6 +1383,80 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 </body>
 </html>
   `.trim()
+}
+
+function extractA4PrintBodyInner(html: string): string {
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+  if (!bodyMatch) return ''
+  const inner = bodyMatch[1]
+  const npIdx = inner.search(/<div class="no-print"/i)
+  if (npIdx === -1) return inner.trim()
+  return inner.slice(0, npIdx).trim()
+}
+
+/**
+ * Landscape A4 with two invoices side by side (half width each).
+ * Long invoices may still span multiple sheets; preview before printing.
+ */
+export function generateA4LandscapeTwoInvoicesHTML(left: PrintInvoiceData, right: PrintInvoiceData): string {
+  const leftFull = generateA4InvoiceHTML(left)
+  const headEnd = leftFull.indexOf('</head>')
+  if (headEnd === -1) return leftFull
+
+  const head = leftFull.slice(0, headEnd + 7)
+  const bodyLeft = extractA4PrintBodyInner(leftFull)
+  const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right))
+
+  const extraCss = `
+    @media print {
+      @page { size: A4 landscape; margin: 8mm; }
+    }
+    .a4-two-up {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .a4-two-up-col {
+      flex: 1 1 50%;
+      max-width: 50%;
+      box-sizing: border-box;
+      padding: 0 10px;
+    }
+    body {
+      max-width: none !important;
+      margin: 0 auto !important;
+      padding: 12px !important;
+    }
+    @media screen {
+      body {
+        box-shadow: none !important;
+        border: none !important;
+        max-width: 1200px !important;
+      }
+    }
+  `
+  const mergedHead = head.includes('</style>')
+    ? head.replace('</style>', `${extraCss}\n  </style>`)
+    : head
+
+  return `${mergedHead}
+<body>
+  <div class="a4-two-up">
+    <div class="a4-two-up-col">${bodyLeft}</div>
+    <div class="a4-two-up-col">${bodyRight}</div>
+  </div>
+  <div class="no-print">
+    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">Print (landscape 2-up)</div>
+    <div class="print-actions">
+      <button type="button" onclick="window.print()" class="print-btn print-btn-primary">Print</button>
+      <button type="button" onclick="window.close()" class="print-btn print-btn-secondary">Close</button>
+    </div>
+  </div>
+</body>
+</html>`
 }
 
 export const openPrintWindow = (htmlContent: string): void => {

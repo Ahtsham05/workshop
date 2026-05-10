@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { Invoice, Product, Customer, CustomerLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
@@ -305,6 +306,7 @@ const createInvoice = async (invoiceBody, userId) => {
         : `Sale Invoice #${invoice.invoiceNumber}`;
       
       // For credit/cash invoices, create a sale entry (debit - customer owes us)
+      const ledgerInvoiceType = resolveInvoiceLedgerInvoiceType(invoice);
       await customerLedgerService.createLedgerEntry({
         organizationId: invoice.organizationId,
         branchId: invoice.branchId,
@@ -317,6 +319,7 @@ const createInvoice = async (invoiceBody, userId) => {
         debit: invoice.total,
         credit: 0,
         paymentMethod: ledgerPaymentMethod,
+        invoiceType: ledgerInvoiceType,
         notes: invoice.notes || `Invoice for ${validatedItems.length} items`
       });
       console.log('Customer ledger entry created for invoice:', displayReference);
@@ -339,6 +342,7 @@ const createInvoice = async (invoiceBody, userId) => {
           debit: 0,
           credit: invoice.paidAmount,
           paymentMethod: ledgerPaymentMethod,
+          invoiceType: ledgerInvoiceType,
           notes: `Amount paid: $${invoice.paidAmount.toFixed(2)}${invoice.balance > 0 ? `, Balance: $${invoice.balance.toFixed(2)}` : ''}`
         });
         console.log('Payment ledger entry created for invoice:', invoice.invoiceNumber, 'Amount:', invoice.paidAmount);
@@ -640,6 +644,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         
         // Create new entries for new customer (if not walk-in)
         if (newCustomerId !== 'walk-in') {
+          const invType = resolveInvoiceLedgerInvoiceType(invoice);
           await customerLedgerService.createLedgerEntry({
             organizationId: invoice.organizationId,
             branchId: invoice.branchId,
@@ -652,6 +657,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
             debit: newTotal,
             credit: 0,
             paymentMethod: ledgerPaymentMethod,
+            invoiceType: invType,
             notes: `Invoice updated`
           });
 
@@ -671,6 +677,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
               debit: 0,
               credit: newPaidAmount,
               paymentMethod: ledgerPaymentMethod,
+              invoiceType: invType,
               notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
             });
           }

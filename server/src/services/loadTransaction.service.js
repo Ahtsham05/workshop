@@ -162,6 +162,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     debit: Number(transaction.amount) || 0,
     credit: 0,
     paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
+    invoiceType: 'cash',
     notes:
       transaction.notes ||
       `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`,
@@ -183,6 +184,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
       debit: 0,
       credit: receivedAmount,
       paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
+      invoiceType: 'cash',
       notes:
         transaction.notes ||
         `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`,

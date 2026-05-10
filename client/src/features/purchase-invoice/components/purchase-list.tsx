@@ -25,6 +25,7 @@ import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { BilingualName } from '@/components/bilingual-name'
+import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 
 interface PurchaseListProps {
@@ -213,23 +214,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
       {/* Purchases Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{t('Purchases List')} ({totalItems})</CardTitle>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="itemsPerPage" className="text-sm">{t('Show')}:</Label>
-              <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5</SelectItem>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <CardTitle>{t('Purchases List')} ({totalItems})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -253,11 +238,20 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                     <TableCell className="font-medium">
                       {purchase.invoiceNumber}
                     </TableCell>
-                    <TableCell className='max-w-[12rem]'>
-                      <BilingualName
-                        primary={purchase.supplier?.name || 'N/A'}
-                        secondary={purchase.supplier?.nameUrdu}
-                      />
+                    <TableCell className='max-w-[14rem]'>
+                      <div className='flex min-w-0 items-center gap-2'>
+                        <ContactPhotoCell
+                          picture={purchase.supplier?.picture}
+                          name={purchase.supplier?.name || 'N/A'}
+                          className='h-8 w-8 shrink-0'
+                        />
+                        <div className='min-w-0 flex-1'>
+                          <BilingualName
+                            primary={purchase.supplier?.name || 'N/A'}
+                            secondary={purchase.supplier?.nameUrdu}
+                          />
+                        </div>
+                      </div>
                     </TableCell>
                     {/* <TableCell>
                       {purchase.supplier?.phone || '-'}
@@ -355,14 +349,37 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
             </div>
           )}
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="space-y-4 px-2 py-4">
-              {/* Pagination info - always visible */}
-              <div className="text-sm text-muted-foreground text-center md:text-left">
-                {t('Showing')} {startIndex + 1} {t('to')} {endIndex} {t('of')} {totalItems} {t('entries')}
+          {/* Pagination — rows-per-page + nav at bottom */}
+          {totalItems > 0 && (
+            <div className="mt-4 space-y-4 border-t px-2 pt-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-center text-sm text-muted-foreground sm:text-left">
+                  {t('Showing')} {startIndex + 1} {t('to')} {endIndex} {t('of')} {totalItems}{' '}
+                  {t('entries')}
+                </div>
+                <div className="flex items-center justify-center gap-2 sm:justify-end">
+                  <Label htmlFor="purchase-items-per-page" className="text-sm whitespace-nowrap">
+                    {t('Show')}:
+                  </Label>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => setItemsPerPage(Number(value))}
+                  >
+                    <SelectTrigger id="purchase-items-per-page" className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              
+
+              {totalPages > 1 ? (
+                <>
               {/* Mobile pagination - simplified */}
               <div className="flex items-center justify-center gap-2 md:hidden">
                 <Button
@@ -393,9 +410,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
               </div>
 
               {/* Desktop pagination - full controls */}
-              <div className="hidden md:flex items-center justify-between">
-                <div></div> {/* Spacer for alignment */}
-                <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center justify-center">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -459,6 +475,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                   </Button>
                 </div>
               </div>
+                </>
+              ) : null}
             </div>
           )}
         </CardContent>

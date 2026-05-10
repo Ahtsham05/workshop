@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { BilingualName } from '@/components/bilingual-name'
+import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -853,12 +854,12 @@ export function InvoicePanel({
                               if (selectedCustomer) {
                                 const urdu = selectedCustomer.nameUrdu?.trim()
                                 return (
-                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full min-w-0">
-                                    <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-[10px] font-medium text-white">
-                                        {selectedCustomer.name?.charAt(0).toUpperCase() || 'C'}
-                                      </span>
-                                    </div>
+                                  <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full min-w-0 pl-1">
+                                    <ContactPhotoCell
+                                      picture={selectedCustomer.picture}
+                                      name={selectedCustomer.name || ''}
+                                      className="h-5 w-5 shrink-0 rounded-full"
+                                    />
                                     <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
                                       <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate shrink-0')} title={selectedCustomer.name}>
                                         {selectedCustomer.name}
@@ -874,12 +875,12 @@ export function InvoicePanel({
                               } else if (invoice.customerName) {
                                 // Fallback to showing the stored customer name if customer not found in list
                                 return (
-                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
-                                    <div className="w-3 h-3 rounded-full bg-gray-500 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-[10px] font-medium text-white">
-                                        {invoice.customerName.charAt(0).toUpperCase()}
-                                      </span>
-                                    </div>
+                                  <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
+                                    <ContactPhotoCell
+                                      picture={undefined}
+                                      name={invoice.customerName}
+                                      className="h-5 w-5 shrink-0 rounded-full"
+                                    />
                                     <span className={getTextClasses(invoice.customerName, "text-xs truncate")} title={invoice.customerName}>
                                       {invoice.customerName}
                                     </span>
@@ -977,11 +978,11 @@ export function InvoicePanel({
                               className="flex items-center gap-3 cursor-pointer p-3"
                             >
                               <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-sm font-medium text-white">
-                                    {customer.name?.charAt(0).toUpperCase() || 'C'}
-                                  </span>
-                                </div>
+                                <ContactPhotoCell
+                                  picture={customer.picture}
+                                  name={customer.name || ''}
+                                  className="h-8 w-8 shrink-0"
+                                />
                                 <div className="flex flex-col flex-1 min-w-0 gap-0.5">
                                   <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                                     <span className={getTextClasses(customer.name, 'truncate font-medium shrink-0')} title={customer.name}>

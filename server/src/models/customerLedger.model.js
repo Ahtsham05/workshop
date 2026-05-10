@@ -71,6 +71,12 @@ const customerLedgerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  /** Cash / credit / pending sale — not payment rail (Card, Wallet, etc.). */
+  invoiceType: {
+    type: String,
+    enum: ['cash', 'credit', 'pending'],
+    trim: true,
+  },
   notes: {
     type: String,
   },

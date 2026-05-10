@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { CustomerLedger, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
@@ -498,7 +499,8 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
       description: `Sale Invoice #${invoiceNumber}`,
       debit: total,
       credit: 0,
-      paymentMethod: invoiceType === 'cash' ? 'Cash' : paymentMethod,
+      paymentMethod,
+      invoiceType: normalizeCustomerInvoiceType(invoiceType),
       notes: notes || 'Invoice ledger backfilled',
     });
 
@@ -518,8 +520,14 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
         debit: 0,
         credit: paidAmount,
         paymentMethod: paymentMethod || 'Cash',
+        invoiceType: normalizeCustomerInvoiceType(invoiceType),
         notes: `Amount paid: Rs${paidAmount.toFixed(2)}`,
       });
+    }
+
+    const normalizedType = normalizeCustomerInvoiceType(invoiceType);
+    if (normalizedType) {
+      await CustomerLedger.updateMany({ referenceId }, { $set: { invoiceType: normalizedType } });
     }
     return;
   }
@@ -551,6 +559,7 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
       debit: total,
       credit: 0,
       paymentMethod: paymentMethod,
+      invoiceType: normalizeCustomerInvoiceType(invoiceType),
       notes: `Invoice updated`
     });
   }
@@ -581,6 +590,7 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
           debit: 0,
           credit: paidAmount,
           paymentMethod: paymentMethod || 'Cash',
+          invoiceType: normalizeCustomerInvoiceType(invoiceType),
           notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
         });
       }
@@ -599,6 +609,7 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
         debit: 0,
         credit: paidAmount,
         paymentMethod: paymentMethod || 'Cash',
+        invoiceType: normalizeCustomerInvoiceType(invoiceType),
         notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
       });
     }
@@ -606,6 +617,11 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
     // No payment in update but entry exists - delete it
     console.log(`Deleting payment entry - no payment in update`);
     await deleteLedgerEntry(paymentEntry._id);
+  }
+
+  const normalizedType = normalizeCustomerInvoiceType(invoiceType);
+  if (normalizedType) {
+    await CustomerLedger.updateMany({ referenceId }, { $set: { invoiceType: normalizedType } });
   }
 };
 

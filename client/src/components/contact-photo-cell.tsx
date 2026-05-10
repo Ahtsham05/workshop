@@ -32,14 +32,16 @@ export function ContactPhotoCell({ picture, name, className }: ContactPhotoCellP
   return (
     <Avatar
       className={cn(
-        'h-9 w-9 shrink-0 rounded-xl border border-border/70 bg-muted/40 shadow-sm ring-1 ring-black/[0.06] dark:ring-white/[0.08]',
+        'h-9 w-9 shrink-0 rounded-full border-0 bg-muted/50 shadow-none ring-0',
         className,
       )}
     >
-      {url ? <AvatarImage src={url} alt='' className='object-cover' /> : null}
+      {url ? (
+        <AvatarImage src={url} alt='' className='size-full rounded-full object-cover' />
+      ) : null}
       <AvatarFallback
         delayMs={url ? 120 : 0}
-        className='rounded-xl bg-gradient-to-br from-muted to-muted/80 text-xs font-semibold text-muted-foreground'
+        className='rounded-full bg-gradient-to-br from-sky-100 to-sky-200/90 text-[10px] font-semibold text-sky-800 dark:from-sky-950/80 dark:to-sky-900/60 dark:text-sky-200'
       >
         {initials || <User className='h-4 w-4 opacity-70' aria-hidden />}
       </AvatarFallback>

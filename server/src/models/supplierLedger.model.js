@@ -57,6 +57,12 @@ const supplierLedgerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  /** Cash vs credit purchase terms — not payment rail. */
+  invoiceType: {
+    type: String,
+    enum: ['cash', 'credit', 'pending'],
+    trim: true,
+  },
   notes: {
     type: String,
   },

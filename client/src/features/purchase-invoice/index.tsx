@@ -55,6 +55,7 @@ export interface Supplier {
   email?: string;
   address?: string;
   balance?: number;
+  picture?: { url?: string; publicId?: string };
 }
 
 export function createEmptyPurchaseManualItem(): PurchaseItem {

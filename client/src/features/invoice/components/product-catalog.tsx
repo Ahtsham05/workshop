@@ -200,7 +200,7 @@ export function ProductCatalog({
             {/* Purchase Price Toggle */}
             <button
               type="button"
-              onClick={() => setShowCost((v) => !v)}
+              onClick={() => setShowCost(!showCost)}
               title={showCost ? t('Hide purchase price') : t('Show purchase price')}
               className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
                 showCost

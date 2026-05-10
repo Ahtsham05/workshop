@@ -36,6 +36,7 @@ import { isMobileShopBusiness, isWholesaleRetailBusiness } from '@/lib/business-
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
+import { ContactPhotoCell } from '@/components/contact-photo-cell'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -495,12 +496,12 @@ export default function PurchasePanel({
                     <Search className="w-4 h-4 flex-shrink-0" />
                     {(purchase.supplier?._id || (purchase.supplier as any)?.id) ? (
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
-                          <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                            <span className="text-[10px] font-medium text-white">
-                              {purchase.supplier.name?.charAt(0).toUpperCase() || 'S'}
-                            </span>
-                          </div>
+                        <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
+                          <ContactPhotoCell
+                            picture={purchase.supplier.picture}
+                            name={purchase.supplier.name || ''}
+                            className="h-5 w-5 shrink-0 rounded-full"
+                          />
                           <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
                             <span className="text-xs truncate shrink-0" title={purchase.supplier.name}>
                               {purchase.supplier.name}
@@ -570,6 +571,7 @@ export default function PurchasePanel({
                                 email: supplier.email,
                                 address: supplier.address,
                                 balance: supplier.balance,
+                                picture: supplier.picture,
                               }
                               console.log('Setting supplier to:', selectedSupplier)
                               setPurchase(prev => ({
@@ -586,11 +588,11 @@ export default function PurchasePanel({
                             }`}
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-medium text-white">
-                                  {supplier.name?.charAt(0).toUpperCase() || 'S'}
-                                </span>
-                              </div>
+                              <ContactPhotoCell
+                                picture={supplier.picture}
+                                name={supplier.name || ''}
+                                className="h-8 w-8 shrink-0"
+                              />
                               <div className="flex flex-col flex-1 min-w-0 gap-0.5">
                                 <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                                   <span className="truncate font-medium shrink-0" title={supplier.name}>

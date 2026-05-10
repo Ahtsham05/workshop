@@ -7,8 +7,11 @@ type SaleLineStockLike = {
 }
 
 /** Restore catalog stock preview when removing sale lines or holding a draft */
-export function revertSaleDraftStock(products: StockProduct[], items: SaleLineStockLike[]): StockProduct[] {
-  let next = products.map((p) => ({ ...p }))
+export function revertSaleDraftStock<T extends StockProduct>(
+  products: T[],
+  items: SaleLineStockLike[],
+): T[] {
+  let next = products.map((p) => ({ ...p })) as T[]
   for (const item of items) {
     if (!item.productId) continue
     const idx = next.findIndex((p) => String(p._id || p.id) === String(item.productId))
@@ -23,8 +26,11 @@ export function revertSaleDraftStock(products: StockProduct[], items: SaleLineSt
 }
 
 /** Apply catalog stock preview when loading a held / recovered sale draft */
-export function applySaleDraftStock(products: StockProduct[], items: SaleLineStockLike[]): StockProduct[] {
-  let next = products.map((p) => ({ ...p }))
+export function applySaleDraftStock<T extends StockProduct>(
+  products: T[],
+  items: SaleLineStockLike[],
+): T[] {
+  let next = products.map((p) => ({ ...p })) as T[]
   for (const item of items) {
     if (!item.productId) continue
     const idx = next.findIndex((p) => String(p._id || p.id) === String(item.productId))

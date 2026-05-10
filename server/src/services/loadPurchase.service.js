@@ -156,6 +156,7 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
     debit: 0,
     credit: Number(purchase.amount) || 0,
     paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
+    invoiceType: 'cash',
     notes: purchase.notes || `Wallet: ${purchase.walletType}`,
   });
 
@@ -175,6 +176,7 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
       debit: paidAmount,
       credit: 0,
       paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
+      invoiceType: 'cash',
       notes: purchase.notes || `Wallet: ${purchase.walletType}`,
     });
   }
