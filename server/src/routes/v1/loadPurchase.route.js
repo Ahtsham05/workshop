@@ -17,6 +17,7 @@ router
 
 router
   .route('/:purchaseId')
+  .get(validate(loadPurchaseValidation.getLoadPurchase), loadPurchaseController.getLoadPurchase)
   .patch(validate(loadPurchaseValidation.updateLoadPurchase), loadPurchaseController.updateLoadPurchase)
   .delete(validate(loadPurchaseValidation.deleteLoadPurchase), loadPurchaseController.deleteLoadPurchase);
 

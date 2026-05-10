@@ -246,13 +246,13 @@ export default function SimSalePage() {
           { label: 'Load A/C', value: record.walletType || '—' },
           { label: 'Customer', value: record.customerName || '—' },
           { label: 'Mobile', value: record.customerMobile || '—' },
-          { label: 'Purchase Price (SIM)', value: fmtRs(record.simAmount) },
-          { label: 'Load amount', value: fmtRs(record.loadAmount) },
-          { label: 'Sale Price', value: fmtRs(record.saleAmount) },
+          { label: 'CNIC', value: record.customerCNIC?.trim() || '—' },
+          { label: 'Location', value: record.customerLocation?.trim() || '—' },
           {
             label: 'Payment',
             value: `${record.paymentMethod}${record.paymentWalletType ? ` (${record.paymentWalletType})` : ''}`,
           },
+          { label: 'Total amount', value: fmtRs(record.saleAmount) },
         ],
       })
       resetForm()

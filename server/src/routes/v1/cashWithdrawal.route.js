@@ -22,6 +22,7 @@ router
 
 router
   .route('/:withdrawalId')
+  .get(validate(cashWithdrawalValidation.getCashWithdrawal), cashWithdrawalController.getCashWithdrawal)
   .patch(validate(cashWithdrawalValidation.updateCashWithdrawal), cashWithdrawalController.updateCashWithdrawal)
   .delete(validate(cashWithdrawalValidation.deleteCashWithdrawal), cashWithdrawalController.deleteCashWithdrawal);
 

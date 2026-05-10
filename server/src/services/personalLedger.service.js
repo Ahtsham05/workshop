@@ -1,6 +1,95 @@
 const httpStatus = require('http-status');
 const { PersonalLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
+const cashBookService = require('./cashBook.service');
+
+/**
+ * Map My Wallet payment method to cash book paymentMethod (not 'wallet' — that flag is reserved
+ * for internal mobile-shop wallet settlements which are excluded from cash book totals).
+ */
+const mapPersonalLedgerPaymentToCashBook = (paymentMethod) => {
+  const m = String(paymentMethod || 'Cash').trim().toLowerCase();
+  if (m === 'bank transfer') return 'bank';
+  if (m === 'card') return 'card';
+  if (m === 'cheque') return 'cheque';
+  if (m === 'cash') return 'cash';
+  return 'cash';
+};
+
+const buildCashBookDescription = (entry) => {
+  const cat = entry.category ? String(entry.category).trim() : '';
+  const desc = entry.description ? String(entry.description).trim() : '';
+  if (cat && desc) return `${cat} — ${desc}`;
+  return desc || cat || 'My Wallet';
+};
+
+/**
+ * Derive income/expense for Cash Book from a personal ledger row.
+ */
+const resolveCashBookLine = (entry) => {
+  const debit = Number(entry.debit) || 0;
+  const credit = Number(entry.credit) || 0;
+  const t = String(entry.transactionType || '').toLowerCase();
+
+  if (t === 'income' || t === 'opening_balance') {
+    if (credit <= 0) return null;
+    return { type: 'income', amount: credit };
+  }
+  if (t === 'expense') {
+    if (debit <= 0) return null;
+    return { type: 'expense', amount: debit };
+  }
+  if (t === 'transfer' || t === 'adjustment') {
+    if (debit > 0) return { type: 'expense', amount: debit };
+    if (credit > 0) return { type: 'income', amount: credit };
+    return null;
+  }
+  return null;
+};
+
+/**
+ * Mirror My Wallet movements into Cash Book (Source: wallet) using real payment channel as Payment.
+ */
+const syncCashBookFromPersonalLedger = async (entry) => {
+  if (!entry || !entry._id) {
+    return null;
+  }
+
+  await cashBookService.deleteEntriesByReference(entry._id, 'PersonalLedger');
+
+  const line = resolveCashBookLine(entry);
+  if (!line) {
+    return null;
+  }
+
+  return cashBookService.upsertReferenceEntry({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    type: line.type,
+    source: 'wallet',
+    amount: line.amount,
+    paymentMethod: mapPersonalLedgerPaymentToCashBook(entry.paymentMethod),
+    referenceId: entry._id,
+    referenceModel: 'PersonalLedger',
+    description: buildCashBookDescription(entry),
+    notes: entry.notes,
+    date: entry.transactionDate,
+    createdBy: entry.createdBy,
+  });
+};
+
+/**
+ * Re-create cash book lines for every personal ledger entry (e.g. after deploy).
+ */
+const resyncCashBookForAllPersonalLedgers = async () => {
+  const entries = await PersonalLedger.find({});
+  let n = 0;
+  for (const entry of entries) {
+    await syncCashBookFromPersonalLedger(entry);
+    n += 1;
+  }
+  return { processed: n };
+};
 
 /**
  * Recalculate running balances from a given date onwards for a branch
@@ -35,7 +124,9 @@ const recalculateBalances = async (organizationId, branchId, fromDate) => {
 const createEntry = async (body) => {
   const entry = await PersonalLedger.create({ ...body, balance: 0 });
   await recalculateBalances(body.organizationId, body.branchId, body.transactionDate);
-  return PersonalLedger.findById(entry._id);
+  const saved = await PersonalLedger.findById(entry._id);
+  await syncCashBookFromPersonalLedger(saved);
+  return saved;
 };
 
 /**
@@ -128,7 +219,9 @@ const updateEntry = async (id, updateBody) => {
 
   Object.assign(entry, updateBody);
   await entry.save();
-  return entry;
+  const refreshed = await PersonalLedger.findById(id);
+  await syncCashBookFromPersonalLedger(refreshed);
+  return refreshed;
 };
 
 /**
@@ -141,6 +234,7 @@ const deleteEntry = async (id) => {
   }
 
   const { organizationId, branchId, transactionDate } = entry;
+  await cashBookService.deleteEntriesByReference(entry._id, 'PersonalLedger');
   await entry.deleteOne();
   await recalculateBalances(organizationId, branchId, transactionDate);
   return entry;
@@ -154,4 +248,6 @@ module.exports = {
   getSummary,
   updateEntry,
   deleteEntry,
+  syncCashBookFromPersonalLedger,
+  resyncCashBookForAllPersonalLedgers,
 };

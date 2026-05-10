@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const pick = require('../utils/pick');
+const ApiError = require('../utils/ApiError');
+const { LoadPurchase } = require('../models');
 const { loadPurchaseService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
@@ -20,6 +22,16 @@ const getLoadPurchases = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getLoadPurchase = catchAsync(async (req, res) => {
+  const filter = { _id: req.params.purchaseId };
+  applyBranchFilter(filter, req);
+  const purchase = await LoadPurchase.findOne(filter).populate('supplierId', 'name phone email');
+  if (!purchase) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Load purchase not found');
+  }
+  res.send(purchase);
+});
+
 const updateLoadPurchase = catchAsync(async (req, res) => {
   const purchase = await loadPurchaseService.updateLoadPurchase(req.params.purchaseId, req.body);
   res.send(purchase);
@@ -33,6 +45,7 @@ const deleteLoadPurchase = catchAsync(async (req, res) => {
 module.exports = {
   createLoadPurchase,
   getLoadPurchases,
+  getLoadPurchase,
   updateLoadPurchase,
   deleteLoadPurchase,
 };

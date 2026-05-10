@@ -22,6 +22,8 @@ import {
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { toast } from 'sonner';
+import { useDispatch } from 'react-redux';
+import { mobileShopApi } from '@/stores/mobile-shop.api';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/context/language-context';
@@ -282,6 +284,7 @@ function EntryForm({
 
 export function PersonalLedger() {
   const { t } = useLanguage();
+  const dispatch = useDispatch();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [reportEntries, setReportEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -386,6 +389,10 @@ export function PersonalLedger() {
     }
   };
 
+  const invalidateCashBookCaches = () => {
+    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']));
+  };
+
   const fetchSummary = async () => {
     if (!reportEntries.length) {
       setSummary({ totalCredit: 0, totalDebit: 0, netBalance: 0, transactionCount: 0 });
@@ -413,6 +420,7 @@ export function PersonalLedger() {
       const id = entry.id || entry._id;
       await Axios.delete(`${summery.deletePersonalLedgerEntry.url}/${id}`);
       toast.success(t('Entry deleted successfully'));
+      invalidateCashBookCaches();
       fetchEntries();
       fetchReportEntries();
       fetchOpeningBalance();
@@ -426,6 +434,7 @@ export function PersonalLedger() {
     setShowForm(false);
     setEditingEntry(null);
     setCurrentPage(1);
+    invalidateCashBookCaches();
     fetchEntries();
     fetchReportEntries();
     fetchOpeningBalance();

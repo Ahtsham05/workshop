@@ -53,6 +53,12 @@ const updateCashWithdrawal = {
   }).min(1),
 };
 
+const getCashWithdrawal = {
+  params: Joi.object().keys({
+    withdrawalId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 const deleteCashWithdrawal = {
   params: Joi.object().keys({
     withdrawalId: Joi.string().custom(objectId).required(),
@@ -94,6 +100,7 @@ module.exports = {
   createCashWithdrawal,
   createCashWithdrawalsBatch,
   getCashWithdrawals,
+  getCashWithdrawal,
   updateCashWithdrawal,
   deleteCashWithdrawal,
   deleteCashWithdrawalsBatch,

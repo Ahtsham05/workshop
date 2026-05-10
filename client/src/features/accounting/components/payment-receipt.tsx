@@ -1,9 +1,49 @@
 import { format } from 'date-fns';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
 
+function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
+  return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
+}
+
+function resolveReceiptCompany(
+  lang: InvoiceLanguage,
+  company:
+    | {
+        name?: string;
+        nameUrdu?: string;
+        address?: string;
+        addressUrdu?: string;
+        phone?: string;
+        email?: string;
+        logo?: string;
+      }
+    | undefined
+): { name: string; address: string; phone?: string; email?: string; logo?: string } {
+  const c = company;
+  const fallbackName = c?.name?.trim() || 'Logix Plus Solutions';
+  const name = lang === 'ur' && c?.nameUrdu?.trim() ? c.nameUrdu.trim() : fallbackName;
+  const address =
+    lang === 'ur' ? (c?.addressUrdu?.trim() || c?.address?.trim() || '') : (c?.address?.trim() || '');
+  return {
+    name,
+    address,
+    phone: c?.phone,
+    email: c?.email,
+    logo: c?.logo,
+  };
+}
+
+/** Clean Urdu + Latin stack — no Nastaliq / Jameel (aligned with sales & purchase prints). */
+const RECEIPT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`;
+
+const RECEIPT_GOOGLE_FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap';
+
 interface PaymentReceiptProps {
   customer: {
     name: string;
+    /** Shown when receipt language / user preference is Urdu */
+    nameUrdu?: string;
     phone?: string;
     address?: string;
   };
@@ -20,7 +60,10 @@ interface PaymentReceiptProps {
   };
   company?: {
     name: string;
+    nameUrdu?: string;
     address?: string;
+    /** Urdu address line(s); falls back to `address` when empty */
+    addressUrdu?: string;
     phone?: string;
     email?: string;
     logo?: string;
@@ -46,6 +89,9 @@ export function PaymentReceipt({
   const startAlign = isUrdu ? 'right' : 'left';
   const locale = isUrdu ? 'ur-PK' : 'en-PK';
 
+  const resolvedCompany = resolveReceiptCompany(language, company);
+  const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
+
   const formatCurrency = (amount: number) => {
     return `Rs ${Math.abs(amount).toFixed(2)}`;
   };
@@ -67,16 +113,25 @@ export function PaymentReceipt({
   };
 
   const printReceipt = () => {
+    const baseCompany = company || {
+      name: 'Logix Plus Solutions',
+      address: '',
+      phone: '',
+      email: '',
+      logo: '',
+    };
+    const printCompany = resolveReceiptCompany(language, company);
     const printData = {
-      customer,
+      customer: {
+        ...customer,
+        name: resolveReceiptPartyName(language, customer.name, customer.nameUrdu),
+      },
       payment,
       balance,
-      company: company || {
-        name: 'Logix Plus Solutions',
-        address: '',
-        phone: '',
-        email: '',
-        logo: '',
+      company: {
+        ...baseCompany,
+        name: printCompany.name,
+        address: printCompany.address,
       },
       receiptNumber: receiptNumber || `RCP-${Date.now()}`,
       isTrial: isTrial ?? false,
@@ -103,38 +158,42 @@ export function PaymentReceipt({
   <title>${labels.payment_receipt} ${data.receiptNumber}</title>
   <style>
     @media print {
-      @page { 
-        margin: 5mm; 
-        size: 80mm auto; 
+      @page {
+        margin: 6mm;
+        size: auto;
       }
-      body { 
-        margin: 0; 
-        padding: 0; 
-        font-size: 13px;
+      body {
+        margin: 0;
+        padding: 0;
+        font-size: 12px;
       }
       .no-print {
         display: none !important;
       }
     }
-    
+
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: ${RECEIPT_FONT_STACK};
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.45;
       margin: 0;
-      padding: 8px;
-      width: 300px;
-      background: white;
-      color: #000;
+      padding: 12px 14px;
+      max-width: 380px;
+      margin-left: auto;
+      margin-right: auto;
+      background: #fff;
+      color: #111827;
       direction: ${dir};
       text-align: ${startAlign};
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: 'kern' 1;
     }
-    
+
     .receipt-header {
       text-align: center;
-      margin-bottom: 12px;
-      border-bottom: 2px solid #000;
-      padding-bottom: 8px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 12px;
     }
     
     .company-logo {
@@ -145,62 +204,79 @@ export function PaymentReceipt({
     }
     
     .business-name {
-      font-size: 16px;
-      font-weight: bold;
-      margin-bottom: 4px;
-      text-transform: uppercase;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+      color: #111827;
     }
-    
+
     .business-info {
-      font-size: 10px;
-      margin-bottom: 1px;
+      font-size: 11px;
+      margin-bottom: 2px;
+      color: #4b5563;
+      line-height: 1.4;
     }
-    
+
     .receipt-title {
       font-size: 14px;
-      font-weight: bold;
-      margin: 8px 0;
-      text-decoration: underline;
+      font-weight: 700;
+      margin: 10px 0 6px;
+      color: #111827;
+      border-bottom: none;
+      text-decoration: none;
     }
-    
+
     .receipt-info {
-      margin-bottom: 12px;
-      border-bottom: 1px dashed #000;
-      padding-bottom: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed #d1d5db;
     }
-    
+
     .info-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 3px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: 10px 16px;
+      align-items: baseline;
+      margin-bottom: 8px;
       font-size: 12px;
     }
-    
+
     .info-label {
-      font-weight: bold;
+      font-weight: 600;
+      color: #374151;
     }
-    
+
+    .info-row span:last-child {
+      font-variant-numeric: tabular-nums;
+      color: #111827;
+      word-break: break-word;
+    }
+
     .description-section {
-      margin-bottom: 12px;
-      padding: 8px;
-      background: #f9f9f9;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
     }
-    
+
     .payment-details {
-      background: #f5f5f5;
-      border: 2px solid #000;
-      padding: 12px;
-      margin: 12px 0;
+      background: #fafafa;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin: 14px 0;
     }
-    
+
     .amount-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #333;
-      font-size: 13px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: baseline;
+      padding: 9px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
     }
     
     .amount-row:last-child {
@@ -208,40 +284,44 @@ export function PaymentReceipt({
     }
     
     .amount-row.total {
-      font-size: 16px;
-      font-weight: bold;
-      border-top: 2px solid #000;
+      font-size: 13px;
+      font-weight: 700;
+      border-top: 2px solid #111827;
       margin-top: 6px;
       padding-top: 10px;
+      border-bottom: none;
     }
-    
+
     .amount-paid {
-      font-size: 16px;
-      font-weight: bold;
+      font-size: 14px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
     
     .signature-section {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-top: 30px;
-      margin-bottom: 12px;
+      gap: 24px;
+      margin-top: 22px;
+      margin-bottom: 14px;
     }
-    
+
     .signature-line {
-      border-top: 2px solid #000;
+      border-top: 1px solid #374151;
       padding-top: 8px;
       text-align: center;
-      font-weight: bold;
+      font-weight: 600;
       font-size: 10px;
+      color: #374151;
     }
-    
+
     .footer {
       text-align: center;
-      font-size: 9px;
-      margin-top: 12px;
-      border-top: 2px solid #000;
-      padding-top: 8px;
+      font-size: 10px;
+      margin-top: 14px;
+      border-top: 1px solid #d1d5db;
+      padding-top: 10px;
+      color: #6b7280;
     }
     
     .footer-line {
@@ -279,15 +359,16 @@ export function PaymentReceipt({
     
     @media screen {
       body {
-        max-width: 350px;
-        margin: 20px auto;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        padding: 20px;
-        border-radius: 8px;
+        max-width: 380px;
+        margin: 24px auto;
+        box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        padding: 20px 22px;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="${RECEIPT_GOOGLE_FONTS_HREF}" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
@@ -404,155 +485,163 @@ export function PaymentReceipt({
       <style>
         {`
         .receipt-content {
-          font-family: ${isUrdu ? "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', Arial, sans-serif" : "'Inter', 'Manrope', Arial, sans-serif"};
-          color: #000;
-          background: white;
-          font-size: ${isUrdu ? '16px' : '14px'};
-          max-width: 800px;
+          font-family: ${RECEIPT_FONT_STACK};
+          color: #111827;
+          background: #fff;
+          font-size: 14px;
+          line-height: 1.45;
+          max-width: 420px;
           margin: 0 auto;
-          padding: 40px;
-          border: 2px solid #000;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          padding: 22px 24px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+          -webkit-font-smoothing: antialiased;
         }
-        
+
         .receipt-header {
           text-align: center;
-          margin-bottom: 30px;
-          border-bottom: 3px double #000;
-          padding-bottom: 20px;
+          margin-bottom: 18px;
+          border-bottom: 1px solid #1f2937;
+          padding-bottom: 16px;
         }
-        
+
         .company-name {
-          font-size: ${isUrdu ? '28px' : '24px'};
-          font-weight: bold;
-          margin-bottom: 10px;
-          text-transform: uppercase;
-          color: #000;
-          line-height: ${isUrdu ? '1.8' : '1.2'};
+          font-size: 17px;
+          font-weight: 700;
+          margin-bottom: 8px;
+          letter-spacing: 0.02em;
+          color: #111827;
         }
-        
+
         .receipt-title {
-          font-size: ${isUrdu ? '24px' : '20px'};
-          font-weight: bold;
-          margin: 15px 0;
-          text-decoration: underline;
-          color: #000;
-          line-height: ${isUrdu ? '1.8' : '1.2'};
+          font-size: 16px;
+          font-weight: 700;
+          margin: 12px 0 8px;
+          color: #111827;
+          text-decoration: none;
         }
-        
+
         .receipt-number {
-          font-size: ${isUrdu ? '16px' : '14px'};
-          color: #333;
-          margin-top: 10px;
-          line-height: ${isUrdu ? '1.8' : '1.2'};
+          font-size: 13px;
+          color: #4b5563;
+          margin-top: 6px;
         }
-        
+
         .receipt-info {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin: 30px 0;
+          gap: 14px;
+          margin: 18px 0;
+          align-items: stretch;
         }
-        
+
         .info-section {
-          border: 1px solid #333;
-          padding: 15px;
-          border-radius: 4px;
-          background: white;
+          border: 1px solid #e5e7eb;
+          padding: 14px 16px;
+          border-radius: 8px;
+          background: #fafafa;
+          min-height: 100%;
         }
-        
+
         .info-label {
-          font-weight: bold;
-          font-size: ${isUrdu ? '16px' : '14px'};
-          color: #000;
-          margin-bottom: 5px;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          font-weight: 600;
+          font-size: 12px;
+          color: #374151;
+          margin-bottom: 4px;
         }
-        
+
         .info-value {
-          font-size: ${isUrdu ? '18px' : '16px'};
-          color: #000;
-          margin-bottom: 10px;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          font-size: 14px;
+          color: #111827;
+          margin-bottom: 12px;
+          font-variant-numeric: tabular-nums;
+          word-break: break-word;
         }
-        
+
+        .info-value:last-child {
+          margin-bottom: 0;
+        }
+
         .payment-details {
-          background: #f5f5f5;
-          border: 2px solid #000;
-          padding: 20px;
-          margin: 30px 0;
+          background: #fafafa;
+          border: 1px solid #1f2937;
+          border-radius: 8px;
+          padding: 14px 16px;
+          margin: 18px 0;
         }
-        
+
         .amount-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 12px 0;
-          border-bottom: 1px solid #333;
-          font-size: ${isUrdu ? '18px' : '16px'};
-          color: #000;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 12px;
+          align-items: baseline;
+          padding: 10px 0;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: 13px;
+          color: #111827;
         }
-        
+
         .amount-row:last-child {
           border-bottom: none;
         }
-        
+
         .amount-row.total {
-          font-size: ${isUrdu ? '22px' : '20px'};
-          font-weight: bold;
-          border-top: 2px solid #000;
-          margin-top: 10px;
-          padding-top: 15px;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          font-size: 13px;
+          font-weight: 700;
+          border-top: 2px solid #111827;
+          margin-top: 6px;
+          padding-top: 12px;
+          border-bottom: none;
         }
-        
+
         .amount-paid {
-          font-size: ${isUrdu ? '26px' : '24px'};
-          font-weight: bold;
-          color: #000;
+          font-size: 15px;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .signature-section {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 40px;
-          margin-top: 60px;
+          gap: 24px;
+          margin-top: 28px;
         }
-        
+
         .signature-line {
-          border-top: 2px solid #000;
-          padding-top: 10px;
+          border-top: 1px solid #374151;
+          padding-top: 8px;
           text-align: center;
-          font-weight: bold;
-          color: #000;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          font-weight: 600;
+          font-size: 11px;
+          color: #374151;
         }
-        
+
         .notes {
-          margin-top: 30px;
-          font-size: ${isUrdu ? '14px' : '12px'};
-          color: #333;
+          margin-top: 18px;
+          font-size: 11px;
+          color: #6b7280;
           text-align: center;
-          line-height: ${isUrdu ? '1.8' : '1.4'};
+          line-height: 1.5;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 12px;
         }
         `}
       </style>
 
       <div className="receipt-content">
         <div className="receipt-header">
-          <div className="company-name">
-            {company?.name || 'Logix Plus Solutions'}
-          </div>
-          {company?.address && (
-            <div style={{ fontSize: '14px', marginBottom: '5px', color: '#000' }}>
-              {company.address}
+          <div className="company-name">{resolvedCompany.name}</div>
+          {resolvedCompany.address?.trim() ? (
+            <div style={{ fontSize: '12px', marginBottom: '6px', color: '#4b5563', lineHeight: 1.4 }}>
+              {resolvedCompany.address}
             </div>
-          )}
-          {(company?.phone || company?.email) && (
-            <div style={{ fontSize: '14px', color: '#000' }}>
-              {company?.phone && `Tel: ${company.phone}`}
-              {company?.phone && company?.email && ' | '}
-              {company?.email && `Email: ${company.email}`}
+          ) : null}
+          {(resolvedCompany.phone || resolvedCompany.email) && (
+            <div style={{ fontSize: '12px', color: '#4b5563', lineHeight: 1.4 }}>
+              {resolvedCompany.phone && `Tel: ${resolvedCompany.phone}`}
+              {resolvedCompany.phone && resolvedCompany.email && ' | '}
+              {resolvedCompany.email && `Email: ${resolvedCompany.email}`}
             </div>
           )}
           <div className="receipt-title">{labels.payment_receipt}</div>
@@ -566,7 +655,7 @@ export function PaymentReceipt({
         <div className="receipt-info">
           <div className="info-section">
             <div className="info-label">{labels.received_from}:</div>
-            <div className="info-value">{customer.name}</div>
+            <div className="info-value">{displayCustomerName}</div>
             {customer.phone && (
               <>
                 <div className="info-label">{labels.phone}:</div>
@@ -590,6 +679,8 @@ export function PaymentReceipt({
           <div className="info-section">
             <div className="info-label">{labels.payment_date}:</div>
             <div className="info-value">{formatDate(payment.date)}</div>
+            <div className="info-label">{labels.payment_time}:</div>
+            <div className="info-value">{formatTime(payment.date)}</div>
             {payment.paymentMethod && (
               <>
                 <div className="info-label">{labels.payment_method}:</div>
@@ -600,9 +691,21 @@ export function PaymentReceipt({
         </div>
 
         {payment.description && (
-          <div style={{ marginBottom: '20px' }}>
-            <div className="info-label">{labels.description}:</div>
-            <div style={{ padding: '10px', background: '#f9f9f9', borderRadius: '4px', border: '1px solid #ddd', color: '#000' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <div className="info-label" style={{ marginBottom: '6px' }}>
+              {labels.description}:
+            </div>
+            <div
+              style={{
+                padding: '10px 12px',
+                background: '#f9fafb',
+                borderRadius: '6px',
+                border: '1px solid #e5e7eb',
+                color: '#111827',
+                fontSize: '13px',
+                lineHeight: 1.45,
+              }}
+            >
               {payment.description}
             </div>
           </div>

@@ -343,7 +343,16 @@ export interface BillPaymentReceipt {
 export interface CashBookEntryRecord {
   id: string
   type: 'income' | 'expense'
-  source: 'sale' | 'load' | 'repair' | 'service' | 'purchase' | 'expense' | 'other' | 'opening_balance'
+  source:
+    | 'sale'
+    | 'load'
+    | 'repair'
+    | 'service'
+    | 'purchase'
+    | 'expense'
+    | 'other'
+    | 'opening_balance'
+    | 'wallet'
   amount: number
   paymentMethod: string
   description?: string
@@ -528,6 +537,10 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    getLoadPurchaseById: builder.query<LoadPurchaseRecord, string>({
+      query: (id) => `/load-purchases/${id}`,
+      providesTags: ['LoadPurchases'],
+    }),
     getLoadTransactions: builder.query<PaginatedResult<LoadTransactionRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -559,6 +572,10 @@ export const mobileShopApi = createApi({
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+    getLoadTransactionById: builder.query<LoadTransactionRecord, string>({
+      query: (id) => `/load-transactions/${id}`,
+      providesTags: ['LoadTransactions'],
+    }),
     getCashWithdrawals: builder.query<PaginatedResult<CashWithdrawalRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -566,6 +583,10 @@ export const mobileShopApi = createApi({
         return `/cash-withdrawals?${p.toString()}`
       },
       providesTags: ['CashWithdrawals'],
+    }),
+    getCashWithdrawalById: builder.query<CashWithdrawalRecord, string>({
+      query: (id) => `/cash-withdrawals/${id}`,
+      providesTags: (_result, _err, id) => [{ type: 'CashWithdrawals', id }],
     }),
     createCashWithdrawal: builder.mutation<CashWithdrawalRecord, CreateCashWithdrawalInput>({
       query: (body) => ({
@@ -944,6 +965,10 @@ export const mobileShopApi = createApi({
       },
       providesTags: ['SimSales'],
     }),
+    getSimSaleById: builder.query<SimSaleRecord, string>({
+      query: (id) => `/sim-sales/${id}`,
+      providesTags: ['SimSales'],
+    }),
     createSimSale: builder.mutation<SimSaleRecord, CreateSimSaleInput>({
       query: (body) => ({ url: '/sim-sales', method: 'POST', body }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
@@ -965,14 +990,19 @@ export const {
   useUpsertWalletMutation,
   useDeleteWalletMutation,
   useGetLoadPurchasesQuery,
+  useGetLoadPurchaseByIdQuery,
+  useLazyGetLoadPurchaseByIdQuery,
   useCreateLoadPurchaseMutation,
   useUpdateLoadPurchaseMutation,
   useDeleteLoadPurchaseMutation,
   useGetLoadTransactionsQuery,
+  useGetLoadTransactionByIdQuery,
+  useLazyGetLoadTransactionByIdQuery,
   useCreateLoadTransactionMutation,
   useUpdateLoadTransactionMutation,
   useDeleteLoadTransactionMutation,
   useGetCashWithdrawalsQuery,
+  useGetCashWithdrawalByIdQuery,
   useCreateCashWithdrawalMutation,
   useCreateCashWithdrawalsBatchMutation,
   useUpdateCashWithdrawalMutation,
@@ -1025,6 +1055,8 @@ export const {
   useGetInstallmentSummaryQuery,
   // Sim Sales
   useGetSimSalesQuery,
+  useGetSimSaleByIdQuery,
+  useLazyGetSimSaleByIdQuery,
   useCreateSimSaleMutation,
   useUpdateSimSaleMutation,
   useDeleteSimSaleMutation,

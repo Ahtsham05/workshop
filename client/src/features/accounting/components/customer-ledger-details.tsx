@@ -12,16 +12,25 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
-import { useGetInvoiceByIdQuery } from '@/stores/invoice.api';
+import { invoiceApi, useGetInvoiceByIdQuery } from '@/stores/invoice.api';
+import { returnsApi, useGetSalesReturnByIdQuery } from '@/stores/returns.api';
 import { PaymentReceipt } from './payment-receipt';
-import { mobileShopApi } from '@/stores/mobile-shop.api';
+import {
+  mobileShopApi,
+  useGetCashWithdrawalByIdQuery,
+  useGetLoadTransactionByIdQuery,
+  useGetSimSaleByIdQuery,
+} from '@/stores/mobile-shop.api';
+import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '@/features/invoice/utils/print-utils';
+import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
+import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
 
 interface LedgerEntry {
   _id?: string;
@@ -47,6 +56,39 @@ function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string)
   if (k === 'credit') return t('Credit');
   if (k === 'pending') return t('Pending');
   return raw;
+}
+
+function isSimSaleLedgerRow(entry: LedgerEntry): boolean {
+  if (entry.transactionType !== 'sale') return false;
+  const ref = String(entry.reference || '').toUpperCase();
+  if (ref.includes('SIM-SALE')) return true;
+  return /\bsim sale\b/i.test(entry.description || '');
+}
+
+/** Load Management sale — ledger referenceId is LoadTransaction, not sales Invoice. */
+function isLoadSaleLedgerRow(entry: LedgerEntry): boolean {
+  const ref = String(entry.reference || '').toUpperCase();
+  if (ref.includes('LOAD-SALE')) return true;
+  return /\bload sale\b/i.test(entry.description || '') || /\bfor load sale\b/i.test(entry.description || '');
+}
+
+/** Cash Management (wallet withdrawal/deposit) — referenceId is CashWithdrawal, not Invoice. */
+function isCashWithdrawalLedgerRow(entry: LedgerEntry): boolean {
+  return /CW-WITH|CW-DEPO/i.test(String(entry.reference || ''));
+}
+
+function resolveInvoiceCustomerForPrint(invoice: any, fallbackName: string): { name: string; nameUrdu?: string } {
+  if (invoice.customerId === 'walk-in') {
+    return { name: invoice.walkInCustomerName || 'Walk-in', nameUrdu: undefined };
+  }
+  const cid = invoice.customerId;
+  if (cid && typeof cid === 'object') {
+    return {
+      name: cid.name || invoice.customerName || fallbackName,
+      nameUrdu: cid.nameUrdu?.trim() || undefined,
+    };
+  }
+  return { name: invoice.customerName || fallbackName, nameUrdu: undefined };
 }
 
 interface CustomerLedgerDetailsProps {
@@ -149,6 +191,486 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
   );
 }
 
+function SalesReturnDialogContent({
+  salesReturnId,
+  fallbackCustomerName,
+}: {
+  salesReturnId?: string;
+  fallbackCustomerName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!salesReturnId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: sr, isLoading, error } = useGetSalesReturnByIdQuery(salesReturnId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !sr) {
+    return <div className="text-center py-8 text-red-500">{t('Failed to load sales return details')}</div>;
+  }
+
+  const formatDate = (date: unknown) => {
+    try {
+      if (!date) return '-';
+      const dateObj = new Date(date as string);
+      if (isNaN(dateObj.getTime())) return '-';
+      return format(dateObj, 'MMM dd, yyyy');
+    } catch {
+      return '-';
+    }
+  };
+
+  const formatCurrency = (amount: unknown) => {
+    const num = Number(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  const customerLabel =
+    sr.customerName ||
+    (typeof sr.customerId === 'object' && sr.customerId != null && 'name' in sr.customerId
+      ? String((sr.customerId as { name?: string }).name || '')
+      : '') ||
+    fallbackCustomerName;
+
+  const invoiceLabel =
+    typeof sr.invoiceId === 'object' && sr.invoiceId != null && 'invoiceNumber' in sr.invoiceId
+      ? String((sr.invoiceId as { invoiceNumber?: string }).invoiceNumber || '')
+      : typeof sr.invoiceId === 'string'
+        ? sr.invoiceId
+        : '';
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">{t('Return Number')}</p>
+          <p className="font-medium">{sr.returnNumber || '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Date')}</p>
+          <p className="font-medium">{formatDate(sr.date || sr.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Customer')}</p>
+          <p className="font-medium">{customerLabel}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Total Amount')}</p>
+          <p className="font-medium text-lg">Rs{formatCurrency(sr.totalAmount)}</p>
+        </div>
+        {invoiceLabel ? (
+          <div>
+            <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
+            <p className="font-medium">{invoiceLabel}</p>
+          </div>
+        ) : null}
+        <div>
+          <p className="text-sm text-gray-500">{t('Refund method')}</p>
+          <Badge variant="outline">{sr.refundMethod || '—'}</Badge>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Status')}</p>
+          <Badge>{sr.status || 'N/A'}</Badge>
+        </div>
+        {sr.reason?.trim() ? (
+          <div className="col-span-2">
+            <p className="text-sm text-gray-500">{t('Reason')}</p>
+            <p className="font-medium">{sr.reason}</p>
+          </div>
+        ) : null}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Product')}</TableHead>
+              <TableHead>{t('Quantity')}</TableHead>
+              <TableHead>{t('price')}</TableHead>
+              <TableHead className="text-right">{t('Total')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sr.items && sr.items.length > 0 ? (
+              sr.items.map((item, index) => (
+                <TableRow key={index}>
+                  <TableCell>{item.name || '-'}</TableCell>
+                  <TableCell>{item.quantity ?? 0}</TableCell>
+                  <TableCell>Rs{formatCurrency(item.price)}</TableCell>
+                  <TableCell className="text-right">Rs{formatCurrency(item.total)}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-gray-500">
+                  {t('No items')}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function SimSaleDetailDialogContent({
+  simSaleId,
+  fallbackCustomerName,
+}: {
+  simSaleId?: string;
+  fallbackCustomerName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!simSaleId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: sale, isLoading, error } = useGetSimSaleByIdQuery(simSaleId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !sale) {
+    return (
+      <div className="text-center py-8 text-red-500">{t('Failed to load SIM sale details')}</div>
+    );
+  }
+
+  const fmt = (n: unknown) => {
+    const x = Number(n);
+    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+  };
+  const fmtDate = (d: unknown) => {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d as string);
+      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+    } catch {
+      return '—';
+    }
+  };
+
+  const cust =
+    sale.customerName?.trim() ||
+    (typeof sale.customerId === 'object' && sale.customerId != null && 'name' in sale.customerId
+      ? String((sale.customerId as { name?: string }).name || '')
+      : '') ||
+    fallbackCustomerName;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('SIM sale')}</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Job number')}</p>
+            <p className="font-semibold text-slate-900 dark:text-slate-100">#{sale.jobNumber}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Date')}</p>
+            <p className="font-medium">{fmtDate(sale.date)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Product')}</p>
+            <p className="font-medium">{sale.productName?.trim() || '—'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Customer')}</p>
+          <p className="font-medium">{cust}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('phone')}</p>
+          <p className="font-medium">{sale.customerMobile?.trim() || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">CNIC</p>
+          <p className="font-medium">{sale.customerCNIC?.trim() || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Location')}</p>
+          <p className="font-medium">{sale.customerLocation?.trim() || '—'}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">{t('Load A/C')}</p>
+          <p className="font-medium">{sale.walletType?.trim() || '—'}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Amounts')}</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('SIM amount')}</p>
+            <p className="font-medium">Rs{fmt(sale.simAmount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Load amount')}</p>
+            <p className="font-medium">Rs{fmt(sale.loadAmount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Purchase amount')}</p>
+            <p className="font-medium">Rs{fmt(sale.purchaseAmount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Commission')}</p>
+            <p className="font-medium">Rs{fmt(sale.commission)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Total amount')}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(sale.saleAmount)}</p>
+          </div>
+        </div>
+      </div>
+
+      {sale.notes?.trim() ? (
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Notes')}</p>
+          <p className="mt-1 rounded-md bg-muted/60 p-3 text-sm">{sale.notes}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LoadSaleDetailDialogContent({
+  transactionId,
+  fallbackCustomerName,
+}: {
+  transactionId?: string;
+  fallbackCustomerName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!transactionId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: tx, isLoading, error } = useGetLoadTransactionByIdQuery(transactionId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !tx) {
+    return (
+      <div className="text-center py-8 text-red-500">{t('Failed to load load sale details')}</div>
+    );
+  }
+
+  const fmt = (n: unknown) => {
+    const x = Number(n);
+    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+  };
+  const fmtDate = (d: unknown) => {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d as string);
+      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+    } catch {
+      return '—';
+    }
+  };
+
+  const cust =
+    tx.customerName?.trim() ||
+    (typeof tx.customerId === 'object' && tx.customerId != null && 'name' in tx.customerId
+      ? String((tx.customerId as { name?: string }).name || '')
+      : '') ||
+    fallbackCustomerName;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Load sale')}</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Transaction ID')}</p>
+            <p className="font-mono text-sm font-medium">{String(tx.id).slice(-12)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Date')}</p>
+            <p className="font-medium">{fmtDate(tx.date)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Type')}</p>
+            <Badge variant="outline">{tx.type}</Badge>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Network')}</p>
+            <p className="font-medium">{tx.network}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Wallet')}</p>
+          <p className="font-medium">{tx.walletType}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('phone')}</p>
+          <p className="font-medium">{tx.mobileNumber}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">{t('Customer')}</p>
+          <p className="font-medium">{cust}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Amounts')}</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Amount')}</p>
+            <p className="font-medium">Rs{fmt(tx.amount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Received')}</p>
+            <p className="font-medium">Rs{fmt(tx.receivedAmount ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
+            <p className="font-medium">{fmt(tx.commissionRate)}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
+            <p className="font-medium">Rs{fmt(tx.extraCharge)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Profit')}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(tx.profit)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CashWithdrawalDetailDialogContent({
+  withdrawalId,
+  fallbackCustomerName,
+}: {
+  withdrawalId?: string;
+  fallbackCustomerName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!withdrawalId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: cw, isLoading, error } = useGetCashWithdrawalByIdQuery(withdrawalId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !cw) {
+    return (
+      <div className="text-center py-8 text-red-500">{t('Failed to load cash transaction details')}</div>
+    );
+  }
+
+  const fmt = (n: unknown) => {
+    const x = Number(n);
+    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+  };
+  const fmtDate = (d: unknown) => {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d as string);
+      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+    } catch {
+      return '—';
+    }
+  };
+
+  const cust =
+    (typeof cw.customerId === 'object' && cw.customerId != null && 'name' in cw.customerId
+      ? String((cw.customerId as { name?: string }).name || '')
+      : '') ||
+    cw.customerName?.trim() ||
+    fallbackCustomerName;
+
+  const typeLabel = cw.transactionType === 'withdrawal' ? t('Withdrawal') : t('Deposit');
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Cash Management')}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge>{typeLabel}</Badge>
+          <span className="text-xs text-muted-foreground">{fmtDate(cw.date)}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Wallet')}</p>
+          <p className="font-medium">{cw.walletType}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Customer')}</p>
+          <p className="font-medium">{cust}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Customer account')}</p>
+          <p className="font-medium">{cw.customerNumber?.trim() || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Account type')}</p>
+          <p className="font-medium">{cw.customerAccountType || '—'}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Amounts')}</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Wallet amount')}</p>
+            <p className="font-medium">Rs{fmt(cw.amount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Cash amount')}</p>
+            <p className="font-medium">Rs{fmt(cw.cashAmount ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
+            <p className="font-medium">{fmt(cw.commissionRate)}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
+            <p className="font-medium">Rs{fmt(cw.extraCharge)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Profit')}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(cw.profit)}</p>
+          </div>
+        </div>
+      </div>
+
+      {cw.notes?.trim() ? (
+        <div>
+          <p className="text-xs text-muted-foreground">{t('Notes')}</p>
+          <p className="mt-1 rounded-md bg-muted/60 p-3 text-sm">{cw.notes}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetailsProps) {
   const { t } = useLanguage();
   const dispatch = useDispatch<AppDispatch>();
@@ -165,12 +687,21 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [viewingInvoice, setViewingInvoice] = useState<any>(null);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [viewingSalesReturnId, setViewingSalesReturnId] = useState<string | null>(null);
+  const [salesReturnDialogOpen, setSalesReturnDialogOpen] = useState(false);
+  const [viewingSimSaleId, setViewingSimSaleId] = useState<string | null>(null);
+  const [simSaleDialogOpen, setSimSaleDialogOpen] = useState(false);
+  const [viewingLoadTxId, setViewingLoadTxId] = useState<string | null>(null);
+  const [loadSaleDialogOpen, setLoadSaleDialogOpen] = useState(false);
+  const [viewingCashWithdrawalId, setViewingCashWithdrawalId] = useState<string | null>(null);
+  const [cashWithdrawalDialogOpen, setCashWithdrawalDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [printingRowId, setPrintingRowId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLedgerEntries();
@@ -203,7 +734,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     try {
       const data = entries.map(entry => ({
         'Date': format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
-        'Type': getTransactionTypeLabel(entry.transactionType),
+        'Type': getTransactionTypeLabel(entry),
         'Description': entry.description,
         'Reference': entry.reference || '-',
         'Invoice Type': formatLedgerInvoiceType(entry, t),
@@ -265,8 +796,32 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     }
   };
 
-  const handleViewInvoice = (referenceId: string) => {
-    setViewingInvoice({ id: referenceId });
+  const handleViewLinkedCustomerEntry = (entry: LedgerEntry) => {
+    const id = entry.referenceId != null ? String(entry.referenceId) : '';
+    if (!id) return;
+    if (entry.transactionType === 'sales_return') {
+      setViewingSalesReturnId(id);
+      setSalesReturnDialogOpen(true);
+      return;
+    }
+    if (isCashWithdrawalLedgerRow(entry)) {
+      setViewingCashWithdrawalId(id);
+      setCashWithdrawalDialogOpen(true);
+      return;
+    }
+    if (entry.transactionType === 'sale') {
+      if (isSimSaleLedgerRow(entry)) {
+        setViewingSimSaleId(id);
+        setSimSaleDialogOpen(true);
+        return;
+      }
+      if (isLoadSaleLedgerRow(entry)) {
+        setViewingLoadTxId(id);
+        setLoadSaleDialogOpen(true);
+        return;
+      }
+    }
+    setViewingInvoice({ id });
     setInvoiceDialogOpen(true);
   };
 
@@ -283,15 +838,196 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     setReceiptDialogOpen(true);
   };
 
-  // Check if entry is manually created (not from invoice)
+  /** True when this line was added via Accounts → Add Entry (no linked sales invoice / SIM sale / etc.). */
   const isManualEntry = (entry: LedgerEntry) => {
-    return !entry.referenceId;
+    const rid = entry.referenceId as unknown;
+    if (rid == null) return true;
+    if (typeof rid === 'string' && !rid.trim()) return true;
+    return false;
   };
 
-  const getTransactionTypeLabel = (type: string) => {
+  const canPrintLinkedCustomerEntry = (entry: LedgerEntry) =>
+    Boolean(entry.referenceId) &&
+    !isManualEntry(entry) &&
+    (entry.transactionType === 'sale' ||
+      entry.transactionType === 'payment_received' ||
+      entry.transactionType === 'sales_return');
+
+  const handlePrintLinkedCustomerDoc = async (entry: LedgerEntry) => {
+    const rid = entry.referenceId ? String(entry.referenceId) : '';
+    const rowId = String(entry.id || entry._id || '');
+    if (!rid || !rowId) return;
+    setPrintingRowId(rowId);
+    try {
+      if (entry.transactionType === 'sales_return') {
+        const sr = await dispatch(returnsApi.endpoints.getSalesReturnById.initiate(rid)).unwrap();
+        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
+        const cust =
+          sr.customerName ||
+          (typeof sr.customerId === 'object' && sr.customerId != null && 'name' in sr.customerId
+            ? String((sr.customerId as { name?: string }).name || '')
+            : '') ||
+          customer.name ||
+          '—';
+        const invRef =
+          typeof sr.invoiceId === 'object' && sr.invoiceId != null && 'invoiceNumber' in sr.invoiceId
+            ? String((sr.invoiceId as { invoiceNumber?: string }).invoiceNumber || '')
+            : typeof sr.invoiceId === 'string'
+              ? sr.invoiceId
+              : '';
+        const itemLines =
+          sr.items?.map((it) => ({
+            label: `${it.name} × ${it.quantity}`,
+            value: fmtRs(it.total),
+          })) ?? [];
+        printMobileShopReceipt(
+          {
+            title: 'Sales return',
+            reference: sr.returnNumber,
+            issuedAt: sr.date ? new Date(sr.date).toLocaleString() : new Date(sr.createdAt).toLocaleString(),
+            lines: [
+              { label: 'Customer', value: cust },
+              ...(invRef ? [{ label: 'Invoice', value: invRef }] : []),
+              ...itemLines,
+              { label: 'Total', value: fmtRs(sr.totalAmount) },
+              ...(sr.reason?.trim() ? [{ label: 'Reason', value: sr.reason }] : []),
+            ],
+          },
+          orgData,
+          branchData?.invoiceNote ?? undefined,
+        );
+        toast.success(t('print_invoice_btn'));
+        return;
+      }
+
+      if (isSimSaleLedgerRow(entry)) {
+        const sale = await dispatch(mobileShopApi.endpoints.getSimSaleById.initiate(rid)).unwrap();
+        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
+        printMobileShopReceipt(
+          {
+            title: 'SIM sale',
+            reference: `Job #${sale.jobNumber}`,
+            issuedAt: new Date(sale.date).toLocaleString(),
+            lines: [
+              { label: 'Item', value: sale.productName || '—' },
+              { label: 'Load A/C', value: sale.walletType || '—' },
+              { label: 'Customer', value: sale.customerName || customer.name || '—' },
+              { label: 'Mobile', value: sale.customerMobile || '—' },
+              { label: 'CNIC', value: sale.customerCNIC?.trim() || '—' },
+              { label: 'Location', value: sale.customerLocation?.trim() || '—' },
+              { label: 'SIM amount', value: fmtRs(sale.simAmount) },
+              { label: 'Load amount', value: fmtRs(sale.loadAmount) },
+              { label: 'Commission', value: fmtRs(sale.commission) },
+              { label: 'Total amount', value: fmtRs(sale.saleAmount) },
+            ],
+          },
+          orgData,
+          branchData?.invoiceNote ?? undefined,
+        );
+        toast.success(t('print_invoice_btn'));
+        return;
+      }
+
+      if (isLoadSaleLedgerRow(entry)) {
+        const tx = await dispatch(mobileShopApi.endpoints.getLoadTransactionById.initiate(rid)).unwrap();
+        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
+        const cust =
+          tx.customerName ||
+          (typeof tx.customerId === 'object' && tx.customerId && 'name' in (tx.customerId as object)
+            ? String((tx.customerId as { name?: string }).name || '')
+            : '') ||
+          customer.name ||
+          '—';
+        printMobileShopReceipt(
+          {
+            title: 'Load sale',
+            reference: String(tx.id).slice(-10).toUpperCase(),
+            issuedAt: new Date(tx.date).toLocaleString(),
+            lines: [
+              { label: 'Network', value: tx.network || '—' },
+              { label: 'Wallet', value: tx.walletType },
+              { label: 'Customer', value: cust || '—' },
+              { label: 'Mobile', value: tx.mobileNumber || '—' },
+              { label: 'Amount', value: fmtRs(tx.amount) },
+              { label: 'Received', value: fmtRs(tx.receivedAmount ?? 0) },
+              { label: 'Commission %', value: `${Number(tx.commissionRate ?? 0).toFixed(2)}%` },
+              { label: 'Extra charge', value: fmtRs(tx.extraCharge) },
+              { label: 'Profit', value: fmtRs(tx.profit) },
+            ],
+          },
+          orgData,
+          branchData?.invoiceNote ?? undefined,
+        );
+        toast.success(t('print_invoice_btn'));
+        return;
+      }
+
+      const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
+      const { name: customerName, nameUrdu: customerNameUrdu } = resolveInvoiceCustomerForPrint(invoice, customer.name);
+
+      const printData: PrintInvoiceData = {
+        invoiceNumber: invoice.invoiceNumber,
+        items: (invoice.items || []).map((item: any) => ({
+          name: item.name,
+          nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        })),
+        customerId: invoice.customerId,
+        customerName,
+        customerNameUrdu,
+        walkInCustomerName: invoice.walkInCustomerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal ?? 0,
+        tax: invoice.tax ?? 0,
+        discount: invoice.discount ?? 0,
+        total: invoice.total ?? 0,
+        paidAmount: invoice.paidAmount ?? 0,
+        balance: invoice.balance ?? 0,
+        notes: invoice.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
+        deliveryCharge: invoice.deliveryCharge ?? 0,
+        serviceCharge: invoice.serviceCharge ?? 0,
+        companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
+        language: invoice.language,
+        isUrduOnly: invoice.isUrduOnly,
+        userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+        invoiceNote: branchData?.invoiceNote,
+        printInUrdu: getInvoicePrintInUrdu(),
+      };
+
+      openPrintWindow(generateInvoiceHTML(printData));
+      toast.success(t('print_invoice_btn'));
+    } catch (error) {
+      console.error(error);
+      toast.error(t('print_error'));
+    } finally {
+      setPrintingRowId(null);
+    }
+  };
+
+  const getTransactionTypeLabel = (entry: LedgerEntry) => {
+    const type = entry.transactionType;
+    const manual = isManualEntry(entry);
+
+    if (type === 'sale') {
+      return manual ? t('Cash Paid') : t('Sale');
+    }
+    if (type === 'payment_received') {
+      return manual ? t('Cash Received') : t('Payment Received');
+    }
+
     const labels: Record<string, string> = {
-      sale: t('Sale'),
-      payment_received: t('Payment Received'),
+      refund: t('Refund'),
       sales_return: t('Sales Return'),
       credit_note: t('Credit Note'),
       debit_note: t('Debit Note'),
@@ -406,6 +1142,78 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={salesReturnDialogOpen}
+        onOpenChange={(open) => {
+          setSalesReturnDialogOpen(open);
+          if (!open) setViewingSalesReturnId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Sales Return')}</DialogTitle>
+          </DialogHeader>
+          <SalesReturnDialogContent
+            salesReturnId={viewingSalesReturnId ?? undefined}
+            fallbackCustomerName={customer.name}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={simSaleDialogOpen}
+        onOpenChange={(open) => {
+          setSimSaleDialogOpen(open);
+          if (!open) setViewingSimSaleId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('SIM sale details')}</DialogTitle>
+          </DialogHeader>
+          <SimSaleDetailDialogContent
+            simSaleId={viewingSimSaleId ?? undefined}
+            fallbackCustomerName={customer.name}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={loadSaleDialogOpen}
+        onOpenChange={(open) => {
+          setLoadSaleDialogOpen(open);
+          if (!open) setViewingLoadTxId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Load sale details')}</DialogTitle>
+          </DialogHeader>
+          <LoadSaleDetailDialogContent
+            transactionId={viewingLoadTxId ?? undefined}
+            fallbackCustomerName={customer.name}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={cashWithdrawalDialogOpen}
+        onOpenChange={(open) => {
+          setCashWithdrawalDialogOpen(open);
+          if (!open) setViewingCashWithdrawalId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Cash Management transaction')}</DialogTitle>
+          </DialogHeader>
+          <CashWithdrawalDetailDialogContent
+            withdrawalId={viewingCashWithdrawalId ?? undefined}
+            fallbackCustomerName={customer.name}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -415,6 +1223,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
             <PaymentReceipt
               customer={{
                 name: customer.name,
+                nameUrdu: customer.nameUrdu,
                 phone: customer.phone,
                 address: customer.address,
               }}
@@ -430,8 +1239,18 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                 currentBalance: selectedPayment.currentBalance,
               }}
               company={{
-                name: branchData?.name || 'Logix Plus Solutions',
-                address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+                name: branchData?.name || orgData?.name || 'Logix Plus Solutions',
+                nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
+                address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+                  .filter((v) => v != null && String(v).trim() !== '')
+                  .join(', '),
+                addressUrdu: [
+                  branchData?.location?.addressUrdu?.trim(),
+                  branchData?.location?.city,
+                  branchData?.location?.country,
+                ]
+                  .filter((v) => v != null && String(v).trim() !== '')
+                  .join(', '),
                 phone: branchData?.phone,
                 email: branchData?.email,
                 logo: orgData?.logo?.url,
@@ -475,7 +1294,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
             <div className="text-center py-8 text-gray-500">{t('No transactions found')}</div>
           ) : (
             <>
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -487,7 +1306,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                       <TableHead className="text-right">{t('Debit')}</TableHead>
                       <TableHead className="text-right">{t('Credit')}</TableHead>
                       <TableHead className="text-right">{t('Balance')}</TableHead>
-                      <TableHead className="text-right">{t('Actions')}</TableHead>
+                      <TableHead className="text-right whitespace-nowrap w-[1%]">{t('Actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -498,7 +1317,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                         </TableCell>
                         <TableCell>
                           <Badge variant={getTransactionTypeBadge(entry.transactionType)}>
-                            {getTransactionTypeLabel(entry.transactionType)}
+                            {getTransactionTypeLabel(entry)}
                           </Badge>
                         </TableCell>
                         <TableCell>{entry.description}</TableCell>
@@ -507,7 +1326,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                             <Button
                               variant="link"
                               className="p-0 h-auto font-normal text-blue-600 hover:text-blue-800"
-                              onClick={() => handleViewInvoice(entry.referenceId!)}
+                              onClick={() => handleViewLinkedCustomerEntry(entry)}
                             >
                               {entry.reference || entry.referenceId}
                             </Button>
@@ -527,8 +1346,20 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                         <TableCell className={`text-right ${getBalanceColor(entry.balance)}`}>
                           Rs{Math.abs(entry.balance).toFixed(2)}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
+                        <TableCell className="text-right whitespace-nowrap align-middle">
+                          <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
+                            {canPrintLinkedCustomerEntry(entry) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePrintLinkedCustomerDoc(entry)}
+                                disabled={printingRowId === String(entry.id || entry._id)}
+                                className="h-8 w-8 p-0"
+                                title={t('print_invoice_btn')}
+                              >
+                                <Printer className="w-4 h-4 text-slate-700" />
+                              </Button>
+                            )}
                             {entry.transactionType === 'payment_received' && entry.credit > 0 && (
                               <Button
                                 variant="ghost"
@@ -540,7 +1371,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                                 <Receipt className="w-4 h-4 text-blue-600" />
                               </Button>
                             )}
-                            {entry.transactionType === 'payment_received' && isManualEntry(entry) && (
+                            {isManualEntry(entry) && (
                               <Button
                                 variant="ghost"
                                 size="sm"

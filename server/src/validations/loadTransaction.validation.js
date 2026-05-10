@@ -62,6 +62,12 @@ const updateLoadTransaction = {
     .min(1),
 };
 
+const getLoadTransaction = {
+  params: Joi.object().keys({
+    transactionId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 const deleteLoadTransaction = {
   params: Joi.object().keys({
     transactionId: Joi.string().custom(objectId).required(),
@@ -71,6 +77,7 @@ const deleteLoadTransaction = {
 module.exports = {
   createLoadTransaction,
   getLoadTransactions,
+  getLoadTransaction,
   updateLoadTransaction,
   deleteLoadTransaction,
 };

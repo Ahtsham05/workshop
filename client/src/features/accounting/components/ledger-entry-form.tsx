@@ -84,8 +84,8 @@ export function LedgerEntryForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const customerTransactionTypes = [
-    { value: 'sale', label: t('Sale') },
-    { value: 'payment_received', label: t('Payment Received') },
+    { value: 'sale', label: t('Cash Paid') },
+    { value: 'payment_received', label: t('Cash Received') },
     { value: 'credit_note', label: t('Credit Note') },
     { value: 'debit_note', label: t('Debit Note') },
     { value: 'adjustment', label: t('Adjustment') },
@@ -93,8 +93,8 @@ export function LedgerEntryForm({
   ];
 
   const supplierTransactionTypes = [
-    { value: 'purchase', label: t('Purchase') },
-    { value: 'payment_made', label: t('Payment Made') },
+    { value: 'purchase', label: t('Cash Received') },
+    { value: 'payment_made', label: t('Cash Paid') },
     { value: 'purchase_return', label: t('Purchase Return') },
     { value: 'debit_note', label: t('Debit Note') },
     { value: 'credit_note', label: t('Credit Note') },

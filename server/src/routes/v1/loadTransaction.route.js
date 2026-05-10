@@ -18,6 +18,7 @@ router
 
 router
   .route('/:transactionId')
+  .get(validate(loadTransactionValidation.getLoadTransaction), loadTransactionController.getLoadTransaction)
   .patch(validate(loadTransactionValidation.updateLoadTransaction), loadTransactionController.updateLoadTransaction)
   .delete(validate(loadTransactionValidation.deleteLoadTransaction), loadTransactionController.deleteLoadTransaction);
 

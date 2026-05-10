@@ -12,16 +12,25 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
-import { useGetPurchaseByIdQuery } from '@/stores/purchase.api';
+import { purchaseApi, useGetPurchaseByIdQuery } from '@/stores/purchase.api';
+import { returnsApi, useGetPurchaseReturnByIdQuery } from '@/stores/returns.api';
 import { PaymentReceipt } from './payment-receipt';
-import { mobileShopApi } from '@/stores/mobile-shop.api';
+import { mobileShopApi, useGetLoadPurchaseByIdQuery } from '@/stores/mobile-shop.api';
+import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
+import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
+
+function isLoadPurchaseLedgerRow(entry: LedgerEntry): boolean {
+  const ref = String(entry.reference || '').toUpperCase();
+  if (ref.includes('LOAD-PURCHASE')) return true;
+  return /\bload purchase\b/i.test(entry.description || '');
+}
 
 interface LedgerEntry {
   _id?: string;
@@ -140,6 +149,229 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
   );
 }
 
+function PurchaseReturnDialogContent({
+  purchaseReturnId,
+  fallbackSupplierName,
+}: {
+  purchaseReturnId?: string;
+  fallbackSupplierName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!purchaseReturnId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: pr, isLoading, error } = useGetPurchaseReturnByIdQuery(purchaseReturnId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !pr) {
+    return <div className="text-center py-8 text-red-500">{t('Failed to load purchase return details')}</div>;
+  }
+
+  const formatDate = (date: unknown) => {
+    try {
+      if (!date) return '-';
+      const dateObj = new Date(date as string);
+      if (isNaN(dateObj.getTime())) return '-';
+      return format(dateObj, 'MMM dd, yyyy');
+    } catch {
+      return '-';
+    }
+  };
+
+  const formatCurrency = (amount: unknown) => {
+    const num = Number(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  const supplierLabel =
+    (typeof pr.supplierId === 'object' && pr.supplierId != null && 'name' in pr.supplierId
+      ? String((pr.supplierId as { name?: string }).name || '')
+      : '') || fallbackSupplierName;
+
+  const purchaseLabel =
+    typeof pr.purchaseId === 'object' && pr.purchaseId != null && 'invoiceNumber' in pr.purchaseId
+      ? String((pr.purchaseId as { invoiceNumber?: string }).invoiceNumber || '')
+      : typeof pr.purchaseId === 'string'
+        ? pr.purchaseId
+        : '';
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">{t('Return Number')}</p>
+          <p className="font-medium">{pr.returnNumber || '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Date')}</p>
+          <p className="font-medium">{formatDate(pr.date || pr.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Supplier')}</p>
+          <p className="font-medium">{supplierLabel}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Total Amount')}</p>
+          <p className="font-medium text-lg">Rs{formatCurrency(pr.totalAmount)}</p>
+        </div>
+        {purchaseLabel ? (
+          <div>
+            <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
+            <p className="font-medium">{purchaseLabel}</p>
+          </div>
+        ) : null}
+        <div>
+          <p className="text-sm text-gray-500">{t('Refund method')}</p>
+          <Badge variant="outline">{pr.refundMethod || '—'}</Badge>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Status')}</p>
+          <Badge>{pr.status || 'N/A'}</Badge>
+        </div>
+        {pr.reason?.trim() ? (
+          <div className="col-span-2">
+            <p className="text-sm text-gray-500">{t('Reason')}</p>
+            <p className="font-medium">{pr.reason}</p>
+          </div>
+        ) : null}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Product')}</TableHead>
+              <TableHead>{t('Quantity')}</TableHead>
+              <TableHead>{t('price')}</TableHead>
+              <TableHead className="text-right">{t('Total')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pr.items && pr.items.length > 0 ? (
+              pr.items.map((item, index) => (
+                <TableRow key={index}>
+                  <TableCell>{item.name || '-'}</TableCell>
+                  <TableCell>{item.quantity ?? 0}</TableCell>
+                  <TableCell>Rs{formatCurrency(item.costPrice)}</TableCell>
+                  <TableCell className="text-right">Rs{formatCurrency(item.total)}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-gray-500">
+                  {t('No items')}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function LoadPurchaseDetailDialogContent({
+  loadPurchaseId,
+  fallbackSupplierName,
+}: {
+  loadPurchaseId?: string;
+  fallbackSupplierName: string;
+}) {
+  const { t } = useLanguage();
+
+  if (!loadPurchaseId) {
+    return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
+  }
+
+  const { data: lp, isLoading, error } = useGetLoadPurchaseByIdQuery(loadPurchaseId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !lp) {
+    return (
+      <div className="text-center py-8 text-red-500">{t('Failed to load load purchase details')}</div>
+    );
+  }
+
+  const fmt = (n: unknown) => {
+    const x = Number(n);
+    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+  };
+  const fmtDate = (d: unknown) => {
+    try {
+      if (!d) return '—';
+      const dt = new Date(d as string);
+      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+    } catch {
+      return '—';
+    }
+  };
+
+  const supplierLabel = lp.supplierName?.trim() || fallbackSupplierName;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Load purchase')}</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Reference')}</p>
+            <p className="font-mono text-sm font-medium">{String(lp.id).slice(-12).toUpperCase()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Date')}</p>
+            <p className="font-medium">{fmtDate(lp.date)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Wallet')}</p>
+            <p className="font-medium">{lp.walletType}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">{t('Supplier')}</p>
+          <p className="font-medium">{supplierLabel}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Amounts')}</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Amount')}</p>
+            <p className="font-medium">Rs{fmt(lp.amount)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Paid')}</p>
+            <p className="font-medium">Rs{fmt(lp.paidAmount ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
+            <p className="font-medium">{fmt(lp.commissionRate)}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
+            <p className="font-medium">Rs{fmt(lp.extraCharge)}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted-foreground">{t('Profit')}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(lp.profit)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
   const dispatch = useDispatch<AppDispatch>();
@@ -156,12 +388,17 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [viewingPurchase, setViewingPurchase] = useState<any>(null);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [viewingPurchaseReturnId, setViewingPurchaseReturnId] = useState<string | null>(null);
+  const [purchaseReturnDialogOpen, setPurchaseReturnDialogOpen] = useState(false);
+  const [viewingLoadPurchaseId, setViewingLoadPurchaseId] = useState<string | null>(null);
+  const [loadPurchaseDialogOpen, setLoadPurchaseDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [printingRowId, setPrintingRowId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLedgerEntries();
@@ -194,7 +431,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     try {
       const data = entries.map(entry => ({
         'Date': format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
-        'Type': getTransactionTypeLabel(entry.transactionType),
+        'Type': getTransactionTypeLabel(entry),
         'Description': entry.description,
         'Reference': entry.reference || '-',
         'Invoice Type': formatLedgerInvoiceType(entry, t),
@@ -256,8 +493,20 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     }
   };
 
-  const handleViewPurchase = (referenceId: string) => {
-    setViewingPurchase({ id: referenceId });
+  const handleViewLinkedSupplierEntry = (entry: LedgerEntry) => {
+    const id = entry.referenceId != null ? String(entry.referenceId) : '';
+    if (!id) return;
+    if (entry.transactionType === 'purchase_return') {
+      setViewingPurchaseReturnId(id);
+      setPurchaseReturnDialogOpen(true);
+      return;
+    }
+    if (isLoadPurchaseLedgerRow(entry)) {
+      setViewingLoadPurchaseId(id);
+      setLoadPurchaseDialogOpen(true);
+      return;
+    }
+    setViewingPurchase({ id });
     setPurchaseDialogOpen(true);
   };
 
@@ -274,15 +523,143 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     setReceiptDialogOpen(true);
   };
 
-  // Check if entry is manually created (not from purchase invoice)
   const isManualEntry = (entry: LedgerEntry) => {
-    return !entry.referenceId;
+    const rid = entry.referenceId as unknown;
+    if (rid == null) return true;
+    if (typeof rid === 'string' && !rid.trim()) return true;
+    return false;
   };
 
-  const getTransactionTypeLabel = (type: string) => {
+  const canPrintLinkedSupplierEntry = (entry: LedgerEntry) =>
+    Boolean(entry.referenceId) &&
+    !isManualEntry(entry) &&
+    (entry.transactionType === 'purchase' ||
+      entry.transactionType === 'payment_made' ||
+      entry.transactionType === 'purchase_return');
+
+  const handlePrintLinkedPurchase = async (entry: LedgerEntry) => {
+    const id = entry.referenceId ? String(entry.referenceId) : '';
+    const rowId = String(entry.id || entry._id || '');
+    if (!id || !rowId) return;
+    setPrintingRowId(rowId);
+    try {
+      if (entry.transactionType === 'purchase_return') {
+        const pr = await dispatch(returnsApi.endpoints.getPurchaseReturnById.initiate(id)).unwrap();
+        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
+        const sup =
+          (typeof pr.supplierId === 'object' && pr.supplierId != null && 'name' in pr.supplierId
+            ? String((pr.supplierId as { name?: string }).name || '')
+            : '') ||
+          supplier.name ||
+          '—';
+        const purchaseRef =
+          typeof pr.purchaseId === 'object' && pr.purchaseId != null && 'invoiceNumber' in pr.purchaseId
+            ? String((pr.purchaseId as { invoiceNumber?: string }).invoiceNumber || '')
+            : typeof pr.purchaseId === 'string'
+              ? pr.purchaseId
+              : '';
+        const itemLines =
+          pr.items?.map((it) => ({
+            label: `${it.name} × ${it.quantity}`,
+            value: fmtRs(it.total),
+          })) ?? [];
+        printMobileShopReceipt(
+          {
+            title: 'Purchase return',
+            reference: pr.returnNumber,
+            issuedAt: pr.date ? new Date(pr.date).toLocaleString() : new Date(pr.createdAt).toLocaleString(),
+            lines: [
+              { label: 'Supplier', value: sup },
+              ...(purchaseRef ? [{ label: 'Purchase', value: purchaseRef }] : []),
+              ...itemLines,
+              { label: 'Total', value: fmtRs(pr.totalAmount) },
+              ...(pr.reason?.trim() ? [{ label: 'Reason', value: pr.reason }] : []),
+            ],
+          },
+          orgData,
+          branchData?.invoiceNote ?? undefined,
+        );
+        toast.success(t('print_invoice_btn'));
+        return;
+      }
+
+      if (isLoadPurchaseLedgerRow(entry)) {
+        const lp = await dispatch(mobileShopApi.endpoints.getLoadPurchaseById.initiate(id)).unwrap();
+        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
+        printMobileShopReceipt(
+          {
+            title: 'Load purchase',
+            reference: String(lp.id).slice(-10).toUpperCase(),
+            issuedAt: new Date(lp.date).toLocaleString(),
+            lines: [
+              { label: 'Wallet', value: lp.walletType },
+              { label: 'Amount', value: fmtRs(lp.amount) },
+              { label: 'Paid', value: fmtRs(lp.paidAmount ?? 0) },
+              ...(lp.supplierName ? [{ label: 'Supplier', value: lp.supplierName }] : []),
+              { label: 'Commission %', value: `${Number(lp.commissionRate ?? 0).toFixed(2)}%` },
+              { label: 'Extra charge', value: fmtRs(lp.extraCharge) },
+              { label: 'Profit', value: fmtRs(lp.profit) },
+            ],
+          },
+          orgData,
+          branchData?.invoiceNote ?? undefined,
+        );
+        toast.success(t('print_invoice_btn'));
+        return;
+      }
+
+      const purchase = await dispatch(purchaseApi.endpoints.getPurchaseById.initiate(id)).unwrap();
+      const printModule = await import('@/utils/purchasePrintUtils');
+      const branchDetails = {
+        name: orgData?.name || branchData?.name,
+        nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
+        address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+          .filter(Boolean)
+          .join(', '),
+        phone: branchData?.phone,
+        email: branchData?.email,
+        logo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
+        invoiceNote: branchData?.invoiceNote,
+      };
+      const html = printModule.generatePurchaseInvoiceHTML(
+        purchase,
+        purchase?.supplier?.name || supplier.name,
+        t,
+        branchDetails,
+        preferredLanguage,
+        getInvoicePrintInUrdu(),
+      );
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        w.print();
+      }
+      toast.success(t('print_invoice_btn'));
+    } catch (e) {
+      console.error(e);
+      toast.error(t('print_error'));
+    } finally {
+      setPrintingRowId(null);
+    }
+  };
+
+  const getTransactionTypeLabel = (entry: LedgerEntry) => {
+    const type = entry.transactionType;
+    const manual = isManualEntry(entry);
+
+    if (type === 'purchase') {
+      return manual ? t('Cash Received') : t('Purchase');
+    }
+    if (type === 'payment_made') {
+      return manual ? t('Cash Paid') : t('Payment Made');
+    }
+    if (type === 'payment_received') {
+      return manual ? t('Cash Received') : t('Payment Received');
+    }
+
     const labels: Record<string, string> = {
-      purchase: t('Purchase'),
-      payment_made: t('Payment Made'),
       purchase_return: t('Purchase Return'),
       debit_note: t('Debit Note'),
       credit_note: t('Credit Note'),
@@ -397,6 +774,42 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={purchaseReturnDialogOpen}
+        onOpenChange={(open) => {
+          setPurchaseReturnDialogOpen(open);
+          if (!open) setViewingPurchaseReturnId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Purchase Return')}</DialogTitle>
+          </DialogHeader>
+          <PurchaseReturnDialogContent
+            purchaseReturnId={viewingPurchaseReturnId ?? undefined}
+            fallbackSupplierName={supplier.name}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={loadPurchaseDialogOpen}
+        onOpenChange={(open) => {
+          setLoadPurchaseDialogOpen(open);
+          if (!open) setViewingLoadPurchaseId(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('Load purchase details')}</DialogTitle>
+          </DialogHeader>
+          <LoadPurchaseDetailDialogContent
+            loadPurchaseId={viewingLoadPurchaseId ?? undefined}
+            fallbackSupplierName={supplier.name}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -406,6 +819,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
             <PaymentReceipt
               customer={{
                 name: supplier.name,
+                nameUrdu: supplier.nameUrdu,
                 phone: supplier.phone,
                 address: supplier.address,
               }}
@@ -421,8 +835,18 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                 currentBalance: selectedPayment.currentBalance,
               }}
               company={{
-                name: branchData?.name || 'Logix Plus Solutions',
-                address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+                name: branchData?.name || orgData?.name || 'Logix Plus Solutions',
+                nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
+                address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+                  .filter((v) => v != null && String(v).trim() !== '')
+                  .join(', '),
+                addressUrdu: [
+                  branchData?.location?.addressUrdu?.trim(),
+                  branchData?.location?.city,
+                  branchData?.location?.country,
+                ]
+                  .filter((v) => v != null && String(v).trim() !== '')
+                  .join(', '),
                 phone: branchData?.phone,
                 email: branchData?.email,
                 logo: orgData?.logo?.url,
@@ -481,7 +905,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
           ) : entries.length === 0 ? (
             <div className="text-center py-8 text-gray-500">{t('No transactions found')}</div>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -493,7 +917,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                     <TableHead className="text-right">{t('Debit')}</TableHead>
                     <TableHead className="text-right">{t('Credit')}</TableHead>
                     <TableHead className="text-right">{t('Balance')}</TableHead>
-                    <TableHead className="text-right">{t('Actions')}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap w-[1%]">{t('Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -504,7 +928,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                       </TableCell>
                       <TableCell>
                         <Badge variant={getTransactionTypeBadge(entry.transactionType)}>
-                          {getTransactionTypeLabel(entry.transactionType)}
+                          {getTransactionTypeLabel(entry)}
                         </Badge>
                       </TableCell>
                       <TableCell>{entry.description}</TableCell>
@@ -513,7 +937,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                           <Button
                             variant="link"
                             className="p-0 h-auto font-normal text-blue-600 hover:text-blue-800"
-                            onClick={() => handleViewPurchase(entry.referenceId!)}
+                            onClick={() => handleViewLinkedSupplierEntry(entry)}
                           >
                             {entry.reference || entry.referenceId}
                           </Button>
@@ -533,8 +957,20 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                       <TableCell className={`text-right ${getBalanceColor(entry.balance)}`}>
                         Rs{Math.abs(entry.balance).toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
+                      <TableCell className="text-right whitespace-nowrap align-middle">
+                        <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
+                          {canPrintLinkedSupplierEntry(entry) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintLinkedPurchase(entry)}
+                              disabled={printingRowId === String(entry.id || entry._id)}
+                              className="h-8 w-8 p-0"
+                              title={t('print_invoice_btn')}
+                            >
+                              <Printer className="w-4 h-4 text-slate-700" />
+                            </Button>
+                          )}
                           {entry.transactionType === 'payment_made' && entry.debit > 0 && (
                             <Button
                               variant="ghost"
@@ -546,7 +982,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                               <Receipt className="w-4 h-4 text-blue-600" />
                             </Button>
                           )}
-                          {entry.transactionType === 'payment_made' && isManualEntry(entry) && (
+                          {isManualEntry(entry) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -563,7 +999,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                               size="sm"
                               onClick={() => handleDeleteEntry(entry)}
                               title={t('Delete entry')}
-                              className="text-red-600 hover:text-red-700"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>

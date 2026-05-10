@@ -53,6 +53,12 @@ const updateLoadPurchase = {
     .min(1),
 };
 
+const getLoadPurchase = {
+  params: Joi.object().keys({
+    purchaseId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 const deleteLoadPurchase = {
   params: Joi.object().keys({
     purchaseId: Joi.string().custom(objectId).required(),
@@ -62,6 +68,7 @@ const deleteLoadPurchase = {
 module.exports = {
   createLoadPurchase,
   getLoadPurchases,
+  getLoadPurchase,
   updateLoadPurchase,
   deleteLoadPurchase,
 };

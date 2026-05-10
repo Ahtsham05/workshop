@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const pick = require('../utils/pick');
+const ApiError = require('../utils/ApiError');
+const { CashWithdrawal } = require('../models');
 const { cashWithdrawalService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
@@ -18,6 +20,16 @@ const getCashWithdrawals = catchAsync(async (req, res) => {
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'startDate', 'endDate']);
   const result = await cashWithdrawalService.queryCashWithdrawals(filter, options);
   res.send(result);
+});
+
+const getCashWithdrawal = catchAsync(async (req, res) => {
+  const filter = { _id: req.params.withdrawalId };
+  applyBranchFilter(filter, req);
+  const withdrawal = await CashWithdrawal.findOne(filter).populate('customerId', 'name phone nameUrdu');
+  if (!withdrawal) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Cash withdrawal not found');
+  }
+  res.send(withdrawal);
 });
 
 const updateCashWithdrawal = catchAsync(async (req, res) => {
@@ -47,6 +59,7 @@ module.exports = {
   createCashWithdrawal,
   createCashWithdrawalsBatch,
   getCashWithdrawals,
+  getCashWithdrawal,
   updateCashWithdrawal,
   deleteCashWithdrawal,
   deleteCashWithdrawalsBatch,
