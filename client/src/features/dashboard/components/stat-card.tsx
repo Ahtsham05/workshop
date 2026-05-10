@@ -78,10 +78,10 @@ export function StatCard({
           {valueSuffix}
         </div>
         {(change !== undefined || description) && (
-          <div className='mt-1 flex items-center gap-2 text-xs text-white/70'>
+          <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
             {change !== undefined && (
               <div
-                className={`flex items-center gap-1 ${isPositive ? 'text-emerald-200' : 'text-rose-200'}`}
+                className={`flex items-center gap-1 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}
               >
                 {isPositive ? (
                   <TrendingUp className='h-3 w-3' />

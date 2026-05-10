@@ -67,6 +67,8 @@ interface InvoicePanelProps {
   onSaveSuccess?: () => void
   isEditing?: boolean
   editingInvoice?: any
+  /** Matches Product Catalog "Cost" toggle — when true, purchase cost is readable in the product picker */
+  showProductCost?: boolean
 }
 
 export function InvoicePanel({
@@ -87,7 +89,8 @@ export function InvoicePanel({
   onBackToList,
   onSaveSuccess,
   isEditing = false,
-  editingInvoice
+  editingInvoice,
+  showProductCost = false,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
@@ -1264,10 +1267,15 @@ export function InvoicePanel({
                                                 {product.cost != null && (
                                                   <span
                                                     key={`cost-${product._id}`}
-                                                    className="text-amber-600 dark:text-amber-400 blur-sm hover:blur-none transition-all duration-200 select-none cursor-pointer"
+                                                    className={cn(
+                                                      'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
+                                                      showProductCost
+                                                        ? 'cursor-default'
+                                                        : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
+                                                    )}
                                                     title="Purchase cost"
                                                   >
-                                                    Cost: Rs{product.cost}
+                                                    Cost: Rs{Number(product.cost).toFixed(2)}
                                                   </span>
                                                 )}
                                               </div>
@@ -1572,26 +1580,28 @@ export function InvoicePanel({
 
           {/* Totals Display */}
           <div className='space-y-2'>
-            <div className='flex justify-between'>
-              <span>{t('subtotal')}:</span>
-              <span>Rs{invoice.subtotal.toFixed(2)}</span>
+            <div className='flex justify-between gap-6'>
+              <span className='text-muted-foreground'>{t('subtotal')}:</span>
+              <span className='tabular-nums font-medium'>Rs{invoice.subtotal.toFixed(2)}</span>
             </div>
             {invoice.discount > 0 && (
-              <div className='flex justify-between text-red-600'>
+              <div className='flex justify-between gap-6 text-red-600'>
                 <span>{t('discount')}:</span>
-                <span>-Rs{invoice.discount.toFixed(2)}</span>
+                <span className='tabular-nums'>-Rs{invoice.discount.toFixed(2)}</span>
               </div>
             )}
             {invoice.tax > 0 && (
-              <div className='flex justify-between'>
-                <span>{t('tax')} ({taxRate}%):</span>
-                <span>Rs{invoice.tax.toFixed(2)}</span>
+              <div className='flex justify-between gap-6'>
+                <span className='text-muted-foreground'>
+                  {t('tax')} ({taxRate}%):
+                </span>
+                <span className='tabular-nums'>Rs{invoice.tax.toFixed(2)}</span>
               </div>
             )}
             <Separator />
-            <div className='flex justify-between font-bold text-lg'>
+            <div className='flex justify-between gap-6 font-bold text-lg'>
               <span>{t('total')}:</span>
-              <span>Rs{invoice.total.toFixed(2)}</span>
+              <span className='tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
             </div>
             
             {/* Profit Display */}

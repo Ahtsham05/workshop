@@ -33,11 +33,18 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
 
   return (
     <Dialog open={!!productId} onOpenChange={onClose}>
-      <DialogContent className='w-full max-w-[95vw] max-h-[90vh] overflow-y-auto'>
-        <DialogHeader>
-          <DialogTitle>{t('Product Details')}</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        className={cn(
+          'flex max-h-[92vh] w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1400px)]',
+        )}
+      >
+        <div className='shrink-0 border-b px-6 pt-6 pb-4'>
+          <DialogHeader>
+            <DialogTitle>{t('Product Details')}</DialogTitle>
+          </DialogHeader>
+        </div>
 
+        <div className='min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4'>
         {isLoading ? (
           <Skeleton className='h-[400px] w-full' />
         ) : data ? (
@@ -247,6 +254,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
             No data available
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   )

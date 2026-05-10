@@ -23,6 +23,8 @@ interface ProductCatalogProps {
   loading: boolean
   showImages: boolean
   setShowImages: (show: boolean) => void
+  showCost: boolean
+  setShowCost: (show: boolean) => void
   searchTerm: string
   setSearchTerm: (term: string) => void
   onAddToInvoice: (product: Product, quantity?: number) => void
@@ -36,6 +38,8 @@ export function ProductCatalog({
   loading,
   showImages,
   setShowImages,
+  showCost,
+  setShowCost,
   searchTerm,
   setSearchTerm,
   onAddToInvoice,
@@ -47,7 +51,6 @@ export function ProductCatalog({
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
-  const [showCost, setShowCost] = useState(false)
   const [historyDialog, setHistoryDialog] = useState<{
     open: boolean
     productId: string

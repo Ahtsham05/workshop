@@ -6,19 +6,51 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import { Columns2, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  clearSaleWorkspace,
+  saveSaleWorkspace,
+  loadSaleWorkspace,
+  listSaleHeld,
+  pushSaleHeld,
+  removeSaleHeld,
+  newHoldId,
+  isSaleDraftSnapshotEmpty,
+  POS_HOLD_MAX_AGE_MS,
+  type SaleHeldRecord,
+} from '@/lib/pos-hold-storage'
+import { applySaleDraftStock, revertSaleDraftStock } from '@/lib/pos-hold-stock'
 import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
+const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
 
 const getInitialUrduOnlyPreference = (): boolean => {
   const stored = localStorage.getItem(INVOICE_URDU_ONLY_PREF_KEY)
+  return stored === 'true'
+}
+
+const getInitialShowProductCatalog = (): boolean => {
+  const stored = localStorage.getItem(INVOICE_SHOW_CATALOG_KEY)
+  if (stored === null) return true
   return stored === 'true'
 }
 
@@ -173,8 +205,242 @@ export default function InvoicePage() {
   
   // UI state
   const [showImages, setShowImages] = useState(true)
+  /** Shared with Product Catalog — when true, purchase cost is readable in catalog and product picker */
+  const [showProductCost, setShowProductCost] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [taxRate, setTaxRate] = useState(0) // Configurable tax rate
+  const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog)
+
+  const toggleProductCatalog = useCallback(() => {
+    setShowProductCatalog((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(INVOICE_SHOW_CATALOG_KEY, String(next))
+      } catch {
+        /* quota / private mode */
+      }
+      return next
+    })
+  }, [])
+
+  const [heldSheetOpen, setHeldSheetOpen] = useState(false)
+  const [heldUiEpoch, setHeldUiEpoch] = useState(0)
+  const saleAutosaveRecoveredRef = useRef(false)
+
+  /** Always-latest snapshot for synchronous persist (tab close / route change / visibility) */
+  const salePersistRef = useRef({
+    loading,
+    currentView,
+    invoice,
+    taxRate,
+    showImages,
+    showProductCost,
+    searchTerm,
+    showProductCatalog,
+  })
+  salePersistRef.current = {
+    loading,
+    currentView,
+    invoice,
+    taxRate,
+    showImages,
+    showProductCost,
+    searchTerm,
+    showProductCatalog,
+  }
+
+  const persistSaleDraftSync = useCallback(() => {
+    const s = salePersistRef.current
+    if (s.loading) return
+    if (s.currentView !== 'create') return
+    if (isSaleDraftSnapshotEmpty(s.invoice as unknown as Record<string, unknown>)) {
+      clearSaleWorkspace()
+      return
+    }
+    saveSaleWorkspace({
+      invoice: s.invoice as unknown as Record<string, unknown>,
+      taxRate: s.taxRate,
+      showImages: s.showImages,
+      showProductCost: s.showProductCost,
+      searchTerm: s.searchTerm,
+      showProductCatalog: s.showProductCatalog,
+    })
+  }, [])
+
+  const resetSaleInvoiceForm = useCallback(() => {
+    const preferredUrduOnly = getInitialUrduOnlyPreference()
+    setInvoice({
+      items: [createEmptyManualInvoiceItem()],
+      language: preferredUrduOnly ? 'ur' : preferredLanguage,
+      isUrduOnly: preferredUrduOnly,
+      customerId: 'walk-in',
+      type: 'cash',
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      totalProfit: 0,
+      totalCost: 0,
+      paidAmount: 0,
+      balance: 0,
+      paymentMethod: 'cash',
+      walletType: undefined,
+      splitPayment: [],
+      loyaltyPoints: 0,
+      deliveryCharge: 0,
+      serviceCharge: 0,
+      roundingAdjustment: 0,
+      notes: '',
+    })
+  }, [preferredLanguage])
+
+  const saleHeldList = useMemo(() => listSaleHeld(), [heldUiEpoch])
+
+  // Persist after each draft change. Skip while products/customers load — avoids clearing localStorage
+  // before useLayoutEffect restores the workspace snapshot.
+  useEffect(() => {
+    if (loading) return
+    persistSaleDraftSync()
+  }, [
+    loading,
+    invoice,
+    taxRate,
+    showImages,
+    showProductCost,
+    searchTerm,
+    showProductCatalog,
+    currentView,
+    persistSaleDraftSync,
+  ])
+
+  // Tab / window close, mobile backgrounding, and full browser exit
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') persistSaleDraftSync()
+    }
+    const onPageLifecycle = () => persistSaleDraftSync()
+    document.addEventListener('visibilitychange', onHidden)
+    window.addEventListener('pagehide', onPageLifecycle)
+    window.addEventListener('beforeunload', onPageLifecycle)
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden)
+      window.removeEventListener('pagehide', onPageLifecycle)
+      window.removeEventListener('beforeunload', onPageLifecycle)
+    }
+  }, [persistSaleDraftSync])
+
+  // SPA route change: React may cancel pending timers without firing them — always flush on unmount
+  useEffect(() => {
+    return () => persistSaleDraftSync()
+  }, [persistSaleDraftSync])
+
+  useLayoutEffect(() => {
+    if (loading) return
+    if (currentView !== 'create') return
+    if (saleAutosaveRecoveredRef.current) return
+    saleAutosaveRecoveredRef.current = true
+
+    const ws = loadSaleWorkspace()
+    if (
+      !ws ||
+      isSaleDraftSnapshotEmpty(ws.invoice) ||
+      Date.now() - ws.updatedAt > POS_HOLD_MAX_AGE_MS
+    ) {
+      if (ws && Date.now() - ws.updatedAt > POS_HOLD_MAX_AGE_MS) clearSaleWorkspace()
+      return
+    }
+    const inv = ws.invoice as unknown as Invoice
+    setInvoice(inv)
+    setTaxRate(ws.taxRate)
+    setShowImages(ws.showImages)
+    setShowProductCost(ws.showProductCost)
+    setSearchTerm(ws.searchTerm)
+    setShowProductCatalog(ws.showProductCatalog)
+    setProducts((prev) => applySaleDraftStock(prev, inv.items))
+    toast.success(t('draft_restored'))
+  }, [loading, currentView, t])
+
+  const manualHoldSale = useCallback(() => {
+    if (currentView !== 'create') return
+    if (isSaleDraftSnapshotEmpty(invoice as unknown as Record<string, unknown>)) {
+      toast.error(t('nothing_to_hold'))
+      return
+    }
+    setProducts((prev) => revertSaleDraftStock(prev, invoice.items))
+    const cust =
+      invoice.customerId === 'walk-in'
+        ? invoice.walkInCustomerName?.trim() || t('walk_in_customer')
+        : invoice.customerName ||
+          customers.find((c) => c._id === invoice.customerId)?.name ||
+          t('customer')
+    const lineCount = invoice.items.filter((it) => it.productId || it.name?.trim()).length
+    const label = `${cust} · Rs ${Number(invoice.total ?? 0).toLocaleString('en-PK', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} · ${lineCount}`
+    const record: SaleHeldRecord = {
+      id: newHoldId(),
+      label,
+      savedAt: Date.now(),
+      snapshot: {
+        invoice: invoice as unknown as Record<string, unknown>,
+        taxRate,
+        showImages,
+        showProductCost,
+        searchTerm,
+        showProductCatalog,
+      },
+    }
+    pushSaleHeld(record)
+    clearSaleWorkspace()
+    resetSaleInvoiceForm()
+    setHeldUiEpoch((x) => x + 1)
+    toast.success(t('draft_saved_to_held'))
+  }, [
+    currentView,
+    invoice,
+    customers,
+    taxRate,
+    showImages,
+    showProductCost,
+    searchTerm,
+    showProductCatalog,
+    t,
+    resetSaleInvoiceForm,
+  ])
+
+  const resumeSaleHeld = useCallback(
+    (id: string) => {
+      const entry = listSaleHeld().find((h) => h.id === id)
+      if (!entry) return
+      if (!isSaleDraftSnapshotEmpty(invoice as unknown as Record<string, unknown>)) {
+        setProducts((prev) => revertSaleDraftStock(prev, invoice.items))
+      }
+      const inv = entry.snapshot.invoice as unknown as Invoice
+      setInvoice(inv)
+      setTaxRate(entry.snapshot.taxRate)
+      setShowImages(entry.snapshot.showImages)
+      setShowProductCost(entry.snapshot.showProductCost)
+      setSearchTerm(entry.snapshot.searchTerm)
+      setShowProductCatalog(entry.snapshot.showProductCatalog)
+      setProducts((prev) => applySaleDraftStock(prev, inv.items))
+      removeSaleHeld(id)
+      clearSaleWorkspace()
+      setHeldUiEpoch((x) => x + 1)
+      setHeldSheetOpen(false)
+      toast.success(t('held_restored'))
+    },
+    [invoice, t],
+  )
+
+  const deleteSaleHeld = useCallback(
+    (id: string) => {
+      removeSaleHeld(id)
+      setHeldUiEpoch((x) => x + 1)
+      toast.success(t('held_deleted'))
+    },
+    [t],
+  )
 
   // Refresh products to get latest stock data
   const refreshProducts = useCallback(async () => {
@@ -769,6 +1035,8 @@ export default function InvoicePage() {
     
     // Reset the saved flag for new invoice
     setInvoiceSaved(false)
+
+    clearSaleWorkspace()
     
     // Refresh products to ensure latest stock data
     refreshProducts()
@@ -808,6 +1076,8 @@ export default function InvoicePage() {
       toast.error(t('no_permission_edit_invoice') || 'You do not have permission to edit invoices')
       return
     }
+
+    clearSaleWorkspace()
     
     // Reset the saved flag when starting to edit
     setInvoiceSaved(false)
@@ -918,6 +1188,8 @@ export default function InvoicePage() {
     
     // Reset the saved flag for next invoice
     setInvoiceSaved(false)
+
+    clearSaleWorkspace()
     
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
@@ -928,6 +1200,7 @@ export default function InvoicePage() {
 
   // Handle successful invoice save - commit stock changes
   const handleSaveSuccess = useCallback(() => {
+    clearSaleWorkspace()
     // Mark invoice as saved to prevent stock restoration
     setInvoiceSaved(true)
     
@@ -971,6 +1244,7 @@ export default function InvoicePage() {
   }, [preferredLanguage, refreshProducts])
 
   const handleConvertPending = () => {
+    clearSaleWorkspace()
     setCurrentView('convert-pending')
   }
   if (currentView === 'list') {
@@ -1028,10 +1302,123 @@ export default function InvoicePage() {
           <ProfileDropdown />
         </div>
       </Header>
-      <Main>
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen'>
-          {/* Left Panel - Invoice */}
-          <div className='min-w-0 space-y-4 pb-6'>
+      <Main
+        className={cn(
+          'pb-6',
+          showProductCatalog ? 'pt-3 md:pt-4' : 'pt-2 md:pt-2.5',
+        )}
+      >
+        <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+            <p className='order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1'>
+              {t('autosave_hint')}
+            </p>
+            <div className='flex flex-wrap justify-end gap-2 order-1 sm:order-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='gap-2 shadow-sm'
+                onClick={manualHoldSale}
+              >
+                <PauseCircle className='h-4 w-4 shrink-0' aria-hidden />
+                {t('hold_invoice')}
+              </Button>
+
+              <Sheet open={heldSheetOpen} onOpenChange={setHeldSheetOpen}>
+                <SheetTrigger asChild>
+                  <Button type='button' variant='outline' size='sm' className='gap-2 shadow-sm'>
+                    {t('held_drafts')}
+                    {saleHeldList.length > 0 ? (
+                      <Badge variant='secondary' className='px-1.5 py-0'>
+                        {saleHeldList.length}
+                      </Badge>
+                    ) : null}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side='right' className='flex w-full flex-col gap-0 overflow-hidden sm:max-w-md'>
+                  <SheetHeader className='text-left'>
+                    <SheetTitle>{t('held_drafts_sheet_title_sales')}</SheetTitle>
+                    {saleHeldList.length === 0 ? (
+                      <SheetDescription className='text-xs'>{t('held_drafts_empty')}</SheetDescription>
+                    ) : (
+                      <SheetDescription className='sr-only'>{t('held_drafts_sheet_title_sales')}</SheetDescription>
+                    )}
+                  </SheetHeader>
+                  <div className='mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1'>
+                    {saleHeldList.length === 0 ? null : (
+                      saleHeldList.map((h) => (
+                        <div
+                          key={h.id}
+                          className='flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-sm'
+                        >
+                          <p className='text-sm font-medium leading-snug'>{h.label}</p>
+                          <p className='text-xs text-muted-foreground'>
+                            {new Date(h.savedAt).toLocaleString()}
+                          </p>
+                          <div className='flex flex-wrap gap-2'>
+                            <Button size='sm' type='button' onClick={() => resumeSaleHeld(h.id)}>
+                              {t('resume_held')}
+                            </Button>
+                            <Button
+                              size='sm'
+                              type='button'
+                              variant='outline'
+                              className='gap-1'
+                              onClick={() => deleteSaleHeld(h.id)}
+                            >
+                              <Trash2 className='h-4 w-4' aria-hidden />
+                              {t('held_remove')}
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
+
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='gap-2 shadow-sm'
+                onClick={toggleProductCatalog}
+                aria-pressed={showProductCatalog}
+                aria-expanded={showProductCatalog}
+                aria-label={
+                  showProductCatalog ? t('hide_product_catalog') : t('show_product_catalog')
+                }
+              >
+                {showProductCatalog ? (
+                  <>
+                    <Columns2 className='h-4 w-4 shrink-0' aria-hidden />
+                    {t('hide_product_catalog')}
+                  </>
+                ) : (
+                  <>
+                    <LayoutGrid className='h-4 w-4 shrink-0' aria-hidden />
+                    {t('show_product_catalog')}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+        <div
+          className={cn(
+            'grid w-full items-start content-start',
+            showProductCatalog ? 'gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
+          )}
+        >
+          {/* Invoice panel — centered readable width when catalog hidden (matches modern SaaS checkout) */}
+          <div
+            className={cn(
+              'min-w-0 space-y-4 pb-6',
+              !showProductCatalog &&
+                'mx-auto w-full max-w-2xl sm:max-w-3xl 2xl:max-w-4xl',
+            )}
+          >
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}
@@ -1051,16 +1438,19 @@ export default function InvoicePage() {
               onSaveSuccess={handleSaveSuccess}
               isEditing={currentView === 'edit'}
               editingInvoice={editingInvoice}
+              showProductCost={showProductCost}
             />
           </div>
 
-          {/* Right Panel - Product Catalog */}
+          {showProductCatalog && (
           <div className='min-w-0 space-y-4 max-h-[2000px] overflow-y-auto pb-6'>
             <ProductCatalog
               categorizedProducts={categorizedProducts}
               loading={loading}
               showImages={showImages}
               setShowImages={setShowImages}
+              showCost={showProductCost}
+              setShowCost={setShowProductCost}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onAddToInvoice={addToInvoice}
@@ -1073,6 +1463,8 @@ export default function InvoicePage() {
               }
             />
           </div>
+          )}
+        </div>
         </div>
       </Main>
     </div>

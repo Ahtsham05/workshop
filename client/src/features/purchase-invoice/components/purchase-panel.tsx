@@ -1063,13 +1063,13 @@ export default function PurchasePanel({
 
           {/* Totals Display */}
           <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>{t('Subtotal')}:</span>
-              <span>Rs{totals.subtotal.toFixed(2)}</span>
+            <div className="flex justify-between gap-6">
+              <span className="text-muted-foreground">{t('Subtotal')}:</span>
+              <span className="tabular-nums font-medium">Rs{totals.subtotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between font-bold text-lg border-t pt-2">
+            <div className="flex justify-between gap-6 border-t pt-2 font-bold text-lg">
               <span>{t('Total')}:</span>
-              <span>Rs{totals.total.toFixed(2)}</span>
+              <span className="tabular-nums">Rs{totals.total.toFixed(2)}</span>
             </div>
 
             {/* Paid Amount Input */}

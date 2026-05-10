@@ -196,10 +196,10 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-rose-200'>
+              <div className='text-2xl font-bold text-rose-600'>
                 {fmt(data?.expenses ?? 0)}
               </div>
-              <p className='text-xs text-white/75 mt-1'>
+              <p className='text-xs text-muted-foreground mt-1'>
                 Total expenses for selected period
               </p>
             </CardContent>
