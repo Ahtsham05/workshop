@@ -96,6 +96,36 @@ export interface PurchaseReportData {
   paymentTypes: string[]
 }
 
+export interface PurchaseInvoiceItem {
+  name: string
+  nameUrdu?: string
+  quantity: number
+  unit?: string
+  unitPrice: number
+  subtotal: number
+}
+
+export interface PurchaseInvoiceDetail {
+  _id: string
+  invoiceNumber: string
+  purchaseDate: string
+  paymentType: string
+  status: string
+  totalAmount: number
+  paidAmount: number
+  balance: number
+  supplierName: string
+  supplierNameUrdu?: string
+  supplierPhone?: string
+  items: PurchaseInvoiceItem[]
+}
+
+export interface PurchaseInvoiceDetailsSummary {
+  totalPurchases: number
+  totalInvoices: number
+  totalItems: number
+}
+
 export interface ProductReportData {
   _id: string
   productName: string
@@ -668,6 +698,19 @@ export const reportsApi = createApi({
       },
       providesTags: ['PurchaseReport'],
     }),
+    getPurchaseInvoiceDetails: builder.query<{
+      purchases: PurchaseInvoiceDetail[]
+      summary: PurchaseInvoiceDetailsSummary
+      period: { startDate: string; endDate: string }
+    }, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/purchases/invoices?${searchParams.toString()}`
+      },
+      providesTags: ['PurchaseReport'],
+    }),
     getProductReport: builder.query<{
       data: ProductReportData[]
       stockSummary: any
@@ -893,6 +936,7 @@ export const {
   useGetSalesReportQuery,
   useGetSalesInvoiceDetailsQuery,
   useGetPurchaseReportQuery,
+  useGetPurchaseInvoiceDetailsQuery,
   useGetProductReportQuery,
   useGetProductDetailReportQuery,
   useGetCustomerReportQuery,

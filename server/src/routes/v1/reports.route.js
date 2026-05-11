@@ -12,6 +12,7 @@ router.route('/sales').get(auth('viewReports'), reportsController.getSalesReport
 router.route('/sales/invoices').get(auth('viewReports'), reportsController.getSalesInvoiceDetails);
 
 router.route('/purchases').get(auth('viewReports'), reportsController.getPurchaseReport);
+router.route('/purchases/invoices').get(auth('viewReports'), reportsController.getPurchaseInvoiceDetails);
 
 router.route('/products').get(auth('viewReports'), reportsController.getProductReport);
 

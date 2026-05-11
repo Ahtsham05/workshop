@@ -22,7 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
-import { useCreateSalesReturnMutation } from '@/stores/returns.api'
+import { useCreateSalesReturnMutation, type SalesReturnPayload } from '@/stores/returns.api'
 
 interface ReturnItem {
   productId: string
@@ -134,15 +134,17 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
       selectedInvoice.customer?.name ||
       'Walk-in Customer'
 
-    const payload: Record<string, unknown> = {
+    const payload: SalesReturnPayload = {
       invoiceId: selectedInvoice._id || selectedInvoice.id,
       customerName,
-      items: returnItems.map(({ productId, name, quantity, price, total }) => ({
+      items: returnItems.map(({ productId, name, quantity, price, total, originalPrice }) => ({
         productId,
         name,
         quantity,
         price,
         total,
+        originalPrice,
+        originalTotal: originalPrice * quantity,
       })),
       totalAmount,
       refundMethod,

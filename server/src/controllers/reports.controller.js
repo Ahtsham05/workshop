@@ -260,8 +260,21 @@ const getPurchaseReport = catchAsync(async (req, res) => {
           totalBalance: { $sum: effectiveBalance },
           totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
           totalCreditBalance: { $sum: { $cond: [{ $ne: ['$paymentType', 'Cash'] }, effectiveBalance, 0] } },
+          uniqueSuppliers: { $addToSet: '$supplier' },
           purchaseCount: { $sum: 1 },
           avgPurchaseValue: { $avg: '$totalAmount' },
+        },
+      },
+      {
+        $project: {
+          totalPurchases: 1,
+          totalPaid: 1,
+          totalBalance: 1,
+          totalCashPaid: 1,
+          totalCreditBalance: 1,
+          uniqueSuppliers: { $size: '$uniqueSuppliers' },
+          purchaseCount: 1,
+          avgPurchaseValue: 1,
         },
       },
     ]),
@@ -281,6 +294,120 @@ const getPurchaseReport = catchAsync(async (req, res) => {
   ]);
 
   res.status(httpStatus.OK).send({ data: purchaseData, summary: summary[0] || {}, paymentBreakdown, period: { startDate: start, endDate: end } });
+});
+
+/* ── Purchase Invoice Details ──────────────────────────────────────────────── */
+const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+
+  const purchases = await Purchase.aggregate([
+    { $match: { ...scope, purchaseDate: { $gte: start, $lte: end } } },
+    {
+      $lookup: {
+        from: 'suppliers',
+        let: { sid: '$supplier' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$sid'] } } },
+          { $project: { name: 1, phone: 1, nameUrdu: 1 } },
+        ],
+        as: 'supplierDoc',
+      },
+    },
+    { $unwind: { path: '$supplierDoc', preserveNullAndEmptyArrays: true } },
+    { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'products',
+        let: { pid: '$items.product' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$pid'] } } },
+          { $project: { name: 1, nameUrdu: 1 } },
+        ],
+        as: 'productDoc',
+      },
+    },
+    { $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: '$_id',
+        invoiceNumber: { $first: '$invoiceNumber' },
+        purchaseDate: { $first: '$purchaseDate' },
+        paymentType: { $first: '$paymentType' },
+        totalAmount: { $first: '$totalAmount' },
+        paidAmount: { $first: { $ifNull: ['$paidAmount', 0] } },
+        balance: { $first: { $ifNull: ['$balance', 0] } },
+        supplierName: { $first: { $ifNull: ['$supplierDoc.name', 'Unknown'] } },
+        supplierNameUrdu: { $first: { $ifNull: ['$supplierDoc.nameUrdu', ''] } },
+        supplierPhone: { $first: { $ifNull: ['$supplierDoc.phone', ''] } },
+        items: {
+          $push: {
+            $cond: [
+              { $ifNull: ['$items', false] },
+              {
+                name: { $ifNull: ['$productDoc.name', 'Unknown'] },
+                nameUrdu: { $ifNull: ['$productDoc.nameUrdu', ''] },
+                quantity: { $ifNull: ['$items.quantity', 0] },
+                unit: { $ifNull: ['$items.unit', ''] },
+                unitPrice: { $ifNull: ['$items.priceAtPurchase', 0] },
+                subtotal: { $ifNull: ['$items.total', 0] },
+              },
+              '$$REMOVE',
+            ],
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        effectivePaid: {
+          $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', { $min: ['$paidAmount', '$totalAmount'] }],
+        },
+        effectiveBalance: {
+          $cond: [
+            { $eq: ['$paymentType', 'Cash'] },
+            0,
+            { $max: [0, { $subtract: ['$totalAmount', { $min: ['$paidAmount', '$totalAmount'] }] }] },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        status: {
+          $cond: [{ $gte: ['$effectivePaid', '$totalAmount'] }, 'paid', 'unpaid'],
+        },
+      },
+    },
+    {
+      $project: {
+        invoiceNumber: 1,
+        purchaseDate: 1,
+        paymentType: 1,
+        totalAmount: 1,
+        paidAmount: '$effectivePaid',
+        balance: '$effectiveBalance',
+        status: 1,
+        supplierName: 1,
+        supplierNameUrdu: 1,
+        supplierPhone: 1,
+        items: 1,
+      },
+    },
+    { $sort: { purchaseDate: 1, invoiceNumber: 1 } },
+  ]);
+
+  const totalPurchases = purchases.reduce((s, p) => s + (p.totalAmount || 0), 0);
+  const totalItems = purchases.reduce(
+    (s, p) => s + (p.items || []).reduce((is, item) => is + (item.quantity || 0), 0),
+    0
+  );
+
+  res.status(httpStatus.OK).send({
+    purchases,
+    summary: { totalPurchases, totalInvoices: purchases.length, totalItems },
+    period: { startDate: start, endDate: end },
+  });
 });
 
 /* ── Products ──────────────────────────────────────────────────────────────── */
@@ -1841,6 +1968,7 @@ const getInstallmentReport = catchAsync(async (req, res) => {
 
 module.exports = {
   getSalesInvoiceDetails,
+  getPurchaseInvoiceDetails,
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
