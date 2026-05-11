@@ -347,7 +347,6 @@ const ur: Record<string, string> = {
     "subtotal": "ذیلی مجموعہ",
     "discount": "رعایت",
     "tax_rate": "ٹیکس کی شرح",
-    "total": "کل",
     "type": "قسم",
     "paid_amount": "ادا شدہ رقم",
     "payment_method": "ادائیگی کا طریقہ",

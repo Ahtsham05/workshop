@@ -347,7 +347,6 @@ const en: Record<string, string> = {
     "subtotal": "Subtotal",
     "discount": "Discount",
     "tax_rate": "Tax Rate",
-    "total": "Total",
     "type": "Type",
     "paid_amount": "Paid Amount",
     "payment_method": "Payment Method",
