@@ -537,13 +537,31 @@ const getSupplierReport = catchAsync(async (req, res) => {
         totalPaid: { $sum: supEffPaid },
         totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
         totalBalance: { $sum: supEffBal },
+        avgPurchaseValue: { $avg: '$totalAmount' },
         lastPurchase: { $max: '$purchaseDate' },
       } },
       { $sort: { totalAmount: -1 } },
     ]),
     Purchase.aggregate([
       { $match: baseMatch },
-      { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' }, totalPaid: { $sum: supEffPaid }, totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } }, totalBalance: { $sum: supEffBal }, purchaseCount: { $sum: 1 } } },
+      { $group: {
+        _id: null,
+        uniqueSuppliers: { $addToSet: '$supplier' },
+        totalPurchases: { $sum: '$totalAmount' },
+        totalPaid: { $sum: supEffPaid },
+        totalCashPaid: { $sum: { $cond: [{ $eq: ['$paymentType', 'Cash'] }, '$totalAmount', 0] } },
+        totalBalance: { $sum: supEffBal },
+        purchaseCount: { $sum: 1 },
+      } },
+      { $project: {
+        uniqueSuppliers: { $size: '$uniqueSuppliers' },
+        totalPurchases: 1,
+        totalPaid: 1,
+        totalCashPaid: 1,
+        totalBalance: 1,
+        purchaseCount: 1,
+        avgTransactionValue: { $cond: [{ $gt: ['$purchaseCount', 0] }, { $divide: ['$totalPurchases', '$purchaseCount'] }, 0] },
+      } },
     ]),
   ]);
 

@@ -1,12 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useGetSupplierReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
+import { formatDistanceToNow, format } from 'date-fns'
 import { forwardRef, useImperativeHandle } from 'react'
 import * as XLSX from 'xlsx'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
@@ -35,9 +34,8 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
             [t('phone')]: supplier.phone || 'N/A',
             [t('purchases')]: supplier.totalPurchases,
             [t('total_amount')]: supplier.totalAmount,
-            [t('cash_paid')]: supplier.totalCashPaid,
-            [t('paid')]: supplier.totalPaid,
-            [t('balance')]: supplier.totalBalance,
+            'Avg Purchase': supplier.avgPurchaseValue,
+            'Last Purchase': supplier.lastPurchase ? format(new Date(supplier.lastPurchase), 'yyyy-MM-dd') : 'N/A',
           }))
 
           const ws = XLSX.utils.json_to_sheet(excelData)
@@ -54,36 +52,35 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
 
   if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
-  const formatCurrency = (value: number) => 
+  const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
 
   return (
     <div className='space-y-6'>
-      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+      <div className='grid gap-4 md:grid-cols-3'>
+        <Card className={kpiCardClass('indigo')}>
+          <CardHeader>
+            <CardTitle className='text-sm'>{t('unique_suppliers')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>{data?.summary?.uniqueSuppliers || 0}</div>
+          </CardContent>
+        </Card>
         <Card className={kpiCardClass('orange')}>
-          <CardHeader><CardTitle className='text-sm'>{t('total_purchases')}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className='text-sm'>{t('total_purchases')}</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPurchases || 0)}</div>
             <p className='text-xs text-muted-foreground mt-1'>{data?.summary?.purchaseCount || 0} {t('invoices')}</p>
           </CardContent>
         </Card>
-        <Card className={kpiCardClass('emerald')}>
-          <CardHeader><CardTitle className='text-sm'>{t('cash_paid')}</CardTitle></CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold text-green-600'>{formatCurrency(data?.summary?.totalCashPaid || 0)}</div>
-            <p className='text-xs text-muted-foreground mt-1'>{t('cash_purchases_fully_paid')}</p>
-          </CardContent>
-        </Card>
         <Card className={kpiCardClass('cyan')}>
-          <CardHeader><CardTitle className='text-sm'>{t('total_paid')}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className='text-sm'>{t('avg_transaction')}</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalPaid || 0)}</div>
-          </CardContent>
-        </Card>
-        <Card className={kpiCardClass('rose')}>
-          <CardHeader><CardTitle className='text-sm'>{t('balance_due')}</CardTitle></CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold text-red-600'>{formatCurrency(data?.summary?.totalBalance || 0)}</div>
+            <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.avgTransactionValue || 0)}</div>
           </CardContent>
         </Card>
       </div>
@@ -100,9 +97,8 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
                 <TableHead>{t('phone')}</TableHead>
                 <TableHead className='text-right'>{t('purchases')}</TableHead>
                 <TableHead className='text-right'>{t('total_amount')}</TableHead>
-                <TableHead className='text-right'>{t('cash_paid')}</TableHead>
-                <TableHead className='text-right'>{t('paid')}</TableHead>
-                <TableHead className='text-right'>{t('balance')}</TableHead>
+                <TableHead className='text-right'>Avg Purchase</TableHead>
+                <TableHead className='text-right'>Last Purchase</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -114,13 +110,11 @@ export const SupplierReport = forwardRef<{ exportToExcel: () => void }, Supplier
                   <TableCell>{supplier.phone || 'N/A'}</TableCell>
                   <TableCell className='text-right'>{supplier.totalPurchases}</TableCell>
                   <TableCell className='text-right'>{formatCurrency(supplier.totalAmount)}</TableCell>
-                  <TableCell className='text-right text-green-600'>{formatCurrency(supplier.totalCashPaid || 0)}</TableCell>
-                  <TableCell className='text-right'>{formatCurrency(supplier.totalPaid)}</TableCell>
-                  <TableCell className='text-right'>
-                    {supplier.totalBalance > 0
-                      ? <Badge variant='destructive'>{formatCurrency(supplier.totalBalance)}</Badge>
-                      : <Badge variant='default'>{formatCurrency(0)}</Badge>
-                    }
+                  <TableCell className='text-right'>{formatCurrency(supplier.avgPurchaseValue || 0)}</TableCell>
+                  <TableCell className='text-right text-sm text-muted-foreground'>
+                    {supplier.lastPurchase
+                      ? formatDistanceToNow(new Date(supplier.lastPurchase), { addSuffix: true })
+                      : 'N/A'}
                   </TableCell>
                 </TableRow>
                 )

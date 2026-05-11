@@ -107,6 +107,7 @@ const ur: Record<string, string> = {
     "revenue": "آمدنی",
     "current_stock": "موجودہ اسٹاک",
     "unique_customers": "منفرد گاہک",
+    "unique_suppliers": "منفرد سپلائرز",
     "avg_transaction": "اوسط لین دین",
     "top_customers": "بہترین گاہک",
     "customer": "گاہک",

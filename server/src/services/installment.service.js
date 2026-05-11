@@ -189,14 +189,16 @@ const updateInstallmentPlan = async (planId, updateBody, userId) => {
 
 const deleteInstallmentPlan = async (planId) => {
   const plan = await getInstallmentPlanById(planId);
-  if (plan.productId && Number(plan.quantity || 0) > 0) {
+  // Only restore stock if the plan was NOT completed.
+  // A completed plan means the customer fully paid and kept the product,
+  // so deleting it should not put the item back into inventory.
+  if (plan.status !== 'completed' && plan.productId && Number(plan.quantity || 0) > 0) {
     await Product.findByIdAndUpdate(
       plan.productId,
       { $inc: { stockQuantity: Number(plan.quantity) } },
       { new: true }
     );
   }
-  // Delete all payments and cash book entries
   await InstallmentPayment.deleteMany({ installmentPlanId: plan._id });
   await cashBookService.deleteEntriesByReference(plan._id, 'InstallmentPlan');
   await cashBookService.deleteEntriesByReference(plan._id, 'InstallmentPayment');

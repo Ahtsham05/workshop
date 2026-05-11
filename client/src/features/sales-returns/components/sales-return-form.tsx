@@ -30,6 +30,7 @@ interface ReturnItem {
   quantity: number
   maxQuantity: number
   price: number
+  originalPrice: number
   total: number
 }
 
@@ -62,15 +63,18 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
   const handleSelectInvoice = (invoice: any) => {
     setSelectedInvoice(invoice)
     setInvoiceSearch('')
-    // Pre-fill items from the invoice
-    const items: ReturnItem[] = (invoice.items || []).map((item: any) => ({
-      productId: item.productId || item.product?._id || item.product?.id,
-      name: item.name || item.product?.name || 'Unknown',
-      quantity: 1,
-      maxQuantity: item.quantity,
-      price: item.unitPrice ?? item.price ?? 0,
-      total: item.unitPrice ?? item.price ?? 0,
-    }))
+    const items: ReturnItem[] = (invoice.items || []).map((item: any) => {
+      const unitPrice = Number(item.unitPrice ?? item.price ?? 0)
+      return {
+        productId: item.productId || item.product?._id || item.product?.id,
+        name: item.name || item.product?.name || 'Unknown',
+        quantity: 1,
+        maxQuantity: item.quantity,
+        price: unitPrice,
+        originalPrice: unitPrice,
+        total: unitPrice,
+      }
+    })
     setReturnItems(items)
   }
 
@@ -84,11 +88,28 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
     )
   }
 
+  const updatePrice = (index: number, value: string) => {
+    setReturnItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item
+        const parsed = Number(value)
+        const safe = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+        const capped = Math.min(safe, item.originalPrice)
+        return { ...item, price: capped, total: item.quantity * capped }
+      })
+    )
+  }
+
   const removeItem = (index: number) => {
     setReturnItems((prev) => prev.filter((_, i) => i !== index))
   }
 
   const totalAmount = returnItems.reduce((sum, item) => sum + item.total, 0)
+  const originalAmount = returnItems.reduce(
+    (sum, item) => sum + item.originalPrice * item.quantity,
+    0
+  )
+  const retainedAmount = Math.max(0, originalAmount - totalAmount)
 
   const handleSubmit = async () => {
     if (!selectedInvoice) {
@@ -100,13 +121,22 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
       return
     }
 
-    const payload = {
+    const rawCustomerId =
+      typeof selectedInvoice.customerId === 'object' && selectedInvoice.customerId !== null
+        ? selectedInvoice.customerId._id || selectedInvoice.customerId.id
+        : selectedInvoice.customerId
+    const customerIdStr = rawCustomerId ? String(rawCustomerId) : ''
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(customerIdStr)
+
+    const customerName =
+      selectedInvoice.customerName ||
+      selectedInvoice.walkInCustomerName ||
+      selectedInvoice.customer?.name ||
+      'Walk-in Customer'
+
+    const payload: Record<string, unknown> = {
       invoiceId: selectedInvoice._id || selectedInvoice.id,
-      customerId: selectedInvoice.customerId || null,
-      customerName:
-        selectedInvoice.customerName ||
-        selectedInvoice.walkInCustomerName ||
-        selectedInvoice.customer?.name,
+      customerName,
       items: returnItems.map(({ productId, name, quantity, price, total }) => ({
         productId,
         name,
@@ -118,6 +148,10 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
       refundMethod,
       reason,
       damageDescription,
+    }
+
+    if (isValidObjectId) {
+      payload.customerId = customerIdStr
     }
 
     try {
@@ -242,7 +276,24 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell>PKR {item.price.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <div className='space-y-1'>
+                        <Input
+                          type='number'
+                          min={0}
+                          max={item.originalPrice}
+                          step='0.01'
+                          value={item.price}
+                          onChange={(e) => updatePrice(index, e.target.value)}
+                          className='h-8 w-28'
+                        />
+                        {item.price !== item.originalPrice && (
+                          <p className='text-xs text-muted-foreground'>
+                            Original: PKR {item.originalPrice.toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>PKR {item.total.toLocaleString()}</TableCell>
                     <TableCell>
                       <Button
@@ -258,8 +309,15 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                 ))}
               </TableBody>
             </Table>
-            <div className='mt-4 text-right text-lg font-semibold'>
-              Total Return: PKR {totalAmount.toLocaleString()}
+            <div className='mt-4 space-y-1 text-right'>
+              {retainedAmount > 0 && (
+                <div className='text-sm text-green-600'>
+                  Retained as profit: PKR {retainedAmount.toLocaleString()}
+                </div>
+              )}
+              <div className='text-lg font-semibold'>
+                Total Return: PKR {totalAmount.toLocaleString()}
+              </div>
             </div>
           </CardContent>
         </Card>

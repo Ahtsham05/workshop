@@ -107,6 +107,7 @@ const en: Record<string, string> = {
     "revenue": "Revenue",
     "current_stock": "Current Stock",
     "unique_customers": "Unique Customers",
+    "unique_suppliers": "Unique Suppliers",
     "avg_transaction": "Avg Transaction",
     "top_customers": "Top Customers",
     "customer": "Customer",
