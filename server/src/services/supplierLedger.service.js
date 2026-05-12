@@ -93,6 +93,14 @@ const syncCashBookFromSupplierLedger = async (entry) => {
     return null;
   }
 
+  // Parent-module-linked entries (Purchase, LoadPurchase, …) already create their
+  // own cashbook line. Mirroring from the supplier ledger here would double-count
+  // the same cash movement, so we never write a SupplierLedger mirror in that case.
+  if (entry.referenceId) {
+    await cashBookService.deleteEntriesByReference(entry._id, 'SupplierLedger');
+    return null;
+  }
+
   const isPaymentMade = transactionType === 'payment_made';
   const amount = Number(isPaymentMade ? entry.debit : entry.credit) || 0;
 

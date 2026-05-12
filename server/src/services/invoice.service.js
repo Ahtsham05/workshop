@@ -57,11 +57,10 @@ const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, p
   const method = (invoice.paymentMethod || 'cash').toLowerCase();
   const isWalletPayment = method === 'wallet' && invoice.walletType;
 
-  // Cash book: physical / bank / card sales only — wallet payments stay in Wallet module only (no ledger double-count)
-  const shouldCreateCashBookEntry =
-    paidAmount > 0 &&
-    !isWalletPayment &&
-    (isWalkIn || method === 'bank' || method === 'card');
+  // Cash book: any non-wallet receipt (cash / bank / card / cheque) — wallet payments
+  // live in the Wallet module only. The Invoice module is the single source of
+  // truth for invoice cashbook lines so the customer ledger doesn't double-count.
+  const shouldCreateCashBookEntry = paidAmount > 0 && !isWalletPayment;
 
   if (!shouldCreateCashBookEntry || paidAmount <= 0) {
     await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');

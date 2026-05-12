@@ -118,8 +118,11 @@ const syncCashBookFromCustomerLedger = async (entry) => {
       createdBy: entry.createdBy,
     });
 
-  // Invoice-linked sale — invoice / payment lines own cashbook
-  if (transactionType === 'sale' && entry.referenceId) {
+  // Parent-module-linked entries (Invoice, LoadTransaction, SimSale, CashWithdrawal,
+  // SalesReturn, …) already write their own cashbook lines. Mirroring those here
+  // would double-count the cash movement, so we always skip when referenceId is
+  // present. Manual ledger entries (no referenceId) still flow through below.
+  if (entry.referenceId) {
     return null;
   }
 
