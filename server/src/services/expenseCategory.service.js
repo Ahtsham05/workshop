@@ -36,7 +36,7 @@ const seedDefaults = async (organizationId, branchId, userId) => {
 
 const getCategories = async (organizationId, branchId, userId) => {
   await seedDefaults(organizationId, branchId, userId);
-  return ExpenseCategory.find({ organizationId, branchId }).sort({ name: 1 }).lean();
+  return ExpenseCategory.find({ organizationId, branchId }).sort({ createdAt: -1 });
 };
 
 const createCategory = async (data, organizationId, branchId, userId) => {
@@ -59,7 +59,24 @@ const createCategory = async (data, organizationId, branchId, userId) => {
 const updateCategory = async (id, data, organizationId) => {
   const cat = await ExpenseCategory.findOne({ _id: id, organizationId });
   if (!cat) throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
-  Object.assign(cat, data);
+
+  const patch = { ...data };
+  if (patch.name !== undefined) {
+    patch.name = String(patch.name).trim();
+    if (patch.name !== cat.name) {
+      const exists = await ExpenseCategory.findOne({
+        organizationId,
+        branchId: cat.branchId,
+        name: { $regex: `^${patch.name}$`, $options: 'i' },
+        _id: { $ne: cat._id },
+      });
+      if (exists) {
+        throw new ApiError(httpStatus.CONFLICT, `Category "${patch.name}" already exists`);
+      }
+    }
+  }
+
+  Object.assign(cat, patch);
   await cat.save();
   return cat;
 };

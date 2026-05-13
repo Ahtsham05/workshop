@@ -4,6 +4,8 @@ import { ExpenseForm } from './expense-form';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
+import { MobileShopGuard } from '@/components/mobile-shop-guard';
+import { AccountsMobileShopLists } from './accounts-mobile-shop-lists';
 
 type ViewMode = 'list' | 'create' | 'edit';
 
@@ -75,6 +77,10 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
         onDelete={handleDelete}
         refreshTrigger={refreshTrigger}
       />
+
+      <MobileShopGuard fallback={null}>
+        <AccountsMobileShopLists />
+      </MobileShopGuard>
     </div>
   );
 }

@@ -247,7 +247,7 @@ const queryLoadTransactions = async (filter, options) => {
 
   return LoadTransaction.paginate(queryFilter, {
     ...queryOptions,
-    sortBy: queryOptions.sortBy || 'date:desc',
+    sortBy: queryOptions.sortBy || 'date:desc,createdAt:desc',
     populate: 'customerId',
   });
 };
