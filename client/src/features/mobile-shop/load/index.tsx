@@ -80,6 +80,9 @@ type PurchaseFormState = {
   date: string
 }
 
+/** Rupee fields: avoid float artifacts from wallet math; keep 2 decimal places. */
+const roundMoney2 = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100
+
 type LoadSaleFormState = {
   walletId: string
   walletType: string
@@ -424,25 +427,37 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       return
     }
     if (field === 'currentBalance') {
-      const selectedWallet = wallets.find(w => w.id === saleForm.walletId)
-      const walletBalance = Number(selectedWallet?.balance ?? 0)
-      const currentBal = Number(value) || 0
-      const calculatedAmount = walletBalance - currentBal
-      setSaleForm(prev => ({
-        ...prev,
-        currentBalance: value,
-        amount: calculatedAmount > 0 ? String(calculatedAmount) : '0',
-      }))
+      setSaleForm(prev => {
+        const selectedWallet = wallets.find(w => w.id === prev.walletId)
+        const walletBalance = Number(selectedWallet?.balance ?? 0)
+        const currentBal = Number(value) || 0
+        const calculatedAmount = walletBalance - currentBal
+        const amountRounded = calculatedAmount > 0 ? roundMoney2(calculatedAmount) : 0
+        const amountStr = amountRounded > 0 ? String(amountRounded) : '0'
+        let nextReceived = prev.receivedAmount
+        if (!prev.customerId || !isSaleReceivedAmountManual) {
+          nextReceived = amountStr
+        } else {
+          const currentReceived = roundMoney2(Number(prev.receivedAmount) || 0)
+          nextReceived = String(Math.max(0, Math.min(currentReceived, amountRounded)))
+        }
+        return {
+          ...prev,
+          currentBalance: value,
+          amount: amountStr,
+          receivedAmount: nextReceived,
+        }
+      })
       return
     }
     setSaleForm(prev => {
       const next = { ...prev, [field]: value }
       if (field === 'amount') {
-        const amount = Number(value) || 0
+        const amount = roundMoney2(Number(value) || 0)
         if (!isSaleReceivedAmountManual) {
           next.receivedAmount = String(amount)
         } else {
-          const currentReceived = Number(prev.receivedAmount) || 0
+          const currentReceived = roundMoney2(Number(prev.receivedAmount) || 0)
           next.receivedAmount = String(Math.max(0, Math.min(currentReceived, amount)))
         }
       }
