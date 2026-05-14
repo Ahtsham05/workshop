@@ -24,8 +24,6 @@ export interface SalesReturnPayload {
     quantity: number
     price: number
     total: number
-    originalPrice?: number
-    originalTotal?: number
   }>
   totalAmount: number
   refundMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'adjustment'

@@ -137,14 +137,12 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
     const payload: SalesReturnPayload = {
       invoiceId: selectedInvoice._id || selectedInvoice.id,
       customerName,
-      items: returnItems.map(({ productId, name, quantity, price, total, originalPrice }) => ({
+      items: returnItems.map(({ productId, name, quantity, price, total }) => ({
         productId,
         name,
         quantity,
         price,
         total,
-        originalPrice,
-        originalTotal: originalPrice * quantity,
       })),
       totalAmount,
       refundMethod,
