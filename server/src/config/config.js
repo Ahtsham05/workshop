@@ -27,6 +27,9 @@ const envVarsSchema = Joi.object()
     CLOUDINARY_API_KEY: Joi.string().description('Cloudinary API key'),
     CLOUDINARY_API_SECRET: Joi.string().description('Cloudinary API secret'),
     PEXELS_API_KEY: Joi.string().allow('').description('Pexels API key for product/category image search'),
+    GEMINI_API_KEY: Joi.string().allow('').description('Google Gemini API key for customer image AI scan'),
+    GEMINI_VISION_MODEL: Joi.string().allow('').description('Gemini vision model (default gemini-2.5-flash-lite, API v1)'),
+    GEMINI_FALLBACK_MODELS: Joi.string().allow('').description('Comma-separated fallback models if quota hit'),
   })
   .unknown();
 
@@ -77,5 +80,10 @@ module.exports = {
   },
   pexels: {
     apiKey: envVars.PEXELS_API_KEY || '',
+  },
+  gemini: {
+    apiKey: envVars.GEMINI_API_KEY || '',
+    model: envVars.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite',
+    fallbackModels: envVars.GEMINI_FALLBACK_MODELS || '',
   },
 };

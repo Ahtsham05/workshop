@@ -3,6 +3,7 @@ import { SuppliersActionDialog } from './users-action-dialog'  // Changed to Sup
 import { SuppliersDeleteDialog } from './users-delete-dialog'  // Changed to SuppliersDeleteDialog
 import { UsersInviteDialog } from './users-invite-dialog'  // Adjusted for SuppliersInviteDialog
 import SupplierImportDialog from './supplier-import-dialog'
+import { SupplierAiScanDialog } from './supplier-ai-scan-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddSuppliers } from '@/stores/supplier.slice'
@@ -57,6 +58,13 @@ export default function SuppliersDialogs({ setFetch }: any) {
         key='supplier-import'
         open={open === 'import'}
         onClose={() => setOpen(null)}
+        onImport={handleImport}
+      />
+
+      <SupplierAiScanDialog
+        key='supplier-ai-scan'
+        open={open === 'ai-scan'}
+        onOpenChange={(isOpen) => setOpen(isOpen ? 'ai-scan' : null)}
         onImport={handleImport}
       />
 

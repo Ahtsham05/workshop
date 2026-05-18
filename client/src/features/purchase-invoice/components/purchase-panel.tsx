@@ -18,7 +18,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles } from 'lucide-react'
+import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useSelector } from 'react-redux'
@@ -78,6 +79,7 @@ export default function PurchasePanel({
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const [aiScanOpen, setAiScanOpen] = useState(false)
 
   // Refs for quantity inputs to focus after product selection
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -448,20 +450,48 @@ export default function PurchasePanel({
   const totals = calculateTotals()
   const isLoading = savingType !== null
 
+  const handleApplyAiScan = useCallback(
+    (payload: PurchaseScanApplyPayload) => {
+      setPurchase((prev) => ({
+        ...prev,
+        supplier: payload.supplier,
+        items: payload.items.length > 0 ? payload.items : prev.items,
+        date: payload.date || prev.date,
+        notes: payload.notes ?? prev.notes,
+        paymentType: payload.paymentType || prev.paymentType,
+      }))
+    },
+    [setPurchase],
+  )
+
   return (
     <div className="space-y-4">
       {/* Supplier Selection Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {onBackToList && (
-              <Button variant="ghost" size="sm" onClick={onBackToList}>
-                <ArrowLeft className="h-4 w-4" />
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2">
+              {onBackToList && (
+                <Button variant="ghost" size="sm" onClick={onBackToList}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <Package className="h-5 w-5" />
+              {t('Purchase Details')}
+            </CardTitle>
+            {!isEditing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={() => setAiScanOpen(true)}
+              >
+                <Sparkles className="h-4 w-4 text-violet-600" />
+                {t('ai_scan_invoice')}
               </Button>
             )}
-            <Package className="h-5 w-5" />
-            {t('Purchase Details')}
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Show invoice number in edit mode */}
@@ -1220,6 +1250,14 @@ export default function PurchasePanel({
           </div>
         </CardContent>
       </Card>
+
+      <PurchaseAiScanDialog
+        open={aiScanOpen}
+        onOpenChange={setAiScanOpen}
+        suppliers={suppliers}
+        products={products}
+        onApply={handleApplyAiScan}
+      />
     </div>
   )
 }

@@ -14,6 +14,10 @@ router
   .post(upload.single('image'), customerController.uploadCustomerImage);
 
 router
+  .route('/scan-image')
+  .post(auth('createCustomers'), upload.single('image'), customerController.scanCustomerImage);
+
+router
   .route('/')
   .post(auth('createCustomers'), validate(customerValidation.createCustomer), customerController.createCustomer)
   .get(auth('viewCustomers'), validate(customerValidation.getCustomers), customerController.getCustomers);

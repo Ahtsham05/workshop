@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Customer } from '../data/schema'
 
-type CustomersDialogType = 'invite' | 'add' | 'edit' | 'delete' | 'import'
+type CustomersDialogType = 'invite' | 'add' | 'edit' | 'delete' | 'import' | 'ai-scan'
 
 interface CustomersContextType {
   open: CustomersDialogType | null

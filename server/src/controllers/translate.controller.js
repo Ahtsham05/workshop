@@ -37,6 +37,37 @@ const translateNameToUrdu = catchAsync(async (req, res) => {
   res.send({ translated });
 });
 
+/**
+ * Proxies Urdu → English romanization for display names.
+ */
+const translateNameToEnglish = catchAsync(async (req, res) => {
+  const text = String(req.body.text ?? '')
+    .trim()
+    .slice(0, 500);
+  if (!text) {
+    return res.send({ translated: '' });
+  }
+
+  if (/[A-Za-z]/.test(text) && !arabicScript.test(text)) {
+    return res.send({ translated: text });
+  }
+  if (!arabicScript.test(text)) {
+    return res.send({ translated: '' });
+  }
+
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+    text,
+  )}&langpair=ur|en`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    return res.send({ translated: '' });
+  }
+  const data = await response.json();
+  const translated = String(data.responseData?.translatedText ?? '').trim();
+  res.send({ translated: /[A-Za-z]/.test(translated) ? translated : '' });
+});
+
 module.exports = {
   translateNameToUrdu,
+  translateNameToEnglish,
 };

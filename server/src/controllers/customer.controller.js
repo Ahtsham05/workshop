@@ -6,6 +6,7 @@ const { Sale, Transaction } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary } = require('../middlewares/upload');
+const customerVisionService = require('../services/customerVision.service');
 
 const createCustomer = catchAsync(async (req, res) => {
   const customer = await customerService.createCustomer({ ...req.body, ...getBranchContext(req) });
@@ -65,6 +66,19 @@ const bulkAddCustomers = catchAsync(async (req, res) => {
   }
 });
 
+const scanCustomerImage = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
+  }
+
+  const result = await customerVisionService.extractCustomersFromImage(
+    req.file.buffer,
+    req.file.mimetype || 'image/jpeg',
+  );
+
+  res.send(result);
+});
+
 const uploadCustomerImage = catchAsync(async (req, res) => {
   if (!req.file) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
@@ -93,5 +107,6 @@ module.exports = {
   deleteCustomer,
   getAllCustomers,
   bulkAddCustomers,
+  scanCustomerImage,
   uploadCustomerImage,
 };

@@ -14,6 +14,10 @@ router
   .post(upload.single('image'), supplierController.uploadSupplierImage);
 
 router
+  .route('/scan-image')
+  .post(auth('createSuppliers'), upload.single('image'), supplierController.scanSupplierImage);
+
+router
   .route('/')
   .post(auth('createSuppliers'), validate(supplierValidation.createSupplier), supplierController.createSupplier)
   .get(auth('viewSuppliers'), validate(supplierValidation.getSuppliers), supplierController.getSuppliers);

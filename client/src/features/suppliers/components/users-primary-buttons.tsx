@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { useSuppliers } from '../context/users-context'
-import { PlusCircle, Upload } from 'lucide-react'
+import { PlusCircle, Upload, Sparkles } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 
 export default function UsersPrimaryButtons() {
@@ -15,6 +15,13 @@ export default function UsersPrimaryButtons() {
       >
         <span>Invite User</span> <IconMailPlus size={18} />
       </Button> */}
+      <Button
+        variant='outline'
+        className='space-x-1'
+        onClick={() => setOpen('ai-scan')}
+      >
+        <span>{t('ai_scan')}</span> <Sparkles size={18} />
+      </Button>
       <Button 
         variant='outline' 
         className='space-x-1' 

@@ -3,6 +3,17 @@ import type { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-for
 import Axios from '@/utils/Axios'
 
 /** Calls the same endpoint as the debounced hook; use after form reset when Urdu is empty. */
+export async function fetchEnglishNameSuggestion(text: string): Promise<string> {
+  const trimmed = String(text ?? '').trim()
+  if (trimmed.length < 2 || !/[\u0600-\u06FF]/.test(trimmed)) return ''
+  try {
+    const res = await Axios.post('/translate/name-to-english', { text: trimmed })
+    return String(res.data?.translated ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
 export async function fetchUrduNameSuggestion(text: string): Promise<string> {
   const trimmed = String(text ?? '').trim()
   if (trimmed.length < 2 || !/[A-Za-z]/.test(trimmed)) return ''

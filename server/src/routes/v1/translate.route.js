@@ -15,4 +15,11 @@ router
     translateController.translateNameToUrdu,
   );
 
+router
+  .route('/name-to-english')
+  .post(
+    validate(translateValidation.translateNameToEnglish),
+    translateController.translateNameToEnglish,
+  );
+
 module.exports = router;

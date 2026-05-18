@@ -4,9 +4,14 @@ const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const purchaseValidation = require('../../validations/purchase.validation');
 const purchaseController = require('../../controllers/purchase.controller');
+const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
 router.use(auth(), branchScope());
+
+router
+  .route('/scan-image')
+  .post(auth('createPurchases'), upload.single('image'), purchaseController.scanPurchaseImage);
 
 router
   .route('/')

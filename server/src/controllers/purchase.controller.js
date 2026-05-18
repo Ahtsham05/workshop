@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
+const ApiError = require('../utils/ApiError');
 const { purchaseService } = require('../services');
+const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
@@ -62,11 +64,25 @@ const getPurchaseByDate = catchAsync(async (req, res) => {
   res.send(purchase);
 });
 
+const scanPurchaseImage = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
+  }
+
+  const result = await purchaseVisionService.extractPurchaseFromImage(
+    req.file.buffer,
+    req.file.mimetype || 'image/jpeg',
+  );
+
+  res.send(result);
+});
+
 module.exports = {
   createPurchase,
   getPurchases,
   getPurchase,
   updatePurchase,
   deletePurchase,
-  getPurchaseByDate
+  getPurchaseByDate,
+  scanPurchaseImage,
 };
