@@ -702,7 +702,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     companyAddress,
     companyPhone,
     companyEmail,
-    companyTaxNumber,
   } = data
 
   const language = resolvePrintLanguage(data)
@@ -713,7 +712,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const endAlign = language === 'ur' ? 'left' : 'right'
 
   const headerBusinessName = resolveHeaderBusinessName(data, language)
-  const invoiceAddrLine = formatPrintInvoiceAddress(data.invoiceAddress, data.invoiceAddressUrdu, language)
 
   const urduTexts = {
     ...labels,
@@ -721,7 +719,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     business_address: companyAddress || labels.business_address,
     business_phone: companyPhone || labels.business_phone,
     business_email: companyEmail || labels.business_email,
-    tax_id: `${labels.tax_id_prefix} ${companyTaxNumber || labels.tax_id_fallback}`,
   }
 
   const getTypeText = (type: string) => {
@@ -764,8 +761,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="company-details">
         ${urduTexts.business_address}<br>
         ${urduTexts.business_phone}<br>
-        ${urduTexts.business_email}<br>
-        ${urduTexts.tax_id}
+        ${urduTexts.business_email}
       </div>
     </div>
     <div class="invoice-details">
@@ -786,12 +782,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
         <span><strong>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</strong></span>
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
-      ${invoiceAddrLine ? `
-      <div class="info-row">
-        <span class="info-label">${urduTexts.invoice_address}:</span>
-        <span><strong>${invoiceAddrLine}</strong></span>
-      </div>
-      ` : ''}
     </div>
     <div class="info-section">
       <div class="info-title">${urduTexts.invoice_details}:</div>
@@ -885,9 +875,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <div class="footer">
     <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
-    <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">
-      ${urduTexts.powered_by}
-    </div>
   </div>
 `
 
