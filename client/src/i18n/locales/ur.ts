@@ -685,7 +685,7 @@ const ur: Record<string, string> = {
     "purchase_date": "خرید تاریخ",
     "purchase_price": "خرید قیمت",
     "sale_price": "فروخت قیمت",
-    "select_product": "مصنوع منتخب کریں",
+    // "select_product": "مصنوع منتخب کریں",
     
     // Supplier import functionality
     "import_suppliers_from_excel": "ایکسل سے سپلائرز امپورٹ کریں",

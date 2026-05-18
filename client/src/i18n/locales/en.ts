@@ -681,7 +681,7 @@ const en: Record<string, string> = {
     "purchase_date": "Purchase date",
     "purchase_price": "Purchase price",
     "sale_price": "Sale price",
-    "select_product": "Select product",
+    // "select_product": "Select product",
     
     // Supplier import functionality
     "import_suppliers_from_excel": "Import Suppliers from Excel",
