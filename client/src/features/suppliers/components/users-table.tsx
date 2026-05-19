@@ -26,6 +26,7 @@ import {
 import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
@@ -38,13 +39,14 @@ declare module '@tanstack/react-table' {
 }
 
 interface DataTableProps {
-  columns: ColumnDef<Supplier>[]  // Changed from Customer to Supplier
-  data: Supplier[]  // Changed from Customer to Supplier
+  columns: ColumnDef<Supplier>[]
+  data: Supplier[]
   paggination: any
+  loading?: boolean
   toolbarLeading?: ReactNode
 }
 
-export function SupplierTable({ columns, data, paggination, toolbarLeading }: DataTableProps) {
+export function SupplierTable({ columns, data, paggination, loading, toolbarLeading }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -84,7 +86,8 @@ export function SupplierTable({ columns, data, paggination, toolbarLeading }: Da
   return (
     <div className='space-y-4'>
       <DataTableToolbar table={table} leading={toolbarLeading} />
-      <div className='rounded-md border'>
+      <TableLoadingOverlay loading={loading}>
+        <div className='rounded-md border'>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -148,7 +151,8 @@ export function SupplierTable({ columns, data, paggination, toolbarLeading }: Da
             )}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      </TableLoadingOverlay>
       <DataTablePagination table={table} paggination={paggination} />
     </div>
   )

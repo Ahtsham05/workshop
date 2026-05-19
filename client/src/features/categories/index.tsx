@@ -15,7 +15,6 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Input } from '@/components/ui/input'
-import { Loader2 } from 'lucide-react'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 
@@ -51,7 +50,6 @@ export default function CategoriesIndex() {
     dispatch(fetchCategories(params)).then((data) => {
       setCategories(data.payload?.results || [])
       setTotalPage(data.payload?.totalPages || 1)
-      setLimit(data.payload?.limit || 10)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [dispatch, currentPage, limit, fetch, debouncedSearch])
@@ -80,35 +78,30 @@ export default function CategoriesIndex() {
           </div>
           
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-            {loading ? (
-              <div className='flex h-[50vh] items-center justify-center'>
-                <Loader2 className='animate-spin size-8' />
-              </div>
-            ) : (
-              <CategoriesTable 
-                categories={categories}
-                toolbarLeading={
-                  <Input
-                    autoFocus
-                    placeholder={t('search_categories')}
-                    className='h-9 w-full'
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                    aria-label={t('search_categories')}
-                  />
-                }
-                paggination={{
-                  totalPage,
-                  currentPage,
-                  setCurrentPage,
-                  limit,
-                  setLimit: (n: number) => {
-                    setLimit(n)
-                    setCurrentPage(1)
-                  },
-                }}
-              />
-            )}
+            <CategoriesTable
+              categories={categories}
+              loading={loading}
+              toolbarLeading={
+                <Input
+                  autoFocus
+                  placeholder={t('search_categories')}
+                  className='h-9 w-full'
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  aria-label={t('search_categories')}
+                />
+              }
+              paggination={{
+                totalPage,
+                currentPage,
+                setCurrentPage,
+                limit,
+                setLimit: (n: number) => {
+                  setLimit(n)
+                  setCurrentPage(1)
+                },
+              }}
+            />
           </div>
         </Main>
 

@@ -12,7 +12,6 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState } from 'react'
 import { fetchCustomers } from '@/stores/customer.slice'
-import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -49,9 +48,8 @@ export default function Customers() {
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.customer } : {}),
     }
     dispatch(fetchCustomers(params)).then((data) => {
-      setCustomers(data.payload?.results)
-      setTotalPage(data.payload?.totalPages)
-      setLimit(data.payload?.limit)
+      setCustomers(data.payload?.results ?? [])
+      setTotalPage(data.payload?.totalPages ?? 1)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [dispatch, currentPage, limit, fetch, debouncedSearch])
@@ -79,36 +77,31 @@ export default function Customers() {
             <CustomerPrimaryButtons />
           </div>
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-            {
-              loading ? (
-                <div className='flex h-[50vh] items-center justify-center'><Loader2 className='animate-spin size-8' /></div>
-              ) : (
-                <CustomerTable
-                  data={customers}
-                  columns={columns}
-                  toolbarLeading={
-                    <Input
-                      autoFocus
-                      placeholder={t('search_customers')}
-                      className='h-9 w-full'
-                      value={searchInput}
-                      onChange={(event) => setSearchInput(event.target.value)}
-                      aria-label={t('search_customers')}
-                    />
-                  }
-                  paggination={{
-                    totalPage,
-                    currentPage,
-                    setCurrentPage,
-                    limit,
-                    setLimit: (n: number) => {
-                      setLimit(n)
-                      setCurrentPage(1)
-                    },
-                  }}
+            <CustomerTable
+              data={customers}
+              columns={columns}
+              loading={loading}
+              toolbarLeading={
+                <Input
+                  autoFocus
+                  placeholder={t('search_customers')}
+                  className='h-9 w-full'
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  aria-label={t('search_customers')}
                 />
-              )
-            }
+              }
+              paggination={{
+                totalPage,
+                currentPage,
+                setCurrentPage,
+                limit,
+                setLimit: (n: number) => {
+                  setLimit(n)
+                  setCurrentPage(1)
+                },
+              }}
+            />
           </div>
         </Main>
 

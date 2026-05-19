@@ -10,7 +10,6 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
@@ -26,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Product } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import type { ReactNode } from 'react'
 
@@ -40,6 +40,7 @@ interface DataTableProps {
   columns: ColumnDef<Product>[]
   data: Product[]
   paggination: any
+  loading?: boolean
   onSelectedRowsChange?: (selectedRows: Product[]) => void
   inlineEditMode?: boolean
   editValues?: Record<string, { price?: number; cost?: number; stockQuantity?: number }>
@@ -50,7 +51,8 @@ interface DataTableProps {
 export function ProductTable({ 
   columns, 
   data, 
-  paggination, 
+  paggination,
+  loading,
   onSelectedRowsChange, 
   inlineEditMode = false,
   editValues = {},
@@ -85,35 +87,25 @@ export function ProductTable({
       rowSelection,
       columnFilters,
     },
-    initialState: {
-      pagination: {
-        pageSize: paggination.limit, // Set initial page size from props
-      },
-    },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    manualPagination: true,
+    pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    manualPagination: false, // Use client-side pagination for display
-    pageCount: 1, // We handle pagination on the server
   })
-  
-  // Sync table page size with backend limit whenever it changes
-  React.useEffect(() => {
-    table.setPageSize(paggination.limit)
-  }, [paggination.limit, table])
 
   return (
     <div className='space-y-4'>
       <DataTableToolbar table={table} leading={toolbarLeading} />
-      <div className='rounded-md border'>
+      <TableLoadingOverlay loading={loading}>
+        <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -217,7 +209,8 @@ export function ProductTable({
             )}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      </TableLoadingOverlay>
       <DataTablePagination table={table} paggination={paggination} />
     </div>
   )

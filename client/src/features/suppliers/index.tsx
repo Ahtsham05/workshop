@@ -14,7 +14,6 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState } from 'react'
 import { fetchSuppliers } from '@/stores/supplier.slice'
-import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
@@ -85,39 +84,31 @@ export default function Suppliers() {
           <SupplierPrimaryButtons />
         </div>
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          {
-            loading ? (
-              <div className='flex h-[50vh] items-center justify-center'>
-                <Loader2 className='animate-spin size-8' />
-                <span className="sr-only">{t('loading')}</span>
-              </div>
-            ) : (
-              <SupplierTable
-                data={suppliers}
-                columns={columns}
-                toolbarLeading={
-                  <Input
-                    autoFocus
-                    placeholder={t('search_suppliers')}
-                    className='h-9 w-full'
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                    aria-label={t('search_suppliers')}
-                  />
-                }
-                paggination={{
-                  totalPage,
-                  currentPage,
-                  setCurrentPage,
-                  limit,
-                  setLimit: (n: number) => {
-                    setLimit(n)
-                    setCurrentPage(1)
-                  },
-                }}
+          <SupplierTable
+            data={suppliers}
+            columns={columns}
+            loading={loading}
+            toolbarLeading={
+              <Input
+                autoFocus
+                placeholder={t('search_suppliers')}
+                className='h-9 w-full'
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                aria-label={t('search_suppliers')}
               />
-            )
-          }
+            }
+            paggination={{
+              totalPage,
+              currentPage,
+              setCurrentPage,
+              limit,
+              setLimit: (n: number) => {
+                setLimit(n)
+                setCurrentPage(1)
+              },
+            }}
+          />
         </div>
       </Main>
 

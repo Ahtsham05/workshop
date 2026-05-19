@@ -11,7 +11,6 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
@@ -26,6 +25,7 @@ import {
 import { Customer } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import type { ReactNode } from 'react'
 
@@ -40,10 +40,11 @@ interface DataTableProps {
   columns: ColumnDef<Customer>[]
   data: Customer[]
   paggination: any
+  loading?: boolean
   toolbarLeading?: ReactNode
 }
 
-export function CustomerTable({ columns, data, paggination, toolbarLeading }: DataTableProps) {
+export function CustomerTable({ columns, data, paggination, loading, toolbarLeading }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -67,9 +68,10 @@ export function CustomerTable({ columns, data, paggination, toolbarLeading }: Da
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    manualPagination: true,
+    pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
@@ -78,7 +80,8 @@ export function CustomerTable({ columns, data, paggination, toolbarLeading }: Da
   return (
     <div className='space-y-4'>
       <DataTableToolbar table={table} leading={toolbarLeading} />
-      <div className='rounded-md border'>
+      <TableLoadingOverlay loading={loading}>
+        <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -143,7 +146,8 @@ export function CustomerTable({ columns, data, paggination, toolbarLeading }: Da
             )}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      </TableLoadingOverlay>
       <DataTablePagination table={table} paggination={paggination} />
     </div>
   )

@@ -48,9 +48,7 @@ export function DataTablePagination<TData>({
           <Select
             value={`${limit}`}
             onValueChange={(value) => {
-              setLimit(Number(value)); // Update the page size (limit)
-              setCurrentPage(1); // Reset to first page when page size changes
-              table.setPageSize(Number(value))
+              setLimit(Number(value))
             }}
           >
             <SelectTrigger className="h-8 w-[70px]">

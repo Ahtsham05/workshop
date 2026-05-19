@@ -10,7 +10,6 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
@@ -29,6 +28,7 @@ import { Category } from '@/stores/category.slice'
 import { useCategoryColumns } from './categories-columns'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -40,10 +40,11 @@ declare module '@tanstack/react-table' {
 interface CategoriesTableProps {
   categories: Category[]
   paggination: any
+  loading?: boolean
   toolbarLeading?: ReactNode
 }
 
-export function CategoriesTable({ categories, paggination, toolbarLeading }: CategoriesTableProps) {
+export function CategoriesTable({ categories, paggination, loading, toolbarLeading }: CategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -56,8 +57,9 @@ export function CategoriesTable({ categories, paggination, toolbarLeading }: Cat
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    manualPagination: true,
+    pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
@@ -75,7 +77,8 @@ export function CategoriesTable({ categories, paggination, toolbarLeading }: Cat
   return (
     <div className="space-y-4">
       <DataTableToolbar table={table} leading={toolbarLeading} />
-      <div className="rounded-md border">
+      <TableLoadingOverlay loading={loading}>
+        <div className="rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -136,7 +139,8 @@ export function CategoriesTable({ categories, paggination, toolbarLeading }: Cat
             )}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      </TableLoadingOverlay>
       <DataTablePagination table={table} paggination={paggination} />
     </div>
   )

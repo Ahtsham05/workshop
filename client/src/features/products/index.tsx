@@ -15,7 +15,6 @@ import { AppDispatch } from '@/stores/store'
 import { useEffect, useState, useCallback } from 'react'
 import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
 import { fetchCategories } from '@/stores/category.slice'
-import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { LanguageSwitch } from '@/components/language-switch'
@@ -281,40 +280,35 @@ export default function Products() {
             </div>
           </div>
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-            {
-              loading ? (
-                <div className='flex h-[50vh] items-center justify-center'><Loader2 className='animate-spin size-8' /></div>
-              ) : (
-                <ProductTable
-                  data={products}
-                  columns={columns}
-                  toolbarLeading={
-                    <Input
-                      autoFocus
-                      placeholder={t('search_products')}
-                      className='h-9 w-full'
-                      value={searchInput}
-                      onChange={(event) => setSearchInput(event.target.value)}
-                      aria-label={t('search_products')}
-                    />
-                  }
-                  paggination={{
-                    totalPage,
-                    currentPage,
-                    setCurrentPage,
-                    limit,
-                    setLimit: (n: number) => {
-                      setLimit(n)
-                      setCurrentPage(1)
-                    },
-                  }}
-                  onSelectedRowsChange={handleSelectedRowsChange}
-                  inlineEditMode={inlineEditMode}
-                  editValues={editValues}
-                  onEditValueChange={handleEditValueChange}
+            <ProductTable
+              data={products}
+              columns={columns}
+              loading={loading}
+              toolbarLeading={
+                <Input
+                  autoFocus
+                  placeholder={t('search_products')}
+                  className='h-9 w-full'
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  aria-label={t('search_products')}
                 />
-              )
-            }
+              }
+              paggination={{
+                totalPage,
+                currentPage,
+                setCurrentPage,
+                limit,
+                setLimit: (n: number) => {
+                  setLimit(n)
+                  setCurrentPage(1)
+                },
+              }}
+              onSelectedRowsChange={handleSelectedRowsChange}
+              inlineEditMode={inlineEditMode}
+              editValues={editValues}
+              onEditValueChange={handleEditValueChange}
+            />
           </div>
         </Main>
 
