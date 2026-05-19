@@ -988,98 +988,110 @@ const getAnalytics = async (scope, year) => {
 
 /**
  * Returns per-class -> per-student -> per-month fee data for a full year.
+ * Includes every active student (including zero-fee / no-voucher students).
  * Optional classId filter.
  */
 const getYearlyFeeReport = async (scope, year, classId) => {
   const af = aggFilter(scope);
-  const match = { ...af, year: Number(year) };
-  if (classId) match.classId = new mongoose.Types.ObjectId(classId);
+  const tenantFilter = getTenantFilter(scope);
+  const yearNum = Number(year);
+  const match = { ...af, year: yearNum };
+  const classObjectId = classId ? new mongoose.Types.ObjectId(classId) : null;
+  if (classObjectId) match.classId = classObjectId;
 
-  const vouchers = await FeeVoucher.aggregate([
-    { $match: match },
-    {
-      $lookup: {
-        from: 'students',
-        localField: 'studentId',
-        foreignField: '_id',
-        as: 'student',
-      },
-    },
-    { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: 'schoolclasses',
-        localField: 'classId',
-        foreignField: '_id',
-        as: 'class',
-      },
-    },
-    { $unwind: { path: '$class', preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        studentId: 1,
-        classId: 1,
-        className: '$class.name',
-        classOrder: '$class.order',
-        name: { $concat: [{ $ifNull: ['$student.firstName', ''] }, ' ', { $ifNull: ['$student.lastName', ''] }] },
-        rollNumber: '$student.rollNumber',
-        admissionNumber: '$student.admissionNumber',
-        fatherName: '$student.parent.fatherName',
-        phone: '$student.parent.phone',
-        month: 1,
-        netAmount: 1,
-        paidAmount: 1,
-        status: 1,
-      },
-    },
-    { $sort: { classOrder: 1, className: 1, rollNumber: 1 } },
+  const studentFilter = {
+    ...tenantFilter,
+    status: 'active',
+    ...(classObjectId ? { classId: classObjectId } : {}),
+  };
+  const classFilter = {
+    ...tenantFilter,
+    ...(classObjectId ? { _id: classObjectId } : {}),
+  };
+
+  const [voucherRows, students, classes] = await Promise.all([
+    FeeVoucher.find(match)
+      .select('studentId classId month netAmount paidAmount status')
+      .lean(),
+    Student.find(studentFilter)
+      .select('firstName lastName rollNumber admissionNumber parent classId feeStructure')
+      .lean(),
+    SchoolClass.find(classFilter).select('name order').sort({ order: 1, name: 1 }).lean(),
   ]);
 
-  // Group by class -> student
-  const classMap = {};
-  vouchers.forEach((v) => {
+  // classId -> studentId -> month -> voucher
+  const voucherMap = {};
+  voucherRows.forEach((v) => {
     const cKey = String(v.classId);
-    if (!classMap[cKey]) {
-      classMap[cKey] = {
-        classId: cKey,
-        className: v.className || 'Unknown',
-        students: {},
-      };
-    }
     const sKey = String(v.studentId);
-    if (!classMap[cKey].students[sKey]) {
-      classMap[cKey].students[sKey] = {
-        studentId: sKey,
-        name: v.name,
-        rollNumber: v.rollNumber,
-        admissionNumber: v.admissionNumber,
-        fatherName: v.fatherName || '',
-        phone: v.phone || '',
-        months: {},
-        totalPaid: 0,
-        totalPending: 0,
-      };
-    }
-    const st = classMap[cKey].students[sKey];
-    st.months[v.month] = { netAmount: v.netAmount, paidAmount: v.paidAmount, status: v.status };
-    st.totalPaid += v.paidAmount || 0;
-    st.totalPending += Math.max(0, (v.netAmount || 0) - (v.paidAmount || 0));
-  });
-
-  // Convert to array
-  return Object.values(classMap).map((cls) => {
-    const students = Object.values(cls.students);
-    const classTotalPaid = students.reduce((s, st) => s + st.totalPaid, 0);
-    const classTotalPending = students.reduce((s, st) => s + st.totalPending, 0);
-    return {
-      classId: cls.classId,
-      className: cls.className,
-      totalStudents: students.length,
-      classTotalPaid,
-      classTotalPending,
-      students,
+    if (!voucherMap[cKey]) voucherMap[cKey] = {};
+    if (!voucherMap[cKey][sKey]) voucherMap[cKey][sKey] = {};
+    voucherMap[cKey][sKey][v.month] = {
+      netAmount: v.netAmount || 0,
+      paidAmount: v.paidAmount || 0,
+      status: v.status,
     };
   });
+
+  const buildStudentRow = (student) => {
+    const sid = student._id.toString();
+    const cid = student.classId.toString();
+    const monthlyData = voucherMap[cid]?.[sid] || {};
+    const months = {};
+    let totalPaid = 0;
+    let totalPending = 0;
+
+    const configuredFee =
+      (student.feeStructure?.monthlyFee || 0) + (student.feeStructure?.transportFee || 0);
+
+    MONTH_NAMES.forEach((m) => {
+      const entry = monthlyData[m];
+      if (entry) {
+        months[m] = entry;
+        totalPaid += entry.paidAmount || 0;
+        totalPending += Math.max(0, (entry.netAmount || 0) - (entry.paidAmount || 0));
+      } else if (configuredFee === 0) {
+        months[m] = { netAmount: 0, paidAmount: 0, status: 'paid' };
+      }
+    });
+
+    return {
+      studentId: sid,
+      name: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+      rollNumber: student.rollNumber || '',
+      admissionNumber: student.admissionNumber || '',
+      fatherName: student.parent?.fatherName || '',
+      phone: student.parent?.phone || '',
+      months,
+      totalPaid,
+      totalPending,
+    };
+  };
+
+  const sortStudents = (rows) =>
+    rows.sort((a, b) =>
+      (a.rollNumber || '').localeCompare(b.rollNumber || '', undefined, { numeric: true }),
+    );
+
+  const result = classes.map((cls) => {
+    const cid = cls._id.toString();
+    const studentsInClass = students.filter((s) => String(s.classId) === cid);
+    const studentRows = sortStudents(studentsInClass.map(buildStudentRow));
+
+    const classTotalPaid = studentRows.reduce((s, st) => s + st.totalPaid, 0);
+    const classTotalPending = studentRows.reduce((s, st) => s + st.totalPending, 0);
+
+    return {
+      classId: cid,
+      className: cls.name,
+      totalStudents: studentRows.length,
+      classTotalPaid,
+      classTotalPending,
+      students: studentRows,
+    };
+  });
+
+  return result.filter((cls) => cls.totalStudents > 0);
 };
 
 /**

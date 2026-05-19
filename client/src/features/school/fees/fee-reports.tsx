@@ -559,14 +559,18 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                         <td className="px-2 py-1.5 text-muted-foreground">{s.phone || '-'}</td>
                         {MONTHS.map((m) => {
                           const e = s.months[m];
+                          const net = e?.netAmount || 0;
+                          const paid = e?.paidAmount || 0;
                           return (
                             <td key={m} className={`px-1 py-1.5 text-center ${m === month ? 'bg-blue-50/60' : ''}`}>
                               {e ? (
-                                e.status === 'paid'
-                                  ? <span className="text-emerald-600 font-semibold">{(e.paidAmount || 0).toLocaleString()}</span>
-                                  : (e.paidAmount || 0) > 0
-                                    ? <span className="text-blue-600 font-medium" title={`Partial: ${e.paidAmount || 0}/${e.netAmount || 0}`}>{(e.paidAmount || 0).toLocaleString()}<span className="text-[9px] text-muted-foreground">/{(e.netAmount || 0).toLocaleString()}</span></span>
-                                    : <span className="text-red-500 font-semibold">{(e.netAmount || 0).toLocaleString()}</span>
+                                net === 0 && paid === 0
+                                  ? <span className="text-muted-foreground font-medium" title="Zero fee">0</span>
+                                  : e.status === 'paid'
+                                    ? <span className="text-emerald-600 font-semibold">{paid.toLocaleString()}</span>
+                                    : paid > 0
+                                      ? <span className="text-blue-600 font-medium" title={`Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>
+                                      : <span className="text-red-500 font-semibold">{net.toLocaleString()}</span>
                               ) : <span className="text-muted-foreground/30">-</span>}
                             </td>
                           );
