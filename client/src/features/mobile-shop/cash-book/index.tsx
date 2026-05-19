@@ -21,16 +21,14 @@ import {
   useGetOpeningBalanceQuery,
   useSetOpeningBalanceMutation,
 } from '@/stores/mobile-shop.api'
-
-const formatDateInput = (date: Date) => {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+import {
+  formatBusinessDateTime,
+  getBusinessToday,
+  shiftBusinessCalendarDate,
+} from '@/lib/business-timezone'
 
 export default function CashBookPage() {
-  const today = useMemo(() => formatDateInput(new Date()), [])
+  const today = useMemo(() => getBusinessToday(), [])
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [cashBookPage, setCashBookPage] = useState(1)
@@ -40,14 +38,10 @@ export default function CashBookPage() {
     if (!startDate || !endDate) {
       return undefined
     }
-    // Parse as local date (not UTC) so midnight = local midnight regardless of timezone
-    const [sy, sm, sd] = startDate.split('-').map(Number)
-    const [ey, em, ed] = endDate.split('-').map(Number)
-    const start = new Date(sy, sm - 1, sd, 0, 0, 0, 0)
-    const end = new Date(ey, em - 1, ed, 23, 59, 59, 999)
+    // Send calendar dates only; server applies Pakistan (PKT) day boundaries.
     return {
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
+      startDate,
+      endDate,
       page: cashBookPage,
       limit: cashBookLimit,
     }
@@ -77,27 +71,24 @@ export default function CashBookPage() {
   }
 
   const setTodayFilter = () => {
-    const value = formatDateInput(new Date())
+    const value = getBusinessToday()
     setStartDate(value)
     setEndDate(value)
     setCashBookPage(1)
   }
 
   const setYesterdayFilter = () => {
-    const date = new Date()
-    date.setDate(date.getDate() - 1)
-    const value = formatDateInput(date)
+    const value = shiftBusinessCalendarDate(getBusinessToday(), -1)
     setStartDate(value)
     setEndDate(value)
     setCashBookPage(1)
   }
 
   const setLast7DaysFilter = () => {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - 6)
-    setStartDate(formatDateInput(start))
-    setEndDate(formatDateInput(end))
+    const end = getBusinessToday()
+    const start = shiftBusinessCalendarDate(end, -6)
+    setStartDate(start)
+    setEndDate(end)
     setCashBookPage(1)
   }
 
@@ -248,7 +239,7 @@ export default function CashBookPage() {
             <TableBody>
               {(entries?.results ?? []).filter((e) => e.paymentMethod !== 'wallet' && e.source !== 'opening_balance').map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell>{new Date(entry.date).toLocaleString()}</TableCell>
+                  <TableCell>{formatBusinessDateTime(entry.date)}</TableCell>
                   <TableCell>{entry.source ? entry.source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-'}</TableCell>
                   <TableCell className='capitalize'>{entry.paymentMethod}</TableCell>
                   <TableCell className='text-red-600'>

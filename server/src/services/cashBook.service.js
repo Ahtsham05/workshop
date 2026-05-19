@@ -2,6 +2,10 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { CashBookEntry } = require('../models');
 const ApiError = require('../utils/ApiError');
+const {
+  applyBusinessDateRange,
+  parseBusinessDateBoundary,
+} = require('../utils/businessTimezone');
 
 const normalizePaymentMethod = (paymentMethod = 'cash') => {
   const value = String(paymentMethod).trim().toLowerCase();
@@ -61,16 +65,10 @@ const queryEntries = async (filter, options) => {
     delete queryOptions.search;
   }
 
-  if (queryOptions.startDate || queryOptions.endDate) {
-    queryFilter.date = {};
-    if (queryOptions.startDate) {
-      queryFilter.date.$gte = new Date(queryOptions.startDate);
-      delete queryOptions.startDate;
-    }
-    if (queryOptions.endDate) {
-      queryFilter.date.$lte = new Date(queryOptions.endDate);
-      delete queryOptions.endDate;
-    }
+  applyBusinessDateRange(queryOptions);
+  if (queryOptions.date) {
+    queryFilter.date = queryOptions.date;
+    delete queryOptions.date;
   }
 
   return CashBookEntry.paginate(queryFilter, {
@@ -98,22 +96,29 @@ const getSummary = async (filter = {}) => {
   baseMatch.paymentMethod = { $ne: 'wallet' };
   baseMatch.source = { $ne: 'opening_balance' };
 
+  const periodStartBoundary = filter.startDate
+    ? parseBusinessDateBoundary(filter.startDate, false)
+    : null;
+  const periodEndBoundary = filter.endDate
+    ? parseBusinessDateBoundary(filter.endDate, true)
+    : null;
+
   // Build the date-range match for the selected period
   const periodMatch = { ...baseMatch };
-  if (filter.startDate || filter.endDate) {
+  if (periodStartBoundary || periodEndBoundary) {
     periodMatch.date = {};
-    if (filter.startDate) {
-      periodMatch.date.$gte = new Date(filter.startDate);
+    if (periodStartBoundary) {
+      periodMatch.date.$gte = periodStartBoundary;
     }
-    if (filter.endDate) {
-      periodMatch.date.$lte = new Date(filter.endDate);
+    if (periodEndBoundary) {
+      periodMatch.date.$lte = periodEndBoundary;
     }
   }
 
-  // Build the opening balance match (all entries BEFORE startDate)
+  // Build the opening balance match (all entries BEFORE start of selected period in PKT)
   const openingMatch = { ...baseMatch };
-  if (filter.startDate) {
-    openingMatch.date = { $lt: new Date(filter.startDate) };
+  if (periodStartBoundary) {
+    openingMatch.date = { $lt: periodStartBoundary };
   }
 
   const aggregateGroup = {
@@ -133,7 +138,7 @@ const getSummary = async (filter = {}) => {
 
   const [periodResult, openingResult, manualObEntry] = await Promise.all([
     CashBookEntry.aggregate([{ $match: periodMatch }, { $group: aggregateGroup }]),
-    filter.startDate
+    periodStartBoundary
       ? CashBookEntry.aggregate([{ $match: openingMatch }, { $group: aggregateGroup }])
       : Promise.resolve([]),
     CashBookEntry.findOne({ ...manualObFilter, source: 'opening_balance' }),

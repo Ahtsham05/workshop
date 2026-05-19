@@ -3,27 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, RepairJob, ServiceInvoice, CashWithdrawal, SimSale, Purchase } = require('../models');
 const { isValidObjectId } = mongoose;
 
-const parseDateBoundary = (value, isEnd = false) => {
-  if (!value) return null;
-  const raw = String(value);
-  const datePart = raw.slice(0, 10);
-  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
-
-  if (dateOnlyMatch) {
-    const year = Number(dateOnlyMatch[1]);
-    const month = Number(dateOnlyMatch[2]) - 1;
-    const day = Number(dateOnlyMatch[3]);
-    return isEnd
-      ? new Date(Date.UTC(year, month, day, 23, 59, 59, 999))
-      : new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-  if (isEnd) parsed.setUTCHours(23, 59, 59, 999);
-  else parsed.setUTCHours(0, 0, 0, 0);
-  return parsed;
-};
+const { parseBusinessDateBoundary: parseDateBoundary } = require('../utils/businessTimezone');
 
 const getRange = (query) => {
   const now = new Date();
