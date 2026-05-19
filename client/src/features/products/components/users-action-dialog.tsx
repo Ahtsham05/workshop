@@ -154,7 +154,42 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
       },
   })
 
-  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+  useEffect(() => {
+    if (!open) return
+    if (isEdit && currentRow) {
+      form.reset({
+        name: currentRow.name || '',
+        nameUrdu: currentRow.nameUrdu || '',
+        description: currentRow.description || '',
+        barcode: currentRow.barcode || '',
+        price: currentRow.price || 0,
+        cost: currentRow.cost || 0,
+        stockQuantity: currentRow.stockQuantity || 0,
+        unit: currentRow.unit || DEFAULT_UNIT,
+        unitConversions: currentRow.unitConversions || [],
+        image: currentRow.image || undefined,
+        categories: currentRow.categories || [],
+      })
+    } else {
+      form.reset({
+        name: '',
+        nameUrdu: '',
+        description: '',
+        barcode: '',
+        stockQuantity: 0,
+        price: 0,
+        cost: 0,
+        unit: DEFAULT_UNIT,
+        unitConversions: [],
+        image: undefined,
+        categories: [],
+      })
+    }
+    setImageRemoved(false)
+  }, [open, currentRow, isEdit, form])
+
+  const productSessionKey = open ? (currentRow?.id ?? currentRow?._id ?? 'new') : null
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
 
   const onSubmit = async (values: productForm) => {
     if (isEdit) {

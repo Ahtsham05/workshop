@@ -84,7 +84,8 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         },
   })
 
-  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+  const customerSessionKey = open ? (currentRow?.id ?? 'new') : null
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', customerSessionKey)
 
   const dispatch = useDispatch<AppDispatch>()
 

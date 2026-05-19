@@ -90,7 +90,8 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
         },
   })
   
-  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+  const supplierSessionKey = open ? (currentRow?.id ?? 'new') : null
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', supplierSessionKey)
   
   // Watch the phone field and update whatsapp field automatically
   const phoneValue = form.watch('phone')

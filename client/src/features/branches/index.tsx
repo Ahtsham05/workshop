@@ -85,8 +85,14 @@ export default function BranchesPage() {
     },
   })
 
-  useAutoUrduNameFromEnglish(branchForm, 'name', 'nameUrdu')
-  useAutoUrduNameFromEnglish(branchForm, 'location.address', 'location.addressUrdu')
+  const branchSessionKey = dialogOpen ? (selectedBranch?._id ?? 'new') : null
+  useAutoUrduNameFromEnglish(branchForm, 'name', 'nameUrdu', branchSessionKey)
+  useAutoUrduNameFromEnglish(
+    branchForm,
+    'location.address',
+    'location.addressUrdu',
+    branchSessionKey ? `${branchSessionKey}:address` : null,
+  )
 
   const { data, isLoading, refetch } = useGetBranchesQuery({ page, limit: 20 })
   const [createBranch, { isLoading: isCreating }] = useCreateBranchMutation()
