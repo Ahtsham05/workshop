@@ -1,4 +1,7 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
+import { fetchSuppliers } from '@/stores/supplier.slice'
 import {
   Dialog,
   DialogContent,
@@ -50,9 +53,15 @@ import type { Purchase, PurchaseItem, Supplier } from '../index'
 import {
   buildPurchaseItemFromMatch,
   getProductId,
+  getSupplierId,
   matchProductFromScan,
   matchSupplierFromScan,
 } from '../utils/scan-matching'
+import {
+  extractFirstPhone,
+  normalizeSuppliersList,
+} from '../utils/catalog-helpers'
+import type { ScannedSupplierHint } from '../utils/scan-matching'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 export interface PurchaseScanApplyPayload {
@@ -89,6 +98,9 @@ const FULLSCREEN_DIALOG_CLASS = cn(
   '!translate-x-0 !translate-y-0 rounded-none border-0 p-0 shadow-lg overflow-hidden',
   'sm:!max-w-none data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
 )
+
+/** Popovers must sit above the fullscreen dialog (z-[100]); default popover is z-50. */
+const SCAN_POPOVER_CLASS = 'z-[200] w-72 p-0'
 
 function splitScannedNames(rawName: string, rawNameUrdu: string) {
   let name = rawName.trim()
@@ -156,34 +168,45 @@ function ProductReviewRow({
         ) : null}
       </TableCell>
       <TableCell className="align-top">
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setOpen} modal>
           <PopoverTrigger asChild>
             <Button
+              type="button"
               variant="outline"
               size="sm"
               className="h-8 w-full max-w-[220px] justify-between"
             >
               <span className="truncate text-left">
-                {matched?.name || t('select_product')}
+                {matched
+                  ? [matched.name, matched.nameUrdu].filter(Boolean).join(' · ')
+                  : t('select_product')}
               </span>
               <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-0" align="start">
+          <PopoverContent className={SCAN_POPOVER_CLASS} align="start" side="bottom">
             <Command shouldFilter={false}>
               <CommandInput
                 placeholder={t('search_products')}
                 value={search}
                 onValueChange={setSearch}
               />
-              <CommandList className="max-h-48">
+              <CommandList className="max-h-56">
                 <CommandGroup>
-                  {filtered.slice(0, 40).map((p) => (
+                  {filtered.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      {products.length === 0 ? t('loading') : t('no_results')}
+                    </p>
+                  ) : null}
+                  {filtered.slice(0, 50).map((p) => {
+                    const pid = getProductId(p)
+                    return (
                     <CommandItem
-                      key={getProductId(p)}
-                      value={getProductId(p)}
+                      key={pid || p.name}
+                      value={`${pid}-${p.name}`}
                       onSelect={() => {
                         onProductPick(line.id, p)
+                        setSearch('')
                         setOpen(false)
                       }}
                     >
@@ -196,7 +219,8 @@ function ProductReviewRow({
                         ) : null}
                       </div>
                     </CommandItem>
-                  ))}
+                    )
+                  })}
                 </CommandGroup>
               </CommandList>
             </Command>
@@ -260,11 +284,19 @@ function ProductReviewRow({
 export function PurchaseAiScanDialog({
   open,
   onOpenChange,
-  suppliers,
+  suppliers: suppliersProp,
   products,
   onApply,
 }: PurchaseAiScanDialogProps) {
   const { t } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
+  const suppliersFromRedux = useSelector((state: RootState) => state.supplier.data)
+  const suppliers = useMemo(() => {
+    const fromProp = normalizeSuppliersList(suppliersProp)
+    if (fromProp.length > 0) return fromProp
+    return normalizeSuppliersList(suppliersFromRedux)
+  }, [suppliersProp, suppliersFromRedux])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -278,6 +310,49 @@ export function PurchaseAiScanDialog({
   const [notes, setNotes] = useState('')
   const [purchaseDate, setPurchaseDate] = useState('')
   const [paymentType, setPaymentType] = useState<Purchase['paymentType'] | ''>('')
+  const [lastScannedSupplier, setLastScannedSupplier] = useState<ScannedSupplierHint | null>(
+    null,
+  )
+
+  useEffect(() => {
+    if (!open) return
+    if (suppliers.length > 0) return
+    dispatch(fetchSuppliers({ page: 1, limit: 2000 }))
+  }, [open, suppliers.length, dispatch])
+
+  useEffect(() => {
+    if (step !== 'review' || selectedSupplierId || !lastScannedSupplier) return
+    const matched = matchSupplierFromScan(lastScannedSupplier, suppliers)
+    if (matched) {
+      setSelectedSupplierId(getSupplierId(matched))
+    }
+  }, [step, selectedSupplierId, lastScannedSupplier, suppliers])
+
+  useEffect(() => {
+    if (step !== 'review' || products.length === 0 || lines.length === 0) return
+    setLines((prev) =>
+      prev.map((line) => {
+        if (line.matchedProductId) return line
+        const matched = matchProductFromScan(
+          {
+            name: line.scannedName,
+            nameUrdu: line.scannedNameUrdu,
+            barcode: line.scannedBarcode,
+          },
+          products,
+        )
+        if (!matched) return line
+        return {
+          ...line,
+          matchedProductId: getProductId(matched),
+          sellingPrice:
+            line.sellingPrice > 0 ? line.sellingPrice : matched.price || matched.cost || 0,
+          purchasePrice:
+            line.purchasePrice > 0 ? line.purchasePrice : matched.cost || 0,
+        }
+      }),
+    )
+  }, [step, products, lines.length])
 
   const setImage = useCallback((file: File) => {
     setImageFile(file)
@@ -304,6 +379,7 @@ export function PurchaseAiScanDialog({
     setPurchaseDate('')
     setPaymentType('')
     setSupplierSearch('')
+    setLastScannedSupplier(null)
   }, [])
 
   const handleScan = useCallback(async () => {
@@ -349,13 +425,19 @@ export function PurchaseAiScanDialog({
         String(supplierRaw.name || ''),
         String(supplierRaw.nameUrdu || ''),
       )
-      const matchedSupplier = matchSupplierFromScan(
-        { name, nameUrdu, phone: String(supplierRaw.phone || '') },
-        suppliers,
-      )
-      setSelectedSupplierId(matchedSupplier?._id || '')
+      const scannedSupplierHint: ScannedSupplierHint = {
+        name,
+        nameUrdu,
+        phone: extractFirstPhone(String(supplierRaw.phone || '')),
+        matchedSupplierId: supplierRaw.matchedSupplierId as string | undefined,
+      }
+      setLastScannedSupplier(scannedSupplierHint)
+
+      const matchedSupplier = matchSupplierFromScan(scannedSupplierHint, suppliers)
+      setSelectedSupplierId(matchedSupplier ? getSupplierId(matchedSupplier) : '')
       setScannedSupplierLabel(
-        [name, nameUrdu, supplierRaw.phone].filter(Boolean).join(' · '),
+        [name, nameUrdu].filter(Boolean).join(' · ') ||
+          [name, nameUrdu, scannedSupplierHint.phone].filter(Boolean).join(' · '),
       )
 
       const mappedLines: ReviewLineItem[] = items.map(
@@ -381,6 +463,7 @@ export function PurchaseAiScanDialog({
               name: names.name,
               nameUrdu: names.nameUrdu,
               barcode,
+              matchedProductId: raw.matchedProductId as string | undefined,
             },
             products,
           )
@@ -413,8 +496,13 @@ export function PurchaseAiScanDialog({
       if (pt) setPaymentType(pt)
 
       setStep('review')
+      const matchedProducts = mappedLines.filter((l) => l.matchedProductId).length
+      const matchNote =
+        matchedSupplier || matchedProducts > 0
+          ? ` (${matchedSupplier ? matchedSupplier.name : ''}${matchedSupplier && matchedProducts > 0 ? ' · ' : ''}${matchedProducts > 0 ? `${matchedProducts}/${items.length} products auto-matched` : ''})`
+          : ''
       toast.success(
-        `${t('ai_scan_success')}: ${items.length} ${t('purchase_lines_found')}`,
+        `${t('ai_scan_success')}: ${items.length} ${t('purchase_lines_found')}${matchNote}`,
       )
     } catch (error) {
       console.error('Purchase AI scan error:', error)
@@ -453,8 +541,8 @@ export function PurchaseAiScanDialog({
   const unmatchedCount = lines.filter((l) => !l.matchedProductId).length
 
   const handleApply = () => {
-    const supplier = suppliers.find((s) => s._id === selectedSupplierId)
-    if (!supplier?._id) {
+    const supplier = suppliers.find((s) => getSupplierId(s) === selectedSupplierId)
+    if (!supplier || !getSupplierId(supplier)) {
       toast.error(t('select_supplier_required'))
       return
     }
@@ -497,7 +585,7 @@ export function PurchaseAiScanDialog({
     matchesBilingualSearch(supplierSearch, s.name, s.nameUrdu, s.phone),
   )
 
-  const selectedSupplier = suppliers.find((s) => s._id === selectedSupplierId)
+  const selectedSupplier = suppliers.find((s) => getSupplierId(s) === selectedSupplierId)
 
   return (
     <Dialog
@@ -603,20 +691,29 @@ export function PurchaseAiScanDialog({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>{t('supplier')}</Label>
-                    <Popover open={supplierPopoverOpen} onOpenChange={setSupplierPopoverOpen}>
+                    <Popover open={supplierPopoverOpen} onOpenChange={setSupplierPopoverOpen} modal>
                       <PopoverTrigger asChild>
                         <Button
+                          type="button"
                           variant="outline"
                           role="combobox"
                           className="w-full justify-between font-normal"
                         >
                           <span className="truncate">
-                            {selectedSupplier?.name || t('select_supplier')}
+                            {selectedSupplier
+                              ? [selectedSupplier.name, selectedSupplier.nameUrdu]
+                                  .filter(Boolean)
+                                  .join(' · ')
+                              : scannedSupplierLabel || t('select_supplier')}
                           </span>
                           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <PopoverContent
+                        className={cn(SCAN_POPOVER_CLASS, 'w-[min(100vw-2rem,28rem)]')}
+                        align="start"
+                        side="bottom"
+                      >
                         <Command shouldFilter={false}>
                           <CommandInput
                             placeholder={t('search_supplier')}
@@ -625,19 +722,29 @@ export function PurchaseAiScanDialog({
                           />
                           <CommandList>
                             <CommandGroup>
-                              {filteredSuppliers.map((s) => (
+                              {filteredSuppliers.length === 0 ? (
+                                <p className="py-4 text-center text-sm text-muted-foreground">
+                                  {suppliers.length === 0
+                                    ? t('loading')
+                                    : t('no_results')}
+                                </p>
+                              ) : null}
+                              {filteredSuppliers.map((s) => {
+                                const sid = getSupplierId(s)
+                                return (
                                 <CommandItem
-                                  key={s._id}
-                                  value={s._id}
+                                  key={sid || s.name}
+                                  value={`${sid}-${s.name}`}
                                   onSelect={() => {
-                                    setSelectedSupplierId(s._id)
+                                    setSelectedSupplierId(sid)
+                                    setSupplierSearch('')
                                     setSupplierPopoverOpen(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       'mr-2 h-4 w-4',
-                                      selectedSupplierId === s._id ? 'opacity-100' : 'opacity-0',
+                                      selectedSupplierId === sid ? 'opacity-100' : 'opacity-0',
                                     )}
                                   />
                                   <div className="min-w-0">
@@ -652,7 +759,8 @@ export function PurchaseAiScanDialog({
                                     ) : null}
                                   </div>
                                 </CommandItem>
-                              ))}
+                                )
+                              })}
                             </CommandGroup>
                           </CommandList>
                         </Command>
@@ -728,7 +836,16 @@ export function PurchaseAiScanDialog({
                 </Button>
                 <Button
                   onClick={handleApply}
-                  disabled={unmatchedCount > 0 || !selectedSupplierId}
+                  disabled={
+                    !selectedSupplierId || lines.length === 0 || unmatchedCount > 0
+                  }
+                  title={
+                    unmatchedCount > 0
+                      ? t('match_all_products_before_apply')
+                      : !selectedSupplierId
+                        ? t('select_supplier_required')
+                        : undefined
+                  }
                 >
                   {t('apply_to_purchase_form')}
                 </Button>

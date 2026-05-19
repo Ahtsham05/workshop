@@ -3,22 +3,28 @@ const httpStatus = require('http-status');
 const config = require('../config/config');
 const ApiError = require('../utils/ApiError');
 const { createGeminiApiError, callGeminiWithFallback } = require('../utils/geminiVisionHelpers');
+const { parseJsonFromLlmContent } = require('../utils/jsonFromLlm');
+const { matchSupplier, matchProduct } = require('../utils/fuzzyEntityMatch');
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
 
-const SYSTEM_PROMPT = `You are an OCR assistant for a business purchase invoice / stock purchase bill (Urdu or English).
+const SYSTEM_PROMPT = `You are an OCR assistant for Pakistani wholesale/retail purchase invoices (handwritten or printed, Urdu and/or English).
 
-Return ONLY valid JSON (no markdown):
+Return ONLY valid JSON (no markdown, no comments):
 {"supplier":{"name":"","nameUrdu":"","phone":"","address":""},"invoiceNumber":"","date":"","paymentType":"","notes":"","items":[{"name":"","nameUrdu":"","barcode":"","quantity":1,"purchasePrice":0,"sellingPrice":0}]}
 
 Rules:
-- supplier: vendor/shop name and phone from invoice header
-- items: every product line with quantity and rates from the invoice
-- purchasePrice: unit cost / purchase rate / "rate" / "قیمت" per unit (not line total unless only total is shown, then divide by qty)
-- sellingPrice: retail/sale price if printed on invoice, else 0
-- barcode: product code if visible
+- Read the shop/vendor heading at the top (e.g. "Sultan Traders", "یونائیٹیک") into supplier.name / supplier.nameUrdu
+- items: every product line with quantity and unit rate from the bill
+- purchasePrice: per-unit cost/rate (قیمت / rate), NOT line total unless only total is shown (then divide by quantity)
+- sellingPrice: retail price if printed, else 0
+- quantity: from qty column; default 1 if unclear
+- barcode: SKU/code if visible
 - date: YYYY-MM-DD if visible, else ""
-- paymentType: Cash, Credit, Card, etc. if mentioned, else ""
-- name: English/Latin transliteration when Urdu is shown; nameUrdu: exact Urdu script
+- paymentType: Cash, Credit, Card, Cheque, Bank if mentioned, else ""
+- name: English/Latin when possible; nameUrdu: exact Urdu script from the image
+- For handwritten Urdu bills, transcribe carefully — do not skip rows
+- Strip Rs, commas from numbers
 - Do not invent rows not on the invoice`;
 
 const PREFERRED_VISION_MODELS = [
@@ -112,19 +118,20 @@ async function resolveModelsToTry(apiKey) {
 }
 
 function parseJsonFromContent(content) {
-  const trimmed = String(content || '').trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
   try {
-    return JSON.parse(candidate);
-  } catch {
-    const start = candidate.indexOf('{');
-    const end = candidate.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      return JSON.parse(candidate.slice(start, end + 1));
-    }
-    throw new ApiError(httpStatus.BAD_GATEWAY, 'Could not parse purchase invoice data from image');
+    return parseJsonFromLlmContent(content);
+  } catch (err) {
+    throw new ApiError(
+      httpStatus.BAD_GATEWAY,
+      'Could not parse purchase invoice data from image. Try a clearer photo with good lighting.',
+    );
   }
+}
+
+function parseNumber(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(String(value).replace(/,/g, '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function normalizeItem(raw) {
@@ -133,20 +140,18 @@ function normalizeItem(raw) {
   const barcode = String(raw?.barcode || '').trim();
   const qty = Number(raw?.quantity);
   const quantity = Number.isFinite(qty) && qty > 0 ? qty : 1;
-  let purchasePrice = Number(String(raw?.purchasePrice ?? '').replace(/,/g, ''));
-  if (!Number.isFinite(purchasePrice)) purchasePrice = 0;
-  let sellingPrice = Number(String(raw?.sellingPrice ?? '').replace(/,/g, ''));
-  if (!Number.isFinite(sellingPrice)) sellingPrice = 0;
+  const purchasePrice = parseNumber(raw?.purchasePrice, 0);
+  const sellingPrice = parseNumber(raw?.sellingPrice, 0);
   if (!name && !nameUrdu && !barcode) return null;
   return { name, nameUrdu, barcode, quantity, purchasePrice, sellingPrice };
 }
 
 function normalizeInvoice(raw) {
   const supplier = {
-    name: String(raw?.supplier?.name || '').trim(),
-    nameUrdu: String(raw?.supplier?.nameUrdu || '').trim(),
-    phone: String(raw?.supplier?.phone || '').trim(),
-    address: String(raw?.supplier?.address || '').trim(),
+    name: String(raw?.supplier?.name || raw?.vendor?.name || '').trim(),
+    nameUrdu: String(raw?.supplier?.nameUrdu || raw?.vendor?.nameUrdu || '').trim(),
+    phone: String(raw?.supplier?.phone || raw?.vendor?.phone || '').trim(),
+    address: String(raw?.supplier?.address || raw?.vendor?.address || '').trim(),
   };
   const urduScript = /[\u0600-\u06FF\u0750-\u077F]/;
   if (!supplier.nameUrdu && supplier.name && urduScript.test(supplier.name)) {
@@ -192,7 +197,49 @@ async function callGeminiModel(apiKey, model, base64, safeMime) {
   });
 }
 
-async function extractPurchaseFromImage(imageBuffer, mimeType = 'image/jpeg') {
+function enrichWithCatalogMatches(invoice, catalog = {}) {
+  const suppliers = Array.isArray(catalog.suppliers) ? catalog.suppliers : [];
+  const products = Array.isArray(catalog.products) ? catalog.products : [];
+
+  const supplierMatch = matchSupplier(invoice.supplier, suppliers);
+  const enrichedSupplier = {
+    ...invoice.supplier,
+    matchedSupplierId: supplierMatch?.entity?.id || null,
+    matchScore: supplierMatch?.score ?? 0,
+    matchMethod: supplierMatch?.method || null,
+  };
+
+  const enrichedItems = invoice.items.map((item) => {
+    const productMatch = matchProduct(item, products);
+    const catalogProduct = productMatch?.entity;
+    let sellingPrice = item.sellingPrice;
+    if (catalogProduct && sellingPrice <= 0) {
+      sellingPrice = Number(catalogProduct.price) || Number(catalogProduct.cost) || 0;
+    }
+    return {
+      ...item,
+      sellingPrice,
+      matchedProductId: catalogProduct?.id || null,
+      matchScore: productMatch?.score ?? 0,
+      matchMethod: productMatch?.method || null,
+      catalogSalePrice: catalogProduct ? Number(catalogProduct.price) || 0 : null,
+      catalogCost: catalogProduct ? Number(catalogProduct.cost) || 0 : null,
+    };
+  });
+
+  return {
+    ...invoice,
+    supplier: enrichedSupplier,
+    items: enrichedItems,
+  };
+}
+
+/**
+ * @param {Buffer} imageBuffer
+ * @param {string} [mimeType]
+ * @param {{ suppliers?: object[], products?: object[] }} [catalog]
+ */
+async function extractPurchaseFromImage(imageBuffer, mimeType = 'image/jpeg', catalog = {}) {
   const apiKey = config.gemini?.apiKey;
   if (!apiKey || !String(apiKey).trim()) {
     throw new ApiError(
@@ -216,16 +263,40 @@ async function extractPurchaseFromImage(imageBuffer, mimeType = 'image/jpeg') {
     callModel: (model) => callGeminiModel(apiKey, model, base64, safeMime),
   });
 
-  const parsed = normalizeInvoice(parseJsonFromContent(extractGeminiText(response)));
-
-  if (parsed.items.length === 0) {
+  const rawText = extractGeminiText(response);
+  if (!rawText.trim()) {
     throw new ApiError(
       httpStatus.UNPROCESSABLE_ENTITY,
-      'No product lines could be read from this invoice. Try a clearer photo.',
+      'AI could not read text from this image. Try a clearer, well-lit photo.',
     );
   }
 
-  return { ...parsed, modelUsed };
+  let parsed;
+  try {
+    parsed = normalizeInvoice(parseJsonFromContent(rawText));
+  } catch (firstErr) {
+    try {
+      const retry = await callGeminiWithFallback({
+        models: models.slice(0, 2),
+        callModel: (model) => callGeminiModel(apiKey, model, base64, safeMime),
+        attemptsPerModel: 1,
+      });
+      parsed = normalizeInvoice(parseJsonFromContent(extractGeminiText(retry.response)));
+    } catch {
+      throw firstErr;
+    }
+  }
+
+  const enriched = enrichWithCatalogMatches(parsed, catalog);
+
+  if (enriched.items.length === 0) {
+    throw new ApiError(
+      httpStatus.UNPROCESSABLE_ENTITY,
+      'No product lines could be read from this invoice. Try a clearer photo or crop to the item table.',
+    );
+  }
+
+  return { ...enriched, modelUsed };
 }
 
 module.exports = {

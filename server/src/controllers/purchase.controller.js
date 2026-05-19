@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { purchaseService } = require('../services');
+const { purchaseService, supplierService, productService } = require('../services');
 const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
@@ -69,9 +69,36 @@ const scanPurchaseImage = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
   }
 
+  const catalogFilter = {};
+  applyBranchFilter(catalogFilter, req);
+
+  const [suppliersPage, productsPage] = await Promise.all([
+    supplierService.querySuppliers(catalogFilter, { limit: 2000, page: 1 }),
+    productService.queryProducts(catalogFilter, { limit: 5000, page: 1 }),
+  ]);
+
+  const catalog = {
+    suppliers: (suppliersPage?.results || []).map((s) => ({
+      id: String(s.id || s._id),
+      name: s.name,
+      nameUrdu: s.nameUrdu,
+      phone: s.phone,
+      whatsapp: s.whatsapp,
+    })),
+    products: (productsPage?.results || []).map((p) => ({
+      id: String(p.id || p._id),
+      name: p.name,
+      nameUrdu: p.nameUrdu,
+      barcode: p.barcode,
+      price: p.price,
+      cost: p.cost,
+    })),
+  };
+
   const result = await purchaseVisionService.extractPurchaseFromImage(
     req.file.buffer,
     req.file.mimetype || 'image/jpeg',
+    catalog,
   );
 
   res.send(result);

@@ -38,6 +38,8 @@ import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preference
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { normalizeSuppliersList } from '../utils/catalog-helpers'
+import { getSupplierId } from '../utils/scan-matching'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -97,7 +99,7 @@ export default function PurchasePanel({
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
-  const suppliers: Supplier[] = suppliersData?.results || []
+  const suppliers: Supplier[] = normalizeSuppliersList(suppliersData)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
@@ -1210,7 +1212,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('receipt')}
                 className="w-full"
                 size="lg"
-                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
+                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'receipt' ? (
@@ -1231,7 +1233,7 @@ export default function PurchasePanel({
                 onClick={() => handleSavePurchase('a4')}
                 className="w-full"
                 size="lg"
-                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
+                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
                 variant="default"
               >
                 {isLoading && savingType === 'a4' ? (
