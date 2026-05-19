@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { useUsers } from '../context/users-context'
-import { PlusCircle, Upload } from 'lucide-react'
+import { PlusCircle, Upload, Sparkles } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 
 export default function UsersPrimaryButtons() {
@@ -9,6 +9,13 @@ export default function UsersPrimaryButtons() {
   
   return (
     <div className='flex gap-2'>
+      <Button
+        variant='outline'
+        className='space-x-1'
+        onClick={() => setOpen('ai-scan')}
+      >
+        <span>{t('ai_scan')}</span> <Sparkles size={18} />
+      </Button>
       <Button 
         variant='outline' 
         className='space-x-1' 

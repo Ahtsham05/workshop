@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
+const productVisionService = require('../services/productVision.service');
 
 const createProduct = catchAsync(async (req, res) => {
   let productData = req.body;
@@ -196,6 +197,19 @@ const bulkUpdateProducts = catchAsync(async (req, res) => {
   }
 });
 
+const scanProductImage = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
+  }
+
+  const result = await productVisionService.extractProductsFromImage(
+    req.file.buffer,
+    req.file.mimetype || 'image/jpeg',
+  );
+
+  res.send(result);
+});
+
 const bulkAddProducts = catchAsync(async (req, res) => {
   try {
     const { products } = req.body;
@@ -246,4 +260,5 @@ module.exports = {
   fetchImageFromSearch,
   bulkUpdateProducts,
   bulkAddProducts,
+  scanProductImage,
 };

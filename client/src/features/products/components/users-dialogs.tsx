@@ -3,6 +3,7 @@ import { UsersActionDialog } from './users-action-dialog'
 import { UsersDeleteDialog } from './users-delete-dialog'
 import { UsersInviteDialog } from './users-invite-dialog'
 import { ProductImportDialog } from './product-import-dialog'
+import { ProductAiScanDialog } from './product-ai-scan-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddProducts } from '@/stores/product.slice'
@@ -40,6 +41,13 @@ export default function UsersDialogs({setFetch}:any) {
         key='product-import'
         open={open === 'import'}
         onOpenChange={() => setOpen('import')}
+        onImport={handleImport}
+      />
+
+      <ProductAiScanDialog
+        key='product-ai-scan'
+        open={open === 'ai-scan'}
+        onOpenChange={() => setOpen('ai-scan')}
         onImport={handleImport}
       />
 

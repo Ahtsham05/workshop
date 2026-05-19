@@ -33,6 +33,10 @@ router
   .route('/bulk')
   .post(auth('createProducts'), validate(productValidation.bulkAddProducts), productController.bulkAddProducts);
 
+router
+  .route('/scan-image')
+  .post(auth('createProducts'), upload.single('image'), productController.scanProductImage);
+
 // Image upload routes
 router
   .route('/upload-image')

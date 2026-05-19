@@ -662,6 +662,16 @@ const en: Record<string, string> = {
     "ai_scan_suppliers_balance_ledger_note": "Opening balances you enter will be saved to each supplier's ledger automatically (same as Excel import).",
     "customer_list_preview": "Customer list preview",
 
+    "ai_scan_products": "AI Scan — Import Products from Photo",
+    "ai_scan_products_description": "Take or upload a photo of a product list, stock register, or price sheet. AI will extract product details for you to review before saving.",
+    "ai_scan_products_tip": "Works best with clear photos showing product names, sale/purchase prices, and stock quantities. Empty barcodes are auto-generated on import.",
+    "no_products_found_in_image": "No products could be read from this image.",
+    "products_found": "products found",
+    "review_and_edit_products": "Review and edit extracted products",
+    "add_products_manually": "Add manually (no scan)",
+    "product_list_preview": "Product list preview",
+    "ai_scan_products_barcode_note": "Leave barcode empty to auto-generate a unique code for each product on import.",
+
     "ai_scan_invoice": "AI Scan Invoice",
     "ai_scan_purchase_invoice": "AI Scan — Purchase Invoice",
     "ai_scan_purchase_description": "Take or upload a photo of a purchase invoice. AI will extract supplier, products, quantities, and prices for you to review before saving.",
