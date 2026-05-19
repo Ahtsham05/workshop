@@ -1,39 +1,11 @@
 const catchAsync = require('../utils/catchAsync');
-
-const latinLetters = /[A-Za-z]/;
-const arabicScript =
-  /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+const nameTranslateService = require('../services/nameTranslate.service');
 
 /**
- * Proxies English → Urdu for display names (uses MyMemory public API; rate limits apply).
+ * Proxies English → Urdu for display names (multi-provider cascade; see nameTranslate.service).
  */
 const translateNameToUrdu = catchAsync(async (req, res) => {
-  const text = String(req.body.text ?? '')
-    .trim()
-    .slice(0, 500);
-  if (!text) {
-    return res.send({ translated: '' });
-  }
-
-  if (!latinLetters.test(text) && arabicScript.test(text)) {
-    return res.send({ translated: text });
-  }
-  if (!latinLetters.test(text)) {
-    return res.send({ translated: '' });
-  }
-
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
-    text,
-  )}&langpair=en|ur`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    return res.send({ translated: '' });
-  }
-  const data = await response.json();
-  let translated = String(data.responseData?.translatedText ?? '').trim();
-  if (translated && translated.toLowerCase() === text.toLowerCase()) {
-    translated = '';
-  }
+  const translated = await nameTranslateService.translateEnglishToUrdu(req.body.text);
   res.send({ translated });
 });
 
@@ -41,30 +13,8 @@ const translateNameToUrdu = catchAsync(async (req, res) => {
  * Proxies Urdu → English romanization for display names.
  */
 const translateNameToEnglish = catchAsync(async (req, res) => {
-  const text = String(req.body.text ?? '')
-    .trim()
-    .slice(0, 500);
-  if (!text) {
-    return res.send({ translated: '' });
-  }
-
-  if (/[A-Za-z]/.test(text) && !arabicScript.test(text)) {
-    return res.send({ translated: text });
-  }
-  if (!arabicScript.test(text)) {
-    return res.send({ translated: '' });
-  }
-
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
-    text,
-  )}&langpair=ur|en`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    return res.send({ translated: '' });
-  }
-  const data = await response.json();
-  const translated = String(data.responseData?.translatedText ?? '').trim();
-  res.send({ translated: /[A-Za-z]/.test(translated) ? translated : '' });
+  const translated = await nameTranslateService.translateUrduToEnglish(req.body.text);
+  res.send({ translated });
 });
 
 module.exports = {

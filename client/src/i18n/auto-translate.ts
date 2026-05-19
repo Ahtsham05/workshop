@@ -131,10 +131,16 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response | nul
   }
 }
 
+type NameLang = 'en' | 'ur'
+
 /** Google Translate (unofficial, public endpoint). Very high rate limits. */
-async function fetchFromGoogle(text: string, target: Lang): Promise<string | null> {
+async function fetchFromGoogle(
+  text: string,
+  source: string,
+  target: string,
+): Promise<string | null> {
   const url =
-    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${target}` +
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source}&tl=${target}` +
     `&dt=t&q=${encodeURIComponent(text)}`
   const res = await fetchWithTimeout(url, 6000)
   if (!res) return null
@@ -150,7 +156,11 @@ async function fetchFromGoogle(text: string, target: Lang): Promise<string | nul
 }
 
 /** Lingva: free Google Translate proxy. Multiple instances for redundancy. */
-async function fetchFromLingva(text: string, target: Lang): Promise<string | null> {
+async function fetchFromLingva(
+  text: string,
+  source: string,
+  target: string,
+): Promise<string | null> {
   const instances = [
     'https://lingva.ml',
     'https://lingva.lunar.icu',
@@ -158,7 +168,7 @@ async function fetchFromLingva(text: string, target: Lang): Promise<string | nul
     'https://lingva.thedaviddelta.com',
   ]
   for (const base of instances) {
-    const url = `${base}/api/v1/en/${target}/${encodeURIComponent(text)}`
+    const url = `${base}/api/v1/${source}/${target}/${encodeURIComponent(text)}`
     const res = await fetchWithTimeout(url, 5000)
     if (!res) continue
     try {
@@ -171,10 +181,14 @@ async function fetchFromLingva(text: string, target: Lang): Promise<string | nul
 }
 
 /** MyMemory: free anonymous tier (5000 chars/day per IP). */
-async function fetchFromMyMemory(text: string, target: Lang): Promise<string | null> {
+async function fetchFromMyMemory(
+  text: string,
+  source: string,
+  target: string,
+): Promise<string | null> {
   const url =
     `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}` +
-    `&langpair=en|${target}`
+    `&langpair=${source}|${target}`
   const res = await fetchWithTimeout(url, 6000)
   if (!res) return null
   try {
@@ -194,9 +208,24 @@ async function fetchFromMyMemory(text: string, target: Lang): Promise<string | n
 /** Cascade: try providers in order, return first success. */
 async function translateExternal(text: string, target: Lang): Promise<string | null> {
   return (
-    (await fetchFromGoogle(text, target)) ??
-    (await fetchFromLingva(text, target)) ??
-    (await fetchFromMyMemory(text, target))
+    (await fetchFromGoogle(text, 'en', target)) ??
+    (await fetchFromLingva(text, 'en', target)) ??
+    (await fetchFromMyMemory(text, 'en', target))
+  )
+}
+
+/** Immediate EN↔UR translation for product/customer names (browser cascade). */
+export async function translateNamePair(
+  text: string,
+  from: NameLang,
+  to: NameLang,
+): Promise<string | null> {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed || from === to) return trimmed || null
+  return (
+    (await fetchFromGoogle(trimmed, from, to)) ??
+    (await fetchFromLingva(trimmed, from, to)) ??
+    (await fetchFromMyMemory(trimmed, from, to))
   )
 }
 

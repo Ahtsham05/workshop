@@ -1,28 +1,35 @@
 import { useEffect, useRef } from 'react'
 import type { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-form'
 import Axios from '@/utils/Axios'
+import { translateNamePair } from '@/i18n/auto-translate'
 
-/** Calls the same endpoint as the debounced hook; use after form reset when Urdu is empty. */
-export async function fetchEnglishNameSuggestion(text: string): Promise<string> {
-  const trimmed = String(text ?? '').trim()
-  if (trimmed.length < 2 || !/[\u0600-\u06FF]/.test(trimmed)) return ''
+async function translateViaServer(
+  path: '/translate/name-to-urdu' | '/translate/name-to-english',
+  text: string,
+): Promise<string> {
   try {
-    const res = await Axios.post('/translate/name-to-english', { text: trimmed })
+    const res = await Axios.post(path, { text })
     return String(res.data?.translated ?? '').trim()
   } catch {
     return ''
   }
 }
 
+/** EN→UR / UR→EN with browser cascade first, server proxy as fallback. */
+export async function fetchEnglishNameSuggestion(text: string): Promise<string> {
+  const trimmed = String(text ?? '').trim()
+  if (trimmed.length < 2 || !/[\u0600-\u06FF]/.test(trimmed)) return ''
+  const local = await translateNamePair(trimmed, 'ur', 'en')
+  if (local && /[A-Za-z]/.test(local)) return local
+  return translateViaServer('/translate/name-to-english', trimmed)
+}
+
 export async function fetchUrduNameSuggestion(text: string): Promise<string> {
   const trimmed = String(text ?? '').trim()
   if (trimmed.length < 2 || !/[A-Za-z]/.test(trimmed)) return ''
-  try {
-    const res = await Axios.post('/translate/name-to-urdu', { text: trimmed })
-    return String(res.data?.translated ?? '').trim()
-  } catch {
-    return ''
-  }
+  const local = await translateNamePair(trimmed, 'en', 'ur')
+  if (local && local.toLowerCase() !== trimmed.toLowerCase()) return local
+  return translateViaServer('/translate/name-to-urdu', trimmed)
 }
 
 /**
