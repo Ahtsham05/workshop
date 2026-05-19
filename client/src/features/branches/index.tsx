@@ -85,7 +85,7 @@ export default function BranchesPage() {
     },
   })
 
-  const branchSessionKey = dialogOpen ? (selectedBranch?._id ?? 'new') : null
+  const branchSessionKey = dialogOpen ? (selectedBranch?.id ?? 'new') : null
   useAutoUrduNameFromEnglish(branchForm, 'name', 'nameUrdu', branchSessionKey)
   useAutoUrduNameFromEnglish(
     branchForm,

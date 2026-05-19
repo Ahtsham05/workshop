@@ -60,7 +60,7 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
     },
   })
 
-  const categorySessionKey = state.open ? (state.currentCategory?._id ?? 'new') : null
+  const categorySessionKey = state.open ? (state.currentCategory?.id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', categorySessionKey)
 
   // Reset form when dialog opens/closes or category changes

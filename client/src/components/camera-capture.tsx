@@ -262,7 +262,11 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
 
   const triggerElement = React.isValidElement(trigger)
     ? React.cloneElement(
-        trigger as React.ReactElement<{ onClick?: React.MouseEventHandler; disabled?: boolean }>,
+        trigger as React.ReactElement<{
+          onClick?: React.MouseEventHandler
+          disabled?: boolean
+          type?: 'button' | 'submit' | 'reset'
+        }>,
         {
           type: 'button',
           onClick: (e: React.MouseEvent) => {
