@@ -47,7 +47,7 @@ import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow, PrintInvoiceData } from '../utils/print-utils'
+import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow } from '../utils/print-utils'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import {

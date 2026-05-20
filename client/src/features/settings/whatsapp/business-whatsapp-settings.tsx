@@ -195,7 +195,8 @@ export default function BusinessWhatsAppSettings() {
       title="WhatsApp"
       desc="Send invoice PDFs via Meta WhatsApp Cloud API (recommended) or local WhatsApp Web (QR scan)."
     >
-      <Card className="mb-6 border-[#25D366]/30">
+      <div className="space-y-6">
+      <Card className="border-[#25D366]/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Cloud className="h-5 w-5 text-[#25D366]" />
@@ -388,6 +389,7 @@ export default function BusinessWhatsAppSettings() {
           </p>
         </CardContent>
       </Card>
+      </div>
     </ContentSection>
   )
 }

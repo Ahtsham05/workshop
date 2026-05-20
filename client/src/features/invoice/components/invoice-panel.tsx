@@ -13,7 +13,7 @@ import { useLanguage } from '@/context/language-context'
 import { Invoice, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
-import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow } from '../utils/print-utils'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import {
   fetchAndStashPrintContact,

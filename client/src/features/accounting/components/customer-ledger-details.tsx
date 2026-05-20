@@ -33,7 +33,6 @@ import {
   generateA4InvoiceHTML,
   openPrintWindow,
   openA4PrintWindow,
-  type PrintInvoiceData,
 } from '@/features/invoice/utils/print-utils';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';

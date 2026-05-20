@@ -818,17 +818,25 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="invoice-info">
     <div class="info-section bill-to-section">
-      <div class="info-title">${urduTexts.bill_to}:</div>
-      <div class="customer-name-highlight">${customerNameHtml}</div>
+      <div class="info-title">${urduTexts.bill_to}</div>
+      <div class="customer-bill-line">
+        <span class="customer-field-label">${urduTexts.customer}</span>
+        <span class="bill-to-customer-name">${customerNameHtml}</span>
+      </div>
       <div class="bill-to-meta">
+        <span class="info-label payment-type-label">${urduTexts.type}</span>
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
     </div>
-    <div class="info-section">
-      <div class="info-title">${urduTexts.invoice_details}:</div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.issue_date}:</span>
-        <span>${new Date().toLocaleDateString(locale)}</span>
+    <div class="info-section invoice-details-section">
+      <div class="info-title">${urduTexts.invoice_details}</div>
+      <div class="info-row detail-row">
+        <span class="info-label">${urduTexts.issue_date}</span>
+        <span class="detail-value">${data.invoiceDate ? new Date(data.invoiceDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)}</span>
+      </div>
+      <div class="info-row detail-row">
+        <span class="info-label">${urduTexts.invoice_number}</span>
+        <span class="detail-value"><strong>${invoiceNumber}</strong></span>
       </div>
     </div>
   </div>
@@ -1076,58 +1084,158 @@ ${itemizedTotalsTable}
     .invoice-info {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 30px;
+      gap: 24px 32px;
       margin-bottom: 30px;
-      padding: 20px;
+      padding: 20px 24px;
       background: #f8f9fa;
       border-radius: 8px;
+      align-items: start;
     }
     
     .info-section {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    html[dir="rtl"] .bill-to-section,
+    html[dir="rtl"] .invoice-details-section {
+      text-align: start;
+      align-items: flex-start;
+    }
+    html[dir="ltr"] .bill-to-section,
+    html[dir="ltr"] .invoice-details-section {
+      text-align: start;
+      align-items: flex-start;
     }
     
     .info-title {
       font-weight: bold;
-      font-size: 16px;
+      font-size: 15px;
       color: #333;
-      margin-bottom: 5px;
+      margin: 0 0 4px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #dee2e6;
     }
     
     .info-row {
       display: flex;
       justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
       font-size: 13px;
+      width: 100%;
+    }
+
+    .customer-bill-line {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      justify-content: flex-start;
+      align-self: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 100%;
+      margin-top: 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e9ecef;
+      text-align: start;
+    }
+
+    .customer-field-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #555;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .customer-field-label::after {
+      content: ':';
+      margin-inline-start: 3px;
+    }
+
+    .info-row.detail-row {
+      flex-wrap: wrap;
+    }
+
+    html[dir="rtl"] .info-row.detail-row {
+      flex-direction: row;
+      justify-content: flex-start;
+      align-items: baseline;
+    }
+
+    html[dir="ltr"] .info-row.detail-row {
+      justify-content: flex-start;
+      align-items: baseline;
     }
     
     .info-label {
       font-weight: 600;
       color: #555;
+      flex-shrink: 0;
+    }
+
+    .detail-value {
+      font-weight: 500;
+      color: #000;
     }
 
     .bill-to-section {
-      gap: 6px;
+      gap: 8px;
+      align-items: flex-start;
+      align-self: start;
+    }
+
+    .invoice-details-section {
+      align-items: flex-start;
+      align-self: start;
+    }
+
+    .bill-to-customer-name {
+      font-size: 20px;
+      font-weight: 800;
+      color: #000;
+      line-height: 1.4;
+      text-align: inherit;
+      min-width: 0;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
     }
 
     .customer-name-highlight {
-      font-size: 22px;
+      font-size: 14px;
       font-weight: 800;
-      color: #1a1a1a;
-      line-height: 1.35;
-      margin: 6px 0 4px;
-      padding: 8px 12px;
-      background: #fff;
-      border-${startAlign === 'right' ? 'right' : 'left'}: 4px solid #007bff;
-      border-radius: 4px;
+      color: #000;
+      text-align: inherit;
     }
 
     .bill-to-meta {
       display: flex;
+      flex-direction: row;
       align-items: center;
-      gap: 10px;
-      margin-top: 4px;
+      justify-content: flex-start;
+      align-self: flex-start;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+      text-align: start;
+    }
+
+    .payment-type-label {
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .payment-type-label::after {
+      content: ':';
+      margin-inline-start: 2px;
     }
 
     .company-contact-line {
