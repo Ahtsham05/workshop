@@ -319,6 +319,64 @@ const getStudentVouchers = async (studentId, scope = {}) => {
 };
 
 /**
+ * Remove orphan vouchers whose student no longer exists.
+ * Also removes related ledger/transaction rows pointing to those vouchers.
+ */
+const cleanupOrphanVouchers = async (scope = {}) => {
+  const tf = getTenantFilter(scope);
+  const af = getAggregateFilter(scope);
+
+  const orphanRows = await FeeVoucher.aggregate([
+    { $match: af },
+    {
+      $lookup: {
+        from: 'students',
+        localField: 'studentId',
+        foreignField: '_id',
+        as: 'student',
+      },
+    },
+    { $match: { student: { $size: 0 } } },
+    { $project: { _id: 1, transactionId: 1 } },
+  ]);
+
+  if (!orphanRows.length) {
+    return { deletedVouchers: 0, deletedTransactions: 0, deletedLedgerRows: 0 };
+  }
+
+  const voucherIds = orphanRows.map((r) => r._id);
+  const transactionIds = orphanRows.map((r) => r.transactionId).filter(Boolean);
+
+  const [txnByRefResult, txnByIdResult, ledgerResult, voucherResult] = await Promise.all([
+    SchoolTransaction.deleteMany({
+      ...tf,
+      referenceModel: 'FeeVoucher',
+      referenceId: { $in: voucherIds },
+    }),
+    transactionIds.length
+      ? SchoolTransaction.deleteMany({
+          ...tf,
+          _id: { $in: transactionIds },
+        })
+      : Promise.resolve({ deletedCount: 0 }),
+    StudentCreditLedger.deleteMany({
+      ...tf,
+      voucherId: { $in: voucherIds },
+    }),
+    FeeVoucher.deleteMany({
+      ...tf,
+      _id: { $in: voucherIds },
+    }),
+  ]);
+
+  return {
+    deletedVouchers: voucherResult.deletedCount || 0,
+    deletedTransactions: (txnByRefResult.deletedCount || 0) + (txnByIdResult.deletedCount || 0),
+    deletedLedgerRows: ledgerResult.deletedCount || 0,
+  };
+};
+
+/**
  * Record fee payment:
  *  1. Update voucher paidAmount / status
  *  2. Create a SchoolTransaction (INCOME) linked to this voucher
@@ -1233,6 +1291,7 @@ module.exports = {
   queryVouchers,
   getVoucherById,
   getStudentVouchers,
+  cleanupOrphanVouchers,
   getStudentFeeSummary,
   getStudentFeeLedger,
   payVoucher,

@@ -67,6 +67,12 @@ const bulkGenerateVouchers = catchAsync(async (req, res) => {
 });
 
 const getVouchers = catchAsync(async (req, res) => {
+  // Self-heal old data: remove vouchers whose student record is already deleted.
+  await feeVoucherService.cleanupOrphanVouchers({
+    organizationId: req.user.organizationId,
+    branchId: req.branchId,
+  });
+
   const filter = {
     organizationId: req.user.organizationId,
     branchId: req.branchId,

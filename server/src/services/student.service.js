@@ -1,6 +1,16 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Student, User, FeeVoucher, SchoolClass } = require('../models');
+const {
+  Student,
+  User,
+  FeeVoucher,
+  SchoolClass,
+  SchoolFee,
+  SchoolAttendance,
+  Mark,
+  StudentCreditLedger,
+  SchoolTransaction,
+} = require('../models');
 const ApiError = require('../utils/ApiError');
 
 const getTenantFilter = (data = {}) => {
@@ -164,6 +174,41 @@ const updateStudentById = async (id, updateBody, scope = {}) => {
 const deleteStudentById = async (id, scope = {}) => {
   const doc = await getStudentById(id, scope);
   if (!doc) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
+
+  const tenantFilter = getTenantFilter(scope);
+  const studentId = doc._id;
+
+  // Collect linked accounting references first so we can remove their transactions too.
+  const [voucherRows, feeRows] = await Promise.all([
+    FeeVoucher.find({ ...tenantFilter, studentId }).select('_id').lean(),
+    SchoolFee.find({ ...tenantFilter, studentId }).select('_id').lean(),
+  ]);
+  const voucherIds = voucherRows.map((v) => v._id);
+  const feeIds = feeRows.map((f) => f._id);
+
+  await Promise.all([
+    // Remove fee vouchers shown in vouchers/reports/dashboard receivables.
+    FeeVoucher.deleteMany({ ...tenantFilter, studentId }),
+    // Remove legacy school-fee rows shown in fee reports.
+    SchoolFee.deleteMany({ ...tenantFilter, studentId }),
+    // Remove wallet audit rows tied to this student.
+    StudentCreditLedger.deleteMany({ ...tenantFilter, studentId }),
+    // Remove student-dependent academic records.
+    SchoolAttendance.deleteMany({ ...tenantFilter, studentId }),
+    Mark.deleteMany({ ...tenantFilter, studentId }),
+    // Remove any transaction rows produced by voucher/fee payments.
+    SchoolTransaction.deleteMany({
+      ...tenantFilter,
+      $or: [
+        ...(voucherIds.length ? [{ referenceModel: 'FeeVoucher', referenceId: { $in: voucherIds } }] : []),
+        ...(feeIds.length ? [{ referenceModel: 'SchoolFee', referenceId: { $in: feeIds } }] : []),
+        { referenceModel: 'Student', referenceId: studentId },
+      ],
+    }),
+    // Keep parent-portal links consistent.
+    User.updateMany({ linkedStudentIds: studentId }, { $pull: { linkedStudentIds: studentId } }),
+  ]);
+
   await doc.deleteOne();
   return doc;
 };
