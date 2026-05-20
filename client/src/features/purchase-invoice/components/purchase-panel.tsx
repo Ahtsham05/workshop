@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
+import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -83,9 +84,12 @@ export default function PurchasePanel({
   const [suppliersLoading, setSuppliersLoading] = useState(false)
   const [aiScanOpen, setAiScanOpen] = useState(false)
 
-  // Refs for quantity inputs to focus after product selection
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const purchasePriceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const paymentTypeTriggerRef = useRef<HTMLButtonElement>(null)
+  const purchaseDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
+  const [paymentTypeSelectOpen, setPaymentTypeSelectOpen] = useState(false)
 
   // Auto-scroll items list when items change
   useEffect(() => {
@@ -274,44 +278,53 @@ export default function PurchasePanel({
     [setPurchase]
   )
 
-  // Handle Enter key on quantity/price input to move to next item or add new row
-  const handlePurchaseQuantityKeyDown = useCallback(
-    (e: React.KeyboardEvent, currentIndex: number) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        // Look for the next empty manual entry row
-        const nextEmptyIdx = purchase.items.findIndex((item, idx) => {
-          const pid = item.product.id || (item.product as any)._id
-          return idx > currentIndex && item.isManualEntry && !pid
-        })
-        if (nextEmptyIdx !== -1) {
-          setProductSelectOpen(`manual-${nextEmptyIdx}`)
-        } else {
-          // Add a new empty row and open its product selector
-          setPurchase(prev => ({
-            ...prev,
-            items: [...prev.items, {
-              product: {
-                id: '',
-                _id: '',
-                name: '',
-                price: 0,
-                cost: 0,
-                stockQuantity: 0,
-              } as any,
-              quantity: 1,
-              purchasePrice: 0,
-              isManualEntry: true
-            }]
-          }))
-          setTimeout(() => {
-            setProductSelectOpen(`manual-${purchase.items.length}`)
-          }, 150)
-        }
+  const addNewPurchaseRowAndOpenProduct = useCallback(() => {
+    const nextEmptyIdx = purchase.items.findIndex((item) => {
+      const pid = item.product.id || (item.product as any)._id
+      return item.isManualEntry && !pid
+    })
+    if (nextEmptyIdx !== -1) {
+      setProductSelectOpen(`manual-${nextEmptyIdx}`)
+      return
+    }
+    setPurchase((prev) => {
+      const nextIndex = prev.items.length
+      setTimeout(() => setProductSelectOpen(`manual-${nextIndex}`), 150)
+      return {
+        ...prev,
+        items: [...prev.items, createEmptyPurchaseManualItem()],
       }
+    })
+  }, [setPurchase])
+
+  const openPurchaseProductSelector = useCallback(() => {
+    const emptyIdx = purchase.items.findIndex((item) => {
+      const pid = item.product.id || (item.product as any)._id
+      return item.isManualEntry && !pid
+    })
+    if (emptyIdx !== -1) {
+      setProductSelectOpen(`manual-${emptyIdx}`)
+      return
+    }
+    addNewPurchaseRowAndOpenProduct()
+  }, [purchase.items, addNewPurchaseRowAndOpenProduct])
+
+  const handlePurchaseQuantityKeyDown = useCallback(
+    (e: React.KeyboardEvent, productId: string) => {
+      onEnterAdvance(e, () => focusField(purchasePriceInputRefs.current[productId]))
     },
-    [purchase.items, setPurchase]
+    [],
   )
+
+  const handlePurchasePriceKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      onEnterAdvance(e, addNewPurchaseRowAndOpenProduct)
+    },
+    [addNewPurchaseRowAndOpenProduct],
+  )
+
+  const focusPaymentType = useCallback(() => focusField(paymentTypeTriggerRef.current), [])
+  const focusPurchaseDate = useCallback(() => focusField(purchaseDateRef.current), [])
 
   // Handle save purchase
   const handleSavePurchase = useCallback(
@@ -452,6 +465,13 @@ export default function PurchasePanel({
   const totals = calculateTotals()
   const isLoading = savingType !== null
 
+  useInvoiceSaveShortcuts(
+    () => handleSavePurchase('none'),
+    () => handleSavePurchase('receipt'),
+    () => handleSavePurchase('a4'),
+    isLoading,
+  )
+
   const handleApplyAiScan = useCallback(
     (payload: PurchaseScanApplyPayload) => {
       setPurchase((prev) => ({
@@ -520,6 +540,12 @@ export default function PurchasePanel({
                   variant="outline"
                   role="combobox"
                   aria-expanded={supplierSelectOpen}
+                  onKeyDown={(e) => {
+                    const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+                    if (!supplierSelectOpen && supplierId) {
+                      onEnterAdvance(e, focusPaymentType)
+                    }
+                  }}
                   className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
                     !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'border-red-500 bg-red-50' : ''
                   }`}
@@ -613,6 +639,7 @@ export default function PurchasePanel({
                               setTimeout(() => {
                                 setSupplierSelectOpen(false)
                                 setSupplierSearchQuery('')
+                                focusPaymentType()
                               }, 100)
                             }}
                             className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-accent/50 transition-colors ${
@@ -661,29 +688,11 @@ export default function PurchasePanel({
               </PopoverContent>
             </Popover>
 
-            {/* Purchase Date */}
-            <div>
-              <Label htmlFor="purchase-date">
-                {t('Purchase Date')} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="purchase-date"
-                type="date"
-                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
-                onChange={(e) =>
-                  setPurchase((prev) => ({
-                    ...prev,
-                    date: new Date(e.target.value).toISOString(),
-                  }))
-                }
-                className="w-full"
-              />
-            </div>
-
             <div>
               <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
               <Select
                 value={purchase.paymentType || 'Cash'}
+                onOpenChange={setPaymentTypeSelectOpen}
                 onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet') => {
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
@@ -704,7 +713,15 @@ export default function PurchasePanel({
                   })
                 }}
               >
-                <SelectTrigger className='w-full'>
+                <SelectTrigger
+                  ref={paymentTypeTriggerRef}
+                  className='w-full'
+                  onKeyDown={(e) => {
+                    if (!paymentTypeSelectOpen) {
+                      onEnterAdvance(e, focusPurchaseDate)
+                    }
+                  }}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -713,6 +730,26 @@ export default function PurchasePanel({
                   {isMobileShop && <SelectItem value='Wallet'>{t('wallet') || 'Wallet'}</SelectItem>}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="purchase-date">
+                {t('Purchase Date')} <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                ref={purchaseDateRef}
+                id="purchase-date"
+                type="date"
+                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                onChange={(e) =>
+                  setPurchase((prev) => ({
+                    ...prev,
+                    date: new Date(e.target.value).toISOString(),
+                  }))
+                }
+                onKeyDown={(e) => onEnterAdvance(e, openPurchaseProductSelector)}
+                className="w-full"
+              />
             </div>
 
             {isMobileShop && purchase.paymentType === 'Wallet' && (
@@ -955,7 +992,7 @@ export default function PurchasePanel({
                             min="1"
                             value={item.quantity}
                             onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
-                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
+                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, productId)}
                             onFocus={(e) => e.target.select()}
                             className='h-7 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                           />
@@ -1031,10 +1068,12 @@ export default function PurchasePanel({
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
                           <Input
+                            ref={(el) => { purchasePriceInputRefs.current[productId] = el }}
                             type="text"
                             inputMode="decimal"
                             value={item.purchasePrice > 0 ? item.purchasePrice : ''}
                             onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
+                            onKeyDown={handlePurchasePriceKeyDown}
                             onFocus={(e) => e.target.select()}
                             className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                           />

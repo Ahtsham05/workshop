@@ -47,6 +47,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
+import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
@@ -115,10 +116,14 @@ export function InvoicePanel({
   const [loadingBalance, setLoadingBalance] = useState(false)
   const [cashReceivedInput, setCashReceivedInput] = useState('')
 
-  // Refs for quantity inputs to focus after product selection
+  // Refs for keyboard Enter navigation
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const invoiceTypeTriggerRef = useRef<HTMLButtonElement>(null)
+  const invoiceDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
+  const [invoiceTypeSelectOpen, setInvoiceTypeSelectOpen] = useState(false)
 
   useEffect(() => {
     if (isEditing) {
@@ -540,31 +545,44 @@ export function InvoicePanel({
     }, 100)
   }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
 
-  // Handle Enter key on quantity input to move to next item or add new row
-  const handleQuantityKeyDown = useCallback((e: React.KeyboardEvent, currentItemId: string) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const currentIndex = invoice.items.findIndex(item => item.id === currentItemId)
-      if (currentIndex === -1) return
-      
-      // Look for the next empty manual entry row
-      const nextEmptyRow = invoice.items.find((item, idx) => idx > currentIndex && item.isManualEntry && !item.productId)
-      if (nextEmptyRow) {
-        // Open its product selector
-        setProductSelectOpen(nextEmptyRow.id)
-      } else {
-        // Add a new empty row and open its product selector
-        const newItem = createEmptyManualInvoiceItem()
-        setInvoice((prev) => ({
-          ...prev,
-          items: [...prev.items, newItem],
-        }))
-        setTimeout(() => {
-          setProductSelectOpen(newItem.id)
-        }, 150)
-      }
+  const addNewRowAndOpenProduct = useCallback(() => {
+    const nextEmptyRow = invoice.items.find((item) => item.isManualEntry && !item.productId)
+    if (nextEmptyRow) {
+      setProductSelectOpen(nextEmptyRow.id)
+      return
     }
+    const newItem = createEmptyManualInvoiceItem()
+    setInvoice((prev) => ({
+      ...prev,
+      items: [...prev.items, newItem],
+    }))
+    setTimeout(() => setProductSelectOpen(newItem.id), 150)
   }, [invoice.items, setInvoice])
+
+  const openProductSelectorForEntry = useCallback(() => {
+    const emptyRow = invoice.items.find((item) => item.isManualEntry && !item.productId)
+    if (emptyRow) {
+      setProductSelectOpen(emptyRow.id)
+      return
+    }
+    const lastManual = [...invoice.items].reverse().find((item) => item.isManualEntry)
+    if (lastManual) {
+      setProductSelectOpen(lastManual.id)
+      return
+    }
+    addNewRowAndOpenProduct()
+  }, [invoice.items, addNewRowAndOpenProduct])
+
+  const handleQuantityKeyDown = useCallback((e: React.KeyboardEvent, currentItemId: string) => {
+    onEnterAdvance(e, () => focusField(priceInputRefs.current[currentItemId]))
+  }, [])
+
+  const handlePriceKeyDown = useCallback((e: React.KeyboardEvent) => {
+    onEnterAdvance(e, addNewRowAndOpenProduct)
+  }, [addNewRowAndOpenProduct])
+
+  const focusInvoiceType = useCallback(() => focusField(invoiceTypeTriggerRef.current), [])
+  const focusInvoiceDate = useCallback(() => focusField(invoiceDateRef.current), [])
 
   const handleDiscountChange = useCallback((value: string) => {
     setDiscountInput(value)
@@ -780,6 +798,13 @@ export function InvoicePanel({
     }
   }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess])
 
+  useInvoiceSaveShortcuts(
+    () => handleSaveInvoice('none'),
+    () => handleSaveInvoice('receipt'),
+    () => handleSaveInvoice('a4'),
+    savingType !== null,
+  )
+
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'cash': return 'bg-green-100 text-green-800'
@@ -864,6 +889,11 @@ export function InvoicePanel({
                     variant="outline"
                     role="combobox"
                     aria-expanded={customerSelectOpen}
+                    onKeyDown={(e) => {
+                      if (!customerSelectOpen && invoice.customerId) {
+                        onEnterAdvance(e, focusInvoiceType)
+                      }
+                    }}
                     className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
                       !invoice.customerId ? 'border-red-500 bg-red-50' : ''
                     }`}
@@ -985,6 +1015,7 @@ export function InvoicePanel({
                             setInvoice(prev => ({ ...prev, customerId: 'walk-in' }))
                             setCustomerSelectOpen(false)
                             setCustomerSearchQuery('')
+                            focusInvoiceType()
                           }}
                           className="flex items-center gap-2 cursor-pointer"
                         >
@@ -1013,6 +1044,7 @@ export function InvoicePanel({
                                 }))
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')
+                                focusInvoiceType()
                               }}
                               className="flex items-center gap-3 cursor-pointer p-3"
                             >
@@ -1063,9 +1095,18 @@ export function InvoicePanel({
               <Label htmlFor="type" className='mb-2'>{t('invoice_type')}</Label>
               <Select
                 value={invoice.type}
+                onOpenChange={setInvoiceTypeSelectOpen}
                 onValueChange={(value: 'cash' | 'credit' | 'pending') => updateInvoiceType(value)}
               >
-                <SelectTrigger className='w-full'>
+                <SelectTrigger
+                  ref={invoiceTypeTriggerRef}
+                  className='w-full'
+                  onKeyDown={(e) => {
+                    if (!invoiceTypeSelectOpen) {
+                      onEnterAdvance(e, focusInvoiceDate)
+                    }
+                  }}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1102,9 +1143,11 @@ export function InvoicePanel({
           <div>
             <Label htmlFor="invoiceDate">Invoice Date</Label>
             <Input
+              ref={invoiceDateRef}
               type="date"
               value={invoice.invoiceDate || new Date().toISOString().split('T')[0]}
               onChange={(e) => setInvoice(prev => ({ ...prev, invoiceDate: e.target.value }))}
+              onKeyDown={(e) => onEnterAdvance(e, openProductSelectorForEntry)}
             />
           </div>
 
@@ -1202,6 +1245,11 @@ export function InvoicePanel({
                                 <Button
                                   variant="outline"
                                   role="combobox"
+                                  onKeyDown={(e) => {
+                                    if (productSelectOpen !== item.id && item.productId) {
+                                      onEnterAdvance(e, () => focusField(qtyInputRefs.current[item.id]))
+                                    }
+                                  }}
                                   className={`w-full justify-between min-h-8 h-auto py-1 text-xs ${
                                     !item.productId ? 'border-red-500 bg-red-50' : ''
                                   }`}
@@ -1509,9 +1557,11 @@ export function InvoicePanel({
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
                           <Input
+                            ref={(el) => { priceInputRefs.current[item.id] = el }}
                             type="text"
                             inputMode="decimal"
                             value={item.unitPrice > 0 ? item.unitPrice : ''}
+                            onKeyDown={handlePriceKeyDown}
                             onChange={(e) => {
                               const newPrice = parseFloat(e.target.value) || 0
                               const newItems = invoice.items.map(i =>
