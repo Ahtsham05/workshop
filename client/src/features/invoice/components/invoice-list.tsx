@@ -48,6 +48,14 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow, PrintInvoiceData } from '../utils/print-utils'
+import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
+import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
+import {
+  fetchAndStashPrintContact,
+  resolveCustomerIdString,
+  stashPrintContact,
+  type PrintWindowContact,
+} from '../utils/invoice-print-contact-bridge'
 import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
@@ -260,7 +268,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     })
   }
 
-  const handlePrintInvoice = (invoice: any, format: 'receipt' | 'a4' = 'receipt') => {
+  const handlePrintInvoice = async (invoice: any, format: 'receipt' | 'a4' = 'receipt') => {
     try {
       setPrintingInvoiceId(invoice._id)
       
@@ -268,9 +276,16 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       const customerName = getCustomerName(invoice)
       const walkInCustomerName = invoice.walkInCustomerName
       const customerNameUrdu = getCustomerUrdu(invoice)
+      const customerId =
+        typeof invoice.customerId === 'object'
+          ? invoice.customerId?._id || invoice.customerId?.id
+          : invoice.customerId
+      const previousBalance = await fetchBalanceBeforeInvoice(customerId, invoice._id || invoice.id)
+      const invoiceTotal = Number(invoice.total || 0)
+      const invoicePaid = Number(invoice.paidAmount || 0)
       
       // Prepare print data
-      const printData: PrintInvoiceData = {
+      const printData = withCustomerContactForPrint({
         invoiceNumber: invoice.invoiceNumber,
         items: (invoice.items || []).map((item: any) => ({
           name: item.name,
@@ -309,14 +324,41 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         userPreferredLanguage: preferredLanguage,
         invoiceNote: branchData?.invoiceNote,
         printInUrdu,
+        previousBalance,
+        newBalance: previousBalance + invoiceTotal - invoicePaid,
+      }, invoice)
+
+      const customerIdStr = resolveCustomerIdString(invoice.customerId)
+      let contactPhone = printData.customerPhone
+      let contactWhatsapp = printData.customerWhatsapp
+      if (customerIdStr) {
+        stashPrintContact({ customerId: customerIdStr, phone: contactPhone, whatsapp: contactWhatsapp })
+        try {
+          const fetched = await fetchAndStashPrintContact(customerIdStr)
+          contactPhone = fetched.phone || contactPhone
+          contactWhatsapp = fetched.whatsapp || contactWhatsapp
+        } catch {
+          /* prompt in print window if still missing */
+        }
+      }
+      const printContact: PrintWindowContact = {
+        customerId: customerIdStr,
+        phone: contactPhone,
+        whatsapp: contactWhatsapp || contactPhone,
+      }
+      if (contactPhone || contactWhatsapp) {
+        Object.assign(printData, {
+          customerPhone: contactPhone,
+          customerWhatsapp: contactWhatsapp || contactPhone,
+        })
       }
 
       if (format === 'receipt') {
         const htmlContent = generateInvoiceHTML(printData)
-        openPrintWindow(htmlContent)
+        openPrintWindow(htmlContent, printContact)
       } else {
         const htmlContent = generateA4InvoiceHTML(printData)
-        openA4PrintWindow(htmlContent)
+        openA4PrintWindow(htmlContent, printContact)
       }
       
       toast.success(`Printing invoice ${invoice.invoiceNumber}`)

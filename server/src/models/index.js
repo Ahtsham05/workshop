@@ -86,3 +86,4 @@ module.exports.RestaurantFloor = require('./restaurantFloor.model');
 module.exports.RestaurantTable = require('./restaurantTable.model');
 module.exports.RestaurantOrder = require('./restaurantOrder.model');
 module.exports.RestaurantReservation = require('./restaurantReservation.model');
+module.exports.WhatsAppIntegration = require('./whatsappIntegration.model');

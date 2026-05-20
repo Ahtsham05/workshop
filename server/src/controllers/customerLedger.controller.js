@@ -30,6 +30,14 @@ const getCustomerBalance = catchAsync(async (req, res) => {
   res.send({ balance });
 });
 
+const getBalanceBeforeReference = catchAsync(async (req, res) => {
+  const balanceBefore = await customerLedgerService.getBalanceBeforeReference(
+    req.params.customerId,
+    req.params.referenceId,
+  );
+  res.send({ balanceBefore });
+});
+
 const getCustomerLedgerSummary = catchAsync(async (req, res) => {
   const summary = await customerLedgerService.getCustomerLedgerSummary(req.params.customerId);
   res.send(summary);
@@ -57,6 +65,7 @@ module.exports = {
   getLedgerEntries,
   getLedgerEntry,
   getCustomerBalance,
+  getBalanceBeforeReference,
   getCustomerLedgerSummary,
   updateLedgerEntry,
   deleteLedgerEntry,

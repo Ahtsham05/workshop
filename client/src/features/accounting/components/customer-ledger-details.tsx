@@ -28,7 +28,21 @@ import {
   useGetLoadTransactionByIdQuery,
   useGetSimSaleByIdQuery,
 } from '@/stores/mobile-shop.api';
-import { generateInvoiceHTML, openPrintWindow, type PrintInvoiceData } from '@/features/invoice/utils/print-utils';
+import {
+  generateInvoiceHTML,
+  generateA4InvoiceHTML,
+  openPrintWindow,
+  openA4PrintWindow,
+  type PrintInvoiceData,
+} from '@/features/invoice/utils/print-utils';
+import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
+import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
+import {
+  fetchAndStashPrintContact,
+  resolveCustomerIdString,
+  stashPrintContact,
+  type PrintWindowContact,
+} from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
 
@@ -853,7 +867,16 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
       entry.transactionType === 'payment_received' ||
       entry.transactionType === 'sales_return');
 
-  const handlePrintLinkedCustomerDoc = async (entry: LedgerEntry) => {
+  const usesInvoiceA4Print = (entry: LedgerEntry) =>
+    canPrintLinkedCustomerEntry(entry) &&
+    entry.transactionType !== 'sales_return' &&
+    !isSimSaleLedgerRow(entry) &&
+    !isLoadSaleLedgerRow(entry);
+
+  const handlePrintLinkedCustomerDoc = async (
+    entry: LedgerEntry,
+    format: 'receipt' | 'a4' = 'receipt',
+  ) => {
     const rid = entry.referenceId ? String(entry.referenceId) : '';
     const rowId = String(entry.id || entry._id || '');
     if (!rid || !rowId) return;
@@ -964,8 +987,32 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
 
       const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
       const { name: customerName, nameUrdu: customerNameUrdu } = resolveInvoiceCustomerForPrint(invoice, customer.name);
+      const previousBalance = balanceBeforeFromLedgerEntry(entry);
 
-      const printData: PrintInvoiceData = {
+      const customerIdStr =
+        resolveCustomerIdString(invoice.customerId) || String(customer._id || customer.id || '')
+      let contactPhone = customer.phone?.trim()
+      let contactWhatsapp = customer.whatsapp?.trim()
+      stashPrintContact({
+        customerId: customerIdStr,
+        phone: contactPhone,
+        whatsapp: contactWhatsapp,
+      })
+      try {
+        const fetched = await fetchAndStashPrintContact(customerIdStr)
+        contactPhone = fetched.phone || contactPhone
+        contactWhatsapp = fetched.whatsapp || contactWhatsapp
+      } catch {
+        /* use cached / prompt in print window */
+      }
+
+      const printContact: PrintWindowContact = {
+        customerId: customerIdStr,
+        phone: contactPhone,
+        whatsapp: contactWhatsapp || contactPhone,
+      }
+
+      const printData = withCustomerContactForPrint({
         invoiceNumber: invoice.invoiceNumber,
         items: (invoice.items || []).map((item: any) => ({
           name: item.name,
@@ -1003,9 +1050,15 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
         userPreferredLanguage: preferredLanguage as 'en' | 'ur',
         invoiceNote: branchData?.invoiceNote,
         printInUrdu: getInvoicePrintInUrdu(),
-      };
+        previousBalance,
+        newBalance: entry.balance,
+      }, invoice, { phone: contactPhone, whatsapp: contactWhatsapp || contactPhone });
 
-      openPrintWindow(generateInvoiceHTML(printData));
+      if (format === 'a4') {
+        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact);
+      } else {
+        openPrintWindow(generateInvoiceHTML(printData), printContact);
+      }
       toast.success(t('print_invoice_btn'));
     } catch (error) {
       console.error(error);
@@ -1352,12 +1405,24 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handlePrintLinkedCustomerDoc(entry)}
+                                onClick={() => handlePrintLinkedCustomerDoc(entry, 'receipt')}
                                 disabled={printingRowId === String(entry.id || entry._id)}
                                 className="h-8 w-8 p-0"
                                 title={t('print_invoice_btn')}
                               >
                                 <Printer className="w-4 h-4 text-slate-700" />
+                              </Button>
+                            )}
+                            {usesInvoiceA4Print(entry) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePrintLinkedCustomerDoc(entry, 'a4')}
+                                disabled={printingRowId === String(entry.id || entry._id)}
+                                className="h-8 w-8 p-0"
+                                title={t('print_a4') || 'Print A4 invoice'}
+                              >
+                                <Receipt className="w-4 h-4 text-slate-700" />
                               </Button>
                             )}
                             {entry.transactionType === 'payment_received' && entry.credit > 0 && (

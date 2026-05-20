@@ -26,6 +26,14 @@ router
   .get(auth('viewPayments'), validate(customerLedgerValidation.getCustomerBalance), customerLedgerController.getCustomerLedgerSummary);
 
 router
+  .route('/customer/:customerId/balance-before/:referenceId')
+  .get(
+    auth('viewPayments'),
+    validate(customerLedgerValidation.getBalanceBeforeReference),
+    customerLedgerController.getBalanceBeforeReference,
+  );
+
+router
   .route('/:entryId')
   .get(auth('viewPayments'), validate(customerLedgerValidation.getLedgerEntry), customerLedgerController.getLedgerEntry)
   .patch(auth('editPayments'), validate(customerLedgerValidation.updateLedgerEntry), customerLedgerController.updateLedgerEntry)

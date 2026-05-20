@@ -55,6 +55,13 @@ import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
+import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
+import {
+  fetchAndStashPrintContact,
+  stashPrintContact,
+  type PrintWindowContact,
+} from '../utils/invoice-print-contact-bridge'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
@@ -177,6 +184,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const groupedConvertedBills = useMemo(() => {
     const billGroups = new Map<string, {
       billNumber: string
+      creditInvoiceId?: string
       invoices: any[]
       totalAmount: number
       items: any[]
@@ -214,6 +222,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         // Create new bill group
         billGroups.set(billNumber, {
           billNumber,
+          creditInvoiceId: invoice.convertedTo ? String(invoice.convertedTo) : undefined,
           invoices: [invoice],
           totalAmount: invoice.total || 0,
           items: invoice.items ? [...invoice.items] : [],
@@ -365,12 +374,12 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     }
   }
 
-  // Print invoice with utility function
-  const printInvoice = (invoiceData: any, printType: 'receipt' | 'a4' = 'receipt') => {
-    try {
-      const printData: PrintInvoiceData = {
+  const buildPrintData = (
+    invoiceData: any,
+    previousBalance: number,
+  ): PrintInvoiceData => withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
-        items: invoiceData.items.map((item: any) => ({
+        items: (invoiceData.items || []).map((item: any) => ({
           name: item.name,
           nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
           quantity: item.quantity,
@@ -392,8 +401,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: 0,
         serviceCharge: 0,
-        previousBalance: customerBalance,
-        newBalance: customerBalance + invoiceData.total,
+        previousBalance,
+        newBalance: previousBalance + (invoiceData.total ?? 0) - (invoiceData.paidAmount ?? 0),
         companyName: orgData?.name || branchData?.name,
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
@@ -404,14 +413,84 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         invoiceNote: branchData?.invoiceNote,
         printInUrdu: getInvoicePrintInUrdu(),
         userPreferredLanguage: preferredLanguage as 'en' | 'ur',
-      }
+  }, { customerId: selectedCustomerId }, selectedCustomer)
 
+  const printInvoice = async (invoiceData: any, printType: 'receipt' | 'a4' = 'receipt') => {
+    try {
+      const refId = invoiceData._id || invoiceData.id
+      const previousBalance = await fetchBalanceBeforeInvoice(selectedCustomerId, refId)
+      const printData = buildPrintData(invoiceData, previousBalance)
+      const printContact: PrintWindowContact = {
+        customerId: selectedCustomerId,
+        phone: selectedCustomer?.phone,
+        whatsapp: selectedCustomer?.whatsapp,
+      }
+      if (selectedCustomerId) {
+        stashPrintContact(printContact)
+        try {
+          await fetchAndStashPrintContact(selectedCustomerId)
+        } catch {
+          /* prompt in print window */
+        }
+      }
       if (printType === 'a4') {
-        const htmlContent = generateA4InvoiceHTML(printData)
-        openA4PrintWindow(htmlContent)
+        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact)
       } else {
-        const htmlContent = generateInvoiceHTML(printData)
-        openPrintWindow(htmlContent)
+        openPrintWindow(generateInvoiceHTML(printData), printContact)
+      }
+    } catch (error) {
+      console.error('Print error:', error)
+      toast.error(t('print_failed'))
+    }
+  }
+
+  const printBillGroup = async (
+    billGroup: {
+      billNumber: string
+      creditInvoiceId?: string
+      totalAmount: number
+      items: any[]
+      notes?: string
+      invoices: any[]
+    },
+    printType: 'receipt' | 'a4',
+  ) => {
+    try {
+      const previousBalance = await fetchBalanceBeforeInvoice(
+        selectedCustomerId,
+        billGroup.creditInvoiceId,
+      )
+      const printData = buildPrintData(
+        {
+          invoiceNumber: billGroup.billNumber,
+          items: billGroup.items,
+          subtotal: billGroup.totalAmount,
+          tax: 0,
+          discount: 0,
+          total: billGroup.totalAmount,
+          paidAmount: 0,
+          balance: billGroup.totalAmount,
+          notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
+        },
+        previousBalance,
+      )
+      const printContact: PrintWindowContact = {
+        customerId: selectedCustomerId,
+        phone: selectedCustomer?.phone,
+        whatsapp: selectedCustomer?.whatsapp,
+      }
+      if (selectedCustomerId) {
+        stashPrintContact(printContact)
+        try {
+          await fetchAndStashPrintContact(selectedCustomerId)
+        } catch {
+          /* prompt in print window */
+        }
+      }
+      if (printType === 'a4') {
+        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact)
+      } else {
+        openPrintWindow(generateInvoiceHTML(printData), printContact)
       }
     } catch (error) {
       console.error('Print error:', error)
@@ -515,7 +594,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       // Print if requested
       if (printType !== 'none') {
         console.log('Printing invoice...')
-        printInvoice(result, printType)
+        await printInvoice(result, printType)
       }
 
       // Reset form
@@ -861,44 +940,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  const printData: PrintInvoiceData = {
-                                    invoiceNumber: billGroup.billNumber,
-                                    items: billGroup.items.map((item: any) => ({
-                                      name: item.name,
-                                      quantity: item.quantity,
-                                      unitPrice: item.unitPrice,
-                                      subtotal: item.subtotal
-                                    })),
-                                    customerId: selectedCustomer,
-                                    customerName: selectedCustomer?.name,
-                                    type: 'credit',
-                                    subtotal: billGroup.totalAmount,
-                                    tax: 0,
-                                    discount: 0,
-                                    total: billGroup.totalAmount,
-                                    paidAmount: 0,
-                                    balance: billGroup.totalAmount,
-                                    notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
-                                    invoiceAddress: branchData?.location?.address?.trim() || undefined,
-                                    invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
-                                    deliveryCharge: 0,
-                                    serviceCharge: 0,
-                                    companyName: orgData?.name || branchData?.name,
-                                    companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
-                                    companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
-                                    companyPhone: branchData?.phone,
-                                    companyEmail: branchData?.email,
-                                    companyLogo: orgData?.logo?.url,
-                                    isTrial: orgData?.subscription?.isTrial,
-                                    invoiceNote: branchData?.invoiceNote,
-                                    printInUrdu: getInvoicePrintInUrdu(),
-                                    userPreferredLanguage: preferredLanguage as 'en' | 'ur',
-                                    customerNameUrdu: selectedCustomer?.nameUrdu?.trim() || undefined,
-                                  }
-                                  const htmlContent = generateInvoiceHTML(printData)
-                                  openPrintWindow(htmlContent)
-                                }}
+                                onClick={() => printBillGroup(billGroup, 'receipt')}
                                 className="flex items-center gap-1"
                               >
                                 <Receipt className="h-3 w-3" />
@@ -907,44 +949,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  const printData: PrintInvoiceData = {
-                                    invoiceNumber: billGroup.billNumber,
-                                    items: billGroup.items.map((item: any) => ({
-                                      name: item.name,
-                                      quantity: item.quantity,
-                                      unitPrice: item.unitPrice,
-                                      subtotal: item.subtotal
-                                    })),
-                                    customerId: selectedCustomer,
-                                    customerName: selectedCustomer?.name,
-                                    type: 'credit',
-                                    subtotal: billGroup.totalAmount,
-                                    tax: 0,
-                                    discount: 0,
-                                    total: billGroup.totalAmount,
-                                    paidAmount: 0,
-                                    balance: billGroup.totalAmount,
-                                    notes: billGroup.notes || `Merged bill from ${billGroup.invoices.length} invoices`,
-                                    invoiceAddress: branchData?.location?.address?.trim() || undefined,
-                                    invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
-                                    deliveryCharge: 0,
-                                    serviceCharge: 0,
-                                    companyName: orgData?.name || branchData?.name,
-                                    companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
-                                    companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
-                                    companyPhone: branchData?.phone,
-                                    companyEmail: branchData?.email,
-                                    companyLogo: orgData?.logo?.url,
-                                    isTrial: orgData?.subscription?.isTrial,
-                                    invoiceNote: branchData?.invoiceNote,
-                                    printInUrdu: getInvoicePrintInUrdu(),
-                                    userPreferredLanguage: preferredLanguage as 'en' | 'ur',
-                                    customerNameUrdu: selectedCustomer?.nameUrdu?.trim() || undefined,
-                                  }
-                                  const htmlContent = generateA4InvoiceHTML(printData)
-                                  openA4PrintWindow(htmlContent)
-                                }}
+                                onClick={() => printBillGroup(billGroup, 'a4')}
                                 className="flex items-center gap-1"
                               >
                                 <Printer className="h-3 w-3" />

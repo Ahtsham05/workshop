@@ -371,7 +371,7 @@ const createInvoice = async (invoiceBody, userId) => {
 
   // Only populate customer if it's not a walk-in customer
   if (isValidCustomerObjectId(invoice.customerId)) {
-    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone email' });
+    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone whatsapp email' });
   }
 
   await invoice.populate(populateOptions);
@@ -423,7 +423,7 @@ const queryInvoices = async (filter, options) => {
 
     if (customerObjectIds.length > 0) {
       // Fetch all customers in one query
-      const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select('name nameUrdu phone email');
+      const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select('name nameUrdu phone whatsapp email');
       const customerMap = new Map();
       customers.forEach(customer => {
         customerMap.set(customer._id.toString(), customer);
@@ -480,7 +480,7 @@ const getInvoiceById = async (id) => {
 
   // Only populate customer if it's not a walk-in customer
   if (invoice.customerId && invoice.customerId !== 'walk-in') {
-    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone email address' });
+    populateOptions.unshift({ path: 'customerId', select: 'name nameUrdu phone whatsapp email address' });
   }
 
   await invoice.populate(populateOptions);
@@ -610,20 +610,36 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   await invoice.save();
   console.log('Invoice updated successfully');
   await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
-  
-  // Update customer ledger entries if amounts or customer changed
+
   const newCustomerId = invoice.customerId;
+  const isConvertedPending =
+    invoice.type === 'pending' && Boolean(invoice.isConvertedToBill);
+
+  if (isConvertedPending && originalCustomerId && originalCustomerId !== 'walk-in') {
+    try {
+      await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
+      console.log('Removed ledger entries for converted pending invoice:', invoice.invoiceNumber);
+    } catch (error) {
+      console.error('Failed to remove ledger for converted pending invoice:', error);
+    }
+  }
+
+  // Pending invoices never post to ledger; only credit/cash (and converted bills) do.
   const newTotal = invoice.total;
   const newPaidAmount = invoice.paidAmount || 0;
   const hasLedgerEntries = await CustomerLedger.exists({ referenceId: invoice._id });
 
-  if (originalCustomerId && originalCustomerId !== 'walk-in' && (
-    originalTotal !== newTotal || 
-    originalPaidAmount !== newPaidAmount ||
-    originalCustomerId !== newCustomerId ||
-    originalType !== invoice.type ||
-    !hasLedgerEntries
-  )) {
+  if (
+    !isConvertedPending &&
+    invoice.type !== 'pending' &&
+    originalCustomerId &&
+    originalCustomerId !== 'walk-in' &&
+    (originalTotal !== newTotal ||
+      originalPaidAmount !== newPaidAmount ||
+      originalCustomerId !== newCustomerId ||
+      originalType !== invoice.type ||
+      !hasLedgerEntries)
+  ) {
     try {
       const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
       console.log('Updating customer ledger entries for invoice:', {

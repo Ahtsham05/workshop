@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { CustomerLedger, Customer } = require('../models');
+const { CustomerLedger, Customer, Invoice } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
 const cashBookService = require('./cashBook.service');
@@ -311,8 +311,67 @@ const queryLedgerEntries = async (filter, options) => {
   options.populate = 'customer';
   options.sort = options.sort || '-transactionDate';
   
+  if (filter.customer) {
+    await cleanupLedgerForConvertedPendingInvoices(filter.customer);
+  }
+
   const entries = await CustomerLedger.paginate(filter, options);
   return entries;
+};
+
+/**
+ * Remove ledger rows for pending invoices that were converted to a credit bill.
+ * Those amounts belong only on the credit invoice ledger line.
+ */
+const cleanupLedgerForConvertedPendingInvoices = async (customerId) => {
+  if (!customerId) return;
+
+  const convertedPending = await Invoice.find({
+    customerId,
+    type: 'pending',
+    isConvertedToBill: true,
+  }).select('_id');
+
+  for (const inv of convertedPending) {
+    const count = await CustomerLedger.countDocuments({ referenceId: inv._id });
+    if (count > 0) {
+      await deleteLedgerEntriesByReference(inv._id);
+    }
+  }
+};
+
+/**
+ * Running balance immediately before a sale/payment linked to referenceId.
+ */
+const getBalanceBeforeReference = async (customerId, referenceId) => {
+  if (!customerId || customerId === 'walk-in' || !referenceId) {
+    return 0;
+  }
+
+  await cleanupLedgerForConvertedPendingInvoices(customerId);
+
+  const saleEntry = await CustomerLedger.findOne({
+    customer: customerId,
+    referenceId,
+    transactionType: 'sale',
+  }).sort({ transactionDate: 1, createdAt: 1 });
+
+  if (saleEntry) {
+    return saleEntry.balance - (Number(saleEntry.debit) || 0) + (Number(saleEntry.credit) || 0);
+  }
+
+  const invoice = await Invoice.findById(referenceId).select('invoiceDate total paidAmount customerId');
+  if (!invoice || String(invoice.customerId) !== String(customerId)) {
+    return 0;
+  }
+
+  const invoiceDate = invoice.invoiceDate || new Date();
+  const priorEntry = await CustomerLedger.findOne({
+    customer: customerId,
+    transactionDate: { $lt: invoiceDate },
+  }).sort({ transactionDate: -1, createdAt: -1 });
+
+  return priorEntry ? priorEntry.balance : 0;
 };
 
 /**
@@ -334,6 +393,7 @@ const getCustomerBalance = async (customerId) => {
   if (!customer) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Customer not found');
   }
+  await cleanupLedgerForConvertedPendingInvoices(customerId);
   return customer.balance || 0;
 };
 
@@ -431,7 +491,7 @@ const deleteLedgerEntry = async (id) => {
  */
 const getAllCustomersWithBalances = async (filter = {}) => {
   const customers = await Customer.find(filter).select(
-    'name nameUrdu phone email balance picture idCardFront idCardBack',
+    'name nameUrdu phone whatsapp email balance picture idCardFront idCardBack',
   );
   
   const customersWithBalances = await Promise.all(
@@ -446,6 +506,7 @@ const getAllCustomersWithBalances = async (filter = {}) => {
         name: customer.name,
         nameUrdu: customer.nameUrdu,
         phone: customer.phone,
+        whatsapp: customer.whatsapp,
         email: customer.email,
         balance: customer.balance || 0,
         picture: customer.picture,
@@ -483,9 +544,14 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
   const entries = await CustomerLedger.find({ referenceId }).sort({ transactionDate: 1 });
   
   if (entries.length === 0) {
-    // Backfill missing ledger entries (e.g. pending->credit conversion or old broken writes)
     if (!customerId || customerId === 'walk-in') {
       console.log('No ledger entries found and customer is invalid/walk-in for reference:', referenceId);
+      return;
+    }
+
+    const linkedInvoice = await Invoice.findById(referenceId).select('type isConvertedToBill');
+    if (linkedInvoice?.type === 'pending') {
+      console.log('Skipping ledger backfill for pending invoice:', referenceId);
       return;
     }
 
@@ -718,4 +784,6 @@ module.exports = {
   updateLedgerEntriesByReference,
   deleteLedgerEntriesByReference,
   syncOpeningBalanceEntry,
+  cleanupLedgerForConvertedPendingInvoices,
+  getBalanceBeforeReference,
 };

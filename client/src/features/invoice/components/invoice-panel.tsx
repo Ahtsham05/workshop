@@ -14,6 +14,13 @@ import { Invoice, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
+import {
+  fetchAndStashPrintContact,
+  resolveCustomerIdString,
+  stashPrintContact,
+  type PrintWindowContact,
+} from '../utils/invoice-print-contact-bridge'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import SmartInput from '@/components/smart-input.tsx'
 import Axios from '@/utils/Axios'
@@ -156,12 +163,12 @@ export function InvoicePanel({
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   // Print functionality using utility
-  const printInvoice = useCallback((invoiceData: any) => {
+  const printInvoice = useCallback(async (invoiceData: any) => {
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
 
-      const printData: PrintInvoiceData = {
+      const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
@@ -209,10 +216,26 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
+        invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
+      }, invoiceData)
+
+      const customerIdStr = resolveCustomerIdString(printData.customerId)
+      const printContact: PrintWindowContact = {
+        customerId: customerIdStr,
+        phone: printData.customerPhone,
+        whatsapp: printData.customerWhatsapp,
+      }
+      if (customerIdStr) {
+        stashPrintContact(printContact)
+        try {
+          await fetchAndStashPrintContact(customerIdStr)
+        } catch {
+          /* prompt in print window */
+        }
       }
 
       const htmlContent = generateInvoiceHTML(printData)
-      openPrintWindow(htmlContent)
+      openPrintWindow(htmlContent, printContact)
       
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {
@@ -227,12 +250,12 @@ export function InvoicePanel({
   }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // A4 Print functionality using utility
-  const printA4Invoice = useCallback((invoiceData: any) => {
+  const printA4Invoice = useCallback(async (invoiceData: any) => {
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
 
-      const printData: PrintInvoiceData = {
+      const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
         items: invoiceData.items.map((item: any) => ({
           name: item.name,
@@ -280,10 +303,26 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
+        invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
+      }, invoiceData)
+
+      const customerIdStr = resolveCustomerIdString(printData.customerId)
+      const printContact: PrintWindowContact = {
+        customerId: customerIdStr,
+        phone: printData.customerPhone,
+        whatsapp: printData.customerWhatsapp,
+      }
+      if (customerIdStr) {
+        stashPrintContact(printContact)
+        try {
+          await fetchAndStashPrintContact(customerIdStr)
+        } catch {
+          /* prompt in print window */
+        }
       }
 
       const htmlContent = generateA4InvoiceHTML(printData)
-      openA4PrintWindow(htmlContent)
+      openA4PrintWindow(htmlContent, printContact)
       
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {

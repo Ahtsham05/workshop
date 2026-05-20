@@ -19,6 +19,7 @@ interface CustomerWithBalance {
   name: string;
   nameUrdu?: string;
   phone?: string;
+  whatsapp?: string;
   email?: string;
   balance: number;
   lastTransactionDate?: string;

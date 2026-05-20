@@ -56,6 +56,7 @@ import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
+import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
@@ -413,6 +414,13 @@ const AuthenticatedSubscriptionPaymentRoute =
     id: '/subscription/payment',
     path: '/subscription/payment',
     getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedSettingsWhatsappRoute =
+  AuthenticatedSettingsWhatsappImport.update({
+    id: '/whatsapp',
+    path: '/whatsapp',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
 const AuthenticatedSettingsNotificationsRoute =
@@ -1156,6 +1164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/whatsapp': {
+      id: '/_authenticated/settings/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/settings/whatsapp'
+      preLoaderRoute: typeof AuthenticatedSettingsWhatsappImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/subscription/payment': {
       id: '/_authenticated/subscription/payment'
       path: '/subscription/payment'
@@ -1670,6 +1685,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
+  AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
 
@@ -1680,6 +1696,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
+    AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }
 
@@ -1987,6 +2004,7 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
@@ -2098,6 +2116,7 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
@@ -2212,6 +2231,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
@@ -2328,6 +2348,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/accounting'
@@ -2438,6 +2459,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/accounting'
@@ -2550,6 +2572,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
+    | '/_authenticated/settings/whatsapp'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
     | '/_authenticated/accounting/'
@@ -2750,6 +2773,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/appearance",
         "/_authenticated/settings/display",
         "/_authenticated/settings/notifications",
+        "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
       ]
     },
@@ -2925,6 +2949,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/notifications": {
       "filePath": "_authenticated/settings/notifications.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/whatsapp": {
+      "filePath": "_authenticated/settings/whatsapp.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/subscription/payment": {

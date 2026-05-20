@@ -12,7 +12,7 @@
  *  - sendBulkMessages(recipients, message, { delay }) → { sent, failed }
  */
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
 const logger = require('../config/logger');
 
@@ -405,6 +405,47 @@ async function sendBulkMessages(recipients, message, options = {}) {
   return result;
 }
 
+/**
+ * Send a document (e.g. invoice PDF) to a WhatsApp number.
+ * @param {string} phone
+ * @param {{ data: Buffer|string, mimetype?: string, filename?: string, caption?: string }} payload
+ * @returns {{ success: boolean, error?: string }}
+ */
+async function sendDocument(phone, { data, mimetype = 'application/pdf', filename = 'document.pdf', caption = '' }) {
+  if (_state !== 'READY' || !_client) {
+    return { success: false, error: 'WhatsApp is not connected. Connect WhatsApp in Settings first.' };
+  }
+
+  const jid = toJid(phone);
+  if (!jid) {
+    return { success: false, error: 'Invalid phone number: ' + phone };
+  }
+
+  try {
+    const isRegistered = await _client.isRegisteredUser(jid);
+    if (!isRegistered) {
+      return { success: false, error: `${phone} is not registered on WhatsApp` };
+    }
+
+    let base64;
+    if (Buffer.isBuffer(data)) {
+      base64 = data.toString('base64');
+    } else if (typeof data === 'string') {
+      base64 = data.replace(/^data:application\/pdf;base64,/, '').trim();
+    } else {
+      return { success: false, error: 'Invalid document data' };
+    }
+
+    const safeName = String(filename || 'document.pdf').replace(/[^\w.\-() ]/g, '_') || 'document.pdf';
+    const media = new MessageMedia(mimetype, base64, safeName);
+    await _client.sendMessage(jid, media, { caption: String(caption || '').slice(0, 1024) });
+    return { success: true };
+  } catch (err) {
+    logger.error(`WhatsApp sendDocument to ${phone} failed:`, err);
+    return { success: false, error: err.message || 'Failed to send document on WhatsApp' };
+  }
+}
+
 module.exports = {
   initialize,
   tryAutoConnect,
@@ -413,4 +454,5 @@ module.exports = {
   getStatus,
   sendMessage,
   sendBulkMessages,
+  sendDocument,
 };

@@ -30,6 +30,11 @@ const envVarsSchema = Joi.object()
     GEMINI_API_KEY: Joi.string().allow('').description('Google Gemini API key for customer image AI scan'),
     GEMINI_VISION_MODEL: Joi.string().allow('').description('Gemini vision model (default gemini-2.5-flash-lite, API v1)'),
     GEMINI_FALLBACK_MODELS: Joi.string().allow('').description('Comma-separated fallback models if quota hit'),
+    WHATSAPP_PROVIDER: Joi.string().valid('auto', 'cloud', 'web').default('auto'),
+    WHATSAPP_CLOUD_ACCESS_TOKEN: Joi.string().allow('').description('Meta WhatsApp Cloud API permanent access token'),
+    WHATSAPP_CLOUD_PHONE_NUMBER_ID: Joi.string().allow('').description('WhatsApp Cloud API phone number ID'),
+    WHATSAPP_CLOUD_API_VERSION: Joi.string().allow('').default('v21.0'),
+    WHATSAPP_CLOUD_BUSINESS_ACCOUNT_ID: Joi.string().allow('').description('Optional WABA ID'),
   })
   .unknown();
 
@@ -85,5 +90,15 @@ module.exports = {
     apiKey: envVars.GEMINI_API_KEY || '',
     model: envVars.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite',
     fallbackModels: envVars.GEMINI_FALLBACK_MODELS || '',
+  },
+  whatsapp: {
+    provider: envVars.WHATSAPP_PROVIDER || 'auto',
+    cloud: {
+      provider: envVars.WHATSAPP_PROVIDER || 'auto',
+      accessToken: (envVars.WHATSAPP_CLOUD_ACCESS_TOKEN || '').trim(),
+      phoneNumberId: (envVars.WHATSAPP_CLOUD_PHONE_NUMBER_ID || '').trim(),
+      apiVersion: (envVars.WHATSAPP_CLOUD_API_VERSION || 'v21.0').trim(),
+      businessAccountId: (envVars.WHATSAPP_CLOUD_BUSINESS_ACCOUNT_ID || '').trim(),
+    },
   },
 };

@@ -14,6 +14,7 @@ import { SupplierLedger } from './components/supplier-ledger';
 import { AccountsDashboard } from './components/accounts-dashboard';
 import { PersonalLedger } from './components/personal-ledger';
 import { useLanguage } from '@/context/language-context';
+import { fetchAndStashPrintContact } from '@/features/invoice/utils/invoice-print-contact-bridge';
 
 export default function AccountingPage() {
   const { t } = useLanguage();
@@ -39,10 +40,21 @@ export default function AccountingPage() {
     if (searchParams?.tab === 'customer-ledger' && searchParams?.customerId) {
       console.log('Opening customer ledger for:', searchParams.customerName);
       setManualTab(null); // Reset manual tab to allow URL params to control
-      setInitialCustomer({ 
-        _id: searchParams.customerId, 
-        name: searchParams.customerName || 'Customer'
+      const customerId = searchParams.customerId as string;
+      setInitialCustomer({
+        _id: customerId,
+        name: searchParams.customerName || 'Customer',
       });
+      fetchAndStashPrintContact(customerId)
+        .then((c) => {
+          setInitialCustomer({
+            _id: customerId,
+            name: searchParams.customerName || 'Customer',
+            phone: c.phone,
+            whatsapp: c.whatsapp,
+          });
+        })
+        .catch(() => {});
     } else if (searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId) {
       console.log('Opening supplier ledger for:', searchParams.supplierName);
       setManualTab(null); // Reset manual tab to allow URL params to control

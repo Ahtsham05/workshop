@@ -20,12 +20,14 @@ const sharedLabels = {
     cash: 'Cash',
     credit: 'Credit',
     pending: 'Pending',
+    contact_label: 'Contact',
     powered_by: 'Logix Plus Software Solutions',
   },
   ur: {
     cash: 'کیش',
     credit: 'ادھار',
     pending: 'زیر التوا',
+    contact_label: 'رابطہ',
     powered_by: 'Logix Plus Software Solutions',
   },
 } as const

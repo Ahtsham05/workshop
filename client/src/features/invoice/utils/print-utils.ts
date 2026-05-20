@@ -1,5 +1,19 @@
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
+import {
+  buildPrintActionsLabels,
+  buildPrintWindowActionsBlock,
+  printActionsBarStyles,
+} from './invoice-print-whatsapp'
+import {
+  ensureInvoicePrintContactBridge,
+  stashPrintContact,
+  type PrintWindowContact,
+} from './invoice-print-contact-bridge'
+import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge'
+import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
+
+export type { PrintWindowContact }
 
 export interface PrintInvoiceData {
   invoiceNumber: string
@@ -56,6 +70,11 @@ export interface PrintInvoiceData {
   printInUrdu?: boolean
   /** Max line items per sheet before a continuation page (A4). Default 14. */
   a4ItemsPerPage?: number
+  /** Customer mobile for WhatsApp send from print preview. */
+  customerPhone?: string
+  customerWhatsapp?: string
+  /** Invoice date (YYYY-MM-DD) for PDF filename; defaults to today when omitted. */
+  invoiceDate?: string
 }
 
 function resolvePrintLanguage(data: PrintInvoiceData): InvoiceLanguage {
@@ -72,17 +91,20 @@ function resolveHeaderBusinessName(data: PrintInvoiceData, lang: InvoiceLanguage
   return en || ur
 }
 
-/** Customer / invoice address line for print (Urdu-first when printing in Urdu). */
-function formatPrintInvoiceAddress(
-  en: string | undefined,
-  ur: string | undefined,
-  lang: InvoiceLanguage,
-): string {
-  const e = (en ?? '').trim()
-  const u = (ur ?? '').trim()
-  if (!e && !u) return ''
-  const text = lang === 'ur' ? u || e : e || u
+/** Branch street address under company name — English or Urdu per print language. */
+function formatPrintHeaderAddress(data: PrintInvoiceData, lang: InvoiceLanguage): string {
+  const en = (data.invoiceAddress ?? '').trim()
+  const ur = (data.invoiceAddressUrdu ?? '').trim()
+  if (!en && !ur) return ''
+  const text = lang === 'ur' ? ur || en : en || ur
   return escapeHtml(text)
+}
+
+/** Professional contact line: "Contact: 0300…" */
+function formatPrintContactLine(phone: string | undefined, contactLabel: string): string {
+  const num = (phone ?? '').trim()
+  if (!num) return ''
+  return `<span class="contact-label">${escapeHtml(contactLabel)}:</span> ${escapeHtml(num)}`
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -140,10 +162,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
-    companyAddress,
     companyPhone,
-    companyEmail,
-    companyTaxNumber,
   } = data
 
   const language = resolvePrintLanguage(data)
@@ -166,15 +185,13 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   //   : totalWithPrev - paid
 
   const headerBusinessName = resolveHeaderBusinessName(data, language)
-  const invoiceAddrLine = formatPrintInvoiceAddress(data.invoiceAddress, data.invoiceAddressUrdu, language)
+  const headerAddressLine = formatPrintHeaderAddress(data, language)
+
+  const contactLine = formatPrintContactLine(companyPhone, labels.contact_label)
 
   const urduTexts = {
     ...labels,
     business_name: headerBusinessName || labels.business_name,
-    business_address: companyAddress || labels.business_address,
-    business_phone: companyPhone || labels.business_phone,
-    business_email: companyEmail || labels.business_email,
-    tax_id: `${labels.tax_id_prefix} ${companyTaxNumber || labels.tax_id_fallback}`,
   }
 
   const getTypeText = (type: string) => {
@@ -186,6 +203,21 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     }
   }
 
+  const customerNameHtml = formatPrintCustomerCell(
+    customerId,
+    walkInCustomerName,
+    customerName,
+    customerNameUrdu,
+    urduTexts.walk_in_customer,
+    urduTexts.not_available,
+    language,
+  )
+
+  const printActions = buildPrintWindowActionsBlock(
+    data,
+    buildPrintActionsLabels(language, 'receipt', urduTexts.print_receipt, urduTexts.print_receipt),
+  )
+
   return `
 <!DOCTYPE html>
 <html dir="${dir}" lang="${language}">
@@ -193,6 +225,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   <meta charset="UTF-8">
   <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
   <style>
+    ${printActionsBarStyles}
     @media print {
       @page { 
         margin: 5mm; 
@@ -245,6 +278,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     .business-info {
       font-size: 10px;
       margin-bottom: 1px;
+      color: #000;
     }
     
     .invoice-info {
@@ -262,6 +296,34 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     
     .info-label {
       font-weight: bold;
+    }
+
+    .customer-name-highlight {
+      font-size: 14px;
+      font-weight: 800;
+      color: #000;
+      text-align: ${startAlign};
+    }
+
+    .customer-row {
+      align-items: baseline;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px dashed #ccc;
+    }
+
+    .company-contact-line {
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .company-contact-line .contact-label {
+      font-weight: 700;
+      color: #000;
+    }
+
+    .company-contact-line {
+      color: #000;
     }
     
     .items-section {
@@ -483,12 +545,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div id="invoice-print-root">
   <div class="receipt-header">
     ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
     <div class="business-name">${urduTexts.business_name}</div>
-    <div class="business-info">${urduTexts.business_address}</div>
-    <div class="business-info">${urduTexts.business_phone} | ${urduTexts.business_email}</div>
-    <div class="business-info">${urduTexts.tax_id}</div>
+    ${headerAddressLine ? `<div class="business-info">${headerAddressLine}</div>` : ''}
+    ${contactLine ? `<div class="business-info company-contact-line">${contactLine}</div>` : ''}
   </div>
   
   <div class="invoice-info">
@@ -504,16 +566,10 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <span class="info-label">${urduTexts.type}:</span>
       <span>${getTypeText(type)}</span>
     </div>
-    <div class="info-row">
+    <div class="info-row customer-row">
       <span class="info-label">${urduTexts.customer}:</span>
-      <span>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</span>
+      <span class="customer-name-highlight">${customerNameHtml}</span>
     </div>
-    ${invoiceAddrLine ? `
-    <div class="info-row">
-      <span class="info-label">${urduTexts.invoice_address}:</span>
-      <span>${invoiceAddrLine}</span>
-    </div>
-    ` : ''}
   </div>
   
   <div class="items-section">
@@ -548,49 +604,45 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     </table>
   </div>
   
-  ${(discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0) ? `
+  ${(() => {
+    const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
+    if (type === 'pending') {
+      if (hasExtraCharges) {
+        return `
   <div class="totals-section">
     <div class="total-row">
       <span>${urduTexts.subtotal}:</span>
       <span>${formatCurrency(subtotal)}</span>
     </div>
-    ${discount > 0 ? `
-    <div class="total-row">
-      <span>${urduTexts.discount}:</span>
-      <span>-${formatCurrency(discount)}</span>
-    </div>
-    ` : ''}
-    ${deliveryCharge > 0 ? `
-    <div class="total-row">
-      <span>${urduTexts.delivery_charge}:</span>
-      <span>${formatCurrency(deliveryCharge)}</span>
-    </div>
-    ` : ''}
-    ${serviceCharge > 0 ? `
-    <div class="total-row">
-      <span>${urduTexts.service_charge}:</span>
-      <span>${formatCurrency(serviceCharge)}</span>
-    </div>
-    ` : ''}
-    ${tax > 0 ? `
-    <div class="total-row">
-      <span>${urduTexts.tax}:</span>
-      <span>${formatCurrency(tax)}</span>
-    </div>
-    ` : ''}
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
+    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
+    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
+    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${formatCurrency(tax)}</span></div>` : ''}
     <div class="total-row total-final">
       <span>${urduTexts.total}:</span>
       <span>${formatCurrency(total)}</span>
     </div>
-  </div>
-  ` : `
+  </div>`
+      }
+      return `
   <div class="totals-section">
     <div class="total-row total-final">
       <span>${urduTexts.total}:</span>
       <span>${formatCurrency(total)}</span>
     </div>
-  </div>
-  `}
+  </div>`
+    }
+    if (hasExtraCharges) {
+      return `
+  <div class="totals-section">
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
+    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
+    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
+    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${formatCurrency(tax)}</span></div>` : ''}
+  </div>`
+    }
+    return ''
+  })()}
   
   ${type !== 'pending' ? `
     <div class="payment-section">
@@ -602,14 +654,6 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.current_invoice}:</span>
         <span style="font-weight: bold;">${formatCurrency(currentInvoice)}</span>
-      </div>
-      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
-        <span>${urduTexts.total_receivable}:</span>
-        <span style="font-weight: bold;">${formatCurrency(totalWithPrev)}</span>
-      </div>
-      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
-        <span>${urduTexts.customer_receipt}:</span>
-        <span style="font-weight: bold;">${formatCurrency(paid)}</span>
       </div>
       <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
         <span>${urduTexts.net_balance}:</span>
@@ -657,24 +701,8 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       ${urduTexts.powered_by}
     </div>
   </div>
-  
-  <div class="no-print">
-    <div style="margin-bottom: 10px; font-weight: bold;">${urduTexts.print_options}</div>
-    <div class="print-actions">
-    <button 
-      onclick="window.print()" 
-      class="print-btn print-btn-primary"
-    >
-      ${urduTexts.print_receipt}
-    </button>
-    <button 
-      onclick="window.close()" 
-      class="print-btn print-btn-secondary"
-    >
-      ${urduTexts.close}
-    </button>
-    </div>
   </div>
+  ${printActions}
 </body>
 </html>
   `.trim()
@@ -699,9 +727,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     notes,
     deliveryCharge = 0,
     serviceCharge = 0,
-    companyAddress,
     companyPhone,
-    companyEmail,
   } = data
 
   const language = resolvePrintLanguage(data)
@@ -712,13 +738,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const endAlign = language === 'ur' ? 'left' : 'right'
 
   const headerBusinessName = resolveHeaderBusinessName(data, language)
+  const headerAddressLine = formatPrintHeaderAddress(data, language)
+
+  const contactLine = formatPrintContactLine(companyPhone, labels.contact_label)
 
   const urduTexts = {
     ...labels,
     business_name: headerBusinessName || labels.business_name,
-    business_address: companyAddress || labels.business_address,
-    business_phone: companyPhone || labels.business_phone,
-    business_email: companyEmail || labels.business_email,
   }
 
   const getTypeText = (type: string) => {
@@ -729,6 +755,21 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       default: return type
     }
   }
+
+  const customerNameHtml = formatPrintCustomerCell(
+    customerId,
+    walkInCustomerName,
+    customerName,
+    customerNameUrdu,
+    urduTexts.walk_in_customer,
+    urduTexts.not_available,
+    language,
+  )
+
+  const printActions = buildPrintWindowActionsBlock(
+    data,
+    buildPrintActionsLabels(language, 'a4', urduTexts.print_invoice, urduTexts.print_invoice),
+  )
 
   // Resolve balances for A4 - prefer explicit fields from `data` when provided
   const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
@@ -758,11 +799,12 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     <div class="company-info">
       ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${urduTexts.business_name}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus solutions" class="company-logo" />` : ''}
       <div class="company-name">${urduTexts.business_name}</div>
+      ${headerAddressLine || contactLine ? `
       <div class="company-details">
-        ${urduTexts.business_address}<br>
-        ${urduTexts.business_phone}<br>
-        ${urduTexts.business_email}
+        ${headerAddressLine ? `${headerAddressLine}<br>` : ''}
+        ${contactLine ? `<span class="company-contact-line">${contactLine}</span>` : ''}
       </div>
+      ` : ''}
     </div>
     <div class="invoice-details">
       <div class="invoice-title">${urduTexts.invoice_title}</div>
@@ -775,11 +817,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   </div>
   
   <div class="invoice-info">
-    <div class="info-section">
+    <div class="info-section bill-to-section">
       <div class="info-title">${urduTexts.bill_to}:</div>
-      <div class="info-row">
-        <span class="info-label">${urduTexts.customer}:</span>
-        <span><strong>${formatPrintCustomerCell(customerId, walkInCustomerName, customerName, customerNameUrdu, urduTexts.walk_in_customer, urduTexts.not_available, language)}</strong></span>
+      <div class="customer-name-highlight">${customerNameHtml}</div>
+      <div class="bill-to-meta">
         <span class="status-badge status-${type}">${getTypeText(type)}</span>
       </div>
     </div>
@@ -793,10 +834,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   </div>
 `
 
-  const totalsBlock = `
+  const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
+  const showItemizedTotalsTable = type === 'pending' || hasExtraCharges
+
+  const itemizedTotalsTable = showItemizedTotalsTable
+    ? `
 <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
     <table class="totals-table" style="width: 400px;">
-      ${subtotal > 0 ? `
+      ${type === 'pending' && subtotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.subtotal}:</td>
         <td class="total-amount">${formatCurrency(subtotal)}</td>
@@ -826,12 +871,19 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
         <td class="total-amount">${formatCurrency(tax)}</td>
       </tr>
       ` : ''}
+      ${type === 'pending' ? `
       <tr class="final-total">
         <td class="total-label">${urduTexts.total}:</td>
         <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
+      ` : ''}
     </table>
   </div>
+`
+    : ''
+
+  const totalsBlock = `
+${itemizedTotalsTable}
 
   ${type !== 'pending' ? `
   <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
@@ -849,14 +901,6 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       </tr>
       ` : ''}
       <tr style="border-top: 2px solid #000;">
-        <td class="total-label" style="font-weight: bold;">${urduTexts.total_receivable || 'کل رقم'}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(totalWithPrev)}</td>
-      </tr>
-      <tr>
-        <td class="total-label">${urduTexts.amount_paid}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(paid)}</td>
-      </tr>
-      <tr>
         <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
         <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
@@ -951,6 +995,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <meta charset="UTF-8">
   <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
   <style>
+    ${printActionsBarStyles}
     @media print {
       @page { 
         margin: 1in; 
@@ -1007,7 +1052,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     
     .company-details {
       font-size: 12px;
-      color: #666;
+      color: #000;
       line-height: 1.3;
     }
     
@@ -1060,6 +1105,41 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     .info-label {
       font-weight: 600;
       color: #555;
+    }
+
+    .bill-to-section {
+      gap: 6px;
+    }
+
+    .customer-name-highlight {
+      font-size: 22px;
+      font-weight: 800;
+      color: #1a1a1a;
+      line-height: 1.35;
+      margin: 6px 0 4px;
+      padding: 8px 12px;
+      background: #fff;
+      border-${startAlign === 'right' ? 'right' : 'left'}: 4px solid #007bff;
+      border-radius: 4px;
+    }
+
+    .bill-to-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .company-contact-line {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 13px;
+      color: #000;
+    }
+
+    .company-contact-line .contact-label {
+      font-weight: 700;
+      color: #000;
     }
     
     .items-table {
@@ -1348,25 +1428,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div id="invoice-print-root">
   ${pagesHtml}
-
-  <div class="no-print">
-    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${urduTexts.print_options}</div>
-    <div class="print-actions">
-    <button 
-      onclick="window.print()" 
-      class="print-btn print-btn-primary"
-    >
-      ${urduTexts.print_invoice}
-    </button>
-    <button 
-      onclick="window.close()" 
-      class="print-btn print-btn-secondary"
-    >
-      ${urduTexts.close}
-    </button>
-    </div>
   </div>
+  ${printActions}
 </body>
 </html>
   `.trim()
@@ -1446,7 +1511,12 @@ export function generateA4LandscapeTwoInvoicesHTML(left: PrintInvoiceData, right
 </html>`
 }
 
-export const openPrintWindow = (htmlContent: string): void => {
+export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContact): void => {
+  ensureInvoicePrintContactBridge()
+  ensureInvoiceWhatsAppSendBridge()
+  ensureInvoicePrintPdfBridge()
+  if (contact) stashPrintContact(contact)
+
   const printWindow = window.open('', '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
   
   if (printWindow) {
@@ -1479,7 +1549,12 @@ export const openPrintWindow = (htmlContent: string): void => {
   }
 }
 
-export const openA4PrintWindow = (htmlContent: string): void => {
+export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowContact): void => {
+  ensureInvoicePrintContactBridge()
+  ensureInvoiceWhatsAppSendBridge()
+  ensureInvoicePrintPdfBridge()
+  if (contact) stashPrintContact(contact)
+
   const printWindow = window.open('', '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
   
   if (printWindow) {

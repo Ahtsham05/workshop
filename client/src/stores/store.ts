@@ -24,6 +24,7 @@ import { returnsApi } from './returns.api';
 import { schoolApi } from './school.api';
 import { expenseCategoryApi } from './expenseCategory.api';
 import { restaurantApi } from './restaurant.api';
+import { businessWhatsappApi } from './businessWhatsapp.api';
 
 export const store = configureStore({
   reducer: {
@@ -52,6 +53,7 @@ export const store = configureStore({
     [schoolApi.reducerPath]: schoolApi.reducer,
     [expenseCategoryApi.reducerPath]: expenseCategoryApi.reducer,
     [restaurantApi.reducerPath]: restaurantApi.reducer,
+    [businessWhatsappApi.reducerPath]: businessWhatsappApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -74,6 +76,7 @@ export const store = configureStore({
       schoolApi.middleware,
       expenseCategoryApi.middleware,
       restaurantApi.middleware,
+      businessWhatsappApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;
