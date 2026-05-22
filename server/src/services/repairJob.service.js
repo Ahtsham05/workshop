@@ -1,7 +1,19 @@
 const httpStatus = require('http-status');
 const { RepairJob } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { parseBusinessDateTime, applyBusinessDateRange } = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
+
+const normalizeRepairJobDates = (body) => {
+  const next = { ...body };
+  if (next.date != null) {
+    const parsed = parseBusinessDateTime(next.date);
+    if (parsed) {
+      next.date = parsed;
+    }
+  }
+  return next;
+};
 
 const syncRepairCashEntry = async (repairJob) => {
   // Use total charges when delivered/completed, otherwise use advance amount received
@@ -31,7 +43,7 @@ const syncRepairCashEntry = async (repairJob) => {
 };
 
 const createRepairJob = async (repairJobBody) => {
-  const repairJob = await RepairJob.create(repairJobBody);
+  const repairJob = await RepairJob.create(normalizeRepairJobDates(repairJobBody));
   await syncRepairCashEntry(repairJob);
   return repairJob;
 };
@@ -40,16 +52,10 @@ const queryRepairJobs = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
 
-  if (queryOptions.startDate || queryOptions.endDate) {
-    queryFilter.date = {};
-    if (queryOptions.startDate) {
-      queryFilter.date.$gte = new Date(queryOptions.startDate);
-      delete queryOptions.startDate;
-    }
-    if (queryOptions.endDate) {
-      queryFilter.date.$lte = new Date(queryOptions.endDate);
-      delete queryOptions.endDate;
-    }
+  applyBusinessDateRange(queryOptions, 'date');
+  if (queryOptions.date) {
+    queryFilter.date = queryOptions.date;
+    delete queryOptions.date;
   }
 
   return RepairJob.paginate(queryFilter, {
@@ -69,7 +75,7 @@ const getRepairJobById = async (repairJobId) => {
 
 const updateRepairJobById = async (repairJobId, updateBody, userId) => {
   const repairJob = await getRepairJobById(repairJobId);
-  Object.assign(repairJob, updateBody, { updatedBy: userId });
+  Object.assign(repairJob, normalizeRepairJobDates(updateBody), { updatedBy: userId });
 
   if (repairJob.status === 'completed' && !repairJob.completedAt) {
     repairJob.completedAt = new Date();

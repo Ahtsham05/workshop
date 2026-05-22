@@ -10,6 +10,7 @@ const BUSINESS_TZ = process.env.BUSINESS_TIMEZONE || 'Asia/Karachi';
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
 
 const CALENDAR_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATETIME_LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 /**
  * Format any Date as YYYY-MM-DD in the business timezone.
@@ -109,6 +110,39 @@ const applyBusinessDateRange = (target, dateField = 'date') => {
   }
 };
 
+/**
+ * Parse a client datetime for storage. Datetime-local strings (no timezone) are
+ * interpreted as Pakistan wall time so production (UTC) matches localhost (PKT).
+ * @param {string|Date} value
+ * @returns {Date|null}
+ */
+const parseBusinessDateTime = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const raw = String(value).trim();
+  const local = DATETIME_LOCAL_RE.exec(raw);
+  if (local) {
+    const year = Number(local[1]);
+    const month = Number(local[2]) - 1;
+    const day = Number(local[3]);
+    const hour = Number(local[4]);
+    const minute = Number(local[5]);
+    const second = Number(local[6] || 0);
+    return new Date(Date.UTC(year, month, day, hour, minute, second, 0) - PKT_OFFSET_MS);
+  }
+
+  const dateOnly = CALENDAR_DATE_RE.exec(raw);
+  if (dateOnly) {
+    return startOfBusinessDay(raw);
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 module.exports = {
   BUSINESS_TZ,
   PKT_OFFSET_MS,
@@ -117,5 +151,6 @@ module.exports = {
   startOfBusinessDay,
   endOfBusinessDay,
   parseBusinessDateBoundary,
+  parseBusinessDateTime,
   applyBusinessDateRange,
 };

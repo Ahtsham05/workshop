@@ -48,6 +48,11 @@ import {
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { type RootState } from '@/stores/store'
+import {
+  formatBusinessDate,
+  parseBusinessDateTimeLocal,
+  toBusinessDateTimeLocal,
+} from '@/lib/business-timezone'
 import { generateRepairReceiptHTML, openRepairPrintWindow } from './repair-print-utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,11 +98,6 @@ type StockFormState = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const toDateTimeLocal = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
 const makeInitialForm = (): RepairFormState => ({
   customerName: '',
   phone: '',
@@ -110,7 +110,7 @@ const makeInitialForm = (): RepairFormState => ({
   charges: '0',
   advanceAmount: '0',
   paymentMethod: 'cash',
-  date: toDateTimeLocal(new Date()),
+  date: toBusinessDateTimeLocal(),
 })
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -118,9 +118,6 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   completed: { label: 'Completed', color: 'bg-green-100 text-green-800' },
   delivered: { label: 'Delivered', color: 'bg-purple-100 text-purple-800' },
 }
-
-const fmtDate = (d?: string) =>
-  d ? new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
 const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 
@@ -154,7 +151,7 @@ export default function RepairPage() {
     amount: '0',
     paymentMethod: 'cash',
     notes: '',
-    date: toDateTimeLocal(new Date()),
+    date: toBusinessDateTimeLocal(),
   })
   const [deleteStockConfirm, setDeleteStockConfirm] = useState<RepairStockEntry | null>(null)
 
@@ -213,7 +210,7 @@ export default function RepairPage() {
         status: 'in_progress',
         charges: Number(form.charges),
         advanceAmount: Number(form.advanceAmount),
-        date: form.date || new Date().toISOString(),
+        date: form.date ? parseBusinessDateTimeLocal(form.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
       } as any).unwrap()
       toast.success('Repair job created')
       setForm(makeInitialForm())
@@ -337,10 +334,10 @@ export default function RepairPage() {
         amount: amt,
         paymentMethod: stockForm.paymentMethod,
         notes: stockForm.notes.trim() || undefined,
-        date: stockForm.date || new Date().toISOString(),
+        date: stockForm.date ? parseBusinessDateTimeLocal(stockForm.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
       }).unwrap()
       toast.success('Stock purchased & cashbook updated')
-      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', notes: '', date: toDateTimeLocal(new Date()) })
+      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', notes: '', date: toBusinessDateTimeLocal() })
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save stock')
     }
@@ -600,7 +597,7 @@ export default function RepairPage() {
                       <TableCell>
                         <div className='font-medium whitespace-nowrap'>{repair.customerName}</div>
                         <div className='text-xs text-muted-foreground'>{repair.phone || '-'}</div>
-                        <div className='text-xs text-muted-foreground'>{fmtDate(repair.date)}</div>
+                        <div className='text-xs text-muted-foreground'>{formatBusinessDate(repair.date)}</div>
                       </TableCell>
                       <TableCell>
                         <div className='whitespace-nowrap'>{repair.deviceModel}</div>
@@ -817,7 +814,7 @@ export default function RepairPage() {
                 {/* Show newest first — reverse the balance-computed rows */}
                 {[...ledgerRows].reverse().map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className='text-xs text-muted-foreground whitespace-nowrap'>{fmtDate(row.date)}</TableCell>
+                    <TableCell className='text-xs text-muted-foreground whitespace-nowrap'>{formatBusinessDate(row.date)}</TableCell>
                     <TableCell>
                       <div className='flex items-center gap-1.5'>
                         <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${row.type === 'purchase' ? 'bg-blue-500' : 'bg-red-500'}`} />

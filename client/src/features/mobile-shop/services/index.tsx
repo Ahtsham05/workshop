@@ -45,6 +45,11 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import {
+  formatBusinessDateTime,
+  parseBusinessDateTimeLocal,
+  toBusinessDateTimeLocal,
+} from '@/lib/business-timezone'
 
 type CatalogForm = {
   serviceName: string
@@ -68,13 +73,7 @@ type InvoiceForm = {
   date: string
 }
 
-const toDateTimeLocal = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-const fmtDate = (v?: string) =>
-  v ? new Date(v).toLocaleString('en-PK', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
+const fmtDate = (v?: string) => (v ? formatBusinessDateTime(v) : '-')
 
 const fmtAmt = (v?: number) => `Rs ${(v ?? 0).toLocaleString()}`
 
@@ -89,7 +88,7 @@ const initialInvoiceForm = (): InvoiceForm => ({
   customerPhone: '',
   paymentMethod: 'cash',
   notes: '',
-  date: toDateTimeLocal(new Date()),
+  date: toBusinessDateTimeLocal(),
 })
 
 export default function ServicesPage() {
@@ -254,7 +253,7 @@ export default function ServicesPage() {
         customerName: invoiceForm.customerName.trim(),
         customerPhone: invoiceForm.customerPhone.trim(),
         paymentMethod: invoiceForm.paymentMethod,
-        date: invoiceForm.date ? new Date(invoiceForm.date).toISOString() : new Date().toISOString(),
+        date: invoiceForm.date ? parseBusinessDateTimeLocal(invoiceForm.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
         notes: invoiceForm.notes.trim(),
         items: invoiceLines.map((line) => ({
           serviceId: line.serviceId,
@@ -306,7 +305,7 @@ export default function ServicesPage() {
       customerPhone: invoice.customerPhone || '',
       paymentMethod: invoice.paymentMethod || 'cash',
       notes: invoice.notes || '',
-      date: invoice.date ? toDateTimeLocal(new Date(invoice.date)) : toDateTimeLocal(new Date()),
+      date: invoice.date ? toBusinessDateTimeLocal(new Date(invoice.date)) : toBusinessDateTimeLocal(),
     })
     setInvoiceLines(
       (invoice.items || []).map((item: any) => ({

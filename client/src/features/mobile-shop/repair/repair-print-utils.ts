@@ -1,6 +1,7 @@
 // Repair job receipt print utility — 80mm thermal printer format with dual-language support
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { repairReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
+import { BUSINESS_TIMEZONE } from '@/lib/business-timezone'
 
 export interface RepairReceiptData {
   customerName: string
@@ -57,7 +58,8 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
 
   const fmtDate = (d?: string) => {
     const dateObj = d ? new Date(d) : new Date()
-    return `${dateObj.toLocaleDateString(locale)} ${dateObj.toLocaleTimeString(locale)}`
+    const opts = { timeZone: BUSINESS_TIMEZONE } as const
+    return `${dateObj.toLocaleDateString(locale, opts)} ${dateObj.toLocaleTimeString(locale, opts)}`
   }
 
   const infoRow = (label: string, value: string | undefined) =>

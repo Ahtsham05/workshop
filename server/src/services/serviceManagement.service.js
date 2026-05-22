@@ -1,7 +1,25 @@
 const httpStatus = require('http-status');
 const { Service, ServiceInvoice } = require('../models');
 const ApiError = require('../utils/ApiError');
+const {
+  parseBusinessDateTime,
+  toBusinessCalendarDate,
+  startOfBusinessDay,
+  endOfBusinessDay,
+  applyBusinessDateRange,
+} = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
+
+const normalizeServiceInvoiceDates = (body) => {
+  const next = { ...body };
+  if (next.date != null) {
+    const parsed = parseBusinessDateTime(next.date);
+    if (parsed) {
+      next.date = parsed;
+    }
+  }
+  return next;
+};
 
 const syncServiceInvoiceCashEntry = async (invoice) => {
   const cashAmount = Number(invoice.totalAmount || 0);
@@ -97,14 +115,11 @@ const deleteServiceDefinitionById = async (serviceId) => {
 };
 
 const buildInvoiceNumber = async (scope, date) => {
-  const d = new Date(date || Date.now());
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const startOfDay = new Date(d);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(d);
-  endOfDay.setHours(23, 59, 59, 999);
+  const d = parseBusinessDateTime(date) || new Date();
+  const calendar = toBusinessCalendarDate(d);
+  const [yyyy, mm, dd] = calendar.split('-');
+  const startOfDay = startOfBusinessDay(calendar);
+  const endOfDay = endOfBusinessDay(calendar);
 
   const count = await ServiceInvoice.countDocuments({
     organizationId: scope.organizationId,
@@ -116,14 +131,15 @@ const buildInvoiceNumber = async (scope, date) => {
 };
 
 const createServiceInvoice = async (invoiceBody) => {
-  if (!Array.isArray(invoiceBody.items) || invoiceBody.items.length === 0) {
+  const normalizedBody = normalizeServiceInvoiceDates(invoiceBody);
+  if (!Array.isArray(normalizedBody.items) || normalizedBody.items.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'At least one service is required');
   }
 
-  const uniqueServiceIds = [...new Set(invoiceBody.items.map((i) => String(i.serviceId)))];
+  const uniqueServiceIds = [...new Set(normalizedBody.items.map((i) => String(i.serviceId)))];
   const services = await Service.find({
-    organizationId: invoiceBody.organizationId,
-    branchId: invoiceBody.branchId,
+    organizationId: normalizedBody.organizationId,
+    branchId: normalizedBody.branchId,
     _id: { $in: uniqueServiceIds },
   }).lean();
 
@@ -132,7 +148,7 @@ const createServiceInvoice = async (invoiceBody) => {
   }
 
   const serviceMap = new Map(services.map((s) => [String(s._id), s]));
-  const items = invoiceBody.items.map((item) => {
+  const items = normalizedBody.items.map((item) => {
     const service = serviceMap.get(String(item.serviceId));
     const quantity = Number(item.quantity || 0);
     if (!service || quantity <= 0) {
@@ -152,22 +168,22 @@ const createServiceInvoice = async (invoiceBody) => {
   });
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const invoiceNumber = await buildInvoiceNumber(invoiceBody, invoiceBody.date);
+  const invoiceNumber = await buildInvoiceNumber(normalizedBody, normalizedBody.date);
 
   const invoice = await ServiceInvoice.create({
-    organizationId: invoiceBody.organizationId,
-    branchId: invoiceBody.branchId,
+    organizationId: normalizedBody.organizationId,
+    branchId: normalizedBody.branchId,
     invoiceNumber,
-    customerName: invoiceBody.customerName || '',
-    customerPhone: invoiceBody.customerPhone || '',
+    customerName: normalizedBody.customerName || '',
+    customerPhone: normalizedBody.customerPhone || '',
     items,
     subtotal,
     totalAmount: subtotal,
-    paymentMethod: invoiceBody.paymentMethod || 'cash',
-    date: invoiceBody.date || new Date(),
-    notes: invoiceBody.notes || '',
-    createdBy: invoiceBody.createdBy,
-    updatedBy: invoiceBody.updatedBy,
+    paymentMethod: normalizedBody.paymentMethod || 'cash',
+    date: normalizedBody.date || new Date(),
+    notes: normalizedBody.notes || '',
+    createdBy: normalizedBody.createdBy,
+    updatedBy: normalizedBody.updatedBy,
   });
 
   await syncServiceInvoiceCashEntry(invoice);
@@ -222,16 +238,10 @@ const queryServiceInvoices = async (filter, options) => {
     queryFilter.invoiceNumber = { $regex: queryFilter.invoiceNumber, $options: 'i' };
   }
 
-  if (queryOptions.startDate || queryOptions.endDate) {
-    queryFilter.date = {};
-    if (queryOptions.startDate) {
-      queryFilter.date.$gte = new Date(queryOptions.startDate);
-      delete queryOptions.startDate;
-    }
-    if (queryOptions.endDate) {
-      queryFilter.date.$lte = new Date(queryOptions.endDate);
-      delete queryOptions.endDate;
-    }
+  applyBusinessDateRange(queryOptions, 'date');
+  if (queryOptions.date) {
+    queryFilter.date = queryOptions.date;
+    delete queryOptions.date;
   }
 
   return ServiceInvoice.paginate(queryFilter, {
@@ -262,7 +272,9 @@ const updateServiceInvoiceById = async (invoiceId, updateBody, userId) => {
   if (updateBody.customerName !== undefined) invoice.customerName = updateBody.customerName || '';
   if (updateBody.customerPhone !== undefined) invoice.customerPhone = updateBody.customerPhone || '';
   if (updateBody.paymentMethod !== undefined) invoice.paymentMethod = updateBody.paymentMethod || 'cash';
-  if (updateBody.date !== undefined) invoice.date = updateBody.date || new Date();
+  if (updateBody.date !== undefined) {
+    invoice.date = parseBusinessDateTime(updateBody.date) || new Date();
+  }
   if (updateBody.notes !== undefined) invoice.notes = updateBody.notes || '';
   invoice.updatedBy = userId;
 

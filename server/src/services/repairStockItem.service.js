@@ -2,14 +2,26 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { RepairStockItem } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { parseBusinessDateTime, applyBusinessDateRange } = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
+
+const normalizeStockEntryDates = (body) => {
+  const next = { ...body };
+  if (next.date != null) {
+    const parsed = parseBusinessDateTime(next.date);
+    if (parsed) {
+      next.date = parsed;
+    }
+  }
+  return next;
+};
 
 /**
  * Create a PURCHASE entry (debit).
  * Automatically creates an expense entry in the cashbook.
  */
 const createPurchaseEntry = async (body) => {
-  const entry = await RepairStockItem.create({ ...body, type: 'purchase' });
+  const entry = await RepairStockItem.create({ ...normalizeStockEntryDates(body), type: 'purchase' });
 
   if (entry.amount > 0) {
     await cashBookService.upsertReferenceEntry({
@@ -35,7 +47,7 @@ const createPurchaseEntry = async (body) => {
  * No cashbook entry — the repair job already records the income/cost.
  */
 const createUsageEntry = async (body) => {
-  return RepairStockItem.create({ ...body, type: 'repair_usage' });
+  return RepairStockItem.create({ ...normalizeStockEntryDates(body), type: 'repair_usage' });
 };
 
 /**
@@ -45,16 +57,10 @@ const getLedger = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
 
-  if (queryOptions.startDate || queryOptions.endDate) {
-    queryFilter.date = {};
-    if (queryOptions.startDate) {
-      queryFilter.date.$gte = new Date(queryOptions.startDate);
-      delete queryOptions.startDate;
-    }
-    if (queryOptions.endDate) {
-      queryFilter.date.$lte = new Date(queryOptions.endDate);
-      delete queryOptions.endDate;
-    }
+  applyBusinessDateRange(queryOptions, 'date');
+  if (queryOptions.date) {
+    queryFilter.date = queryOptions.date;
+    delete queryOptions.date;
   }
 
   return RepairStockItem.paginate(queryFilter, {
