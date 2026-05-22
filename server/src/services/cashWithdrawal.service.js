@@ -422,32 +422,67 @@ const deleteCashWithdrawal = async (withdrawalId) => {
   return withdrawal;
 };
 
+const assertBatchWalletBalance = async ({ organizationId, branchId, walletType, transactionType, entries, createdBy }) => {
+  if (transactionType === 'withdrawal') {
+    return;
+  }
+  const totalAmount = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  if (totalAmount <= 0) {
+    return;
+  }
+  const wallet = await walletService.ensureWallet({ organizationId, branchId, type: walletType, userId: createdBy });
+  if (wallet.balance < totalAmount) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `${walletType} wallet balance is insufficient`);
+  }
+};
+
 const createCashWithdrawalsBatch = async (body) => {
   const { walletId, walletType, transactionType, commissionRate, date, entries, organizationId, branchId, createdBy } = body;
+
+  await assertBatchWalletBalance({
+    organizationId,
+    branchId,
+    walletType,
+    transactionType,
+    entries,
+    createdBy,
+  });
+
   const results = [];
-  for (const entry of entries) {
-    const singleBody = {
-      organizationId,
-      branchId,
-      createdBy,
-      walletId,
-      walletType,
-      transactionType,
-      commissionRate: Number(commissionRate || 0),
-      amount: Number(entry.amount),
-      customerId: entry.customerId || undefined,
-      cashAmount: Number(entry.cashAmount ?? entry.amount),
-      customerName: entry.customerName || undefined,
-      customerNumber: entry.customerNumber || undefined,
-      customerAccountType: entry.customerAccountType || undefined,
-      extraCharge: Number(entry.extraCharge || 0),
-      notes: entry.notes || undefined,
-      date: date || new Date(),
-    };
-    const created = await createCashWithdrawal(singleBody);
-    results.push(created);
+  try {
+    for (const entry of entries) {
+      const singleBody = {
+        organizationId,
+        branchId,
+        createdBy,
+        walletId,
+        walletType,
+        transactionType,
+        commissionRate: Number(commissionRate || 0),
+        amount: Number(entry.amount),
+        customerId: entry.customerId || undefined,
+        cashAmount: Number(entry.cashAmount ?? entry.amount),
+        customerName: entry.customerName || undefined,
+        customerNumber: entry.customerNumber || undefined,
+        customerAccountType: entry.customerAccountType || undefined,
+        extraCharge: Number(entry.extraCharge || 0),
+        notes: entry.notes || undefined,
+        date: date || new Date(),
+      };
+      const created = await createCashWithdrawal(singleBody);
+      results.push(created);
+    }
+    return results;
+  } catch (err) {
+    for (const created of results) {
+      try {
+        await deleteCashWithdrawal(created._id);
+      } catch {
+        // Best-effort rollback if a later entry fails after partial success.
+      }
+    }
+    throw err;
   }
-  return results;
 };
 
 const deleteCashWithdrawalsBatch = async (ids) => {

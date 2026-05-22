@@ -741,6 +741,15 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
     if (!bulkWithdrawalForm.walletId) { toast.error('Please select a wallet'); return }
     const validEntries = bulkWithdrawalForm.entries.filter(e => parseFloat(e.amount) > 0)
     if (validEntries.length === 0) { toast.error('Enter at least one valid amount'); return }
+    if (bulkWithdrawalForm.transactionType === 'deposit') {
+      const selectedWallet = wallets.find(w => w.id === bulkWithdrawalForm.walletId)
+      const totalAmount = validEntries.reduce((sum, e) => sum + Number(e.amount), 0)
+      const walletBalance = Number(selectedWallet?.balance ?? 0)
+      if (totalAmount > walletBalance) {
+        toast.error(`${bulkWithdrawalForm.walletType || 'Wallet'} wallet balance is insufficient`)
+        return
+      }
+    }
     try {
       const batchWalletType = bulkWithdrawalForm.walletType
       const batchTxType = bulkWithdrawalForm.transactionType
