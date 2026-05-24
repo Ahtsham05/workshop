@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useDispatch } from 'react-redux';
+import { useNavigate } from '@tanstack/react-router';
 import { AppDispatch } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
 import { fetchSuppliers } from '@/stores/supplier.slice';
@@ -19,7 +20,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { Columns2, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react';
+import { Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   clearPurchaseWorkspace,
@@ -52,6 +53,7 @@ export interface Supplier {
   name: string;
   nameUrdu?: string;
   phone?: string;
+  whatsapp?: string;
   email?: string;
   address?: string;
   balance?: number;
@@ -104,6 +106,7 @@ const getInitialShowProductCatalog = (): boolean => {
 
 const PurchaseInvoicePage = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { t } = useLanguage();
   const { hasPermission } = usePermissions();
   const [currentView, setCurrentView] = useState<ViewType>('create');
@@ -607,11 +610,7 @@ const PurchaseInvoicePage = () => {
     });
   }, []);
 
-  // Handle save success callback
-  const handleSaveSuccess = useCallback(() => {
-    clearPurchaseWorkspace();
-    // Optimistically update products state with new stock and costs right now
-    // so the catalog shows correct values before the re-fetch completes
+  const refreshProductsAfterPurchase = useCallback(() => {
     setProducts(prevProducts => {
       const updated = prevProducts.map(p => {
         const productId = p.id || (p as any)._id
@@ -631,7 +630,6 @@ const PurchaseInvoicePage = () => {
       return updated
     })
 
-    // Background re-fetch to get exact values from backend (handles rounding, averaging, etc.)
     dispatch(fetchAllProducts({}))
       .then((data: any) => {
         let productsData: Product[] = []
@@ -645,9 +643,25 @@ const PurchaseInvoicePage = () => {
         }
       })
       .catch((err: any) => console.error('Failed to refresh products after purchase:', err))
+  }, [dispatch, purchase.items])
 
-    handleBackToList()
-  }, [handleBackToList, dispatch, purchase.items]);
+  // Handle save success callback
+  const handleSaveSuccess = useCallback(
+    (mode: 'create' | 'update' = 'update') => {
+      refreshProductsAfterPurchase()
+
+      if (mode === 'create') {
+        clearPurchaseWorkspace()
+        setIsEditing(false)
+        setEditingPurchase(null)
+        resetPurchaseForm()
+        return
+      }
+
+      handleBackToList()
+    },
+    [refreshProductsAfterPurchase, resetPurchaseForm, handleBackToList],
+  )
 
   return (
     <div className="h-full w-full">
@@ -669,6 +683,26 @@ const PurchaseInvoicePage = () => {
               {t('autosave_hint')}
             </p>
             <div className="flex flex-wrap justify-end gap-2 order-1 sm:order-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 shadow-sm"
+                onClick={() => setCurrentView('list')}
+              >
+                <History className="h-4 w-4 shrink-0" aria-hidden />
+                Purchase history
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 shadow-sm"
+                onClick={() => navigate({ to: '/purchase-orders' })}
+              >
+                <ClipboardList className="h-4 w-4 shrink-0" aria-hidden />
+                Purchase orders
+              </Button>
               <Button
                 type="button"
                 variant="outline"

@@ -1,9 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import {
+  MOBILE_FORM_KEYBOARD_HINT,
+  makeEnterChain,
+  useCtrlEnterSubmit,
+} from '@/lib/mobile-form-keyboard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -65,6 +71,7 @@ import {
 } from '@/stores/mobile-shop.api'
 import { openBillReceiptPrintWindow } from './bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +94,35 @@ type BatchFormState = {
 
 type ActiveTab = 'bills' | 'companies'
 type DatePreset = 'today' | 'tomorrow' | 'week' | 'all'
+type BillListFilter = 'due-today' | 'overdue'
+
+function getInitialBillListFilters(filter?: BillListFilter) {
+  if (filter === 'due-today') {
+    const today = getBusinessToday()
+    return {
+      dueDatePreset: 'today' as DatePreset,
+      dueStartDate: today,
+      dueEndDate: today,
+      filterStatus: 'pending',
+    }
+  }
+
+  if (filter === 'overdue') {
+    return {
+      dueDatePreset: 'all' as DatePreset,
+      dueStartDate: '',
+      dueEndDate: '',
+      filterStatus: 'overdue',
+    }
+  }
+
+  return {
+    dueDatePreset: 'all' as DatePreset,
+    dueStartDate: '',
+    dueEndDate: '',
+    filterStatus: 'all',
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -404,20 +440,32 @@ function PrintReceiptButton({ billId }: { billId: string }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BillPaymentsPage() {
+  const routeSearch = useSearch({ from: '/_authenticated/mobile-shop/bill-payments' })
+  const initialFilters = getInitialBillListFilters(routeSearch.filter)
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('bills')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<BillPaymentRecord | null>(null)
   const [markPaidTarget, setMarkPaidTarget] = useState<BillPaymentRecord | null>(null)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>(initialFilters.filterStatus)
   const [filterBillType, setFilterBillType] = useState<string>('all')
   const [form, setForm] = useState<BatchFormState>(makeInitialBatchForm())
 
   // Due date filter state
-  const [dueDatePreset, setDueDatePreset] = useState<DatePreset>('all')
-  const [dueStartDate, setDueStartDate] = useState('')
-  const [dueEndDate, setDueEndDate] = useState('')
+  const [dueDatePreset, setDueDatePreset] = useState<DatePreset>(initialFilters.dueDatePreset)
+  const [dueStartDate, setDueStartDate] = useState(initialFilters.dueStartDate)
+  const [dueEndDate, setDueEndDate] = useState(initialFilters.dueEndDate)
+
+  useEffect(() => {
+    const next = getInitialBillListFilters(routeSearch.filter)
+    setDueDatePreset(next.dueDatePreset)
+    setDueStartDate(next.dueStartDate)
+    setDueEndDate(next.dueEndDate)
+    setFilterStatus(next.filterStatus)
+    setPage(1)
+  }, [routeSearch.filter])
 
   const limit = 10
 
@@ -489,21 +537,47 @@ export default function BillPaymentsPage() {
   }, [])
 
   const billAmountRefs = useRef<(HTMLInputElement | null)[]>([])
+  const billCustomerRefs = useRef<(HTMLInputElement | null)[]>([])
+  const billRefRefs = useRef<(HTMLInputElement | null)[]>([])
+  const submitBillRef = useRef<() => void>(() => {})
 
-  const handleBillAmountKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    const isLast = index === form.bills.length - 1
-    if (isLast) {
-      addBillRow()
-      // Focus new row after state update
-      setTimeout(() => {
+  const handleBillRowKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, field: 'amount' | 'customer' | 'ref', index: number) => {
+      if (e.key !== 'Enter') return
+      if (e.ctrlKey || e.metaKey) {
+        if (!e.shiftKey && !e.altKey) {
+          e.preventDefault()
+          submitBillRef.current()
+        }
+        return
+      }
+      if (e.shiftKey) return
+      e.preventDefault()
+      if (field === 'amount') {
+        billCustomerRefs.current[index]?.focus()
+        return
+      }
+      if (field === 'customer') {
+        billRefRefs.current[index]?.focus()
+        return
+      }
+      const isLast = index === form.bills.length - 1
+      if (isLast) {
+        addBillRow()
+        setTimeout(() => billAmountRefs.current[index + 1]?.focus(), 0)
+      } else {
         billAmountRefs.current[index + 1]?.focus()
-      }, 0)
-    } else {
-      billAmountRefs.current[index + 1]?.focus()
-    }
-  }, [form.bills.length, addBillRow])
+      }
+    },
+    [form.bills.length, addBillRow],
+  )
+
+  const handleBillAmountKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+      handleBillRowKeyDown(e, 'amount', index)
+    },
+    [handleBillRowKeyDown],
+  )
 
   const handleSubmit = async () => {
     if (!form.companyId) return toast.error('Please select a company')
@@ -541,6 +615,39 @@ export default function BillPaymentsPage() {
     }
   }
 
+  submitBillRef.current = handleSubmit
+
+  const billHeaderEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'bill-company',
+          'bill-service-charge',
+          'bill-due-date',
+          'bill-payment-date',
+          'bill-payment-method',
+        ],
+        {
+          onSubmit: () => handleSubmit(),
+          onLast: () => {
+            window.setTimeout(() => billAmountRefs.current[0]?.focus(), 50)
+          },
+        },
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  useCtrlEnterSubmit(() => {
+    if (dialogOpen) handleSubmit()
+  }, isCreating)
+
+  useEffect(() => {
+    if (dialogOpen) {
+      window.setTimeout(() => billHeaderEnter.focusFirst(), 100)
+    }
+  }, [dialogOpen, billHeaderEnter])
+
   const handleDelete = async () => {
     if (!deleteTarget) return
     try {
@@ -555,7 +662,7 @@ export default function BillPaymentsPage() {
   return (
     <MobilePageShell
       title='Bill Payments'
-      description='Collect utility bills (electricity, gas, water, internet) and earn service charges.'
+      description={`Collect utility bills (electricity, gas, water, internet) and earn service charges. · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
       {/* Summary Cards */}
       <OverallReportCards />
@@ -725,7 +832,7 @@ export default function BillPaymentsPage() {
               <div>
                 <Label>Company *</Label>
                 <Select value={form.companyId} onValueChange={handleCompanyChange}>
-                  <SelectTrigger>
+                  <SelectTrigger {...billHeaderEnter.enterProps('bill-company')}>
                     <SelectValue placeholder='Select utility company' />
                   </SelectTrigger>
                   <SelectContent>
@@ -751,6 +858,7 @@ export default function BillPaymentsPage() {
                   step='1'
                   value={form.serviceCharge}
                   onChange={(e) => setForm((f) => ({ ...f, serviceCharge: e.target.value }))}
+                  {...billHeaderEnter.enterProps('bill-service-charge')}
                 />
               </div>
             </div>
@@ -762,6 +870,7 @@ export default function BillPaymentsPage() {
                   type='date'
                   value={form.dueDate}
                   onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  {...billHeaderEnter.enterProps('bill-due-date')}
                 />
               </div>
               <div>
@@ -770,6 +879,7 @@ export default function BillPaymentsPage() {
                   type='date'
                   value={form.paymentDate}
                   onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                  {...billHeaderEnter.enterProps('bill-payment-date')}
                 />
               </div>
               <div>
@@ -780,7 +890,7 @@ export default function BillPaymentsPage() {
                     setForm((f) => ({ ...f, paymentMethod: v as BatchFormState['paymentMethod'] }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger {...billHeaderEnter.enterProps('bill-payment-method')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -833,18 +943,22 @@ export default function BillPaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <Input
+                            ref={(el) => { billCustomerRefs.current[i] = el }}
                             placeholder='Optional'
                             className='h-8'
                             value={row.customerName}
                             onChange={(e) => updateBillRow(i, 'customerName', e.target.value)}
+                            onKeyDown={(e) => handleBillRowKeyDown(e, 'customer', i)}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
+                            ref={(el) => { billRefRefs.current[i] = el }}
                             placeholder='Optional'
                             className='h-8'
                             value={row.referenceNumber}
                             onChange={(e) => updateBillRow(i, 'referenceNumber', e.target.value)}
+                            onKeyDown={(e) => handleBillRowKeyDown(e, 'ref', i)}
                           />
                         </TableCell>
                         <TableCell>

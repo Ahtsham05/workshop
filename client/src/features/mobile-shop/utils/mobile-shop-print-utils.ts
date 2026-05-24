@@ -43,7 +43,14 @@ export function generateMobileShopReceiptHTML(data: MobileShopReceiptPrintPayloa
   const email = companyEmail?.trim()
   const tax = taxNumber?.trim()
 
-  const linesHtml = lines
+  const printLines = lines.filter((row) => {
+    if (row.previewOnly) return false
+    const value = row.value.trim()
+    if (!value || value === '—' || value.toUpperCase() === 'N/A') return false
+    return true
+  })
+
+  const linesHtml = printLines
     .map(
       (row) => `
     <div class="info-row">

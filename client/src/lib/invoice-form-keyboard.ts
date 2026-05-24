@@ -13,15 +13,25 @@ export function focusField(el: HTMLElement | null | undefined, selectText = true
   if (!el) return
   window.setTimeout(() => {
     el.focus()
-    if (selectText && el instanceof HTMLInputElement) {
+    if (
+      selectText &&
+      el instanceof HTMLInputElement &&
+      !['date', 'datetime-local', 'time', 'month', 'week'].includes(el.type)
+    ) {
       el.select()
     }
   }, 50)
 }
 
+export type InvoiceSaveShortcutOptions = {
+  /** Ctrl+S — when set, runs this instead of save & print receipt */
+  onSaveSend?: () => void
+}
+
 /**
- * Invoice save shortcuts (sale & purchase):
- * Ctrl+S — save & print receipt
+ * Invoice save shortcuts (sale, purchase & purchase order):
+ * Ctrl+Enter — save & print receipt (or save & send on PO when no onSaveSend)
+ * Ctrl+S — save & send when `onSaveSend` is set, else save & print receipt
  * Ctrl+D — save only
  * Ctrl+F — save & print A4
  * (Cmd on macOS via metaKey)
@@ -31,18 +41,40 @@ export function useInvoiceSaveShortcuts(
   onSaveReceipt: () => void,
   onSaveA4: () => void,
   isSaving: boolean,
+  options?: InvoiceSaveShortcutOptions,
 ) {
-  const handlersRef = useRef({ onSaveOnly, onSaveReceipt, onSaveA4, isSaving })
-  handlersRef.current = { onSaveOnly, onSaveReceipt, onSaveA4, isSaving }
+  const handlersRef = useRef({
+    onSaveOnly,
+    onSaveReceipt,
+    onSaveA4,
+    onSaveSend: options?.onSaveSend,
+    isSaving,
+  })
+  handlersRef.current = {
+    onSaveOnly,
+    onSaveReceipt,
+    onSaveA4,
+    onSaveSend: options?.onSaveSend,
+    isSaving,
+  }
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (!handlersRef.current.isSaving) handlersRef.current.onSaveReceipt()
+        return
+      }
+
+      if (e.shiftKey) return
 
       const key = e.key.toLowerCase()
       let action: (() => void) | undefined
-      if (key === 's') action = handlersRef.current.onSaveReceipt
-      else if (key === 'd') action = handlersRef.current.onSaveOnly
+      if (key === 's') {
+        action = handlersRef.current.onSaveSend ?? handlersRef.current.onSaveReceipt
+      } else if (key === 'd') action = handlersRef.current.onSaveOnly
       else if (key === 'f') action = handlersRef.current.onSaveA4
       else return
 

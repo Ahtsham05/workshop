@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -29,9 +29,14 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Printer, Trash2, CheckCircle, PackageCheck, Eye, Plus, ShoppingCart, Package } from 'lucide-react'
+import { Printer, Trash2, CheckCircle, PackageCheck, Plus, ShoppingCart, Package } from 'lucide-react'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
+import {
+  makeEnterChain,
+  MOBILE_FORM_KEYBOARD_HINT,
+  useCtrlEnterSubmit,
+} from '@/lib/mobile-form-keyboard'
 import {
   useCreateRepairJobMutation,
   useDeleteRepairJobMutation,
@@ -221,6 +226,37 @@ export default function RepairPage() {
     }
   }
 
+  const repairEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'repair-customer',
+          'repair-phone',
+          'repair-device',
+          'repair-color',
+          'repair-serial',
+          'repair-accessories',
+          'repair-issue',
+          'repair-technician',
+          'repair-charges',
+          'repair-advance',
+          'repair-payment-method',
+          'repair-date',
+        ],
+        { onSubmit: () => document.querySelector<HTMLFormElement>('[data-mobile-form="repair"]')?.requestSubmit() },
+      ),
+    [],
+  )
+
+  useCtrlEnterSubmit(
+    () => document.querySelector<HTMLFormElement>('[data-mobile-form="repair"]')?.requestSubmit(),
+    isSaving,
+  )
+
+  useEffect(() => {
+    window.setTimeout(() => repairEnter.focusFirst(), 80)
+  }, [repairEnter])
+
 
   // ── Open complete dialog ──
   const openCompleteDialog = (repair: RepairJobRecord) => {
@@ -401,7 +437,7 @@ export default function RepairPage() {
   return (
     <MobilePageShell
       title='Repair Management'
-      description='Track repair jobs, technicians, advances, and delivery status.'
+      description={`Track repair jobs, technicians, advances, and delivery status. · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
       <div className='grid gap-6 xl:grid-cols-[440px_1fr]'>
         {/* ── Create Form ── */}
@@ -410,7 +446,7 @@ export default function RepairPage() {
             <CardTitle>New Repair Job</CardTitle>
           </CardHeader>
           <CardContent>
-            <form className='grid gap-3' onSubmit={handleSubmit}>
+            <form data-mobile-form='repair' className='grid gap-3' onSubmit={handleSubmit}>
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Customer Name *</Label>
@@ -418,6 +454,7 @@ export default function RepairPage() {
                     placeholder='e.g. Ahmad Khan'
                     value={form.customerName}
                     onChange={(e) => setField('customerName', e.target.value)}
+                    {...repairEnter.enterProps('repair-customer')}
                   />
                 </div>
                 <div className='space-y-1'>
@@ -426,6 +463,7 @@ export default function RepairPage() {
                     placeholder='03xx-xxxxxxx'
                     value={form.phone}
                     onChange={(e) => setField('phone', e.target.value)}
+                    {...repairEnter.enterProps('repair-phone')}
                   />
                 </div>
               </div>
@@ -437,6 +475,7 @@ export default function RepairPage() {
                     placeholder='e.g. Samsung A54'
                     value={form.deviceModel}
                     onChange={(e) => setField('deviceModel', e.target.value)}
+                    {...repairEnter.enterProps('repair-device')}
                   />
                 </div>
                 <div className='space-y-1'>
@@ -445,6 +484,7 @@ export default function RepairPage() {
                     placeholder='e.g. Black'
                     value={form.color}
                     onChange={(e) => setField('color', e.target.value)}
+                    {...repairEnter.enterProps('repair-color')}
                   />
                 </div>
                 <div className='space-y-1'>
@@ -453,6 +493,7 @@ export default function RepairPage() {
                     placeholder='IMEI or serial'
                     value={form.serialNumber}
                     onChange={(e) => setField('serialNumber', e.target.value)}
+                    {...repairEnter.enterProps('repair-serial')}
                   />
                 </div>
               </div>
@@ -463,6 +504,7 @@ export default function RepairPage() {
                   placeholder='e.g. Charger, Back cover, SIM tray'
                   value={form.accessories}
                   onChange={(e) => setField('accessories', e.target.value)}
+                  {...repairEnter.enterProps('repair-accessories')}
                 />
               </div>
 
@@ -473,6 +515,7 @@ export default function RepairPage() {
                   rows={3}
                   value={form.issue}
                   onChange={(e) => setField('issue', e.target.value)}
+                  {...repairEnter.enterProps('repair-issue')}
                 />
               </div>
 
@@ -482,6 +525,7 @@ export default function RepairPage() {
                   placeholder='Assigned technician'
                   value={form.technician}
                   onChange={(e) => setField('technician', e.target.value)}
+                  {...repairEnter.enterProps('repair-technician')}
                 />
               </div>
 
@@ -494,6 +538,7 @@ export default function RepairPage() {
                     step='1'
                     value={form.charges}
                     onChange={(e) => setField('charges', e.target.value)}
+                    {...repairEnter.enterProps('repair-charges')}
                   />
                 </div>
                 <div className='space-y-1'>
@@ -504,6 +549,7 @@ export default function RepairPage() {
                     step='1'
                     value={form.advanceAmount}
                     onChange={(e) => setField('advanceAmount', e.target.value)}
+                    {...repairEnter.enterProps('repair-advance')}
                   />
                 </div>
               </div>
@@ -515,7 +561,7 @@ export default function RepairPage() {
                     value={form.paymentMethod}
                     onValueChange={(v) => setField('paymentMethod', v as RepairFormState['paymentMethod'])}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger {...repairEnter.enterProps('repair-payment-method')}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -532,6 +578,7 @@ export default function RepairPage() {
                     type='datetime-local'
                     value={form.date}
                     onChange={(e) => setField('date', e.target.value)}
+                    {...repairEnter.enterProps('repair-date')}
                   />
                 </div>
               </div>
@@ -647,10 +694,10 @@ export default function RepairPage() {
                           <Button
                             size='icon'
                             variant='outline'
-                            title='View / Print job card'
+                            title='View & print job card'
                             onClick={() => setPrintRepair(repair)}
                           >
-                            <Eye className='h-4 w-4' />
+                            <Printer className='h-4 w-4' />
                           </Button>
                           <Button
                             size='icon'

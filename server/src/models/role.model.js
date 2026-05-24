@@ -20,7 +20,14 @@ const permissionSchema = mongoose.Schema({
   createPurchases: { type: Boolean, default: false },
   editPurchases: { type: Boolean, default: false },
   deletePurchases: { type: Boolean, default: false },
-  
+
+  // Purchase Order Permissions
+  viewPurchaseOrders: { type: Boolean, default: false },
+  createPurchaseOrders: { type: Boolean, default: false },
+  editPurchaseOrders: { type: Boolean, default: false },
+  deletePurchaseOrders: { type: Boolean, default: false },
+  receivePurchaseOrders: { type: Boolean, default: false },
+
   // Customer Permissions
   viewCustomers: { type: Boolean, default: false },
   createCustomers: { type: Boolean, default: false },
@@ -144,7 +151,14 @@ roleSchema.statics.getAdminPermissions = function () {
     createPurchases: true,
     editPurchases: true,
     deletePurchases: true,
-    
+
+    // Purchase Order Permissions (managed inside purchases above)
+    viewPurchaseOrders: true,
+    createPurchaseOrders: true,
+    editPurchaseOrders: true,
+    deletePurchaseOrders: true,
+    receivePurchaseOrders: true,
+
     // Customer Permissions
     viewCustomers: true,
     createCustomers: true,

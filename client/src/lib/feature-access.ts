@@ -19,6 +19,7 @@ export const BASE_FEATURES = [
   'basic_reports',
   'school_management',
   'cash_book',
+  'cash_register',
   'reports',
 ] as const
 

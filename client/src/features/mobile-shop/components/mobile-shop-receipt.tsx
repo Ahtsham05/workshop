@@ -2,7 +2,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Printer, X } from 'lucide-react'
 
-export type MobileReceiptLine = { label: string; value: string }
+export type MobileReceiptLine = {
+  label: string
+  value: string
+  /** Shown in on-screen preview only — hidden on the printed customer receipt */
+  previewOnly?: boolean
+}
 
 export type MobileReceiptData = {
   title: string

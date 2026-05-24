@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { Invoice, Product, Customer, CustomerLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
+const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
@@ -304,48 +305,28 @@ const createInvoice = async (invoiceBody, userId) => {
         ? `Bill sent to party - Bill #${invoice.billNumber}` 
         : `Sale Invoice #${invoice.invoiceNumber}`;
       
-      // For credit/cash invoices, create a sale entry (debit - customer owes us)
       const ledgerInvoiceType = resolveInvoiceLedgerInvoiceType(invoice);
-      await customerLedgerService.createLedgerEntry({
+      const ledgerEntries = buildCustomerSaleLedgerEntries({
         organizationId: invoice.organizationId,
         branchId: invoice.branchId,
-        customer: invoice.customerId,
-        transactionType: 'sale',
-        transactionDate: invoice.invoiceDate || new Date(),
-        reference: displayReference,
+        customerId: invoice.customerId,
         referenceId: invoice._id,
-        description: description,
-        debit: invoice.total,
-        credit: 0,
-        paymentMethod: ledgerPaymentMethod,
+        invoiceNumber: invoice.invoiceNumber,
+        displayReference,
+        description,
+        transactionDate: invoice.invoiceDate || new Date(),
+        total: invoice.total,
+        paidAmount: invoice.paidAmount,
         invoiceType: ledgerInvoiceType,
-        notes: invoice.notes || `Invoice for ${validatedItems.length} items`
+        paymentMethod: ledgerPaymentMethod,
+        notes: invoice.notes || `Invoice for ${validatedItems.length} items`,
+        balance: invoice.balance,
       });
-      console.log('Customer ledger entry created for invoice:', displayReference);
-      
-      // If any amount is paid at the time of invoice, create payment entry (credit - customer paid us)
-      if (invoice.paidAmount > 0) {
-        // Add 1 second to payment date so it appears after the sale entry when sorted
-        const paymentDate = new Date(invoice.invoiceDate || new Date());
-        paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-        
-        await customerLedgerService.createLedgerEntry({
-          organizationId: invoice.organizationId,
-          branchId: invoice.branchId,
-          customer: invoice.customerId,
-          transactionType: 'payment_received',
-          transactionDate: paymentDate,
-          reference: invoice.invoiceNumber,
-          referenceId: invoice._id,
-          description: `Payment received for Invoice #${invoice.invoiceNumber}${invoice.paidAmount < invoice.total ? ' (Partial)' : ''}`,
-          debit: 0,
-          credit: invoice.paidAmount,
-          paymentMethod: ledgerPaymentMethod,
-          invoiceType: ledgerInvoiceType,
-          notes: `Amount paid: $${invoice.paidAmount.toFixed(2)}${invoice.balance > 0 ? `, Balance: $${invoice.balance.toFixed(2)}` : ''}`
-        });
-        console.log('Payment ledger entry created for invoice:', invoice.invoiceNumber, 'Amount:', invoice.paidAmount);
+
+      for (const entry of ledgerEntries) {
+        await customerLedgerService.createLedgerEntry(entry);
       }
+      console.log('Customer ledger entries created for invoice:', displayReference);
     } catch (error) {
       console.error('Failed to create customer ledger entry:', error);
       // Don't fail the invoice creation if ledger entry fails
@@ -660,45 +641,40 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         // Create new entries for new customer (if not walk-in)
         if (newCustomerId !== 'walk-in') {
           const invType = resolveInvoiceLedgerInvoiceType(invoice);
-          await customerLedgerService.createLedgerEntry({
+          const displayReference = invoice.billNumber ? `Bill #${invoice.billNumber}` : invoice.invoiceNumber;
+          const description = invoice.billNumber
+            ? `Bill sent to party - Bill #${invoice.billNumber}`
+            : `Sale Invoice #${invoice.invoiceNumber} (Updated)`;
+
+          const ledgerEntries = buildCustomerSaleLedgerEntries({
             organizationId: invoice.organizationId,
             branchId: invoice.branchId,
-            customer: newCustomerId,
-            transactionType: 'sale',
-            transactionDate: invoice.invoiceDate || new Date(),
-            reference: invoice.invoiceNumber,
+            customerId: newCustomerId,
             referenceId: invoice._id,
-            description: `Sale Invoice #${invoice.invoiceNumber} (Updated)`,
-            debit: newTotal,
-            credit: 0,
-            paymentMethod: ledgerPaymentMethod,
+            invoiceNumber: invoice.invoiceNumber,
+            displayReference,
+            description,
+            transactionDate: invoice.invoiceDate || new Date(),
+            total: newTotal,
+            paidAmount: newPaidAmount,
             invoiceType: invType,
-            notes: `Invoice updated`
+            paymentMethod: ledgerPaymentMethod,
+            notes: invoice.notes || 'Invoice updated',
+            balance: invoice.balance,
+            suffix: ' (Updated)',
           });
 
-          if (newPaidAmount > 0) {
-            const paymentDate = new Date(invoice.invoiceDate || new Date());
-            paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-            await customerLedgerService.createLedgerEntry({
-              organizationId: invoice.organizationId,
-              branchId: invoice.branchId,
-              customer: newCustomerId,
-              transactionType: 'payment_received',
-              transactionDate: paymentDate,
-              reference: invoice.invoiceNumber,
-              referenceId: invoice._id,
-              description: `Payment for Invoice #${invoice.invoiceNumber} (Updated)`,
-              debit: 0,
-              credit: newPaidAmount,
-              paymentMethod: ledgerPaymentMethod,
-              invoiceType: invType,
-              notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
-            });
+          for (const entry of ledgerEntries) {
+            await customerLedgerService.createLedgerEntry(entry);
           }
         }
       } else {
         // Same customer - update existing entries
+        const displayReference = invoice.billNumber ? `Bill #${invoice.billNumber}` : invoice.invoiceNumber;
+        const description = invoice.billNumber
+          ? `Bill sent to party - Bill #${invoice.billNumber}`
+          : `Sale Invoice #${invoice.invoiceNumber}`;
+
         await customerLedgerService.updateLedgerEntriesByReference(invoice._id, {
           organizationId: invoice.organizationId,
           branchId: invoice.branchId,
@@ -710,6 +686,9 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           paymentMethod: ledgerPaymentMethod,
           invoiceType: invoice.type,
           notes: invoice.notes,
+          displayReference,
+          description,
+          balance: invoice.balance,
         });
       }
 

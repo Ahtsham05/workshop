@@ -5,6 +5,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const supplierLedgerService = require('./supplierLedger.service');
+const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
 
 const sanitizeSupplierId = (value) => {
   if (value === null || value === undefined || value === '') {
@@ -144,39 +145,30 @@ const syncSupplierLedgerForLoadPurchase = async (purchase) => {
     return;
   }
 
-  await supplierLedgerService.createLedgerEntry({
+  const reference = `LOAD-PURCHASE-${String(purchase._id).slice(-6).toUpperCase()}`;
+  const ledgerEntries = buildSupplierPurchaseLedgerEntries({
     organizationId: purchase.organizationId,
     branchId: purchase.branchId,
-    supplier: purchase.supplierId,
-    transactionType: 'purchase',
-    transactionDate: purchase.date,
-    reference: `LOAD-PURCHASE-${String(purchase._id).slice(-6).toUpperCase()}`,
+    supplierId: purchase.supplierId,
     referenceId: purchase._id,
-    description: `Load purchase entry${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
-    debit: 0,
-    credit: Number(purchase.amount) || 0,
-    paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
+    invoiceNumber: reference,
+    transactionDate: purchase.date,
+    totalAmount: purchase.amount,
+    paidAmount: purchase.paidAmount,
+    paymentType: 'Cash',
     invoiceType: 'cash',
-    notes: purchase.notes || `Wallet: ${purchase.walletType}`,
+    paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
+    itemsCount: 0,
+    balance: Number(purchase.amount || 0) - Number(purchase.paidAmount || 0),
   });
 
-  const paidAmount = Number(purchase.paidAmount) || 0;
-  if (paidAmount > 0) {
-    const paymentDate = new Date(purchase.date);
-    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+  for (const entry of ledgerEntries) {
     await supplierLedgerService.createLedgerEntry({
-      organizationId: purchase.organizationId,
-      branchId: purchase.branchId,
-      supplier: purchase.supplierId,
-      transactionType: 'payment_made',
-      transactionDate: paymentDate,
-      reference: `LOAD-PURCHASE-${String(purchase._id).slice(-6).toUpperCase()}`,
-      referenceId: purchase._id,
-      description: `Payment for load purchase${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`,
-      debit: paidAmount,
-      credit: 0,
-      paymentMethod: getLedgerPaymentMethodLabel(purchase.paymentMethod),
-      invoiceType: 'cash',
+      ...entry,
+      description: entry.description.replace(
+        `Purchase Invoice #${reference}`,
+        `Load purchase entry${purchase.supplierName ? ` (${purchase.supplierName})` : ''}`
+      ),
       notes: purchase.notes || `Wallet: ${purchase.walletType}`,
     });
   }

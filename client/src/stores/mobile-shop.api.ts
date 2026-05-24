@@ -371,6 +371,7 @@ export interface CashBookQueryParams {
   endDate?: string
   page?: number
   limit?: number
+  paymentMethod?: 'cash'
 }
 
 export interface MobileDashboardSummary {
@@ -772,6 +773,7 @@ export const mobileShopApi = createApi({
         if (params?.page) searchParams.set('page', String(params.page))
         if (params?.startDate) searchParams.set('startDate', params.startDate)
         if (params?.endDate) searchParams.set('endDate', params.endDate)
+        if (params?.paymentMethod) searchParams.set('paymentMethod', params.paymentMethod)
         return `/cash-book?${searchParams.toString()}`
       },
       providesTags: ['CashBook'],

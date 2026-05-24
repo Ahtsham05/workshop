@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -25,6 +24,9 @@ import { PaymentReceipt } from './payment-receipt';
 import { mobileShopApi, useGetLoadPurchaseByIdQuery } from '@/stores/mobile-shop.api';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
+import { supplierBalanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
+import { LedgerStatementTable } from './ledger-statement-table';
+import { LEDGER_STATEMENT_SORT } from '@/features/accounting/utils/ledger-display';
 
 function isLoadPurchaseLedgerRow(entry: LedgerEntry): boolean {
   const ref = String(entry.reference || '').toUpperCase();
@@ -395,7 +397,8 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(25);
+  const [balanceBeforePage, setBalanceBeforePage] = useState(0);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
@@ -411,12 +414,13 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
       const response = await Axios.get(summery.fetchSupplierLedgerEntries.url, {
         params: {
           supplier: supplier._id,
-          sortBy: 'transactionDate:asc',
+          sortBy: LEDGER_STATEMENT_SORT,
           page: currentPage,
           limit: pageSize
         },
       });
       setEntries(response.data.results || []);
+      setBalanceBeforePage(Number(response.data.balanceBeforePage) || 0);
       setTotalPages(response.data.totalPages || 1);
       setTotalResults(response.data.totalResults || 0);
     } catch (error: any) {
@@ -511,9 +515,11 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
   };
 
   const handleGenerateReceipt = (entry: LedgerEntry) => {
-    // Find the previous balance from the entry before this one
     const entryIndex = entries.findIndex(e => (e.id || e._id) === (entry.id || entry._id));
-    const previousBalance = entryIndex > 0 ? entries[entryIndex - 1].balance : entry.balance - entry.debit + entry.credit;
+    const previousBalance =
+      entryIndex > 0
+        ? entries[entryIndex - 1].balance
+        : supplierBalanceBeforeFromLedgerEntry(entry);
 
     setSelectedPayment({
       entry,
@@ -905,112 +911,78 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
           ) : entries.length === 0 ? (
             <div className="text-center py-8 text-gray-500">{t('No transactions found')}</div>
           ) : (
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('Date')}</TableHead>
-                    <TableHead>{t('Type')}</TableHead>
-                    <TableHead>{t('Description')}</TableHead>
-                    <TableHead>{t('Reference')}</TableHead>
-                    <TableHead>{t('Invoice Type')}</TableHead>
-                    <TableHead className="text-right">{t('Debit')}</TableHead>
-                    <TableHead className="text-right">{t('Credit')}</TableHead>
-                    <TableHead className="text-right">{t('Balance')}</TableHead>
-                    <TableHead className="text-right whitespace-nowrap w-[1%]">{t('Actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.map((entry) => (
-                    <TableRow key={entry.id || entry._id}>
-                      <TableCell className="text-sm">
-                        {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getTransactionTypeBadge(entry.transactionType)}>
-                          {getTransactionTypeLabel(entry)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{entry.description}</TableCell>
-                      <TableCell className="text-gray-500 text-sm">
-                        {entry.referenceId ? (
-                          <Button
-                            variant="link"
-                            className="p-0 h-auto font-normal text-blue-600 hover:text-blue-800"
-                            onClick={() => handleViewLinkedSupplierEntry(entry)}
-                          >
-                            {entry.reference || entry.referenceId}
-                          </Button>
-                        ) : (
-                          entry.reference || '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-800">{formatLedgerInvoiceType(entry, t)}</span>
-                      </TableCell>
-                      <TableCell className="text-right text-red-600">
-                        {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '-'}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {entry.credit > 0 ? `Rs${entry.credit.toFixed(2)}` : '-'}
-                      </TableCell>
-                      <TableCell className={`text-right ${getBalanceColor(entry.balance)}`}>
-                        Rs{Math.abs(entry.balance).toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap align-middle">
-                        <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
-                          {canPrintLinkedSupplierEntry(entry) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePrintLinkedPurchase(entry)}
-                              disabled={printingRowId === String(entry.id || entry._id)}
-                              className="h-8 w-8 p-0"
-                              title={t('print_invoice_btn')}
-                            >
-                              <Printer className="w-4 h-4 text-slate-700" />
-                            </Button>
-                          )}
-                          {entry.transactionType === 'payment_made' && entry.debit > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleGenerateReceipt(entry)}
-                              className="h-8 w-8 p-0"
-                              title={t('Generate Receipt')}
-                            >
-                              <Receipt className="w-4 h-4 text-blue-600" />
-                            </Button>
-                          )}
-                          {isManualEntry(entry) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditEntry(entry)}
-                              className="h-8 w-8 p-0"
-                              title={t('Edit entry')}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {isManualEntry(entry) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteEntry(entry)}
-                              title={t('Delete entry')}
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <LedgerStatementTable
+              party="supplier"
+              entries={entries}
+              balanceBeforePage={balanceBeforePage}
+              pageOffset={(currentPage - 1) * pageSize}
+              t={t}
+              getTypeLabel={getTransactionTypeLabel}
+              getTypeBadgeVariant={getTransactionTypeBadge}
+              formatInvoiceType={(entry) => formatLedgerInvoiceType(entry, t)}
+              renderReference={(entry) =>
+                entry.referenceId ? (
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 font-normal text-blue-600 hover:text-blue-800"
+                    onClick={() => handleViewLinkedSupplierEntry(entry)}
+                  >
+                    {entry.reference || entry.referenceId}
+                  </Button>
+                ) : (
+                  entry.reference || '—'
+                )
+              }
+              renderActions={(entry) => (
+                <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
+                  {canPrintLinkedSupplierEntry(entry) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handlePrintLinkedPurchase(entry)}
+                      disabled={printingRowId === String(entry.id || entry._id)}
+                      className="h-8 w-8 p-0"
+                      title={t('print_invoice_btn')}
+                    >
+                      <Printer className="w-4 h-4 text-slate-700" />
+                    </Button>
+                  )}
+                  {entry.transactionType === 'payment_made' && entry.debit > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleGenerateReceipt(entry)}
+                      className="h-8 w-8 p-0"
+                      title={t('Generate Receipt')}
+                    >
+                      <Receipt className="w-4 h-4 text-blue-600" />
+                    </Button>
+                  )}
+                  {isManualEntry(entry) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEditEntry(entry)}
+                      className="h-8 w-8 p-0"
+                      title={t('Edit entry')}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {isManualEntry(entry) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteEntry(entry)}
+                      title={t('Delete entry')}
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            />
           )}
 
           {/* Pagination */}

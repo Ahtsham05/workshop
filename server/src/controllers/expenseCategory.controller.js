@@ -5,7 +5,13 @@ const expenseCategoryService = require('../services/expenseCategory.service');
 const getCategories = catchAsync(async (req, res) => {
   const organizationId = req.organizationId || req.user?.organizationId;
   const branchId       = req.branchId;
-  const categories = await expenseCategoryService.getCategories(organizationId, branchId, req.user?.id);
+  const transactionType = req.query.transactionType;
+  const categories = await expenseCategoryService.getCategories(
+    organizationId,
+    branchId,
+    req.user?.id,
+    transactionType,
+  );
   res.status(httpStatus.OK).send(categories);
 });
 

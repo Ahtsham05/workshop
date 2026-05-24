@@ -31,7 +31,7 @@ import {
   IconClock,
   IconFileImport,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -91,6 +91,13 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
+          title: 'Purchase Orders',
+          url: '/purchase-orders',
+          icon: ClipboardList,
+          permission: 'viewPurchases',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
           title: 'Purchases',
           url: '/purchase-invoice',
           icon: IconPackages,
@@ -136,6 +143,12 @@ export const sidebarData: SidebarData = {
           title: 'Cash Book',
           url: '/mobile-shop/cash-book',
           icon: NotebookText,
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'Track Cash',
+          url: '/cash-register',
+          icon: WalletCards,
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         // {
@@ -203,6 +216,13 @@ export const sidebarData: SidebarData = {
           icon: IconUsers,
           businessTypes: ['restaurant'],
           permission: 'viewSuppliers',
+        },
+        {
+          title: 'Purchase Orders',
+          url: '/purchase-orders',
+          icon: ClipboardList,
+          businessTypes: ['restaurant'],
+          permission: 'viewPurchases',
         },
         {
           title: 'Stock purchases',

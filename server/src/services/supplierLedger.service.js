@@ -2,6 +2,8 @@ const httpStatus = require('http-status');
 const { SupplierLedger, Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
+const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
+const { consolidateSupplierCashEntries } = require('../utils/ledgerConsolidation');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
@@ -130,34 +132,45 @@ const syncCashBookFromSupplierLedger = async (entry) => {
  * @param {Date} fromTransactionDate
  * @returns {Promise<void>}
  */
-const recalculateBalances = async (supplierId, fromTransactionDate) => {
-  // Get all entries for this supplier ordered by transaction date and then by creation order
+const recalculateBalances = async (supplierId, _fromTransactionDate) => {
+  await consolidateSupplierCashEntries(supplierId, SupplierLedger);
+
   const allEntries = await SupplierLedger.find({ supplier: supplierId })
     .sort({ transactionDate: 1, createdAt: 1 });
 
   let runningBalance = 0;
-  let shouldUpdate = false;
 
   for (const entry of allEntries) {
-    // Check if this is where we should start recalculating
-    if (entry.transactionDate >= fromTransactionDate) {
-      shouldUpdate = true;
-    }
+    const debit = Number(entry.debit) || 0;
+    const credit = Number(entry.credit) || 0;
+    runningBalance += credit - debit;
 
-    if (shouldUpdate) {
-      const newBalance = runningBalance + (entry.credit || 0) - (entry.debit || 0);
-      
-      if (entry.balance !== newBalance) {
-        entry.balance = newBalance;
-        await entry.save();
-      }
+    if (entry.balance !== runningBalance) {
+      entry.balance = runningBalance;
+      await entry.save();
     }
-
-    runningBalance += (entry.credit || 0) - (entry.debit || 0);
   }
 
-  // Update supplier balance to the final running balance
   await Supplier.findByIdAndUpdate(supplierId, { balance: runningBalance });
+};
+
+const getBalanceBeforePage = async (filter, page, limit) => {
+  if (!filter.supplier || page <= 1) {
+    return 0;
+  }
+
+  const skip = (page - 1) * limit;
+  if (skip <= 0) {
+    return 0;
+  }
+
+  const lastBeforePage = await SupplierLedger.find(filter)
+    .sort({ transactionDate: 1, createdAt: 1 })
+    .skip(skip - 1)
+    .limit(1)
+    .select('balance');
+
+  return lastBeforePage[0]?.balance ?? 0;
 };
 
 /**
@@ -212,9 +225,18 @@ const queryLedgerEntries = async (filter, options) => {
   }
 
   options.populate = 'supplier';
-  options.sort = options.sort || '-transactionDate';
-  
+  options.sortBy = options.sortBy || 'transactionDate:asc,createdAt:asc';
+
+  const page = options.page && parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
+  const limit = options.limit && parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
+
+  if (filter.supplier) {
+    await recalculateBalances(filter.supplier);
+  }
+
+  const balanceBeforePage = await getBalanceBeforePage(filter, page, limit);
   const entries = await SupplierLedger.paginate(filter, options);
+  entries.balanceBeforePage = balanceBeforePage;
   return entries;
 };
 
@@ -376,157 +398,47 @@ const updateLedgerEntriesByReference = async (referenceId, updateData) => {
     purchaseDate,
     paymentMethod,
     invoiceType,
+    paymentType,
     itemsCount,
     organizationId,
     branchId,
     supplierId,
+    balance,
   } = updateData;
-  
-  // Find all entries related to this purchase
-  const entries = await SupplierLedger.find({ referenceId }).sort({ transactionDate: 1 });
-  
-  if (entries.length === 0) {
-    if (!supplierId) {
-      console.log('No ledger entries found and supplier is missing for reference:', referenceId);
-      return;
-    }
 
-    console.log('No ledger entries found. Creating fresh entries for reference:', referenceId);
-
-    await createLedgerEntry({
-      organizationId,
-      branchId,
-      supplier: supplierId,
-      transactionType: 'purchase',
-      transactionDate: purchaseDate || new Date(),
-      reference: invoiceNumber,
-      referenceId,
-      description: `Purchase Invoice #${invoiceNumber}`,
-      debit: 0,
-      credit: totalAmount,
-      paymentMethod,
-      invoiceType: normalizeCustomerInvoiceType(invoiceType),
-      notes: `Purchase of ${itemsCount || 0} items`,
-    });
-
-    if (paidAmount > 0) {
-      const paymentDate = new Date(purchaseDate || new Date());
-      paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-      await createLedgerEntry({
-        organizationId,
-        branchId,
-        supplier: supplierId,
-        transactionType: 'payment_made',
-        transactionDate: paymentDate,
-        reference: invoiceNumber,
-        referenceId,
-        description: `Payment for Purchase #${invoiceNumber}`,
-        debit: paidAmount,
-        credit: 0,
-        paymentMethod,
-        invoiceType: normalizeCustomerInvoiceType(invoiceType),
-        notes: `Amount paid: Rs${paidAmount.toFixed(2)}`,
-      });
-    }
-
-    const normalizedPurchaseType = normalizeCustomerInvoiceType(invoiceType);
-    if (normalizedPurchaseType) {
-      await SupplierLedger.updateMany({ referenceId }, { $set: { invoiceType: normalizedPurchaseType } });
-    }
+  if (!supplierId) {
+    console.log('No supplier for ledger update on reference:', referenceId);
     return;
   }
 
-  const entrySupplierId = entries[0].supplier;
-  
-  // Find the purchase entry (credit)
-  const purchaseEntry = entries.find(e => e.transactionType === 'purchase');
-  // Find the payment entry (debit) if it exists
-  const paymentEntry = entries.find(e => e.transactionType === 'payment_made');
+  const existingEntries = await SupplierLedger.find({ referenceId }).sort({ transactionDate: 1 });
+  const isUpdate = existingEntries.length > 0;
 
-  // Update purchase entry if amount changed
-  if (purchaseEntry && purchaseEntry.credit !== totalAmount) {
-    console.log(`Updating purchase entry: ${purchaseEntry.credit} -> ${totalAmount}`);
-    
-    // Delete old entry
-    await deleteLedgerEntry(purchaseEntry._id);
-    
-    // Create new entry
-    await createLedgerEntry({
-      organizationId: purchaseEntry.organizationId,
-      branchId: purchaseEntry.branchId,
-      supplier: entrySupplierId,
-      transactionType: 'purchase',
-      transactionDate: purchaseDate || purchaseEntry.transactionDate,
-      reference: invoiceNumber,
-      referenceId: referenceId,
-      description: `Purchase Invoice #${invoiceNumber} (Updated)`,
-      debit: 0,
-      credit: totalAmount,
-      paymentMethod: paymentMethod,
-      invoiceType: normalizeCustomerInvoiceType(invoiceType),
-      notes: `Purchase of ${itemsCount} items (Updated)`
-    });
+  if (isUpdate) {
+    await deleteLedgerEntriesByReference(referenceId);
+  } else {
+    console.log('No ledger entries found. Creating fresh entries for reference:', referenceId);
   }
 
-  // Handle payment entry updates
-  if (paidAmount > 0) {
-    const paymentDate = new Date(purchaseDate || new Date());
-    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
+  const ledgerEntries = buildSupplierPurchaseLedgerEntries({
+    organizationId: organizationId || existingEntries[0]?.organizationId,
+    branchId: branchId || existingEntries[0]?.branchId,
+    supplierId,
+    referenceId,
+    invoiceNumber,
+    transactionDate: purchaseDate || existingEntries[0]?.transactionDate,
+    totalAmount,
+    paidAmount,
+    paymentType,
+    invoiceType: normalizeCustomerInvoiceType(invoiceType),
+    paymentMethod,
+    itemsCount: itemsCount || 0,
+    balance: balance ?? (Number(totalAmount || 0) - Number(paidAmount || 0)),
+    suffix: isUpdate ? ' (Updated)' : '',
+  });
 
-    if (paymentEntry) {
-      // Payment entry exists - check if amount changed
-      if (paymentEntry.debit !== paidAmount) {
-        console.log(`Updating payment entry: ${paymentEntry.debit} -> ${paidAmount}`);
-        
-        // Delete old payment entry
-        await deleteLedgerEntry(paymentEntry._id);
-        
-        // Create new payment entry
-        await createLedgerEntry({
-          organizationId: paymentEntry.organizationId,
-          branchId: paymentEntry.branchId,
-          supplier: entrySupplierId,
-          transactionType: 'payment_made',
-          transactionDate: paymentDate,
-          reference: invoiceNumber,
-          referenceId: referenceId,
-          description: `Payment for Purchase #${invoiceNumber} (Updated)`,
-          debit: paidAmount,
-          credit: 0,
-          paymentMethod: paymentMethod,
-          invoiceType: normalizeCustomerInvoiceType(invoiceType),
-          notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
-        });
-      }
-    } else {
-      // Payment entry doesn't exist - create new one
-      console.log(`Creating new payment entry: ${paidAmount}`);
-      await createLedgerEntry({
-        organizationId: purchaseEntry ? purchaseEntry.organizationId : organizationId,
-        branchId: purchaseEntry ? purchaseEntry.branchId : branchId,
-        supplier: entrySupplierId,
-        transactionType: 'payment_made',
-        transactionDate: paymentDate,
-        reference: invoiceNumber,
-        referenceId: referenceId,
-        description: `Payment for Purchase #${invoiceNumber} (Updated)`,
-        debit: paidAmount,
-        credit: 0,
-        paymentMethod: paymentMethod,
-        invoiceType: normalizeCustomerInvoiceType(invoiceType),
-        notes: `Amount paid: Rs${paidAmount.toFixed(2)}`
-      });
-    }
-  } else if (paymentEntry) {
-    // No payment in update but entry exists - delete it
-    console.log(`Deleting payment entry - no payment in update`);
-    await deleteLedgerEntry(paymentEntry._id);
-  }
-
-  const normalizedPurchaseType = normalizeCustomerInvoiceType(invoiceType);
-  if (normalizedPurchaseType) {
-    await SupplierLedger.updateMany({ referenceId }, { $set: { invoiceType: normalizedPurchaseType } });
+  for (const entry of ledgerEntries) {
+    await createLedgerEntry(entry);
   }
 };
 
@@ -620,4 +532,5 @@ module.exports = {
   updateLedgerEntriesByReference,
   deleteLedgerEntriesByReference,
   syncOpeningBalanceEntry,
+  recalculateBalances,
 };

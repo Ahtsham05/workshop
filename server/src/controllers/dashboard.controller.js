@@ -6,6 +6,7 @@ const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
+const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
 
 /**
  * Build an aggregate $match scope with properly cast ObjectIds.
@@ -43,88 +44,69 @@ const isValidRefObjectId = (id) => {
  */
 const getDashboardStats = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
-  const now = new Date();
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-  const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+  const dateRange = resolveDashboardDateRange(req.query);
+  const { startDate, endDate, compareStart, compareEnd } = dateRange;
 
-  // Current month revenue and sales
-  const currentMonthInvoices = await Invoice.find({
+  const invoiceDateFilter = buildDateMatch('invoiceDate', startDate, endDate);
+  const invoiceCompareFilter = buildDateMatch('invoiceDate', compareStart, compareEnd);
+  const purchaseDateFilter = buildDateMatch('purchaseDate', startDate, endDate);
+  const returnDateFilter = buildDateMatch('date', startDate, endDate);
+  const returnCompareFilter = buildDateMatch('date', compareStart, compareEnd);
+
+  // Revenue and sales in selected period
+  const currentInvoices = await Invoice.find({
     ...bf,
-    createdAt: { $gte: lastMonth },
-    status: { $ne: 'cancelled' }
+    ...invoiceDateFilter,
+    status: { $ne: 'cancelled' },
   });
 
-  const totalRevenue = currentMonthInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-  const totalSales = currentMonthInvoices.length;
+  const totalRevenue = currentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const totalSales = currentInvoices.length;
 
-  // Previous month for comparison
-  const previousMonthInvoices = await Invoice.find({
+  // Previous period for comparison
+  const previousInvoices = await Invoice.find({
     ...bf,
-    createdAt: { $gte: twoMonthsAgo, $lt: lastMonth },
-    status: { $ne: 'cancelled' }
+    ...invoiceCompareFilter,
+    status: { $ne: 'cancelled' },
   });
 
-  const previousRevenue = previousMonthInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-  const previousSales = previousMonthInvoices.length;
+  const previousRevenue = previousInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const previousSales = previousInvoices.length;
 
-  // Calculate percentage changes
-  const totalRevenueChange = previousRevenue > 0 
-    ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 
-    : 0;
-  const totalSalesChange = previousSales > 0 
-    ? ((totalSales - previousSales) / previousSales) * 100 
-    : 0;
+  const totalRevenueChange =
+    previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+  const totalSalesChange =
+    previousSales > 0 ? ((totalSales - previousSales) / previousSales) * 100 : 0;
 
-  // Low stock and out of stock products
+  // Low stock and out of stock products (current snapshot)
   const allProducts = await Product.find({ ...bf });
-  const lowStockCount = allProducts.filter(p => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
-  const outOfStockCount = allProducts.filter(p => p.stockQuantity === 0).length;
+  const lowStockCount = allProducts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
+  const outOfStockCount = allProducts.filter((p) => p.stockQuantity === 0).length;
 
-  // Calculate total inventory stock value
   const totalInventoryValue = allProducts.reduce((sum, product) => {
     const productValue = (product.stockQuantity || 0) * (product.cost || product.price || 0);
     return sum + productValue;
   }, 0);
 
-  // Pending invoices
+  // Pending invoices (current snapshot)
   const pendingInvoices = await Invoice.find({
     ...bf,
     status: 'pending',
-    type: { $in: ['credit', 'pending'] }
+    type: { $in: ['credit', 'pending'] },
   });
 
   const pendingInvoicesAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
 
-  // Today's revenue
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayInvoices = await Invoice.find({
-    ...bf,
-    createdAt: { $gte: startOfToday },
-    status: { $ne: 'cancelled' }
-  });
-  const todayRevenue = todayInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  // Period revenue (same as totalRevenue for filtered dashboard)
+  const todayRevenue = totalRevenue;
+  const todayRevenueChange = totalRevenueChange;
 
-  // Yesterday's revenue for comparison
-  const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const yesterdayInvoices = await Invoice.find({
-    ...bf,
-    createdAt: { $gte: startOfYesterday, $lt: startOfToday },
-    status: { $ne: 'cancelled' }
-  });
-  const yesterdayRevenue = yesterdayInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-
-  const todayRevenueChange = yesterdayRevenue > 0 
-    ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 
-    : 0;
-
-  // Total customers and products
   const totalCustomers = await Customer.countDocuments({ ...bf });
   const totalProducts = await Product.countDocuments({ ...bf });
 
-  // Total purchases (current month) – use aggScope so ObjectId fields cast correctly in pipeline
   const aggScopeEarly = buildAggregateScope(req);
   const purchasesAgg = await Purchase.aggregate([
-    { $match: { ...aggScopeEarly, purchaseDate: { $gte: lastMonth } } },
+    { $match: { ...aggScopeEarly, ...purchaseDateFilter } },
     { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
   ]);
   const totalPurchases = purchasesAgg[0]?.totalPurchases || 0;
@@ -148,8 +130,13 @@ const getDashboardStats = catchAsync(async (req, res) => {
     const { branchId } = req;
 
     const [summary, cashBookSummary] = await Promise.all([
-      mobileDashboardService.getMobileDashboardSummary({ organizationId, branchId }),
-      cashBookService.getSummary({ organizationId, branchId }),
+      mobileDashboardService.getMobileDashboardSummary({
+        organizationId,
+        branchId,
+        startDate,
+        endDate,
+      }),
+      cashBookService.getCashInHandSummary({ organizationId, branchId }),
     ]);
 
     mobileSummary = {
@@ -158,7 +145,6 @@ const getDashboardStats = catchAsync(async (req, res) => {
     };
   }
 
-  // Return metrics – use buildAggregateScope so ObjectId fields cast correctly
   const aggScope = buildAggregateScope(req);
   const [salesReturnsAgg, purchaseReturnsAgg] = await Promise.all([
     SalesReturn.aggregate([
@@ -166,7 +152,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
         $match: {
           ...aggScope,
           status: { $ne: 'rejected' },
-          date: { $gte: lastMonth },
+          ...returnDateFilter,
         },
       },
       {
@@ -182,7 +168,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
         $match: {
           ...aggScope,
           status: { $ne: 'rejected' },
-          date: { $gte: lastMonth },
+          ...returnDateFilter,
         },
       },
       {
@@ -224,6 +210,11 @@ const getDashboardStats = catchAsync(async (req, res) => {
     purchaseReturnCount,
     netSales,
     netPurchase,
+    period: {
+      preset: dateRange.period,
+      startDate: dateRange.startCalendar,
+      endDate: dateRange.endCalendar,
+    },
     ...mobileSummary,
   });
 });
@@ -233,47 +224,22 @@ const getDashboardStats = catchAsync(async (req, res) => {
  * @route GET /v1/dashboard/revenue?period=week
  */
 const getRevenueData = catchAsync(async (req, res) => {
-  // Aggregates must use BSON ObjectIds — applyBranchFilter leaves branchId as strings,
-  // which Mongoose fixes for .find() but NOT for aggregate $match (would return []).
   const aggScope = buildAggregateScope(req);
-  const { period = 'week' } = req.query;
-  const now = new Date();
-  let startDate;
-  let groupBy;
+  const dateRange = resolveDashboardDateRange(req.query);
+  const { startDate, endDate, startCalendar, endCalendar } = dateRange;
+  const isSingleDay = startCalendar === endCalendar;
 
-  switch (period) {
-    case 'day':
-      // Last 24 hours by hour
-      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      groupBy = { $dateToString: { format: '%Y-%m-%d-%H', date: '$createdAt' } };
-      break;
-    case 'week':
-      // Last 7 days
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      groupBy = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
-      break;
-    case 'month':
-      // Last 30 days
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      groupBy = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
-      break;
-    case 'year':
-      // Last 12 months
-      startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-      groupBy = { $dateToString: { format: '%Y-%m', date: '$createdAt' } };
-      break;
-    default:
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      groupBy = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
-  }
+  const groupBy = isSingleDay
+    ? { $dateToString: { format: '%H:00', date: '$invoiceDate', timezone: 'Asia/Karachi' } }
+    : { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate', timezone: 'Asia/Karachi' } };
 
   const revenueData = await Invoice.aggregate([
     {
       $match: {
         ...aggScope,
-        createdAt: { $gte: startDate },
-        status: { $ne: 'cancelled' }
-      }
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
     },
     {
       $group: {
@@ -281,43 +247,29 @@ const getRevenueData = catchAsync(async (req, res) => {
         revenue: { $sum: '$total' },
         sales: { $sum: 1 },
         profit: { $sum: { $ifNull: ['$totalProfit', 0] } },
-      }
+      },
     },
     {
-      $sort: { _id: 1 }
-    }
+      $sort: { _id: 1 },
+    },
   ]);
 
-  // Format the dates based on period
-  const formattedData = revenueData.map(item => {
+  const formattedData = revenueData.map((item) => {
     let formattedDate = item._id;
-    
-    if (period === 'day') {
-      // Format: "14:00"
-      const hour = item._id.split('-')[3];
-      formattedDate = `${hour}:00`;
-    } else if (period === 'week') {
-      // Format: "Mon", "Tue", etc.
-      const date = new Date(item._id);
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      formattedDate = days[date.getDay()];
-    } else if (period === 'month') {
-      // Format: "05 Dec"
-      const date = new Date(item._id);
+
+    if (isSingleDay) {
+      formattedDate = item._id;
+    } else {
+      const date = new Date(`${item._id}T12:00:00`);
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       formattedDate = `${date.getDate().toString().padStart(2, '0')} ${months[date.getMonth()]}`;
-    } else if (period === 'year') {
-      // Format: "Dec 2024"
-      const [year, month] = item._id.split('-');
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      formattedDate = `${months[parseInt(month) - 1]} ${year}`;
     }
 
     return {
       date: formattedDate,
       revenue: item.revenue || 0,
       sales: item.sales || 0,
-      profit: item.profit || 0
+      profit: item.profit || 0,
     };
   });
 
@@ -331,16 +283,15 @@ const getRevenueData = catchAsync(async (req, res) => {
 const getTopProducts = catchAsync(async (req, res) => {
   const aggScope = buildAggregateScope(req);
   const { limit = 5 } = req.query;
-  const now = new Date();
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
 
   const topProducts = await Invoice.aggregate([
     {
       $match: {
         ...aggScope,
-        createdAt: { $gte: lastMonth },
-        status: { $ne: 'cancelled' }
-      }
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
     },
     { $unwind: '$items' },
     {
@@ -412,14 +363,13 @@ const getTopProducts = catchAsync(async (req, res) => {
 const getTopCustomers = catchAsync(async (req, res) => {
   const aggScope = buildAggregateScope(req);
   const { limit = 5 } = req.query;
-  const now = new Date();
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
 
   const topCustomers = await Invoice.aggregate([
     {
       $match: {
         ...aggScope,
-        createdAt: { $gte: lastMonth },
+        ...buildDateMatch('invoiceDate', startDate, endDate),
         status: { $ne: 'cancelled' },
         $expr: {
           $or: [
@@ -518,10 +468,13 @@ const getLowStockProducts = catchAsync(async (req, res) => {
 const getRecentActivities = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
   const { limit = 10 } = req.query;
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
   const half = Math.max(1, Math.ceil(parseInt(limit, 10) / 2));
 
-  // Do not .populate(customerId): walk-in invoices use customerId === 'walk-in', which is not a valid ObjectId
-  const recentInvoices = await Invoice.find({ ...bf })
+  const recentInvoices = await Invoice.find({
+    ...bf,
+    ...buildDateMatch('invoiceDate', startDate, endDate),
+  })
     .sort({ createdAt: -1 })
     .limit(half)
     .select('invoiceNumber total createdAt status walkInCustomerName customerId type paidAmount balance')
@@ -543,8 +496,10 @@ const getRecentActivities = catchAsync(async (req, res) => {
       : [];
   const customerNameById = new Map(customerDocs.map((c) => [String(c._id), c.name]));
 
-  // Get recent purchases (fields needed for paid/balance like purchase report)
-  const recentPurchases = await Purchase.find({ ...bf })
+  const recentPurchases = await Purchase.find({
+    ...bf,
+    ...buildDateMatch('purchaseDate', startDate, endDate),
+  })
     .sort({ createdAt: -1 })
     .limit(half)
     .select('invoiceNumber totalAmount paidAmount balance paymentType createdAt supplier')

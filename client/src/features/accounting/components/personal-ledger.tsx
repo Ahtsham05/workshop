@@ -27,6 +27,8 @@ import { mobileShopApi } from '@/stores/mobile-shop.api';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/context/language-context';
+import { TransactionCategoryPicker } from './transaction-category-picker';
+import type { TransactionCategoryType } from '@/stores/expenseCategory.api';
 
 interface LedgerEntry {
   _id?: string;
@@ -63,14 +65,6 @@ const TRANSACTION_TYPES = [
 ];
 
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Card', 'Cheque', 'Other'];
-
-const CATEGORIES = {
-  income: ['Salary', 'Business Income', 'Freelance', 'Rent Income', 'Investment Return', 'Gift', 'Other'],
-  expense: ['Rent', 'Utilities', 'Food', 'Transport', 'Shopping', 'Medical', 'Education', 'Entertainment', 'Other'],
-  transfer: ['Bank to Cash', 'Cash to Bank', 'Account to Account', 'Other'],
-  opening_balance: ['Opening Balance'],
-  adjustment: ['Correction', 'Other'],
-};
 
 const formatCurrency = (value: number) =>
   `Rs ${Number(value || 0).toLocaleString('en-PK', {
@@ -154,7 +148,7 @@ function EntryForm({
     }
   };
 
-  const categoryOptions = CATEGORIES[form.transactionType as keyof typeof CATEGORIES] || CATEGORIES.income;
+  const categoryType = form.transactionType as TransactionCategoryType;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -235,22 +229,11 @@ function EntryForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <Label>{t('Category')}</Label>
-          <Select
-            value={form.category}
-            onValueChange={(v) => setForm(f => ({ ...f, category: v }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={t('Select category')} />
-            </SelectTrigger>
-            <SelectContent>
-              {categoryOptions.map(c => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <TransactionCategoryPicker
+          transactionType={categoryType}
+          value={form.category}
+          onChange={(category) => setForm((f) => ({ ...f, category }))}
+        />
 
         <div className="space-y-1">
           <Label>{t('Reference')}</Label>

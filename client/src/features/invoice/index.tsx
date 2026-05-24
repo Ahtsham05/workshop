@@ -7,6 +7,7 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -23,7 +24,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { Columns2, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
+import { Clock, Columns2, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   clearSaleWorkspace,
@@ -165,9 +166,13 @@ export default function InvoicePage() {
   const { hasPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
+  const search = useSearch({ from: '/_authenticated/invoice/' })
+
+  const initialView =
+    search.view === 'list' || search.view === 'convert-pending' ? search.view : 'create'
   
   // View state management
-  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>('create')
+  const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>(initialView)
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
 
   // State for invoice
@@ -1263,6 +1268,7 @@ export default function InvoicePage() {
             onCreateNew={handleCreateNew}
             onEdit={handleEdit}
             onConvertPending={handleConvertPending}
+            initialTypeFilter={search.type}
           />
         </Main>
       </div>
@@ -1314,6 +1320,26 @@ export default function InvoicePage() {
               {t('autosave_hint')}
             </p>
             <div className='flex flex-wrap justify-end gap-2 order-1 sm:order-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='gap-2 shadow-sm'
+                onClick={() => setCurrentView('list')}
+              >
+                <History className='h-4 w-4 shrink-0' aria-hidden />
+                {t('invoice_history')}
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='gap-2 shadow-sm'
+                onClick={handleConvertPending}
+              >
+                <Clock className='h-4 w-4 shrink-0' aria-hidden />
+                {t('convert_pending_invoices')}
+              </Button>
               <Button
                 type='button'
                 variant='outline'

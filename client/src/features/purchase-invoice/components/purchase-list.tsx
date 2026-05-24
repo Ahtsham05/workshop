@@ -27,6 +27,7 @@ import { toast } from 'sonner'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
+import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -61,7 +62,10 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const queryParams = {
     page: currentPage,
     limit: itemsPerPage,
-    ...(debouncedSearch && { search: debouncedSearch }),
+    ...(debouncedSearch && {
+      search: debouncedSearch,
+      fieldName: LIST_SEARCH_FIELDS.purchase,
+    }),
   }
 
   const { data: purchasesResponse, isLoading, error } = useGetPurchasesQuery(queryParams)

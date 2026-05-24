@@ -9,6 +9,7 @@ const config = require('../../config/config');
 const customerRoute = require('./customer.route');
 const supplierRoute = require('./supplier.route');
 const purchaseRoute = require('./purchase.route');
+const purchaseOrderRoute = require('./purchaseOrder.route');
 const invoiceRoute = require('./invoice.route');
 const expenseRoute = require('./expense.route');
 const expenseCategoryRoute = require('./expenseCategory.route');
@@ -30,6 +31,7 @@ const cashWithdrawalRoute = require('./cashWithdrawal.route');
 const repairJobRoute = require('./repairJob.route');
 const serviceRoute = require('./service.route');
 const cashBookRoute = require('./cashBook.route');
+const cashRegisterRoute = require('./cashRegister.route');
 const mobileDashboardRoute = require('./mobileDashboard.route');
 const mobileReportsRoute = require('./mobileReports.route');
 const salesReturnRoute = require('./salesReturn.route');
@@ -129,6 +131,10 @@ const defaultRoutes = [
     route: purchaseRoute
   },
   {
+    path: '/purchase-orders',
+    route: purchaseOrderRoute
+  },
+  {
     path: '/invoices',
     route: invoiceRoute
   },
@@ -223,6 +229,10 @@ const defaultRoutes = [
   {
     path: '/cash-book',
     route: cashBookRoute,
+  },
+  {
+    path: '/cash-register',
+    route: cashRegisterRoute,
   },
   {
     path: '/mobile-dashboard',
@@ -425,6 +435,7 @@ const protectedPaths = [
   '/customers',
   '/suppliers',
   '/purchases',
+  '/purchase-orders',
   '/invoices',
   '/expenses',
   '/customer-ledger',
@@ -444,6 +455,7 @@ const protectedPaths = [
   '/repair-stock',
   '/installments',
   '/cash-book',
+  '/cash-register',
   '/mobile-dashboard',
   '/mobile-reports',
   '/sales-returns',

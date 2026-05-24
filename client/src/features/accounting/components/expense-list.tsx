@@ -53,7 +53,9 @@ interface ExpenseListProps {
 
 export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
   const { t } = useLanguage();
-  const { data: categoryData = [] } = useGetExpenseCategoriesQuery();
+  const { data: categoryData = [] } = useGetExpenseCategoriesQuery({
+    transactionType: 'business_expense',
+  });
   const expenseCategories = ['All', ...categoryData.map((c) => c.name)];
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

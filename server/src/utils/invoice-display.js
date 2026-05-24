@@ -8,7 +8,7 @@ const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
 
 /**
  * @param {{ type?: string, total?: number, paidAmount?: number }} inv
- * @returns {{ paidAmount: number, balance: number, displayStatus: 'paid' | 'unpaid' }}
+ * @returns {{ paidAmount: number, balance: number, displayStatus: 'cash' | 'credit' }}
  */
 function normalizeInvoicePayment(inv) {
   const total = roundMoney(inv.total);
@@ -18,18 +18,17 @@ function normalizeInvoicePayment(inv) {
     return {
       paidAmount: total,
       balance: 0,
-      displayStatus: 'paid',
+      displayStatus: 'cash',
     };
   }
 
   const paidRaw = roundMoney(inv.paidAmount);
   const applied = Math.min(paidRaw, total);
   const balance = Math.max(0, roundMoney(total - applied));
-  const fullyPaid = balance <= 0.009;
   return {
     paidAmount: applied,
     balance,
-    displayStatus: fullyPaid ? 'paid' : 'unpaid',
+    displayStatus: 'credit',
   };
 }
 
@@ -38,7 +37,7 @@ function normalizeInvoicePayment(inv) {
  * Credit / Wallet / etc. use stored paidAmount until balance is cleared.
  *
  * @param {{ paymentType?: string, totalAmount?: number, paidAmount?: number, balance?: number }} pur
- * @returns {{ paidAmount: number, balance: number, displayStatus: 'paid' | 'unpaid' }}
+ * @returns {{ paidAmount: number, balance: number, displayStatus: 'cash' | 'credit' }}
  */
 function normalizePurchasePayment(pur) {
   const total = roundMoney(pur.totalAmount);
@@ -48,18 +47,28 @@ function normalizePurchasePayment(pur) {
     return {
       paidAmount: total,
       balance: 0,
-      displayStatus: 'paid',
+      displayStatus: 'cash',
+    };
+  }
+
+  if (paymentType === 'Wallet') {
+    const paidRaw = roundMoney(pur.paidAmount);
+    const applied = Math.min(paidRaw, total);
+    const balance = Math.max(0, roundMoney(total - applied));
+    return {
+      paidAmount: applied,
+      balance,
+      displayStatus: 'cash',
     };
   }
 
   const paidRaw = roundMoney(pur.paidAmount);
   const applied = Math.min(paidRaw, total);
   const balance = Math.max(0, roundMoney(total - applied));
-  const fullyPaid = balance <= 0.009;
   return {
     paidAmount: applied,
     balance,
-    displayStatus: fullyPaid ? 'paid' : 'unpaid',
+    displayStatus: 'credit',
   };
 }
 

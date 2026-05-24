@@ -5,12 +5,25 @@ import { useLanguage } from '@/context/language-context'
 import { useGetTopCustomersQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
+import {
+  dashboardRangeQueryParams,
+  formatDashboardRangeLabel,
+  type DashboardDateRange,
+} from '@/lib/dashboard-date-range'
 
-export function TopCustomers() {
+type Props = {
+  dateRange: DashboardDateRange
+}
+
+export function TopCustomers({ dateRange }: Props) {
   const { t } = useLanguage()
-  const { data: topCustomers, isLoading } = useGetTopCustomersQuery({ limit: 5 })
+  const { data: topCustomers, isLoading, isFetching } = useGetTopCustomersQuery({
+    limit: 5,
+    ...dashboardRangeQueryParams(dateRange),
+  })
+  const loading = isLoading || isFetching
 
-  if (isLoading) {
+  if (loading) {
     return (
       <Card>
         <CardHeader>
@@ -35,7 +48,9 @@ export function TopCustomers() {
           <TrendingUp className='h-5 w-5 text-blue-500' />
           {t('Top Customers')}
         </CardTitle>
-        <CardDescription>{t('Most valuable customers this month')}</CardDescription>
+        <CardDescription>
+          {t('Most valuable customers this month')} · {formatDashboardRangeLabel(dateRange, t)}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className='space-y-3'>

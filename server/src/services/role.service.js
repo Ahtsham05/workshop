@@ -119,6 +119,7 @@ const createDefaultRoles = async () => {
     viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
     viewInvoices: true, createInvoices: true, editInvoices: true, deleteInvoices: true, printInvoices: true,
     viewPurchases: true, createPurchases: true, editPurchases: true, deletePurchases: true,
+    viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, deletePurchaseOrders: true, receivePurchaseOrders: true,
     viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
     viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
     viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,
@@ -145,6 +146,7 @@ const createDefaultRoles = async () => {
         viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
         viewInvoices: true, createInvoices: true, editInvoices: true, printInvoices: true,
         viewPurchases: true, createPurchases: true, editPurchases: true,
+        viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, receivePurchaseOrders: true,
         viewCustomers: true, createCustomers: true, editCustomers: true,
         viewSuppliers: true, createSuppliers: true, editSuppliers: true,
         viewCategories: true, createCategories: true, editCategories: true,
@@ -171,6 +173,7 @@ const createDefaultRoles = async () => {
       description: 'Read-only access to view data',
       permissions: {
         viewProducts: true, viewInvoices: true, viewPurchases: true,
+        viewPurchaseOrders: true,
         viewCustomers: true, viewSuppliers: true, viewCategories: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewDashboard: true,

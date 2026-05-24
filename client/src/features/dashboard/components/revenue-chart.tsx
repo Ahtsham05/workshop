@@ -1,17 +1,24 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { useGetRevenueDataQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  dashboardRangeQueryParams,
+  formatDashboardRangeLabel,
+  type DashboardDateRange,
+} from '@/lib/dashboard-date-range'
 
-export function RevenueChart() {
+type Props = {
+  dateRange: DashboardDateRange
+}
+
+export function RevenueChart({ dateRange }: Props) {
   const { t } = useLanguage()
-  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('week')
-  const { data: revenueData, isLoading } = useGetRevenueDataQuery({ period })
+  const { data: revenueData, isLoading, isFetching } = useGetRevenueDataQuery(dashboardRangeQueryParams(dateRange))
+  const loading = isLoading || isFetching
 
-  if (isLoading) {
+  if (loading) {
     return (
       <Card className='col-span-1 lg:col-span-4'>
         <CardHeader>
@@ -28,22 +35,11 @@ export function RevenueChart() {
   return (
     <Card className='col-span-1 lg:col-span-4'>
       <CardHeader>
-        <div className='flex items-center justify-between'>
-          <div>
-            <CardTitle>{t('revenue_overview')}</CardTitle>
-            <CardDescription>{t('revenue_chart_description')}</CardDescription>
-          </div>
-          <Select value={period} onValueChange={(value: any) => setPeriod(value)}>
-            <SelectTrigger className='w-[120px]'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='day'>{t('Today')}</SelectItem>
-              <SelectItem value='week'>{t('This Week')}</SelectItem>
-              <SelectItem value='month'>{t('This Month')}</SelectItem>
-              <SelectItem value='year'>{t('This Year')}</SelectItem>
-            </SelectContent>
-          </Select>
+        <div>
+          <CardTitle>{t('revenue_overview')}</CardTitle>
+          <CardDescription>
+            {t('revenue_chart_description')} · {formatDashboardRangeLabel(dateRange, t)}
+          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className='pl-2'>

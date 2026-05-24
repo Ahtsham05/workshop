@@ -4,12 +4,25 @@ import { Package, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useGetTopProductsQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  dashboardRangeQueryParams,
+  formatDashboardRangeLabel,
+  type DashboardDateRange,
+} from '@/lib/dashboard-date-range'
 
-export function TopProducts() {
+type Props = {
+  dateRange: DashboardDateRange
+}
+
+export function TopProducts({ dateRange }: Props) {
   const { t } = useLanguage()
-  const { data: topProducts, isLoading } = useGetTopProductsQuery({ limit: 5 })
+  const { data: topProducts, isLoading, isFetching } = useGetTopProductsQuery({
+    limit: 5,
+    ...dashboardRangeQueryParams(dateRange),
+  })
+  const loading = isLoading || isFetching
 
-  if (isLoading) {
+  if (loading) {
     return (
       <Card>
         <CardHeader>
@@ -34,7 +47,9 @@ export function TopProducts() {
           <TrendingUp className='h-5 w-5 text-green-500' />
           {t('Top Selling Products')}
         </CardTitle>
-        <CardDescription>{t('Best performing products this month')}</CardDescription>
+        <CardDescription>
+          {t('Best performing products this month')} · {formatDashboardRangeLabel(dateRange, t)}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className='space-y-3'>

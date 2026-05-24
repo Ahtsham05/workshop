@@ -33,6 +33,8 @@ const ALL_PERMISSIONS: Permission = {
   viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
   viewInvoices: true, createInvoices: true, editInvoices: true, deleteInvoices: true, printInvoices: true,
   viewPurchases: true, createPurchases: true, editPurchases: true, deletePurchases: true,
+  viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true,
+  deletePurchaseOrders: true, receivePurchaseOrders: true,
   viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
   viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
   viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,

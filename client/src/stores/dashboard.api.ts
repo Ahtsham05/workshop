@@ -65,6 +65,17 @@ export interface DashboardStats {
   billPaymentProfit: number
   billsDueToday: number
   billsOverdue: number
+  period?: {
+    preset: string
+    startDate: string
+    endDate: string
+  }
+}
+
+export type DashboardDateParams = {
+  period: 'today' | 'week' | 'month' | 'custom'
+  startDate: string
+  endDate: string
 }
 
 export interface RevenueData {
@@ -118,28 +129,43 @@ export const dashboardApi = createApi({
   baseQuery: baseQueryWithAuth,
   tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities'],
   endpoints: (builder) => ({
-    getDashboardStats: builder.query<DashboardStats, void>({
-      query: () => '/stats',
+    getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({
+      query: (params) => ({
+        url: '/stats',
+        params,
+      }),
       providesTags: ['DashboardStats'],
     }),
-    getRevenueData: builder.query<RevenueData[], { period: 'day' | 'week' | 'month' | 'year' }>({
-      query: ({ period }) => `/revenue?period=${period}`,
+    getRevenueData: builder.query<RevenueData[], DashboardDateParams>({
+      query: (params) => ({
+        url: '/revenue',
+        params,
+      }),
       providesTags: ['Revenue'],
     }),
-    getTopProducts: builder.query<TopProduct[], { limit?: number }>({
-      query: ({ limit = 5 }) => `/top-products?limit=${limit}`,
+    getTopProducts: builder.query<TopProduct[], DashboardDateParams & { limit?: number }>({
+      query: ({ limit = 5, ...params }) => ({
+        url: '/top-products',
+        params: { ...params, limit },
+      }),
       providesTags: ['TopProducts'],
     }),
-    getTopCustomers: builder.query<TopCustomer[], { limit?: number }>({
-      query: ({ limit = 5 }) => `/top-customers?limit=${limit}`,
+    getTopCustomers: builder.query<TopCustomer[], DashboardDateParams & { limit?: number }>({
+      query: ({ limit = 5, ...params }) => ({
+        url: '/top-customers',
+        params: { ...params, limit },
+      }),
       providesTags: ['TopCustomers'],
     }),
     getLowStockProducts: builder.query<LowStockProduct[], void>({
       query: () => '/low-stock',
       providesTags: ['LowStock'],
     }),
-    getRecentActivities: builder.query<RecentActivity[], { limit?: number }>({
-      query: ({ limit = 10 }) => `/recent-activities?limit=${limit}`,
+    getRecentActivities: builder.query<RecentActivity[], DashboardDateParams & { limit?: number }>({
+      query: ({ limit = 10, ...params }) => ({
+        url: '/recent-activities',
+        params: { ...params, limit },
+      }),
       providesTags: ['RecentActivities'],
     }),
   }),

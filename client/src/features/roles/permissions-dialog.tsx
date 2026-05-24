@@ -90,6 +90,17 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
       ],
     },
     {
+      title: t('purchase_orders') || 'Purchase Orders',
+      icon: <Package className="w-4 h-4" />,
+      permissions: [
+        { key: 'viewPurchaseOrders', label: t('view_purchase_orders') || 'View Purchase Orders' },
+        { key: 'createPurchaseOrders', label: t('create_purchase_orders') || 'Create Purchase Orders' },
+        { key: 'editPurchaseOrders', label: t('edit_purchase_orders') || 'Edit Purchase Orders' },
+        { key: 'deletePurchaseOrders', label: t('delete_purchase_orders') || 'Delete Purchase Orders' },
+        { key: 'receivePurchaseOrders', label: t('receive_purchase_orders') || 'Receive Purchase Orders' },
+      ],
+    },
+    {
       title: t('customers') || 'Customers',
       icon: <Users className="w-4 h-4" />,
       permissions: [

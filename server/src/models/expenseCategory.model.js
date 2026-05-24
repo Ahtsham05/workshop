@@ -20,6 +20,12 @@ const expenseCategorySchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    transactionType: {
+      type: String,
+      enum: ['business_expense', 'income', 'expense', 'transfer', 'opening_balance', 'adjustment'],
+      default: 'business_expense',
+      index: true,
+    },
     color: {
       type: String,
       default: '#6366f1',
@@ -40,7 +46,7 @@ expenseCategorySchema.plugin(toJSON);
 expenseCategorySchema.plugin(paginate);
 
 expenseCategorySchema.index(
-  { organizationId: 1, branchId: 1, name: 1 },
+  { organizationId: 1, branchId: 1, name: 1, transactionType: 1 },
   { unique: true },
 );
 

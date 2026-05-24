@@ -74,6 +74,7 @@ interface InvoiceListProps {
   onCreateNew?: () => void
   onEdit?: (invoice: any) => void
   onConvertPending?: () => void
+  initialTypeFilter?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -93,13 +94,15 @@ const typeColors: Record<string, string> = {
 
 export function InvoiceList({ onBack, onCreateNew, onEdit, 
   // onReturn, 
-  onConvertPending }: InvoiceListProps) {
+  onConvertPending,
+  initialTypeFilter,
+}: InvoiceListProps) {
   const { t } = useLanguage()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>(initialTypeFilter || 'all')
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)

@@ -28,6 +28,10 @@ type SearchableSelectProps = {
   clearLabel?: string
   className?: string
   disabled?: boolean
+  id?: string
+  'data-enter-field'?: string
+  onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>
+  onKeyDownCapture?: React.KeyboardEventHandler<HTMLButtonElement>
 }
 
 export function SearchableSelect({
@@ -40,19 +44,38 @@ export function SearchableSelect({
   clearLabel,
   className,
   disabled,
+  id,
+  'data-enter-field': dataEnterField,
+  onKeyDown,
+  onKeyDownCapture,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
 
   const selected = options.find((o) => o.value === value)
 
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (open && e.key === 'Enter') return
+    onKeyDown?.(e)
+  }
+
+  const handleTriggerKeyDownCapture = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (open && e.key === 'Enter') return
+    onKeyDownCapture?.(e)
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
+          type='button'
           variant='outline'
           role='combobox'
           aria-expanded={open}
           disabled={disabled}
+          data-enter-field={dataEnterField}
+          onKeyDown={handleTriggerKeyDown}
+          onKeyDownCapture={handleTriggerKeyDownCapture}
           className={cn('w-full justify-between font-normal', !selected && 'text-muted-foreground', className)}
         >
           <span className='truncate'>{selected ? selected.label : placeholder}</span>

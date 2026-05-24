@@ -55,7 +55,9 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
   const [newCatName, setNewCatName] = useState('')
   const [creatingCat, setCreatingCat] = useState(false)
 
-  const { data: categories = [], refetch } = useGetExpenseCategoriesQuery()
+  const { data: categories = [], refetch } = useGetExpenseCategoriesQuery({
+    transactionType: 'business_expense',
+  })
   const [createCategory] = useCreateExpenseCategoryMutation()
   const [updateCategory] = useUpdateExpenseCategoryMutation()
   const [deleteCategoryMut] = useDeleteExpenseCategoryMutation()
@@ -157,7 +159,11 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
     if (!name) return
     setCreatingCat(true)
     try {
-      const created = await createCategory({ name }).unwrap()
+      const created = await createCategory({
+        name,
+        color: '#6366f1',
+        transactionType: 'business_expense',
+      }).unwrap()
       handleChange('category', created.name)
       setNewCatName('')
       setCatOpen(false)

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
@@ -46,14 +46,22 @@ import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
+import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
 import {
   MobileReceiptOffer,
   fmtRs,
   type MobileReceiptData,
 } from '@/features/mobile-shop/components/mobile-shop-receipt'
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
+import { buildSimSaleReceipt } from '@/features/mobile-shop/utils/mobile-shop-receipt-builders'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import {
+  makeEnterChain,
+  MOBILE_FORM_KEYBOARD_HINT,
+  useCtrlEnterSubmit,
+} from '@/lib/mobile-form-keyboard'
 
 type SimSaleFormState = {
   date: string
@@ -100,6 +108,7 @@ export default function SimSalePage() {
   const [showForm, setShowForm] = useState(false)
 
   const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const [previewReceipt, setPreviewReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -237,29 +246,42 @@ export default function SimSalePage() {
         toast.success('Sim sale saved')
       }
       dispatch(fetchAllProducts({}) as any)
-      setSavedReceipt({
-        title: 'SIM sale',
-        reference: `Job #${record.jobNumber}`,
-        issuedAt: new Date(record.date).toLocaleString(),
-        lines: [
-          { label: 'Item', value: record.productName || '—' },
-          { label: 'Load A/C', value: record.walletType || '—' },
-          { label: 'Customer', value: record.customerName || '—' },
-          { label: 'Mobile', value: record.customerMobile || '—' },
-          { label: 'CNIC', value: record.customerCNIC?.trim() || '—' },
-          { label: 'Location', value: record.customerLocation?.trim() || '—' },
-          {
-            label: 'Payment',
-            value: `${record.paymentMethod}${record.paymentWalletType ? ` (${record.paymentWalletType})` : ''}`,
-          },
-          { label: 'Total amount', value: fmtRs(record.saleAmount) },
-        ],
-      })
+      setSavedReceipt(buildSimSaleReceipt(record))
       resetForm()
     } catch (err: any) {
       toast.error(err?.data?.message || 'Failed to save sim sale')
     }
   }
+
+  const simEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'sim-date',
+          'sim-product',
+          'sim-wallet',
+          'sim-customer',
+          'customer-mobile',
+          'customer-cnic',
+          'customer-location',
+          'sim-payment-method',
+          'sim-amount',
+          'load-amount',
+          'sale-amount',
+        ],
+        { onSubmit: () => handleSubmit() },
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable submit handler for keyboard chain
+    [],
+  )
+
+  useCtrlEnterSubmit(() => handleSubmit(), creating || updating)
+
+  useEffect(() => {
+    if (showForm) {
+      window.setTimeout(() => simEnter.focusFirst(), 80)
+    }
+  }, [showForm, simEnter])
 
   const handleEdit = (sale: any) => {
     setForm({
@@ -295,7 +317,7 @@ export default function SimSalePage() {
   }
 
   return (
-    <MobilePageShell title='Sim Sale' description='Manage SIM card sales'>
+    <MobilePageShell title='Sim Sale' description={`Manage SIM card sales · ${MOBILE_FORM_KEYBOARD_HINT}`}>
       <div className='space-y-6'>
         {savedReceipt ? (
           <MobileReceiptOffer
@@ -305,6 +327,14 @@ export default function SimSalePage() {
             onDismiss={() => setSavedReceipt(null)}
           />
         ) : null}
+
+        <MobileReceiptPreviewDialog
+          receipt={previewReceipt}
+          open={!!previewReceipt}
+          onOpenChange={(open) => !open && setPreviewReceipt(null)}
+          organization={org}
+          invoiceNote={branchData?.invoiceNote}
+        />
 
         {/* Toolbar */}
         <div className='flex justify-end'>
@@ -328,6 +358,7 @@ export default function SimSalePage() {
                     type='date'
                     value={form.date}
                     onChange={e => handleChange('date', e.target.value)}
+                    {...simEnter.enterProps('sim-date')}
                   />
                 </div>
 
@@ -349,6 +380,7 @@ export default function SimSalePage() {
                     searchPlaceholder='Search products...'
                     clearLabel='-- None --'
                     emptyText='No products found.'
+                    {...simEnter.enterProps('sim-product')}
                   />
                   {selectedProductRow && typeof selectedProductRow.stockQuantity === 'number' && selectedProductRow.stockQuantity < 1 && (
                     <p className='text-sm text-destructive'>No stock left for this product. Add inventory or choose another SIM.</p>
@@ -369,7 +401,7 @@ export default function SimSalePage() {
                     value={form.walletType || '__none__'}
                     onValueChange={v => handleChange('walletType', v)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger {...simEnter.enterProps('sim-wallet')}>
                       <SelectValue placeholder='Select load account' />
                     </SelectTrigger>
                     <SelectContent>
@@ -398,6 +430,7 @@ export default function SimSalePage() {
                     searchPlaceholder='Search customers...'
                     clearLabel='Nothing selected'
                     emptyText='No customers found.'
+                    {...simEnter.enterProps('sim-customer')}
                   />
                 </div>
 
@@ -408,6 +441,7 @@ export default function SimSalePage() {
                     placeholder='03xxxxxxxxx'
                     value={form.customerMobile}
                     onChange={e => handleChange('customerMobile', e.target.value)}
+                    {...simEnter.enterProps('customer-mobile')}
                   />
                 </div>
 
@@ -418,6 +452,7 @@ export default function SimSalePage() {
                     placeholder='XXXXX-XXXXXXX-X'
                     value={form.customerCNIC}
                     onChange={e => handleChange('customerCNIC', e.target.value)}
+                    {...simEnter.enterProps('customer-cnic')}
                   />
                 </div>
 
@@ -428,6 +463,7 @@ export default function SimSalePage() {
                     placeholder='Enter location'
                     value={form.customerLocation}
                     onChange={e => handleChange('customerLocation', e.target.value)}
+                    {...simEnter.enterProps('customer-location')}
                   />
                 </div>
 
@@ -438,7 +474,7 @@ export default function SimSalePage() {
                     value={form.paymentMethod}
                     onValueChange={v => handleChange('paymentMethod', v)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger {...simEnter.enterProps('sim-payment-method')}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -492,6 +528,7 @@ export default function SimSalePage() {
                     placeholder='0.00'
                     value={form.simAmount}
                     onChange={e => handleChange('simAmount', e.target.value)}
+                    {...simEnter.enterProps('sim-amount')}
                   />
                   <p className='text-xs text-muted-foreground'>Your purchase price per unit (defaults from product purchase price).</p>
                 </div>
@@ -505,6 +542,7 @@ export default function SimSalePage() {
                     placeholder='0'
                     value={form.loadAmount}
                     onChange={e => handleChange('loadAmount', e.target.value)}
+                    {...simEnter.enterProps('load-amount')}
                   />
                 </div>
 
@@ -528,6 +566,7 @@ export default function SimSalePage() {
                     placeholder='0.00'
                     value={form.saleAmount}
                     onChange={e => handleChange('saleAmount', e.target.value)}
+                    {...simEnter.enterProps('sale-amount')}
                   />
                   <p className='text-xs text-muted-foreground'>Sale price (defaults from product retail price).</p>
                 </div>
@@ -606,6 +645,7 @@ export default function SimSalePage() {
                           <TableCell>{sale.paymentWalletType || '—'}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
+                              <ListPrintButton onClick={() => setPreviewReceipt(buildSimSaleReceipt(sale))} />
                               <Button size='icon' variant='ghost' onClick={() => handleEdit(sale)}>
                                 <Pencil className='h-4 w-4' />
                               </Button>

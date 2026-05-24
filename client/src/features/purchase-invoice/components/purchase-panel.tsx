@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/popover'
 import {
   Command,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/command'
 import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles } from 'lucide-react'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
+import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useSelector } from 'react-redux'
@@ -51,7 +53,7 @@ interface PurchasePanelProps {
   updateSellingPrice: (productId: string, price: number) => void
   calculateTotals: () => { subtotal: number; total: number }
   onBackToList?: () => void
-  onSaveSuccess?: () => void
+  onSaveSuccess?: (mode: 'create' | 'update') => void
   isEditing?: boolean
   editingPurchase?: any
   products: any[]
@@ -326,6 +328,31 @@ export default function PurchasePanel({
   const focusPaymentType = useCallback(() => focusField(paymentTypeTriggerRef.current), [])
   const focusPurchaseDate = useCallback(() => focusField(purchaseDateRef.current), [])
 
+  const selectSupplier = useCallback(
+    (supplier: (typeof suppliers)[number]) => {
+      const sid = supplier._id || (supplier as { id?: string }).id
+      if (!sid) return
+      setPurchase((prev) => ({
+        ...prev,
+        supplier: {
+          _id: sid,
+          name: supplier.name,
+          nameUrdu: supplier.nameUrdu,
+          phone: supplier.phone,
+          whatsapp: (supplier as { whatsapp?: string }).whatsapp,
+          email: supplier.email,
+          address: supplier.address,
+          balance: supplier.balance,
+          picture: supplier.picture,
+        },
+      }))
+      setSupplierSelectOpen(false)
+      setSupplierSearchQuery('')
+      focusPaymentType()
+    },
+    [focusPaymentType, setPurchase],
+  )
+
   // Handle save purchase
   const handleSavePurchase = useCallback(
     async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
@@ -393,7 +420,7 @@ export default function PurchasePanel({
         }),
         totalAmount: totals.total,
         paidAmount: purchase.paidAmount || 0,
-        balance: totals.total - (purchase.paidAmount || 0),
+        balance: resolvePurchaseInvoiceBalance(totals.total, purchase.paidAmount || 0),
         paymentType: paymentType,
         walletType: paymentType === 'Wallet' ? purchase.walletType : undefined,
         purchaseDate: purchase.date || new Date().toISOString(),
@@ -438,9 +465,8 @@ export default function PurchasePanel({
           printPurchase(purchaseForPrint, printType)
         }
 
-        // Reset form and go back to list
         if (onSaveSuccess) {
-          onSaveSuccess()
+          onSaveSuccess(isEditing ? 'update' : 'create')
         }
       } catch (error: any) {
         console.error('Save error:', error)
@@ -587,64 +613,32 @@ export default function PurchasePanel({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">
-                <div className="p-2">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder={t('Search suppliers...')}
-                      value={supplierSearchQuery}
-                      onChange={(e) => setSupplierSearchQuery(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                </div>
-                <div className="max-h-[300px] overflow-y-auto">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t('Search suppliers...')}
+                    value={supplierSearchQuery}
+                    onValueChange={setSupplierSearchQuery}
+                  />
                   {suppliersLoading ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       {t('Loading suppliers...')}
                     </div>
-                  ) : filteredSuppliers.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      {t('No suppliers found')}
-                    </div>
                   ) : (
-                    <div className="space-y-1 p-1">
+                    <CommandEmpty>{t('No suppliers found')}</CommandEmpty>
+                  )}
+                  <CommandList className="max-h-[300px] overflow-y-auto">
+                    <CommandGroup>
                       {filteredSuppliers.map((supplier, index) => {
-                        const supplierId = supplier._id || (supplier as any).id || `supplier-${index}`
-                        const currentSupplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+                        const supplierId = supplier._id || (supplier as { id?: string }).id || `supplier-${index}`
+                        const currentSupplierId = purchase.supplier?._id || (purchase.supplier as { id?: string }).id
                         const isSelected = currentSupplierId === supplierId
                         return (
-                          <div
+                          <CommandItem
                             key={supplierId}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              console.log('Selecting supplier:', supplier)
-                              const selectedSupplier: Supplier = {
-                                _id: supplier._id || (supplier as any).id,
-                                name: supplier.name,
-                                nameUrdu: supplier.nameUrdu,
-                                phone: supplier.phone,
-                                email: supplier.email,
-                                address: supplier.address,
-                                balance: supplier.balance,
-                                picture: supplier.picture,
-                              }
-                              console.log('Setting supplier to:', selectedSupplier)
-                              setPurchase(prev => ({
-                                ...prev,
-                                supplier: selectedSupplier
-                              }))
-                              setTimeout(() => {
-                                setSupplierSelectOpen(false)
-                                setSupplierSearchQuery('')
-                                focusPaymentType()
-                              }, 100)
-                            }}
-                            className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-accent/50 transition-colors ${
-                              isSelected ? 'bg-accent' : ''
-                            }`}
+                            value={`${supplier.name} ${supplier.phone || ''} ${supplier.nameUrdu || ''}`}
+                            onSelect={() => selectSupplier(supplier)}
+                            className="flex items-center gap-3 cursor-pointer p-3"
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <ContactPhotoCell
@@ -674,17 +668,17 @@ export default function PurchasePanel({
                                 )}
                               </div>
                             </div>
-                            {isSelected && (
+                            {isSelected ? (
                               <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
                                 <Check className="w-3 h-3 text-primary" />
                               </div>
-                            )}
-                          </div>
+                            ) : null}
+                          </CommandItem>
                         )
                       })}
-                    </div>
-                  )}
-                </div>
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
               </PopoverContent>
             </Popover>
 
@@ -708,7 +702,7 @@ export default function PurchasePanel({
                       paymentType: value,
                       walletType: value === 'Wallet' ? prev.walletType : undefined,
                       paidAmount: nextPaid,
-                      balance: currentTotal - nextPaid,
+                      balance: resolvePurchaseInvoiceBalance(currentTotal, nextPaid),
                     }
                   })
                 }}
@@ -994,7 +988,7 @@ export default function PurchasePanel({
                             onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
                             onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, productId)}
                             onFocus={(e) => e.target.select()}
-                            className='h-7 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            className='h-7 w-20 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                           />
                           <Button
                             size="sm"
@@ -1163,7 +1157,7 @@ export default function PurchasePanel({
                     setPurchase((prev) => ({
                       ...prev,
                       paidAmount: value,
-                      balance: currentTotal - value,
+                      balance: resolvePurchaseInvoiceBalance(currentTotal, value),
                     }))
                   }}
                   placeholder="0.00"
@@ -1223,7 +1217,6 @@ export default function PurchasePanel({
 
           {/* Save Buttons */}
           <div className="grid grid-cols-1 gap-3">
-            {/* Save Only Button */}
             <Button 
               onClick={() => handleSavePurchase('none')}
               className="w-full"
@@ -1239,14 +1232,12 @@ export default function PurchasePanel({
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  {isEditing ? t('Update Purchase') : t('Save Purchase')}
+                  {isEditing ? t('Update Purchase') : t('Save Purchase')} (Ctrl+D)
                 </>
               )}
             </Button>
-            
-            {/* Print Buttons Row */}
+
             <div className="grid grid-cols-2 gap-3">
-              {/* Save & Print Receipt Button */}
               <Button 
                 onClick={() => handleSavePurchase('receipt')}
                 className="w-full"
@@ -1262,12 +1253,11 @@ export default function PurchasePanel({
                 ) : (
                   <>
                     <Printer className="mr-2 h-4 w-4" />
-                    {t('Save & Print Receipt')}
+                    {t('Save & Print Receipt')} (Ctrl+Enter)
                   </>
                 )}
               </Button>
-              
-              {/* Save & Print A4 Button */}
+
               <Button 
                 onClick={() => handleSavePurchase('a4')}
                 className="w-full"
@@ -1283,7 +1273,7 @@ export default function PurchasePanel({
                 ) : (
                   <>
                     <Printer className="mr-2 h-4 w-4" />
-                    {t('Save & Print A4')}
+                    {t('Save & Print A4')} (Ctrl+F)
                   </>
                 )}
               </Button>

@@ -4,6 +4,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
+const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 
 const ApiError = require('../utils/ApiError');
 
@@ -150,45 +151,31 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     return;
   }
 
-  await customerLedgerService.createLedgerEntry({
+  const reference = `LOAD-SALE-${String(transaction._id).slice(-6).toUpperCase()}`;
+  const saleDescription = `Load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim();
+  const ledgerNotes =
+    transaction.notes ||
+    `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`;
+
+  const ledgerEntries = buildCustomerSaleLedgerEntries({
     organizationId: transaction.organizationId,
     branchId: transaction.branchId,
-    customer: transaction.customerId,
-    transactionType: 'sale',
-    transactionDate: transaction.date,
-    reference: `LOAD-SALE-${String(transaction._id).slice(-6).toUpperCase()}`,
+    customerId: transaction.customerId,
     referenceId: transaction._id,
-    description: `Load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
-    debit: Number(transaction.amount) || 0,
-    credit: 0,
-    paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
+    invoiceNumber: reference,
+    displayReference: reference,
+    description: saleDescription,
+    transactionDate: transaction.date,
+    total: transaction.amount,
+    paidAmount: transaction.receivedAmount,
     invoiceType: 'cash',
-    notes:
-      transaction.notes ||
-      `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`,
+    paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
+    notes: ledgerNotes,
+    balance: Number(transaction.amount || 0) - Number(transaction.receivedAmount || 0),
   });
 
-  const receivedAmount = Number(transaction.receivedAmount) || 0;
-  if (receivedAmount > 0) {
-    const paymentDate = new Date(transaction.date);
-    paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-    await customerLedgerService.createLedgerEntry({
-      organizationId: transaction.organizationId,
-      branchId: transaction.branchId,
-      customer: transaction.customerId,
-      transactionType: 'payment_received',
-      transactionDate: paymentDate,
-      reference: `LOAD-SALE-${String(transaction._id).slice(-6).toUpperCase()}`,
-      referenceId: transaction._id,
-      description: `Payment received for load sale ${transaction.mobileNumber !== 'N/A' ? `(${transaction.mobileNumber})` : ''}`.trim(),
-      debit: 0,
-      credit: receivedAmount,
-      paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
-      invoiceType: 'cash',
-      notes:
-        transaction.notes ||
-        `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`,
-    });
+  for (const entry of ledgerEntries) {
+    await customerLedgerService.createLedgerEntry(entry);
   }
 };
 

@@ -17,6 +17,9 @@ const normalizePaymentMethod = (paymentMethod = 'cash') => {
   return value;
 };
 
+const isCashPaymentMethod = (paymentMethod = 'cash') =>
+  normalizePaymentMethod(paymentMethod) === 'cash';
+
 const createEntry = async (entryBody) => {
   return CashBookEntry.create({
     ...entryBody,
@@ -91,9 +94,13 @@ const getSummary = async (filter = {}) => {
       : filter.branchId;
   }
 
-  // Exclude wallet entries — they are internal transfers that cancel out
+  if (filter.paymentMethod) {
+    baseMatch.paymentMethod = filter.paymentMethod;
+  } else {
+    // Exclude wallet entries — they are internal transfers that cancel out
+    baseMatch.paymentMethod = { $ne: 'wallet' };
+  }
   // Exclude opening_balance entries — handled separately below
-  baseMatch.paymentMethod = { $ne: 'wallet' };
   baseMatch.source = { $ne: 'opening_balance' };
 
   const periodStartBoundary = filter.startDate
@@ -159,6 +166,14 @@ const getSummary = async (filter = {}) => {
   };
 };
 
+const getCashInHandSummary = async (filter = {}) => {
+  const cashOnlyFilter = {
+    ...filter,
+    paymentMethod: 'cash',
+  };
+  return getSummary(cashOnlyFilter);
+};
+
 const getOpeningBalance = async (filter = {}) => {
   const query = { source: 'opening_balance' };
   if (filter.organizationId) query.organizationId = filter.organizationId;
@@ -195,11 +210,13 @@ const setOpeningBalance = async (filter = {}, amount) => {
 
 module.exports = {
   normalizePaymentMethod,
+  isCashPaymentMethod,
   createEntry,
   upsertReferenceEntry,
   deleteEntriesByReference,
   queryEntries,
   getSummary,
+  getCashInHandSummary,
   setOpeningBalance,
   getOpeningBalance,
 };

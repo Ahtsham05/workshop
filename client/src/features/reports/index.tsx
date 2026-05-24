@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -38,17 +39,45 @@ import { MyWalletReport } from './components/my-wallet-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
+  const search = useSearch({ from: '/_authenticated/reports' })
   const { canAccess, planType } = useFeatureAccess()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
   const now = new Date()
-  const [startDate, setStartDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0))
-  const [endDate, setEndDate] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
-  const [activeTab, setActiveTab] = useState('sales')
+
+  const parseSearchDate = (value: string | undefined, endOfDay: boolean) => {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+    const [year, month, day] = value.split('-').map(Number)
+    return endOfDay
+      ? new Date(year, month - 1, day, 23, 59, 59, 999)
+      : new Date(year, month - 1, day, 0, 0, 0, 0)
+  }
+
+  const [startDate, setStartDate] = useState<Date>(() => {
+    return (
+      parseSearchDate(search.startDate, false) ??
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0, 0)
+    )
+  })
+  const [endDate, setEndDate] = useState<Date>(() => {
+    return (
+      parseSearchDate(search.endDate, true) ??
+      new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+    )
+  })
+  const [activeTab, setActiveTab] = useState(search.tab || 'sales')
   const exportRef = useRef<{ exportToExcel: () => void }>(null)
   const queryStartDate = format(startDate, 'yyyy-MM-dd')
   const queryEndDate = format(endDate, 'yyyy-MM-dd')
+
+  useEffect(() => {
+    if (search.tab) setActiveTab(search.tab)
+    const nextStart = parseSearchDate(search.startDate, false)
+    const nextEnd = parseSearchDate(search.endDate, true)
+    if (nextStart) setStartDate(nextStart)
+    if (nextEnd) setEndDate(nextEnd)
+  }, [search.tab, search.startDate, search.endDate])
 
   const handleRefresh = () => {
     window.location.reload()

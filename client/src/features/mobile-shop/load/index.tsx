@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
@@ -57,14 +57,27 @@ import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
+import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
+import {
+  buildBulkCashReceipt,
+  buildCashWithdrawalReceipt,
+  buildLoadPurchaseReceipt,
+  buildLoadSaleReceipt,
+} from '@/features/mobile-shop/utils/mobile-shop-receipt-builders'
 import {
   MobileReceiptOffer,
-  fmtRs,
   type MobileReceiptData,
 } from '@/features/mobile-shop/components/mobile-shop-receipt'
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import {
+  makeEnterChain,
+  MOBILE_FORM_KEYBOARD_HINT,
+  preventEnterSubmit,
+  useCtrlEnterSubmit,
+} from '@/lib/mobile-form-keyboard'
 
 type PurchaseFormState = {
   walletId: string
@@ -254,6 +267,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal'; id: string } | null>(null)
 
   const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const [previewReceipt, setPreviewReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -537,21 +551,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Load purchase recorded!')
-      setSavedReceipt({
-        title: 'Load purchase',
-        reference: String(created.id).slice(-10).toUpperCase(),
-        issuedAt: new Date(created.date).toLocaleString(),
-        lines: [
-          { label: 'Wallet', value: created.walletType },
-          { label: 'Amount', value: fmtRs(created.amount) },
-          { label: 'Paid', value: fmtRs(created.paidAmount ?? 0) },
-          ...(created.supplierName ? [{ label: 'Supplier', value: created.supplierName }] : []),
-          {
-            label: 'Payment',
-            value: `${created.paymentMethod}${created.paymentWalletType ? ` (${created.paymentWalletType})` : ''}`,
-          },
-        ],
-      })
+      setSavedReceipt(buildLoadPurchaseReceipt(created))
       setPurchaseForm(initialPurchaseForm)
       setIsPurchasePaidAmountManual(false)
     } catch (error: any) {
@@ -583,18 +583,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
       }).unwrap()
       toast.success('Load sold successfully!')
-      setSavedReceipt({
-        title: 'Load sale',
-        reference: String(sold.id).slice(-10).toUpperCase(),
-        issuedAt: new Date(sold.date).toLocaleString(),
-        lines: [
-          { label: 'Wallet', value: sold.walletType },
-          { label: 'Customer', value: sold.customerName || '—' },
-          { label: 'Mobile', value: sold.mobileNumber || '—' },
-          { label: 'Amount', value: fmtRs(sold.amount) },
-          { label: 'Received', value: fmtRs(sold.receivedAmount ?? 0) },
-        ],
-      })
+      setSavedReceipt(buildLoadSaleReceipt(sold))
       setSaleForm(initialSaleForm)
       setIsSaleReceivedAmountManual(false)
     } catch (error: any) {
@@ -628,20 +617,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
       }).unwrap()
       toast.success('Cash withdrawal recorded!')
-      setSavedReceipt({
-        title: cw.transactionType === 'withdrawal' ? 'Cash withdrawal' : 'Cash deposit',
-        reference: String(cw.id).slice(-10).toUpperCase(),
-        issuedAt: new Date(cw.date).toLocaleString(),
-        lines: [
-          { label: 'Wallet', value: cw.walletType },
-          { label: 'Amount', value: fmtRs(cw.amount) },
-          { label: 'Cash', value: fmtRs(cw.cashAmount ?? 0) },
-          { label: 'Customer', value: cw.customerName || '—' },
-          { label: 'Phone', value: cw.customerNumber || '—' },
-          { label: 'Account Type', value: cw.customerAccountType || '—' },
-          ...(cw.notes ? [{ label: 'Notes', value: cw.notes }] : []),
-        ],
-      })
+      setSavedReceipt(buildCashWithdrawalReceipt(cw))
       const prevType = withdrawalForm.transactionType
       const prevWalletId = withdrawalForm.walletId
       const prevWalletType = withdrawalForm.walletType
@@ -667,6 +643,89 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
       toast.error(error?.data?.message || 'Failed to save cash withdrawal')
     }
   }
+
+  const purchaseFormRef = useRef<HTMLFormElement>(null)
+  const saleFormRef = useRef<HTMLFormElement>(null)
+  const withdrawalFormRef = useRef<HTMLFormElement>(null)
+
+  const purchaseEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'purchase-wallet',
+          'supplier',
+          'purchase-supplier',
+          'purchase-amount',
+          'purchase-paid-amount',
+          'purchase-payment-method',
+          'purchase-commission',
+          'purchase-extra',
+          'purchase-date',
+        ],
+        { onSubmit: () => purchaseFormRef.current?.requestSubmit(), scopeRef: purchaseFormRef },
+      ),
+    [],
+  )
+
+  const saleEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'sale-wallet',
+          'current-balance',
+          'sale-customer',
+          'sale-amount',
+          'sale-received',
+          'commission',
+          'extra',
+          'sale-payment-method',
+          'phone',
+          'sale-date',
+        ],
+        { onSubmit: () => saleFormRef.current?.requestSubmit(), scopeRef: saleFormRef },
+      ),
+    [],
+  )
+
+  const withdrawalEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'withdrawal-wallet',
+          'withdrawal-amount',
+          'withdrawal-customer',
+          'customer-name',
+          'customer-number',
+          'customer-account-type',
+          'withdrawal-cash-amount',
+          'withdrawal-commission',
+          'withdrawal-extra',
+          'withdrawal-notes',
+          'withdrawal-date',
+        ],
+        { onSubmit: () => withdrawalFormRef.current?.requestSubmit(), scopeRef: withdrawalFormRef },
+      ),
+    [],
+  )
+
+  useCtrlEnterSubmit(() => {
+    if (isCashManagementMode) {
+      withdrawalFormRef.current?.requestSubmit()
+      return
+    }
+    const activePanel = document.querySelector('[role="tabpanel"][data-state="active"] form[data-mobile-form]')
+    ;(activePanel as HTMLFormElement | null)?.requestSubmit()
+  }, isSavingPurchase || isSavingSale || isSavingWithdrawal)
+
+  useEffect(() => {
+    window.setTimeout(() => {
+      if (isCashManagementMode) {
+        withdrawalEnter.focusFirst()
+      } else {
+        saleEnter.focusFirst()
+      }
+    }, 80)
+  }, [isCashManagementMode, saleEnter, withdrawalEnter])
 
   // ─── Bulk Withdrawal Handlers ───
   const handleBulkWithdrawalWalletChange = (walletId: string) => {
@@ -770,25 +829,17 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
         })),
       }).unwrap()
       toast.success(`${validEntries.length} ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'withdrawal' : 'deposit'} entries saved!`)
-      const totalAmt = createdRows.reduce((s, x) => s + x.amount, 0)
-      setSavedReceipt({
-        title: batchTxType === 'withdrawal' ? 'Bulk cash withdrawals' : 'Bulk cash deposits',
-        subtitle: `${createdRows.length} entries`,
-        reference: createdRows[0] ? String(createdRows[0].id).slice(-10).toUpperCase() : undefined,
-        issuedAt: new Date(batchDate).toLocaleString(),
-        lines: [
-          { label: 'Wallet', value: batchWalletType },
-          { label: 'Entries', value: String(createdRows.length) },
-          { label: 'Total amount', value: fmtRs(totalAmt) },
-          ...createdRows.slice(0, 8).map((row, i) => ({
-            label: `#${i + 1}`,
-            value: `${fmtRs(row.amount)}${row.customerName ? ` · ${row.customerName}` : ''}`,
+      setSavedReceipt(
+        buildBulkCashReceipt({
+          transactionType: batchTxType,
+          walletType: batchWalletType,
+          date: batchDate,
+          rows: createdRows.map((row) => ({
+            amount: row.amount,
+            customerName: row.customerName,
           })),
-          ...(createdRows.length > 8
-            ? [{ label: '…', value: `+ ${createdRows.length - 8} more` }]
-            : []),
-        ],
-      })
+        }),
+      )
       // Preserve wallet, type, commission and date — only clear entries
       setBulkWithdrawalForm(prev => ({ ...prev, entries: [makeEmptyBulkEntry()] }))
       // Focus first amount field of the fresh row
@@ -1021,7 +1072,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
   return (
     <MobilePageShell
       title={isCashManagementMode ? 'Cash Management' : 'Load Management'}
-      description={isCashManagementMode ? 'Manage cash withdrawals and deposits' : 'Purchase and sell mobile load'}
+      description={`${isCashManagementMode ? 'Manage cash withdrawals and deposits' : 'Purchase and sell mobile load'} · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
       {savedReceipt ? (
         <MobileReceiptOffer
@@ -1031,6 +1082,14 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
           onDismiss={() => setSavedReceipt(null)}
         />
       ) : null}
+
+      <MobileReceiptPreviewDialog
+        receipt={previewReceipt}
+        open={!!previewReceipt}
+        onOpenChange={(open) => !open && setPreviewReceipt(null)}
+        organization={org}
+        invoiceNote={branchData?.invoiceNote}
+      />
 
       <Tabs defaultValue={isCashManagementMode ? 'withdrawal' : 'sell'}>
         {!isCashManagementMode && (
@@ -1049,12 +1108,12 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                 <CardTitle className='text-blue-700'>📥 {editingPurchase ? 'Edit' : 'Purchase'} Load</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={editingPurchase ? handleUpdatePurchase : handlePurchaseSubmit}>
+                <form ref={purchaseFormRef} data-mobile-form className='space-y-6' onSubmit={editingPurchase ? handleUpdatePurchase : handlePurchaseSubmit} onKeyDown={preventEnterSubmit}>
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-wallet'>Select Wallet *</Label>
                       <Select value={purchaseForm.walletId} onValueChange={(v) => handlePurchaseChange('walletId', v)}>
-                        <SelectTrigger id='purchase-wallet'>
+                        <SelectTrigger id='purchase-wallet' {...purchaseEnter.enterProps('purchase-wallet')}>
                           <SelectValue placeholder='Choose wallet...' />
                         </SelectTrigger>
                         <SelectContent>
@@ -1070,7 +1129,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='supplier'>Supplier Name - Optional</Label>
-                      <Input id='supplier' placeholder='e.g., Jazz Supplier, Local Agent' value={purchaseForm.supplierName} onChange={(e) => handlePurchaseChange('supplierName', e.target.value)} />
+                      <Input id='supplier' placeholder='e.g., Jazz Supplier, Local Agent' value={purchaseForm.supplierName} onChange={(e) => handlePurchaseChange('supplierName', e.target.value)} {...purchaseEnter.enterProps('supplier')} />
                     </div>
                   </div>
 
@@ -1088,6 +1147,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       searchPlaceholder='Search suppliers...'
                       clearLabel='No supplier'
                       emptyText='No suppliers found.'
+                      {...purchaseEnter.enterProps('purchase-supplier')}
                     />
                     <p className='text-xs text-muted-foreground'>Selecting a supplier auto-fills Supplier Name for this purchase.</p>
                   </div>
@@ -1095,7 +1155,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-amount'>Amount (Rs) *</Label>
-                      <Input id='purchase-amount' type='number' min='0' step='0.01' value={purchaseForm.amount} onChange={(e) => handlePurchaseChange('amount', e.target.value)} />
+                      <Input id='purchase-amount' type='number' min='0' step='0.01' value={purchaseForm.amount} onChange={(e) => handlePurchaseChange('amount', e.target.value)} {...purchaseEnter.enterProps('purchase-amount')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-paid-amount'>Amount Paid Now (Rs) - Optional</Label>
@@ -1112,6 +1172,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           setIsPurchasePaidAmountManual(true)
                           handlePurchaseChange('paidAmount', e.target.value)
                         }}
+                        {...purchaseEnter.enterProps('purchase-paid-amount')}
                       />
                       <p className='text-xs text-muted-foreground'>
                         {canEditPurchasePaidAmount
@@ -1124,7 +1185,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='space-y-2 md:max-w-xs'>
                     <Label htmlFor='purchase-payment-method'>Payment Method</Label>
                     <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
-                      <SelectTrigger id='purchase-payment-method'><SelectValue /></SelectTrigger>
+                      <SelectTrigger id='purchase-payment-method' {...purchaseEnter.enterProps('purchase-payment-method')}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value='cash'>Cash</SelectItem>
                         <SelectItem value='bank'>Bank Transfer</SelectItem>
@@ -1153,14 +1214,14 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-commission'>Supplier Commission (%) - Optional</Label>
-                      <Input id='purchase-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5' value={purchaseForm.commissionRate} onChange={(e) => handlePurchaseChange('commissionRate', e.target.value)} />
+                      <Input id='purchase-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5' value={purchaseForm.commissionRate} onChange={(e) => handlePurchaseChange('commissionRate', e.target.value)} {...purchaseEnter.enterProps('purchase-commission')} />
                       {purchaseProfit.commissionProfit > 0 && (
                         <p className='text-xs text-green-600'>Commission Savings: Rs {purchaseProfit.commissionProfit.toFixed(2)}</p>
                       )}
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-extra'>Extra Discount (Rs) - Optional</Label>
-                      <Input id='purchase-extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={purchaseForm.extraCharge} onChange={(e) => handlePurchaseChange('extraCharge', e.target.value)} />
+                      <Input id='purchase-extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={purchaseForm.extraCharge} onChange={(e) => handlePurchaseChange('extraCharge', e.target.value)} {...purchaseEnter.enterProps('purchase-extra')} />
                     </div>
                   </div>
 
@@ -1192,7 +1253,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
 
                   <div className='space-y-2 md:max-w-md'>
                     <Label htmlFor='purchase-date'>Date</Label>
-                    <Input id='purchase-date' type='date' value={purchaseForm.date} onChange={(e) => handlePurchaseChange('date', e.target.value)} />
+                    <Input id='purchase-date' type='date' value={purchaseForm.date} onChange={(e) => handlePurchaseChange('date', e.target.value)} {...purchaseEnter.enterProps('purchase-date')} />
                   </div>
 
                   <div className='flex gap-2'>
@@ -1247,6 +1308,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell>{(p as any).paymentWalletType || '—'}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
+                              <ListPrintButton onClick={() => setPreviewReceipt(buildLoadPurchaseReceipt(p))} />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditPurchase(p)}><Pencil className='h-4 w-4' /></Button>
                               <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeletePurchase(p.id)}><Trash2 className='h-4 w-4' /></Button>
                             </div>
@@ -1281,12 +1343,12 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                 <CardTitle className='text-green-700'>📤 {editingTransaction ? 'Edit' : 'Sell'} Mobile Load</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className='space-y-6' onSubmit={editingTransaction ? handleUpdateTransaction : handleSaleSubmit}>
+                <form ref={saleFormRef} data-mobile-form className='space-y-6' onSubmit={editingTransaction ? handleUpdateTransaction : handleSaleSubmit} onKeyDown={preventEnterSubmit}>
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-wallet'>Select Wallet *</Label>
                       <Select value={saleForm.walletId} onValueChange={(v) => handleSaleChange('walletId', v)}>
-                        <SelectTrigger id='sale-wallet'><SelectValue placeholder='Choose wallet...' /></SelectTrigger>
+                        <SelectTrigger id='sale-wallet' {...saleEnter.enterProps('sale-wallet')}><SelectValue placeholder='Choose wallet...' /></SelectTrigger>
                         <SelectContent>
                           {wallets.length === 0 ? (
                             <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
@@ -1300,7 +1362,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='current-balance'>Current Balance (Rs) - Optional</Label>
-                      <Input id='current-balance' type='number' min='0' step='0.01' placeholder='Enter current wallet balance' value={saleForm.currentBalance} onChange={(e) => handleSaleChange('currentBalance', e.target.value)} />
+                      <Input id='current-balance' type='number' min='0' step='0.01' placeholder='Enter current wallet balance' value={saleForm.currentBalance} onChange={(e) => handleSaleChange('currentBalance', e.target.value)} {...saleEnter.enterProps('current-balance')} />
                       {saleForm.walletId && (
                         <p className='text-xs text-muted-foreground'>Wallet Balance: Rs {Number(wallets.find(w => w.id === saleForm.walletId)?.balance ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 2 })}</p>
                       )}
@@ -1321,6 +1383,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       searchPlaceholder='Search customers...'
                       clearLabel='No customer'
                       emptyText='No customers found.'
+                      {...saleEnter.enterProps('sale-customer')}
                     />
                     <p className='text-xs text-muted-foreground'>If selected, this load sale will also be added in customer ledger.</p>
                   </div>
@@ -1328,7 +1391,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-amount'>Load Amount (Rs) *</Label>
-                      <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} />
+                      <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} {...saleEnter.enterProps('sale-amount')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-received-amount'>Amount Received (Rs) - Optional</Label>
@@ -1346,6 +1409,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           setIsSaleReceivedAmountManual(true)
                           handleSaleChange('receivedAmount', e.target.value)
                         }}
+                        {...saleEnter.enterProps('sale-received')}
                       />
                       <p className='text-xs text-muted-foreground'>
                         {canEditSaleReceivedAmount
@@ -1358,18 +1422,18 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='commission'>Commission Rate (%) - Optional</Label>
-                      <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} />
+                      <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} {...saleEnter.enterProps('commission')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='extra'>Extra Charges (Rs) - Optional</Label>
-                      <Input id='extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={saleForm.extraCharge} onChange={(e) => handleSaleChange('extraCharge', e.target.value)} />
+                      <Input id='extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={saleForm.extraCharge} onChange={(e) => handleSaleChange('extraCharge', e.target.value)} {...saleEnter.enterProps('extra')} />
                     </div>
                   </div>
 
                   <div className='space-y-2 md:max-w-xs'>
                     <Label htmlFor='sale-payment-method'>Payment Method</Label>
                     <Select value={saleForm.paymentMethod} onValueChange={(v) => handleSaleChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
-                      <SelectTrigger id='sale-payment-method'><SelectValue /></SelectTrigger>
+                      <SelectTrigger id='sale-payment-method' {...saleEnter.enterProps('sale-payment-method')}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value='cash'>Cash</SelectItem>
                         <SelectItem value='bank'>Bank Transfer</SelectItem>
@@ -1405,11 +1469,11 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='phone'>Customer Phone Number - Optional</Label>
-                      <Input id='phone' type='tel' placeholder='e.g., 03001234567 (if known)' value={saleForm.mobileNumber} onChange={(e) => handleSaleChange('mobileNumber', e.target.value)} />
+                      <Input id='phone' type='tel' placeholder='e.g., 03001234567 (if known)' value={saleForm.mobileNumber} onChange={(e) => handleSaleChange('mobileNumber', e.target.value)} {...saleEnter.enterProps('phone')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-date'>Date</Label>
-                      <Input id='sale-date' type='date' value={saleForm.date} onChange={(e) => handleSaleChange('date', e.target.value)} />
+                      <Input id='sale-date' type='date' value={saleForm.date} onChange={(e) => handleSaleChange('date', e.target.value)} {...saleEnter.enterProps('sale-date')} />
                     </div>
                   </div>
 
@@ -1482,6 +1546,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
+                              <ListPrintButton onClick={() => setPreviewReceipt(buildLoadSaleReceipt(t))} />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
                               <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteTransaction(t.id)}><Trash2 className='h-4 w-4' /></Button>
                             </div>
@@ -1753,7 +1818,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   </div>
                 ) : (
                   /* ─── SINGLE ENTRY FORM ─── */
-                  <form className='space-y-6' onSubmit={editingWithdrawal ? handleUpdateWithdrawal : handleWithdrawalSubmit}>
+                  <form ref={withdrawalFormRef} data-mobile-form className='space-y-6' onSubmit={editingWithdrawal ? handleUpdateWithdrawal : handleWithdrawalSubmit} onKeyDown={preventEnterSubmit}>
 
                   {/* Transaction Type Toggle */}
                   <div className='grid grid-cols-2 gap-2 p-1 bg-muted rounded-lg'>
@@ -1787,7 +1852,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-wallet'>Select Wallet *</Label>
                       <Select value={withdrawalForm.walletId} onValueChange={(v) => handleWithdrawalChange('walletId', v)}>
-                        <SelectTrigger id='withdrawal-wallet'><SelectValue placeholder='Choose wallet...' /></SelectTrigger>
+                        <SelectTrigger id='withdrawal-wallet' {...withdrawalEnter.enterProps('withdrawal-wallet')}><SelectValue placeholder='Choose wallet...' /></SelectTrigger>
                         <SelectContent>
                           {wallets.length === 0 ? (
                             <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
@@ -1801,7 +1866,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-amount'>Amount (Rs) *</Label>
-                      <Input id='withdrawal-amount' type='number' min='0' step='0.01' placeholder='e.g., 1000, 5000' value={withdrawalForm.amount} onChange={(e) => handleWithdrawalChange('amount', e.target.value)} />
+                      <Input id='withdrawal-amount' type='number' min='0' step='0.01' placeholder='e.g., 1000, 5000' value={withdrawalForm.amount} onChange={(e) => handleWithdrawalChange('amount', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-amount')} />
                     </div>
                   </div>
 
@@ -1821,6 +1886,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       placeholder='Walk-in Customer'
                       searchPlaceholder='Search customers...'
                       emptyText='No customers found.'
+                      {...withdrawalEnter.enterProps('withdrawal-customer')}
                     />
                     <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
                   </div>
@@ -1828,11 +1894,11 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-3'>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-name'>Customer Name - Optional</Label>
-                      <Input id='customer-name' placeholder='e.g., Ahmed Khan' value={withdrawalForm.customerName} onChange={(e) => handleWithdrawalChange('customerName', e.target.value)} />
+                      <Input id='customer-name' placeholder='e.g., Ahmed Khan' value={withdrawalForm.customerName} onChange={(e) => handleWithdrawalChange('customerName', e.target.value)} {...withdrawalEnter.enterProps('customer-name')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-number'>Customer Account / Phone</Label>
-                      <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} />
+                      <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} {...withdrawalEnter.enterProps('customer-number')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-account-type'>Account Type</Label>
@@ -1840,7 +1906,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         value={withdrawalForm.customerAccountType}
                         onValueChange={(v) => handleWithdrawalChange('customerAccountType', v)}
                       >
-                        <SelectTrigger id='customer-account-type'>
+                        <SelectTrigger id='customer-account-type' {...withdrawalEnter.enterProps('customer-account-type')}>
                           <SelectValue placeholder='Select account type' />
                         </SelectTrigger>
                         <SelectContent>
@@ -1869,6 +1935,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                         setIsWithdrawalCashAmountManual(true)
                         handleWithdrawalChange('cashAmount', e.target.value)
                       }}
+                      {...withdrawalEnter.enterProps('withdrawal-cash-amount')}
                     />
                     <p className='text-xs text-muted-foreground'>
                       {`Cash amount must be less than or equal to amount. Remaining amount is ${withdrawalForm.transactionType === 'withdrawal' ? 'cash payable' : 'cash receivable'} and will be added to customer ledger.`}
@@ -1878,7 +1945,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-commission'>Commission Rate (%) - Optional</Label>
-                      <Input id='withdrawal-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5, 2' value={withdrawalForm.commissionRate} onChange={(e) => handleWithdrawalChange('commissionRate', e.target.value)} />
+                      <Input id='withdrawal-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5, 2' value={withdrawalForm.commissionRate} onChange={(e) => handleWithdrawalChange('commissionRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-commission')} />
                       {(Number(withdrawalForm.commissionRate) > 0 || Number(withdrawalForm.extraCharge) > 0) && (
                         <p className='text-xs text-muted-foreground'>
                           {Number(withdrawalForm.commissionRate) > 0 && (
@@ -1893,18 +1960,18 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-extra'>Extra Charges (Rs) - Optional</Label>
-                      <Input id='withdrawal-extra' type='number' min='0' step='0.01' placeholder='e.g., 5, 10' value={withdrawalForm.extraCharge} onChange={(e) => handleWithdrawalChange('extraCharge', e.target.value)} />
+                      <Input id='withdrawal-extra' type='number' min='0' step='0.01' placeholder='e.g., 5, 10' value={withdrawalForm.extraCharge} onChange={(e) => handleWithdrawalChange('extraCharge', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-extra')} />
                     </div>
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-notes'>Notes - Optional</Label>
-                      <Input id='withdrawal-notes' placeholder='Any additional notes' value={withdrawalForm.notes} onChange={(e) => handleWithdrawalChange('notes', e.target.value)} />
+                      <Input id='withdrawal-notes' placeholder='Any additional notes' value={withdrawalForm.notes} onChange={(e) => handleWithdrawalChange('notes', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-notes')} />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-date'>Date</Label>
-                      <Input id='withdrawal-date' type='date' value={withdrawalForm.date} onChange={(e) => handleWithdrawalChange('date', e.target.value)} />
+                      <Input id='withdrawal-date' type='date' value={withdrawalForm.date} onChange={(e) => handleWithdrawalChange('date', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-date')} />
                     </div>
                   </div>
 
@@ -2053,6 +2120,7 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell className='text-orange-600 font-bold'>Rs {Number(w.profit || 0).toFixed(2)}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
+                              <ListPrintButton onClick={() => setPreviewReceipt(buildCashWithdrawalReceipt(w))} />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditWithdrawal(w)}><Pencil className='h-4 w-4' /></Button>
                               <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteWithdrawal(w.id)}><Trash2 className='h-4 w-4' /></Button>
                             </div>

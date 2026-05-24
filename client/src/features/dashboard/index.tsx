@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { useState, useMemo } from 'react'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -6,14 +6,22 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
-import { StatCard } from './components/stat-card'
+import { StatCard, type StatCardLink } from './components/stat-card'
+import { Card } from '@/components/ui/card'
 import { RevenueChart } from './components/revenue-chart'
 import { LowStockWidget } from './components/low-stock-widget'
 import { RecentActivities } from './components/recent-activities'
 import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
+import { DashboardDateFilter } from './components/dashboard-date-filter'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
+import {
+  dashboardRangeQueryParams,
+  getComparisonLabel,
+  getDefaultDashboardDateRange,
+  type DashboardDateRange,
+} from '@/lib/dashboard-date-range'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
 import { useSelector } from 'react-redux'
@@ -25,7 +33,23 @@ import { Navigate } from '@tanstack/react-router'
 
 export default function Dashboard() {
   const { t } = useLanguage()
-  const { data: stats, isLoading, refetch } = useGetDashboardStatsQuery()
+  const [dateRange, setDateRange] = useState<DashboardDateRange>(getDefaultDashboardDateRange)
+  const dateParams = dashboardRangeQueryParams(dateRange)
+  const { data: stats, isLoading, isFetching, refetch } = useGetDashboardStatsQuery(dateParams)
+  const statsLoading = isLoading || isFetching
+  const comparisonLabel = getComparisonLabel(dateRange.period, t)
+  const reportLink = useMemo(
+    () =>
+      (tab: string): StatCardLink => ({
+        to: '/reports',
+        search: {
+          tab,
+          startDate: dateParams.startDate,
+          endDate: dateParams.endDate,
+        },
+      }),
+    [dateParams.endDate, dateParams.startDate]
+  )
   // const { data: usageData } = useGetSubscriptionUsageQuery()
   const { data: orgData } = useGetMyOrganizationQuery()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -77,16 +101,21 @@ export default function Dashboard() {
 
       {/* ===== Main ===== */}
       <Main>
-        <div className='mb-6 flex items-center justify-between'>
-          <div>
-            <h1 className='text-3xl font-bold tracking-tight'>{t('dashboard')}</h1>
-            <p className='text-muted-foreground'>{t('Overview of your business performance')}</p>
+        <Card className='mb-6 border bg-card/80 p-4 shadow-sm backdrop-blur-sm'>
+          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+            <div className='min-w-0'>
+              <h1 className='text-3xl font-bold tracking-tight'>{t('dashboard')}</h1>
+              <p className='mt-1 text-muted-foreground'>{t('Overview of your business performance')}</p>
+            </div>
+            <DashboardDateFilter
+              value={dateRange}
+              onChange={setDateRange}
+              onRefresh={() => refetch()}
+              isRefreshing={statsLoading}
+              className='lg:shrink-0'
+            />
           </div>
-          <Button onClick={() => refetch()} variant='outline' size='sm'>
-            <RefreshCcw className='h-4 w-4 mr-2' />
-            {t('Refresh')}
-          </Button>
-        </div>
+        </Card>
 
         {/* Quick Actions */}
         <div className='mb-6'>
@@ -102,8 +131,9 @@ export default function Dashboard() {
               icon={<DollarSign className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Available cash after expenses')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='emerald'
+              link={{ to: '/cash-register' }}
             />
             <StatCard
               title={t('Wallet Balance')}
@@ -111,8 +141,9 @@ export default function Dashboard() {
               icon={<WalletCards className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Total balance across all wallets')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='cyan'
+              link={{ to: '/mobile-shop/wallet' }}
             />
             <StatCard
               title={t('Load Sold')}
@@ -120,8 +151,9 @@ export default function Dashboard() {
               icon={<Smartphone className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Mobile load transactions')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='violet'
+              link={reportLink('load')}
             />
             <StatCard
               title={t('Load Purchased')}
@@ -129,8 +161,9 @@ export default function Dashboard() {
               icon={<ShoppingBag className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Load bought from distributors')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='sky'
+              link={reportLink('load')}
             />
           </div>
         )}
@@ -144,8 +177,9 @@ export default function Dashboard() {
               icon={<Wrench className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Repair charges collected')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='orange'
+              link={reportLink('repair')}
             />
             <StatCard
               title={t('Bill Collection')}
@@ -153,24 +187,27 @@ export default function Dashboard() {
               icon={<Receipt className='h-4 w-4' />}
               valuePrefix='Rs '
               description={t('Total utility bills collected')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='indigo'
+              link={reportLink('bill-payments')}
             />
             <StatCard
               title={t('Bills Due Today')}
               value={stats?.billsDueToday || 0}
               icon={<Clock className='h-4 w-4' />}
               description={t('Pending bills due today')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='amber'
+              link={{ to: '/mobile-shop/bill-payments', search: { filter: 'due-today' } }}
             />
             <StatCard
               title={t('Overdue Bills')}
               value={stats?.billsOverdue || 0}
               icon={<AlertCircle className='h-4 w-4' />}
               description={t('Bills past due date')}
-              isLoading={isLoading}
+              isLoading={statsLoading}
               tone='rose'
+              link={{ to: '/mobile-shop/bill-payments', search: { filter: 'overdue' } }}
             />
           </div>
         )}
@@ -183,18 +220,20 @@ export default function Dashboard() {
             change={stats?.totalRevenueChange}
             icon={<DollarSign className='h-4 w-4' />}
             valuePrefix='Rs'
-            description={t('from last month')}
-            isLoading={isLoading}
+            description={comparisonLabel}
+            isLoading={statsLoading}
             tone='emerald'
+            link={reportLink('profit-loss')}
           />
           <StatCard
             title={t('Total Sales')}
             value={stats?.totalSales || 0}
             change={stats?.totalSalesChange}
             icon={<ShoppingCart className='h-4 w-4' />}
-            description={t('from last month')}
-            isLoading={isLoading}
+            description={comparisonLabel}
+            isLoading={statsLoading}
             tone='sky'
+            link={reportLink('sales')}
           />
           <StatCard
             title={t('Inventory Value')}
@@ -202,16 +241,18 @@ export default function Dashboard() {
             icon={<Package className='h-4 w-4' />}
             valuePrefix='Rs'
             description={t('Total stock value')}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='violet'
+            link={reportLink('inventory')}
           />
           <StatCard
             title={t('Low Stock Items')}
             value={stats?.lowStockCount || 0}
             icon={<AlertTriangle className='h-4 w-4' />}
             description={`${stats?.outOfStockCount || 0} ${t('out of stock')}`}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='amber'
+            link={{ to: '/products' }}
           />
           <StatCard
             title={t('Pending Invoices')}
@@ -219,8 +260,9 @@ export default function Dashboard() {
             icon={<FileText className='h-4 w-4' />}
             valuePrefix='Rs'
             description={`${t('Total')}: Rs${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='indigo'
+            link={{ to: '/invoice', search: { view: 'list', type: 'pending' } }}
           />
         </div>
 
@@ -232,8 +274,9 @@ export default function Dashboard() {
             icon={<RefreshCcw className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total amount refunded to customers')}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='rose'
+            link={reportLink('sales-returns')}
           />
           <StatCard
             title={t('Purchase Returns')}
@@ -241,8 +284,9 @@ export default function Dashboard() {
             icon={<RefreshCcw className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total amount recovered from suppliers')}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='cyan'
+            link={reportLink('purchase-returns')}
           />
         </div>
 
@@ -254,8 +298,9 @@ export default function Dashboard() {
             icon={<ShoppingCart className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Revenue after sales returns')}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='emerald'
+            link={reportLink('sales')}
           />
           <StatCard
             title={t('Net Purchases')}
@@ -263,26 +308,27 @@ export default function Dashboard() {
             icon={<Package className='h-4 w-4' />}
             valuePrefix='Rs '
             description={t('Total purchases minus returns')}
-            isLoading={isLoading}
+            isLoading={statsLoading}
             tone='orange'
+            link={reportLink('purchases')}
           />
         </div>
 
         {/* Charts and Widgets */}
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-7 mb-6'>
-          <RevenueChart />
+          <RevenueChart dateRange={dateRange} />
           <LowStockWidget />
         </div>
 
         {/* Top Products and Customers */}
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6'>
-          <TopProducts />
-          <TopCustomers />
+          <TopProducts dateRange={dateRange} />
+          <TopCustomers dateRange={dateRange} />
         </div>
 
         {/* Recent Activities */}
         <div className='grid grid-cols-1 gap-6'>
-          <RecentActivities />
+          <RecentActivities dateRange={dateRange} />
         </div>
       </Main>
     </>

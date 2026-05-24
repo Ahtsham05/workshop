@@ -1,13 +1,22 @@
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 
-/** Balance on the ledger line immediately before this entry (not current account total). */
+/** Balance on the ledger line immediately before this entry (customer: debit − credit running total). */
 export function balanceBeforeFromLedgerEntry(entry: {
   balance: number;
   debit?: number;
   credit?: number;
 }): number {
   return entry.balance - (Number(entry.debit) || 0) + (Number(entry.credit) || 0);
+}
+
+/** Balance before entry when running total uses credit − debit (supplier payable ledger). */
+export function supplierBalanceBeforeFromLedgerEntry(entry: {
+  balance: number;
+  debit?: number;
+  credit?: number;
+}): number {
+  return entry.balance + (Number(entry.debit) || 0) - (Number(entry.credit) || 0);
 }
 
 /** Fetch balance before a specific invoice/sale from the server ledger. */

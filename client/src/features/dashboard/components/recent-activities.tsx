@@ -7,10 +7,23 @@ import { useLanguage } from '@/context/language-context'
 import { useGetRecentActivitiesQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import {
+  dashboardRangeQueryParams,
+  formatDashboardRangeLabel,
+  type DashboardDateRange,
+} from '@/lib/dashboard-date-range'
 
-export function RecentActivities() {
+type Props = {
+  dateRange: DashboardDateRange
+}
+
+export function RecentActivities({ dateRange }: Props) {
   const { t } = useLanguage()
-  const { data: activities, isLoading } = useGetRecentActivitiesQuery({ limit: 8 })
+  const { data: activities, isLoading, isFetching } = useGetRecentActivitiesQuery({
+    limit: 8,
+    ...dashboardRangeQueryParams(dateRange),
+  })
+  const loading = isLoading || isFetching
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -28,9 +41,9 @@ export function RecentActivities() {
   const getStatusVariant = (status: string): ComponentProps<typeof Badge>['variant'] => {
     switch (status) {
       case 'completed':
-      case 'paid':
+      case 'cash':
         return 'default'
-      case 'unpaid':
+      case 'credit':
         return 'outline'
       case 'pending':
         return 'secondary'
@@ -42,12 +55,12 @@ export function RecentActivities() {
   }
 
   const statusLabel = (status: string) => {
-    if (status === 'paid') return t('Paid')
-    if (status === 'unpaid') return t('Unpaid')
+    if (status === 'cash') return t('cash')
+    if (status === 'credit') return t('credit')
     return t(status)
   }
 
-  if (isLoading) {
+  if (loading) {
     return (
       <Card className='col-span-1 lg:col-span-4'>
         <CardHeader>
@@ -69,7 +82,9 @@ export function RecentActivities() {
     <Card className='col-span-1 lg:col-span-4'>
       <CardHeader>
         <CardTitle>{t('Recent Activities')}</CardTitle>
-        <CardDescription>{t('Latest transactions and updates')}</CardDescription>
+        <CardDescription>
+          {t('Latest transactions and updates')} · {formatDashboardRangeLabel(dateRange, t)}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className='space-y-3'>
@@ -80,20 +95,20 @@ export function RecentActivities() {
                 className={cn(
                   'flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors',
                   activity.type === 'invoice' &&
-                    activity.status === 'paid' &&
+                    activity.status === 'cash' &&
                     'border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-card dark:border-emerald-900/40 dark:from-emerald-950/35',
                   activity.type === 'invoice' &&
-                    activity.status === 'unpaid' &&
+                    activity.status === 'credit' &&
                     'border-amber-200/80 bg-gradient-to-r from-amber-50/90 to-card dark:border-amber-900/40 dark:from-amber-950/35',
                   activity.type === 'purchase' &&
-                    activity.status === 'paid' &&
+                    activity.status === 'cash' &&
                     'border-sky-200/80 bg-gradient-to-r from-sky-50/90 to-card dark:border-sky-900/40 dark:from-sky-950/35',
                   activity.type === 'purchase' &&
-                    activity.status === 'unpaid' &&
+                    activity.status === 'credit' &&
                     'border-orange-200/80 bg-gradient-to-r from-orange-50/90 to-card dark:border-orange-900/40 dark:from-orange-950/35',
                   !(
                     (activity.type === 'invoice' || activity.type === 'purchase') &&
-                    (activity.status === 'paid' || activity.status === 'unpaid')
+                    (activity.status === 'cash' || activity.status === 'credit')
                   ) && 'hover:bg-muted/50',
                 )}
               >
@@ -101,12 +116,12 @@ export function RecentActivities() {
                   <div
                     className={cn(
                       'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-                      activity.type === 'invoice' && activity.status === 'paid' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-                      activity.type === 'invoice' && activity.status === 'unpaid' && 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
-                      activity.type === 'purchase' && activity.status === 'paid' && 'bg-sky-500/15 text-sky-800 dark:text-sky-200',
-                      activity.type === 'purchase' && activity.status === 'unpaid' && 'bg-orange-500/15 text-orange-800 dark:text-orange-200',
+                      activity.type === 'invoice' && activity.status === 'cash' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+                      activity.type === 'invoice' && activity.status === 'credit' && 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
+                      activity.type === 'purchase' && activity.status === 'cash' && 'bg-sky-500/15 text-sky-800 dark:text-sky-200',
+                      activity.type === 'purchase' && activity.status === 'credit' && 'bg-orange-500/15 text-orange-800 dark:text-orange-200',
                       ((activity.type !== 'invoice' && activity.type !== 'purchase') ||
-                        (activity.status !== 'paid' && activity.status !== 'unpaid')) &&
+                        (activity.status !== 'cash' && activity.status !== 'credit')) &&
                         'bg-primary/10 text-primary',
                     )}
                   >
@@ -130,9 +145,9 @@ export function RecentActivities() {
                       variant={getStatusVariant(activity.status)}
                       className={cn(
                         'text-xs shrink-0',
-                        activity.status === 'unpaid' &&
+                        activity.status === 'credit' &&
                           'border-amber-500/60 text-amber-900 dark:text-amber-100',
-                        activity.status === 'paid' &&
+                        activity.status === 'cash' &&
                           (activity.type === 'purchase'
                             ? 'bg-sky-600 hover:bg-sky-600 text-white border-transparent dark:bg-sky-600'
                             : 'bg-emerald-700 hover:bg-emerald-700 text-white border-transparent dark:bg-emerald-700'),

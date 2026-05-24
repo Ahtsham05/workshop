@@ -14,7 +14,7 @@ const getCashBookEntries = catchAsync(async (req, res) => {
 const getCashBookSummary = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['startDate', 'endDate']);
   applyBranchFilter(filter, req);
-  const result = await cashBookService.getSummary(filter);
+  const result = await cashBookService.getCashInHandSummary(filter);
   res.send(result);
 });
 

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -8,6 +9,11 @@ import {
 } from '@/lib/stat-card-tones'
 
 export type { StatCardTone }
+
+export type StatCardLink = {
+  to: string
+  search?: Record<string, unknown>
+}
 
 interface StatCardProps {
   title: string
@@ -21,49 +27,31 @@ interface StatCardProps {
   valueSuffix?: string
   /** Dark gradient + accent — defaults to slate */
   tone?: StatCardTone
+  /** Navigate to a related page or report */
+  link?: StatCardLink
+  onClick?: () => void
 }
 
-export function StatCard({
+function StatCardContent({
   title,
   value,
   change,
   icon,
   trend,
   description,
-  isLoading,
   valuePrefix = '',
   valueSuffix = '',
   tone = 'slate',
-}: StatCardProps) {
+  interactive = false,
+}: Omit<StatCardProps, 'isLoading' | 'link' | 'onClick'> & { interactive?: boolean }) {
   const isPositive = trend === 'up' || (change !== undefined && change >= 0)
   const styles = STAT_CARD_TONE_STYLES[tone]
-
-  if (isLoading) {
-    return (
-      <Card
-        className={cn(
-          'hover:shadow-md transition-shadow duration-200',
-          styles.card
-        )}
-      >
-        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-          <CardTitle className='text-sm font-medium'>
-            <Skeleton className={cn('h-4 w-24', styles.skeleton)} />
-          </CardTitle>
-          <Skeleton className={cn('h-9 w-9 rounded-xl', styles.skeleton)} />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className={cn('mb-2 h-8 w-32', styles.skeleton)} />
-          <Skeleton className={cn('h-3 w-40', styles.skeleton)} />
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <Card
       className={cn(
-        'hover:shadow-md transition-shadow duration-200',
+        'transition-all duration-200',
+        interactive ? 'hover:shadow-lg hover:-translate-y-0.5' : 'hover:shadow-md',
         styles.card
       )}
     >
@@ -99,4 +87,87 @@ export function StatCard({
       </CardContent>
     </Card>
   )
+}
+
+export function StatCard({
+  title,
+  value,
+  change,
+  icon,
+  trend,
+  description,
+  isLoading,
+  valuePrefix = '',
+  valueSuffix = '',
+  tone = 'slate',
+  link,
+  onClick,
+}: StatCardProps) {
+  const styles = STAT_CARD_TONE_STYLES[tone]
+  const interactive = Boolean(link || onClick)
+
+  if (isLoading) {
+    return (
+      <Card className={cn('hover:shadow-md transition-shadow duration-200', styles.card)}>
+        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+          <CardTitle className='text-sm font-medium'>
+            <Skeleton className={cn('h-4 w-24', styles.skeleton)} />
+          </CardTitle>
+          <Skeleton className={cn('h-9 w-9 rounded-xl', styles.skeleton)} />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className={cn('mb-2 h-8 w-32', styles.skeleton)} />
+          <Skeleton className={cn('h-3 w-40', styles.skeleton)} />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const content = (
+    <StatCardContent
+      title={title}
+      value={value}
+      change={change}
+      icon={icon}
+      trend={trend}
+      description={description}
+      valuePrefix={valuePrefix}
+      valueSuffix={valueSuffix}
+      tone={tone}
+      interactive={interactive}
+    />
+  )
+
+  if (link) {
+    return (
+      <Link
+        to={link.to}
+        search={link.search}
+        className='block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  if (onClick) {
+    return (
+      <div
+        role='button'
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onClick()
+          }
+        }}
+        className='cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+      >
+        {content}
+      </div>
+    )
+  }
+
+  return content
 }

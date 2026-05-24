@@ -23,10 +23,22 @@ interface PermissionProviderProps {
   permissions: Permission | null;
 }
 
+/** Users with purchase access get PO access until roles are re-seeded with explicit PO flags. */
+const PURCHASE_ORDER_FALLBACKS: Partial<Record<keyof Permission, keyof Permission>> = {
+  viewPurchaseOrders: 'viewPurchases',
+  createPurchaseOrders: 'createPurchases',
+  editPurchaseOrders: 'editPurchases',
+  deletePurchaseOrders: 'deletePurchases',
+  receivePurchaseOrders: 'createPurchases',
+};
+
 export const PermissionProvider = ({ children, permissions }: PermissionProviderProps) => {
   const hasPermission = (permission: keyof Permission): boolean => {
     if (!permissions) return false;
-    return permissions[permission] === true;
+    if (permissions[permission] === true) return true;
+    const fallback = PURCHASE_ORDER_FALLBACKS[permission];
+    if (fallback) return permissions[fallback] === true;
+    return false;
   };
 
   const hasAnyPermission = (...requiredPermissions: (keyof Permission)[]): boolean => {

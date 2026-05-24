@@ -762,25 +762,25 @@ export function InvoicePanel({
         const invoiceEffect = invoiceTotal - invoicePaid
         const previousBalanceBeforeInvoice = updatedBalance - invoiceEffect
 
-        const printData = {
-          ...result, // Use the API response data
+        const savedInvoicePayload = {
+          ...result,
           invoiceNumber: result.invoiceNumber || editingInvoice?.invoiceNumber,
           items: validItems,
           customerId: result.customerId || invoice.customerId || editingInvoice?.customerId,
           customerName: resolvedCustomerName,
           customerNameUrdu: resolvedCustomerUrdu || undefined,
           walkInCustomerName: resolvedWalkInCustomerName,
-          previousBalance: previousBalanceBeforeInvoice, // balance before this invoice
-          newBalance: updatedBalance, // balance after this invoice (server value)
+          previousBalance: previousBalanceBeforeInvoice,
+          newBalance: updatedBalance,
           language: result.language || invoice.language,
           isUrduOnly: result.isUrduOnly ?? invoice.isUrduOnly,
-          printInUrdu: getInvoicePrintInUrdu(),
+          invoiceDate: result.invoiceDate || invoice.invoiceDate,
         }
-        
+
         if (printType === 'receipt') {
-          printInvoice(printData)
+          printInvoice(savedInvoicePayload)
         } else if (printType === 'a4') {
-          printA4Invoice(printData)
+          printA4Invoice(savedInvoicePayload)
         }
       }
       
@@ -796,7 +796,7 @@ export function InvoicePanel({
       // Reset saving state
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -1440,7 +1440,7 @@ export function InvoicePanel({
                               }}
                               onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
                               onFocus={(e) => e.target.select()}
-                              className='h-7 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                              className='h-7 w-20 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                             />
                             <Button
                               size="sm"
@@ -1890,7 +1890,6 @@ export function InvoicePanel({
 
           {/* Save Buttons */}
           <div className='grid grid-cols-1 gap-3'>
-            {/* Save Only Button */}
             <Button 
               onClick={() => handleSaveInvoice('none')}
               className='w-full'
@@ -1906,14 +1905,12 @@ export function InvoicePanel({
               ) : (
                 <>
                   <Save className='h-4 w-4 mr-2' />
-                  {isEditing ? t('update_invoice') : t('save_invoice')}
+                  {isEditing ? t('update_invoice') : t('save_invoice')} (Ctrl+D)
                 </>
               )}
             </Button>
-            
-            {/* Print Buttons Row */}
+
             <div className='grid grid-cols-2 gap-3'>
-              {/* Save & Print Receipt Button */}
               <Button 
                 onClick={() => handleSaveInvoice('receipt')}
                 className='w-full'
@@ -1930,14 +1927,13 @@ export function InvoicePanel({
                   <>
                     <Printer className='h-4 w-4 mr-2' />
                     {isEditing 
-                      ? t('update_and_print_receipt')
-                      : t('save_and_print_receipt')
+                      ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
+                      : `${t('save_and_print_receipt')} (Ctrl+Enter)`
                     }
                   </>
                 )}
               </Button>
-              
-              {/* Save & Print A4 Button */}
+
               <Button 
                 onClick={() => handleSaveInvoice('a4')}
                 className='w-full'
@@ -1954,8 +1950,8 @@ export function InvoicePanel({
                   <>
                     <Package className='h-4 w-4 mr-2' />
                     {isEditing 
-                      ? t('update_and_print_a4')
-                      : t('save_and_print_a4')
+                      ? `${t('update_and_print_a4')} (Ctrl+F)`
+                      : `${t('save_and_print_a4')} (Ctrl+F)`
                     }
                   </>
                 )}

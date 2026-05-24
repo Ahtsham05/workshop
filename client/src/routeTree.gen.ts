@@ -17,6 +17,7 @@ import { Route as OrderQrTokenImport } from './routes/order.$qrToken'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
@@ -42,6 +43,7 @@ import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authent
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedRestaurantIndexImport } from './routes/_authenticated/restaurant/index'
 import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
+import { Route as AuthenticatedPurchaseOrdersIndexImport } from './routes/_authenticated/purchase-orders/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
@@ -158,6 +160,12 @@ const AuthenticatedSchoolRoute = AuthenticatedSchoolImport.update({
 const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedCashRegisterRoute = AuthenticatedCashRegisterImport.update({
+  id: '/cash-register',
+  path: '/cash-register',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -318,6 +326,13 @@ const AuthenticatedPurchaseReturnsIndexRoute =
   AuthenticatedPurchaseReturnsIndexImport.update({
     id: '/purchase-returns/',
     path: '/purchase-returns/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedPurchaseOrdersIndexRoute =
+  AuthenticatedPurchaseOrdersIndexImport.update({
+    id: '/purchase-orders/',
+    path: '/purchase-orders/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -989,6 +1004,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/cash-register': {
+      id: '/_authenticated/cash-register'
+      path: '/cash-register'
+      fullPath: '/cash-register'
+      preLoaderRoute: typeof AuthenticatedCashRegisterImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/reports': {
       id: '/_authenticated/reports'
       path: '/reports'
@@ -1267,6 +1289,13 @@ declare module '@tanstack/react-router' {
       path: '/purchase-invoice'
       fullPath: '/purchase-invoice'
       preLoaderRoute: typeof AuthenticatedPurchaseInvoiceIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/purchase-orders/': {
+      id: '/_authenticated/purchase-orders/'
+      path: '/purchase-orders'
+      fullPath: '/purchase-orders'
+      preLoaderRoute: typeof AuthenticatedPurchaseOrdersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-returns/': {
@@ -1839,6 +1868,7 @@ const AuthenticatedHrEmployeesIdRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
@@ -1873,6 +1903,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
+  AuthenticatedPurchaseOrdersIndexRoute: typeof AuthenticatedPurchaseOrdersIndexRoute
   AuthenticatedPurchaseReturnsIndexRoute: typeof AuthenticatedPurchaseReturnsIndexRoute
   AuthenticatedRestaurantIndexRoute: typeof AuthenticatedRestaurantIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
@@ -1897,6 +1928,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
@@ -1936,6 +1968,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
     AuthenticatedPurchaseInvoiceIndexRoute,
+  AuthenticatedPurchaseOrdersIndexRoute: AuthenticatedPurchaseOrdersIndexRoute,
   AuthenticatedPurchaseReturnsIndexRoute:
     AuthenticatedPurchaseReturnsIndexRoute,
   AuthenticatedRestaurantIndexRoute: AuthenticatedRestaurantIndexRoute,
@@ -1979,6 +2012,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
@@ -2019,6 +2053,7 @@ export interface FileRoutesByFullPath {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
@@ -2092,6 +2127,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
@@ -2131,6 +2167,7 @@ export interface FileRoutesByTo {
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
@@ -2206,6 +2243,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
@@ -2246,6 +2284,7 @@ export interface FileRoutesById {
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
+  '/_authenticated/purchase-orders/': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
   '/_authenticated/restaurant/': typeof AuthenticatedRestaurantIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
@@ -2323,6 +2362,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/cash-register'
     | '/reports'
     | '/school'
     | '/voice-demo'
@@ -2363,6 +2403,7 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/purchase-orders'
     | '/purchase-returns'
     | '/restaurant'
     | '/roles'
@@ -2435,6 +2476,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/barcode-demo'
+    | '/cash-register'
     | '/reports'
     | '/voice-demo'
     | '/order/$qrToken'
@@ -2474,6 +2516,7 @@ export interface FileRouteTypes {
     | '/invoice'
     | '/products'
     | '/purchase-invoice'
+    | '/purchase-orders'
     | '/purchase-returns'
     | '/restaurant'
     | '/roles'
@@ -2547,6 +2590,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/cash-register'
     | '/_authenticated/reports'
     | '/_authenticated/school'
     | '/_authenticated/voice-demo'
@@ -2587,6 +2631,7 @@ export interface FileRouteTypes {
     | '/_authenticated/invoice/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
+    | '/_authenticated/purchase-orders/'
     | '/_authenticated/purchase-returns/'
     | '/_authenticated/restaurant/'
     | '/_authenticated/roles/'
@@ -2710,6 +2755,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/barcode-demo",
+        "/_authenticated/cash-register",
         "/_authenticated/reports",
         "/_authenticated/school",
         "/_authenticated/voice-demo",
@@ -2744,6 +2790,7 @@ export const routeTree = rootRoute
         "/_authenticated/invoice/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
+        "/_authenticated/purchase-orders/",
         "/_authenticated/purchase-returns/",
         "/_authenticated/restaurant/",
         "/_authenticated/roles/",
@@ -2812,6 +2859,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/cash-register": {
+      "filePath": "_authenticated/cash-register.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/reports": {
@@ -3009,6 +3060,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/purchase-invoice/": {
       "filePath": "_authenticated/purchase-invoice/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/purchase-orders/": {
+      "filePath": "_authenticated/purchase-orders/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-returns/": {

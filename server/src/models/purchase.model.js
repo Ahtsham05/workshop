@@ -23,6 +23,7 @@ const PurchaseSchema = new mongoose.Schema({
   },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
   invoiceNumber: { type: String, required: true, unique: true },
+  purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', index: true },
   items: [
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },

@@ -20,7 +20,14 @@ export interface Permission {
   createPurchases?: boolean;
   editPurchases?: boolean;
   deletePurchases?: boolean;
-  
+
+  // Purchase Order Permissions
+  viewPurchaseOrders?: boolean;
+  createPurchaseOrders?: boolean;
+  editPurchaseOrders?: boolean;
+  deletePurchaseOrders?: boolean;
+  receivePurchaseOrders?: boolean;
+
   // Customer Permissions
   viewCustomers?: boolean;
   createCustomers?: boolean;

@@ -407,3 +407,47 @@ export function generatePurchaseInvoiceA4HTML(
 </html>
   `.trim()
 }
+
+export type PurchasePrintBranchDetails = BranchPrintDetails
+
+export function openPurchasePrintWindow(
+  purchase: any,
+  supplierName: string,
+  printType: 'receipt' | 'a4',
+  options?: {
+    t?: (key: string) => string
+    branchDetails?: PurchasePrintBranchDetails
+    languageOverride?: InvoiceLanguage
+    printInUrdu?: boolean
+  },
+): boolean {
+  const t = options?.t ?? ((key: string) => key)
+  const branchDetails = options?.branchDetails
+  const html =
+    printType === 'receipt'
+      ? generatePurchaseInvoiceHTML(
+          purchase,
+          supplierName,
+          t,
+          branchDetails,
+          options?.languageOverride,
+          options?.printInUrdu,
+        )
+      : generatePurchaseInvoiceA4HTML(
+          purchase,
+          supplierName,
+          t,
+          branchDetails,
+          options?.languageOverride,
+          options?.printInUrdu,
+        )
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    return false
+  }
+  printWindow.document.write(html)
+  printWindow.document.close()
+  printWindow.print()
+  return true
+}

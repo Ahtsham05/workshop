@@ -2,12 +2,15 @@ const httpStatus = require('http-status');
 const { Purchase, Product, SupplierLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { resolvePurchaseLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
+const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
 const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
+const { resolvePurchaseInvoiceBalance } = require('../utils/purchaseBalance');
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -44,14 +47,16 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, p
   const paymentType = String(purchase.paymentType || 'Cash');
   const isWalletPayment = paymentType === 'Wallet' && purchase.walletType;
 
-  if (paidAmount > 0 && !isWalletPayment) {
+  const isCashPayment = cashBookService.isCashPaymentMethod(paymentType);
+
+  if (paidAmount > 0 && isCashPayment) {
     await cashBookService.upsertReferenceEntry({
       organizationId: purchase.organizationId,
       branchId: purchase.branchId,
       type: 'expense',
       source: 'purchase',
       amount: paidAmount,
-      paymentMethod: purchase.paymentType || 'cash',
+      paymentMethod: 'cash',
       referenceId: purchase._id,
       referenceModel: 'Purchase',
       description: `Payment made for Purchase #${purchase.invoiceNumber}`,
@@ -146,7 +151,14 @@ const createPurchase = async (purchaseBody) => {
   }
 
   // First, create the purchase
-  const purchase = await Purchase.create(purchaseBody);
+  const normalizedBody = {
+    ...purchaseBody,
+    balance:
+      purchaseBody.paidAmount !== undefined
+        ? resolvePurchaseInvoiceBalance(purchaseBody.totalAmount, purchaseBody.paidAmount)
+        : purchaseBody.balance,
+  };
+  const purchase = await Purchase.create(normalizedBody);
 
   // Now, update the stock quantity of each product in the purchase
   for (const item of purchase.items) {
@@ -178,7 +190,7 @@ const createPurchase = async (purchaseBody) => {
 
   // Calculate balance if paidAmount is provided
   if (purchase.paidAmount !== undefined) {
-    purchase.balance = purchase.totalAmount - purchase.paidAmount;
+    purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
   }
 
   // Save the purchase with balance calculated
@@ -198,46 +210,25 @@ const createPurchase = async (purchaseBody) => {
         balance: purchase.balance
       });
 
-      // Create purchase entry (credit - we owe supplier)
-      const purchaseEntry = await supplierLedgerService.createLedgerEntry({
+      const ledgerEntries = buildSupplierPurchaseLedgerEntries({
         organizationId: purchase.organizationId,
         branchId: purchase.branchId,
-        supplier: purchase.supplier,
-        transactionType: 'purchase',
-        transactionDate: purchase.purchaseDate || new Date(),
-        reference: purchase.invoiceNumber,
+        supplierId: purchase.supplier,
         referenceId: purchase._id,
-        description: `Purchase Invoice #${purchase.invoiceNumber}`,
-        debit: 0,
-        credit: purchase.totalAmount,
-        paymentMethod: ledgerPaymentMethod,
+        invoiceNumber: purchase.invoiceNumber,
+        transactionDate: purchase.purchaseDate || new Date(),
+        totalAmount: purchase.totalAmount,
+        paidAmount: purchase.paidAmount,
+        paymentType: purchase.paymentType,
         invoiceType: ledgerInvoiceType,
-        notes: `Purchase of ${purchase.items.length} items`
+        paymentMethod: ledgerPaymentMethod,
+        itemsCount: purchase.items.length,
+        balance: purchase.balance,
       });
-      console.log('Supplier ledger entry created for purchase:', purchase.invoiceNumber, 'Entry ID:', purchaseEntry._id);
 
-      // If any amount is paid at the time of purchase, create payment entry (debit - we paid supplier)
-      if (purchase.paidAmount && purchase.paidAmount > 0) {
-        // Add 1 second to payment date so it appears after the purchase entry when sorted
-        const paymentDate = new Date(purchase.purchaseDate || new Date());
-        paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-        const paymentEntry = await supplierLedgerService.createLedgerEntry({
-          organizationId: purchase.organizationId,
-          branchId: purchase.branchId,
-          supplier: purchase.supplier,
-          transactionType: 'payment_made',
-          transactionDate: paymentDate,
-          reference: purchase.invoiceNumber,
-          referenceId: purchase._id,
-          description: `Payment made for Purchase #${purchase.invoiceNumber}${purchase.paidAmount < purchase.totalAmount ? ' (Partial)' : ''}`,
-          debit: purchase.paidAmount,
-          credit: 0,
-          paymentMethod: ledgerPaymentMethod,
-          invoiceType: ledgerInvoiceType,
-          notes: `Amount paid: Rs${purchase.paidAmount.toFixed(2)}${purchase.balance > 0 ? `, Balance: Rs${purchase.balance.toFixed(2)}` : ''}`
-        });
-        console.log('Payment ledger entry created for purchase:', purchase.invoiceNumber, 'Amount:', purchase.paidAmount, 'Entry ID:', paymentEntry._id);
+      for (const entry of ledgerEntries) {
+        const created = await supplierLedgerService.createLedgerEntry(entry);
+        console.log('Supplier ledger entry created for purchase:', purchase.invoiceNumber, 'Entry ID:', created._id);
       }
     } catch (error) {
       console.error('Failed to create supplier ledger entry:', error);
@@ -261,9 +252,12 @@ const createPurchase = async (purchaseBody) => {
  * @returns {Promise<QueryResult>}
  */
 const queryPurchases = async (filter, options) => {
-  // Ensure 'populate' is set in options to include supplier and product data
-  options.populate = 'supplier,items.product';
-  const purchases = await Purchase.paginate(filter, options);
+  const opts = { ...options };
+  await applySupplierLinkedListSearch(filter, opts, {
+    documentFields: ['invoiceNumber', 'notes'],
+  });
+  opts.populate = 'supplier,items.product';
+  const purchases = await Purchase.paginate(filter, opts);
   return purchases;
 };
 
@@ -390,8 +384,11 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   }
 
   // Now update the purchase itself
-  Object.assign(purchase, updateBody); // Merge the new values into the purchase document
-  await purchase.save(); // Save the updated purchase document
+  Object.assign(purchase, updateBody);
+  if (purchase.paidAmount !== undefined) {
+    purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
+  }
+  await purchase.save();
   await syncPurchaseCashAndWalletEntries(purchase, originalPaymentType, originalWalletType, originalPaidAmount);
 
   // Update supplier ledger entries if amounts or supplier changed
@@ -426,41 +423,25 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         await supplierLedgerService.deleteLedgerEntriesByReference(purchase._id);
         
         // Create new entries for new supplier
-        await supplierLedgerService.createLedgerEntry({
+        const ledgerEntries = buildSupplierPurchaseLedgerEntries({
           organizationId: purchase.organizationId,
           branchId: purchase.branchId,
-          supplier: newSupplier,
-          transactionType: 'purchase',
-          transactionDate: purchase.purchaseDate || new Date(),
-          reference: purchase.invoiceNumber,
+          supplierId: newSupplier,
           referenceId: purchase._id,
-          description: `Purchase Invoice #${purchase.invoiceNumber} (Updated)`,
-          debit: 0,
-          credit: newTotalAmount,
-          paymentMethod: ledgerPaymentMethod,
+          invoiceNumber: purchase.invoiceNumber,
+          transactionDate: purchase.purchaseDate || new Date(),
+          totalAmount: newTotalAmount,
+          paidAmount: newPaidAmount,
+          paymentType: purchase.paymentType,
           invoiceType: ledgerInvoiceType,
-          notes: `Purchase of ${purchase.items.length} items (Updated)`
+          paymentMethod: ledgerPaymentMethod,
+          itemsCount: purchase.items.length,
+          balance: purchase.balance,
+          suffix: ' (Updated)',
         });
 
-        if (newPaidAmount > 0) {
-          const paymentDate = new Date(purchase.purchaseDate || new Date());
-          paymentDate.setSeconds(paymentDate.getSeconds() + 1);
-
-          await supplierLedgerService.createLedgerEntry({
-            organizationId: purchase.organizationId,
-            branchId: purchase.branchId,
-            supplier: newSupplier,
-            transactionType: 'payment_made',
-            transactionDate: paymentDate,
-            reference: purchase.invoiceNumber,
-            referenceId: purchase._id,
-            description: `Payment for Purchase #${purchase.invoiceNumber} (Updated)`,
-            debit: newPaidAmount,
-            credit: 0,
-            paymentMethod: ledgerPaymentMethod,
-            invoiceType: ledgerInvoiceType,
-            notes: `Amount paid: Rs${newPaidAmount.toFixed(2)}`
-          });
+        for (const entry of ledgerEntries) {
+          await supplierLedgerService.createLedgerEntry(entry);
         }
       } else {
         // Same supplier - update existing entries
@@ -473,8 +454,10 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           invoiceNumber: purchase.invoiceNumber,
           purchaseDate: purchase.purchaseDate,
           paymentMethod: ledgerPaymentMethod,
+          paymentType: purchase.paymentType,
           invoiceType: ledgerInvoiceType,
           itemsCount: purchase.items.length,
+          balance: purchase.balance,
         });
       }
 

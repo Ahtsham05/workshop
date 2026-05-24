@@ -6,6 +6,7 @@ module.exports.Supplier = require('./supplier.model');
 module.exports.Product = require('./product.model');
 module.exports.Category = require('./category.model');
 module.exports.Purchase = require('./purchase.model');
+module.exports.PurchaseOrder = require('./purchaseOrder.model');
 module.exports.Invoice = require('./invoice.model');
 module.exports.GeneralLedger = require('./generalLedger.model');
 module.exports.Voucher = require('./voucher.model');
@@ -32,6 +33,8 @@ module.exports.RepairStockItem = require('./repairStockItem.model');
 module.exports.InstallmentPlan = require('./installmentPlan.model');
 module.exports.InstallmentPayment = require('./installmentPayment.model');
 module.exports.CashBookEntry = require('./cashBookEntry.model');
+module.exports.CashRegisterState = require('./cashRegisterState.model');
+module.exports.CashRegisterSnapshot = require('./cashRegisterSnapshot.model');
 module.exports.SalesReturn = require('./salesReturn.model');
 module.exports.PurchaseReturn = require('./purchaseReturn.model');
 

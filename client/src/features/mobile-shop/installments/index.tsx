@@ -48,6 +48,11 @@ import {
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command'
+import {
+  MOBILE_FORM_KEYBOARD_HINT,
+  makeEnterChain,
+  useCtrlEnterSubmit,
+} from '@/lib/mobile-form-keyboard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -164,6 +169,9 @@ export default function InstallmentsPage() {
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm)
   const [deletePaymentInfo, setDeletePaymentInfo] = useState<{ planId: string; paymentId: string } | null>(null)
 
+  const planFormRef = useRef<HTMLFormElement>(null)
+  const paymentFormRef = useRef<HTMLFormElement>(null)
+
   // Status update
   const [statusUpdateInfo, setStatusUpdateInfo] = useState<{ id: string; status: string } | null>(null)
 
@@ -201,6 +209,62 @@ export default function InstallmentsPage() {
   const [deletePlan, { isLoading: isDeleting }] = useDeleteInstallmentPlanMutation()
   const [recordPayment, { isLoading: isRecording }] = useRecordInstallmentPaymentMutation()
   const [deletePayment, { isLoading: isDeletingPayment }] = useDeleteInstallmentPaymentMutation()
+
+  const planEnter = useMemo(
+    () =>
+      makeEnterChain(
+        [
+          'inst-customer-name',
+          'inst-customer-phone',
+          'inst-customer-cnic',
+          'inst-customer-address',
+          'inst-guarantor-name',
+          'inst-guarantor-phone',
+          'inst-product',
+          'inst-item-description',
+          'inst-quantity',
+          'inst-total',
+          'inst-down',
+          'inst-installments',
+          'inst-installment-amount',
+          'inst-start-date',
+          'inst-notes',
+        ],
+        { onSubmit: () => planFormRef.current?.requestSubmit() },
+      ),
+    [],
+  )
+
+  const paymentEnter = useMemo(
+    () =>
+      makeEnterChain(
+        ['pay-amount', 'pay-date', 'pay-notes'],
+        { onSubmit: () => paymentFormRef.current?.requestSubmit() },
+      ),
+    [],
+  )
+
+  useCtrlEnterSubmit(() => {
+    if (paymentDialogOpen) {
+      paymentFormRef.current?.requestSubmit()
+      return
+    }
+    if (planDialogOpen) {
+      planFormRef.current?.requestSubmit()
+    }
+  }, isCreating || isUpdating || isRecording)
+
+  useEffect(() => {
+    if (planDialogOpen) {
+      window.setTimeout(() => planEnter.focusFirst(), 100)
+    }
+  }, [planDialogOpen, planEnter])
+
+  useEffect(() => {
+    if (paymentDialogOpen) {
+      window.setTimeout(() => paymentEnter.focusFirst(), 100)
+    }
+  }, [paymentDialogOpen, paymentEnter])
 
   const plans = plansData?.results ?? []
 
@@ -426,7 +490,7 @@ export default function InstallmentsPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <MobilePageShell title='Installments' description='Manage product installment plans & customer payments'>
+    <MobilePageShell title='Installments' description={`Manage product installment plans & customer payments · ${MOBILE_FORM_KEYBOARD_HINT}`}>
 
       {/* ── Summary Cards ── */}
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6'>
@@ -616,7 +680,7 @@ export default function InstallmentsPage() {
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Edit Installment Plan' : 'New Installment Plan'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handlePlanSubmit} className='space-y-5'>
+          <form ref={planFormRef} onSubmit={handlePlanSubmit} className='space-y-5'>
 
             {/* Customer Info */}
             <div>
@@ -624,19 +688,19 @@ export default function InstallmentsPage() {
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Customer Name *</Label>
-                  <Input value={planForm.customerName} onChange={e => handlePlanFormChange('customerName', e.target.value)} placeholder='Full name' />
+                  <Input value={planForm.customerName} onChange={e => handlePlanFormChange('customerName', e.target.value)} placeholder='Full name' {...planEnter.enterProps('inst-customer-name')} />
                 </div>
                 <div className='space-y-1'>
                   <Label>Phone Number</Label>
-                  <Input value={planForm.customerPhone} onChange={e => handlePlanFormChange('customerPhone', e.target.value)} placeholder='03XX-XXXXXXX' />
+                  <Input value={planForm.customerPhone} onChange={e => handlePlanFormChange('customerPhone', e.target.value)} placeholder='03XX-XXXXXXX' {...planEnter.enterProps('inst-customer-phone')} />
                 </div>
                 <div className='space-y-1'>
                   <Label>CNIC</Label>
-                  <Input value={planForm.customerCNIC} onChange={e => handlePlanFormChange('customerCNIC', e.target.value)} placeholder='XXXXX-XXXXXXX-X' />
+                  <Input value={planForm.customerCNIC} onChange={e => handlePlanFormChange('customerCNIC', e.target.value)} placeholder='XXXXX-XXXXXXX-X' {...planEnter.enterProps('inst-customer-cnic')} />
                 </div>
                 <div className='space-y-1'>
                   <Label>Address</Label>
-                  <Input value={planForm.customerAddress} onChange={e => handlePlanFormChange('customerAddress', e.target.value)} placeholder='Customer address' />
+                  <Input value={planForm.customerAddress} onChange={e => handlePlanFormChange('customerAddress', e.target.value)} placeholder='Customer address' {...planEnter.enterProps('inst-customer-address')} />
                 </div>
               </div>
             </div>
@@ -647,11 +711,11 @@ export default function InstallmentsPage() {
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Guarantor Name</Label>
-                  <Input value={planForm.guarantorName} onChange={e => handlePlanFormChange('guarantorName', e.target.value)} placeholder='Guarantor full name' />
+                  <Input value={planForm.guarantorName} onChange={e => handlePlanFormChange('guarantorName', e.target.value)} placeholder='Guarantor full name' {...planEnter.enterProps('inst-guarantor-name')} />
                 </div>
                 <div className='space-y-1'>
                   <Label>Guarantor Phone</Label>
-                  <Input value={planForm.guarantorPhone} onChange={e => handlePlanFormChange('guarantorPhone', e.target.value)} placeholder='03XX-XXXXXXX' />
+                  <Input value={planForm.guarantorPhone} onChange={e => handlePlanFormChange('guarantorPhone', e.target.value)} placeholder='03XX-XXXXXXX' {...planEnter.enterProps('inst-guarantor-phone')} />
                 </div>
               </div>
             </div>
@@ -670,6 +734,7 @@ export default function InstallmentsPage() {
                         type='button'
                         variant='outline'
                         className={`w-full justify-between font-normal ${!selectedProduct && !editingPlan ? 'text-muted-foreground' : ''}`}
+                        {...planEnter.enterProps('inst-product')}
                       >
                         <div className='flex items-center gap-2 min-w-0'>
                           {selectedProduct?.image?.url ? (
@@ -738,23 +803,24 @@ export default function InstallmentsPage() {
                     value={planForm.itemDescription}
                     onChange={e => handlePlanFormChange('itemDescription', e.target.value)}
                     placeholder='e.g. Samsung Galaxy A54 – IMEI: 123456789, Color: Black'
+                    {...planEnter.enterProps('inst-item-description')}
                   />
                 </div>
                 <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
                   <div className='space-y-1'>
                     <Label>Quantity *</Label>
-                    <Input type='number' min='1' step='1' value={planForm.quantity} onChange={e => handlePlanFormChange('quantity', e.target.value)} placeholder='1' disabled={!!editingPlan} />
+                    <Input type='number' min='1' step='1' value={planForm.quantity} onChange={e => handlePlanFormChange('quantity', e.target.value)} placeholder='1' disabled={!!editingPlan} {...planEnter.enterProps('inst-quantity')} />
                     {selectedProduct && !editingPlan && (
                       <p className='text-xs text-muted-foreground'>In stock: {selectedProduct.stockQuantity ?? 0}</p>
                     )}
                   </div>
                   <div className='space-y-1'>
                     <Label>Total Sale Price (Rs) *</Label>
-                    <Input type='number' min='0' step='0.01' value={planForm.totalAmount} onChange={e => handlePlanFormChange('totalAmount', e.target.value)} placeholder='0' />
+                    <Input type='number' min='0' step='0.01' value={planForm.totalAmount} onChange={e => handlePlanFormChange('totalAmount', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-total')} />
                   </div>
                   <div className='space-y-1'>
                     <Label>Down Payment (Rs)</Label>
-                    <Input type='number' min='0' step='0.01' value={planForm.downPayment} onChange={e => handlePlanFormChange('downPayment', e.target.value)} placeholder='0' />
+                    <Input type='number' min='0' step='0.01' value={planForm.downPayment} onChange={e => handlePlanFormChange('downPayment', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-down')} />
                   </div>
                   <div className='space-y-1'>
                     <Label>Remaining</Label>
@@ -768,7 +834,7 @@ export default function InstallmentsPage() {
                 <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                   <div className='space-y-1'>
                     <Label className='min-h-5 inline-flex items-center'>No. of Installments *</Label>
-                    <Input type='number' min='1' step='1' value={planForm.totalInstallments} onChange={e => handlePlanFormChange('totalInstallments', e.target.value)} placeholder='e.g. 12' />
+                    <Input type='number' min='1' step='1' value={planForm.totalInstallments} onChange={e => handlePlanFormChange('totalInstallments', e.target.value)} placeholder='e.g. 12' {...planEnter.enterProps('inst-installments')} />
                   </div>
                   <div className='space-y-1'>
                     <Label className='min-h-5 inline-flex items-center'>Installment Amount *</Label>
@@ -777,6 +843,7 @@ export default function InstallmentsPage() {
                       value={planForm.installmentAmount}
                       onChange={e => handlePlanFormChange('installmentAmount', e.target.value)}
                       placeholder={calculatedInstallmentAmount || '0'}
+                      {...planEnter.enterProps('inst-installment-amount')}
                     />
                     {calculatedInstallmentAmount && planForm.installmentAmount !== calculatedInstallmentAmount && (
                       <button type='button' className='text-xs text-blue-600 hover:underline' onClick={() => handlePlanFormChange('installmentAmount', calculatedInstallmentAmount)}>
@@ -786,7 +853,7 @@ export default function InstallmentsPage() {
                   </div>
                   <div className='space-y-1'>
                     <Label className='min-h-5 inline-flex items-center'>Start Date</Label>
-                    <Input type='date' value={planForm.startDate} onChange={e => handlePlanFormChange('startDate', e.target.value)} />
+                    <Input type='date' value={planForm.startDate} onChange={e => handlePlanFormChange('startDate', e.target.value)} {...planEnter.enterProps('inst-start-date')} />
                   </div>
                 </div>
                 <div className='grid gap-3 sm:grid-cols-2'>
@@ -818,7 +885,7 @@ export default function InstallmentsPage() {
                 </div>
                 <div className='space-y-1'>
                   <Label>Notes</Label>
-                  <Textarea value={planForm.notes} onChange={e => handlePlanFormChange('notes', e.target.value)} placeholder='Any additional notes...' rows={2} />
+                  <Textarea value={planForm.notes} onChange={e => handlePlanFormChange('notes', e.target.value)} placeholder='Any additional notes...' rows={2} {...planEnter.enterProps('inst-notes')} />
                 </div>
               </div>
             </div>
@@ -858,11 +925,11 @@ export default function InstallmentsPage() {
             <span className='text-sm text-muted-foreground'>Outstanding Balance</span>
             <span className='font-bold text-red-600 text-lg'>{fmt(paymentPlanOutstanding)}</span>
           </div>
-          <form onSubmit={handlePaymentSubmit} className='space-y-4'>
+          <form ref={paymentFormRef} onSubmit={handlePaymentSubmit} className='space-y-4'>
             <div className='grid gap-3 sm:grid-cols-2'>
               <div className='space-y-1'>
                 <Label>Amount (Rs) *</Label>
-                <Input type='number' min='0.01' step='0.01' max={paymentPlanOutstanding} value={paymentForm.amount} onChange={e => setPaymentForm(p => ({ ...p, amount: e.target.value }))} />
+                <Input type='number' min='0.01' step='0.01' max={paymentPlanOutstanding} value={paymentForm.amount} onChange={e => setPaymentForm(p => ({ ...p, amount: e.target.value }))} {...paymentEnter.enterProps('pay-amount')} />
               </div>
               <div className='space-y-1'>
                 <Label>Payment Method</Label>
@@ -879,11 +946,11 @@ export default function InstallmentsPage() {
             </div>
             <div className='space-y-1'>
               <Label>Date</Label>
-              <Input type='date' value={paymentForm.date} onChange={e => setPaymentForm(p => ({ ...p, date: e.target.value }))} />
+              <Input type='date' value={paymentForm.date} onChange={e => setPaymentForm(p => ({ ...p, date: e.target.value }))} {...paymentEnter.enterProps('pay-date')} />
             </div>
             <div className='space-y-1'>
               <Label>Notes</Label>
-              <Input value={paymentForm.notes} onChange={e => setPaymentForm(p => ({ ...p, notes: e.target.value }))} placeholder='Optional note' />
+              <Input value={paymentForm.notes} onChange={e => setPaymentForm(p => ({ ...p, notes: e.target.value }))} placeholder='Optional note' {...paymentEnter.enterProps('pay-notes')} />
             </div>
 
             {/* Payment history in dialog */}

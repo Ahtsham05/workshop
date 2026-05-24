@@ -50,21 +50,20 @@ const resyncPurchases = async (branchFilter, apply) => {
   let count = 0;
   for (const p of purchases) {
     try {
-      // syncPurchaseCashAndWalletEntries is not exported, so reuse the public
-      // updatePurchaseById flow — but that would touch stock/etc. Instead, just
-      // re-call the upsert directly via cashBookService.
       const paidAmount = Number(p.paidAmount || 0);
       const paymentType = String(p.paymentType || 'Cash');
       const isWalletPayment = paymentType === 'Wallet' && p.walletType;
-      if (paidAmount > 0 && !isWalletPayment) {
-        const cashBookService = require('../services/cashBook.service');
+      const cashBookService = require('../services/cashBook.service');
+      const isCashPayment = cashBookService.isCashPaymentMethod(paymentType);
+
+      if (paidAmount > 0 && isCashPayment) {
         await cashBookService.upsertReferenceEntry({
           organizationId: p.organizationId,
           branchId: p.branchId,
           type: 'expense',
           source: 'purchase',
           amount: paidAmount,
-          paymentMethod: paymentType || 'cash',
+          paymentMethod: 'cash',
           referenceId: p._id,
           referenceModel: 'Purchase',
           description: `Payment made for Purchase #${p.invoiceNumber}`,
@@ -72,6 +71,8 @@ const resyncPurchases = async (branchFilter, apply) => {
           createdBy: p.createdBy,
         });
         count += 1;
+      } else {
+        await cashBookService.deleteEntriesByReference(p._id, 'Purchase');
       }
     } catch (err) {
       console.error(`[Purchase] failed for ${p._id}: ${err.message}`);

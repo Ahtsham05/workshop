@@ -8,6 +8,7 @@ import categoryReducer from './category.slice';
 import { invoiceApi } from './invoice.api';
 import { customerApi } from './customer.api';
 import { purchaseApi } from './purchase.api';
+import { purchaseOrderApi } from './purchaseOrder.api';
 import { dashboardApi } from './dashboard.api';
 import { reportsApi } from './reports.api';
 import { companyApi } from './company.api';
@@ -25,6 +26,7 @@ import { schoolApi } from './school.api';
 import { expenseCategoryApi } from './expenseCategory.api';
 import { restaurantApi } from './restaurant.api';
 import { businessWhatsappApi } from './businessWhatsapp.api';
+import { cashRegisterApi } from './cashRegister.api';
 
 export const store = configureStore({
   reducer: {
@@ -37,6 +39,7 @@ export const store = configureStore({
     [invoiceApi.reducerPath]: invoiceApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
     [purchaseApi.reducerPath]: purchaseApi.reducer,
+    [purchaseOrderApi.reducerPath]: purchaseOrderApi.reducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
     [reportsApi.reducerPath]: reportsApi.reducer,
     [companyApi.reducerPath]: companyApi.reducer,
@@ -54,12 +57,14 @@ export const store = configureStore({
     [expenseCategoryApi.reducerPath]: expenseCategoryApi.reducer,
     [restaurantApi.reducerPath]: restaurantApi.reducer,
     [businessWhatsappApi.reducerPath]: businessWhatsappApi.reducer,
+    [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       invoiceApi.middleware,
       customerApi.middleware,
       purchaseApi.middleware,
+      purchaseOrderApi.middleware,
       dashboardApi.middleware,
       reportsApi.middleware,
       companyApi.middleware,
@@ -77,6 +82,7 @@ export const store = configureStore({
       expenseCategoryApi.middleware,
       restaurantApi.middleware,
       businessWhatsappApi.middleware,
+      cashRegisterApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;
