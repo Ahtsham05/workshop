@@ -126,10 +126,6 @@ export function useEnterFieldRefs<T extends string>(fieldOrder: T[], options: En
       refs.current[field] = el
     }
 
-  const focusFieldByKey = useCallback((field: T) => {
-    focusField(refs.current[field] ?? null)
-  }, [])
-
   const onEnter =
     (field: T) => (e: ReactKeyboardEvent<HTMLElement>) => {
       if (e.key !== 'Enter') return

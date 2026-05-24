@@ -50,7 +50,6 @@ import { ListPrintButton } from '@/features/mobile-shop/components/list-print-bu
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
 import {
   MobileReceiptOffer,
-  fmtRs,
   type MobileReceiptData,
 } from '@/features/mobile-shop/components/mobile-shop-receipt'
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
