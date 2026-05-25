@@ -35,8 +35,19 @@ const updateExam = catchAsync(async (req, res) => {
 });
 
 const deleteExam = catchAsync(async (req, res) => {
-  await examService.deleteExamById(req.params.id, getScope(req));
-  res.status(httpStatus.NO_CONTENT).send();
+  const result = await examService.deleteExamById(req.params.id, getScope(req));
+  res.send(result);
 });
 
-module.exports = { createExam, getExams, getExam, updateExam, deleteExam };
+const bulkUpdateExams = catchAsync(async (req, res) => {
+  const { ids, ...updateBody } = req.body;
+  const result = await examService.bulkUpdateExams(ids, updateBody, getScope(req));
+  res.send(result);
+});
+
+const bulkDeleteExams = catchAsync(async (req, res) => {
+  const result = await examService.bulkDeleteExams(req.body.ids, getScope(req));
+  res.send(result);
+});
+
+module.exports = { createExam, getExams, getExam, updateExam, deleteExam, bulkUpdateExams, bulkDeleteExams };

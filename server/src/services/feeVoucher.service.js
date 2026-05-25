@@ -11,6 +11,27 @@ const getTenantFilter = (scope = {}) => {
   return filter;
 };
 
+const MONTH_ORDER = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+
+/** Compute effective net amount, falling back to feeItems when stored netAmount is zero */
+const effectiveNet = (v) => {
+  if (v.netAmount && v.netAmount > 0) return v.netAmount;
+  const t = (v.feeItems || []).reduce((s, fi) => s + (fi.amount || 0), 0);
+  return Math.max(0, t - (v.discount || 0) + (v.fine || 0));
+};
+
+/** Comparable index so January 2026 < February 2026 < … < December 2026 < January 2027 */
+const voucherPeriodIndex = (month, year) => {
+  const mi = MONTH_ORDER.indexOf(month);
+  const y = Number(year);
+  if (!Number.isFinite(y)) return 0;
+  if (mi < 0) return y * 12;
+  return y * 12 + mi;
+};
+
 /**
  * Like getTenantFilter but casts IDs to ObjectId for use in aggregate pipelines.
  * Mongoose .find() auto-casts strings → ObjectId but aggregate() does NOT.
@@ -480,8 +501,20 @@ const deleteVoucherById = async (id, scope = {}) => {
 };
 
 /**
- * Get vouchers for printing (populated with student, class, org details)
+ * Get vouchers for printing (populated with student, class, org details).
+ * Rolls all other unpaid/partial vouchers (including exam fees) into printLineItems
+ * so the printed challan shows every pending fee with its proper name.
  */
+const pendingVoucherLabel = (p) => {
+  const items = p.feeItems || [];
+  if (items.length === 1 && items[0]?.name) return items[0].name;
+  if (items.length > 1) {
+    return items.map((fi) => fi.name).filter(Boolean).join(' + ');
+  }
+  if (p.voucherType === 'exam') return `Exam Fee (${p.month || 'Exam'})`;
+  return `Pending Fee (${p.month || '—'} ${p.year || ''})`.trim();
+};
+
 const getVouchersForPrint = async (ids, scope = {}) => {
   const vouchers = await FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
     .populate('studentId', 'firstName lastName admissionNumber rollNumber parent.phone parent.guardianName parent.fatherName')
@@ -492,34 +525,55 @@ const getVouchersForPrint = async (ids, scope = {}) => {
   const studentIds = [...new Set(vouchers.map((v) => String(v.studentId?._id || v.studentId)).filter(Boolean))];
   if (!studentIds.length) return vouchers;
 
+  const studentObjectIds = studentIds.map((id) => new mongoose.Types.ObjectId(id));
+
   const allPending = await FeeVoucher.find({
     ...getTenantFilter(scope),
-    studentId: { $in: studentIds },
+    studentId: { $in: studentObjectIds },
     status: { $in: ['unpaid', 'partial', 'overdue'] },
   })
-    .select('_id studentId month year netAmount feeItems discount fine paidAmount')
+    .select('_id studentId month year netAmount feeItems discount fine paidAmount voucherType voucherNumber examId')
     .lean();
 
   const pendingByStudent = new Map();
   allPending.forEach((p) => {
     const sid = String(p.studentId);
+    const remaining = Math.max(0, effectiveNet(p) - (p.paidAmount || 0));
+    if (remaining <= 0) return;
     if (!pendingByStudent.has(sid)) pendingByStudent.set(sid, []);
     pendingByStudent.get(sid).push({
       id: String(p._id),
       month: p.month,
       year: p.year,
-      remaining: Math.max(0, effectiveNet(p) - (p.paidAmount || 0)),
+      remaining,
+      voucherType: p.voucherType,
+      voucherNumber: p.voucherNumber,
+      feeItems: p.feeItems || [],
     });
   });
 
   return vouchers.map((v) => {
+    const currentId = String(v._id);
     const sid = String(v.studentId?._id || v.studentId || '');
     const pendingList = (pendingByStudent.get(sid) || [])
-      .filter((p) => p.id !== String(v._id) && p.remaining > 0)
+      .filter((p) => p.id !== currentId)
       .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
     const pendingTotal = pendingList.reduce((sum, p) => sum + p.remaining, 0);
+
+    const currentLineItems = (v.feeItems || []).map((fi) => ({
+      name: fi.name,
+      amount: fi.amount || 0,
+    }));
+    const pendingLineItems = pendingList.map((p) => ({
+      name: pendingVoucherLabel(p),
+      amount: p.remaining,
+      isPending: true,
+      voucherType: p.voucherType,
+    }));
+
     return {
       ...v,
+      printLineItems: [...currentLineItems, ...pendingLineItems],
       pendingDetails: {
         months: pendingList,
         totalPending: pendingTotal,
@@ -538,27 +592,6 @@ const getVouchersForPrint = async (ids, scope = {}) => {
  * - Pending vouchers with per-month breakdown
  * - Last payment info
  */
-const MONTH_ORDER = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-];
-
-/** Compute effective net amount, falling back to feeItems when stored netAmount is zero */
-const effectiveNet = (v) => {
-  if (v.netAmount && v.netAmount > 0) return v.netAmount;
-  const t = (v.feeItems || []).reduce((s, fi) => s + (fi.amount || 0), 0);
-  return Math.max(0, t - (v.discount || 0) + (v.fine || 0));
-};
-
-/** Comparable index so January 2026 < February 2026 < … < December 2026 < January 2027 */
-const voucherPeriodIndex = (month, year) => {
-  const mi = MONTH_ORDER.indexOf(month);
-  const y = Number(year);
-  if (!Number.isFinite(y)) return 0;
-  if (mi < 0) return y * 12;
-  return y * 12 + mi;
-};
-
 const getStudentFeeSummary = async (studentId, scope = {}) => {
   const [allVouchers, student] = await Promise.all([
     FeeVoucher.find({ ...getTenantFilter(scope), studentId })
@@ -1284,10 +1317,100 @@ const getYearlyFeeReport = async (scope, year, classId) => {
   return result;
 };
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const bulkGenerateExamVouchers = async (examId, scope = {}, options = {}) => {
+  const { Exam, Student, FeeCategory } = require('../models');
+  const exam = await Exam.findOne({ _id: examId, ...getTenantFilter(scope) });
+  if (!exam) throw new ApiError(httpStatus.NOT_FOUND, 'Exam not found');
+
+  const amount = options.amount ?? exam.examFeeAmount ?? 0;
+  if (!amount || amount <= 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Set exam fee amount before generating vouchers');
+  }
+
+  const examCategory = await FeeCategory.findOne({
+    ...getTenantFilter(scope),
+    name: /^exam fee$/i,
+    type: 'INCOME',
+  });
+
+  const allStudents = await Student.find({
+    ...getTenantFilter(scope),
+    classId: exam.classId,
+    status: 'active',
+  }).select('_id sectionId classId feeStructure');
+
+  // Only students with a non-zero monthly fee on their admission form
+  const students = allStudents.filter((s) => Number(s.feeStructure?.monthlyFee || 0) > 0);
+  const excludedZeroFee = allStudents.length - students.length;
+
+  const refDate = exam.startDate ? new Date(exam.startDate) : new Date();
+  // Use exam-specific month label so exam vouchers never collide with monthly
+  // vouchers on legacy { org, student, month, year } unique indexes.
+  const month = `Exam — ${String(exam.name || 'Fee').trim()}`.slice(0, 80);
+  const year = refDate.getFullYear();
+  const dueDate = options.dueDate || exam.feeDueDate || exam.startDate || new Date(Date.now() + 14 * 86400000);
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const student of students) {
+    const existing = await FeeVoucher.findOne({
+      ...getTenantFilter(scope),
+      studentId: student._id,
+      voucherType: 'exam',
+      examId: exam._id,
+    });
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      await FeeVoucher.create({
+        organizationId: scope.organizationId,
+        branchId: scope.branchId,
+        createdBy: scope.createdBy,
+        voucherType: 'exam',
+        examId: exam._id,
+        studentId: student._id,
+        classId: exam.classId,
+        sectionId: student.sectionId,
+        month,
+        year,
+        feeItems: [{
+          name: `Exam Fee — ${exam.name}`,
+          amount,
+          categoryId: examCategory?._id,
+        }],
+        dueDate,
+        remarks: `Exam fee for ${exam.name}`,
+      });
+      created += 1;
+    } catch (err) {
+      if (err.code === 11000) skipped += 1;
+      else throw err;
+    }
+  }
+
+  return {
+    created,
+    skipped,
+    excludedZeroFee,
+    totalEligible: students.length,
+    totalStudents: allStudents.length,
+  };
+};
+
 module.exports = {
   createVoucher,
   bulkGenerateVouchers,
   bulkGenerateVouchersV2,
+  bulkGenerateExamVouchers,
   queryVouchers,
   getVoucherById,
   getStudentVouchers,

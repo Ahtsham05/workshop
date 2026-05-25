@@ -15,6 +15,14 @@ router
   .get(auth('getSchool'), validate(examValidation.getExams), examController.getExams);
 
 router
+  .route('/bulk-update')
+  .post(auth('manageSchool'), validate(examValidation.bulkUpdateExams), examController.bulkUpdateExams);
+
+router
+  .route('/bulk-delete')
+  .post(auth('manageSchool'), validate(examValidation.bulkDeleteExams), examController.bulkDeleteExams);
+
+router
   .route('/:id')
   .get(auth('getSchool'), validate(examValidation.getExam), examController.getExam)
   .patch(auth('manageSchool'), validate(examValidation.updateExam), examController.updateExam)

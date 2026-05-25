@@ -42,6 +42,8 @@ const getVouchers = {
   query: Joi.object().keys({
     classId: Joi.string().custom(objectId),
     studentId: Joi.string().custom(objectId),
+    examId: Joi.string().custom(objectId),
+    voucherType: Joi.string().valid('monthly', 'exam', 'admission', 'misc'),
     month: Joi.string().valid(...MONTHS),
     year: Joi.number().integer(),
     status: Joi.string().valid('unpaid', 'partial', 'paid', 'overdue', 'cancelled'),
@@ -127,9 +129,18 @@ const recordAdvancePayment = {
   }),
 };
 
+const bulkGenerateExamVouchers = {
+  body: Joi.object().keys({
+    examId: Joi.string().custom(objectId).required(),
+    amount: Joi.number().min(1),
+    dueDate: Joi.date().iso(),
+  }),
+};
+
 module.exports = {
   createVoucher,
   bulkGenerateVouchers,
+  bulkGenerateExamVouchers,
   getVouchers,
   getVoucher,
   getStudentVouchers,

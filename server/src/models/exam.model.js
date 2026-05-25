@@ -40,6 +40,14 @@ const examSchema = mongoose.Schema(
     endDate: {
       type: Date,
     },
+    examFeeAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    feeDueDate: {
+      type: Date,
+    },
     totalMarks: {
       type: Number,
       default: 0,

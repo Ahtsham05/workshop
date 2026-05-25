@@ -8,18 +8,23 @@ const subjectMarksSchema = Joi.object({
 });
 
 const createExam = {
-  body: Joi.object().keys({
-    name: Joi.string().required(),
-    type: Joi.string().required().valid('monthly', 'midterm', 'final', 'unit_test', 'assignment', 'other'),
-    classId: Joi.string().custom(objectId).required(),
-    startDate: Joi.date().required(),
-    endDate: Joi.date().required(),
-    // Either provide subjects array OR flat totalMarks/passingMarks
-    subjects: Joi.array().items(subjectMarksSchema).min(1),
-    totalMarks: Joi.number().min(1),
-    passingMarks: Joi.number().min(0),
-    status: Joi.string().valid('upcoming', 'ongoing', 'completed', 'cancelled'),
-  }),
+  body: Joi.object()
+    .keys({
+      name: Joi.string().required(),
+      type: Joi.string().valid('monthly', 'midterm', 'final', 'unit_test', 'assignment', 'other'),
+      classId: Joi.string().custom(objectId),
+      classIds: Joi.array().items(Joi.string().custom(objectId)).min(1),
+      startDate: Joi.date().optional().allow(null, ''),
+      endDate: Joi.date().optional().allow(null, ''),
+      examFeeAmount: Joi.number().min(0),
+      feeDueDate: Joi.date().optional().allow(null, ''),
+      // Either provide subjects array OR flat totalMarks/passingMarks
+      subjects: Joi.array().items(subjectMarksSchema).min(1),
+      totalMarks: Joi.number().min(1),
+      passingMarks: Joi.number().min(0),
+      status: Joi.string().valid('upcoming', 'ongoing', 'completed', 'cancelled'),
+    })
+    .xor('classId', 'classIds'),
 };
 
 const getExams = {
@@ -51,6 +56,8 @@ const updateExam = {
       classId: Joi.string().custom(objectId),
       startDate: Joi.date(),
       endDate: Joi.date(),
+      examFeeAmount: Joi.number().min(0),
+      feeDueDate: Joi.date().optional().allow(null, ''),
       subjects: Joi.array().items(subjectMarksSchema).min(1),
       totalMarks: Joi.number().min(1),
       passingMarks: Joi.number().min(0),
@@ -65,4 +72,24 @@ const deleteExam = {
   }),
 };
 
-module.exports = { createExam, getExams, getExam, updateExam, deleteExam };
+const bulkUpdateExams = {
+  body: Joi.object()
+    .keys({
+      ids: Joi.array().items(Joi.string().custom(objectId)).min(1).required(),
+      name: Joi.string(),
+      startDate: Joi.date().optional().allow(null, ''),
+      endDate: Joi.date().optional().allow(null, ''),
+      examFeeAmount: Joi.number().min(0),
+      feeDueDate: Joi.date().optional().allow(null, ''),
+      status: Joi.string().valid('upcoming', 'ongoing', 'completed', 'cancelled'),
+    })
+    .min(2),
+};
+
+const bulkDeleteExams = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string().custom(objectId)).min(1).required(),
+  }),
+};
+
+module.exports = { createExam, getExams, getExam, updateExam, deleteExam, bulkUpdateExams, bulkDeleteExams };

@@ -124,6 +124,7 @@ import { Route as AuthenticatedSchoolFeesReportsIndexImport } from './routes/_au
 import { Route as AuthenticatedSchoolFeesExpensesIndexImport } from './routes/_authenticated/school/fees/expenses/index'
 import { Route as AuthenticatedSchoolFeesDashboardIndexImport } from './routes/_authenticated/school/fees/dashboard/index'
 import { Route as AuthenticatedSchoolFeesCategoriesIndexImport } from './routes/_authenticated/school/fees/categories/index'
+import { Route as AuthenticatedSchoolExamsRollSlipsIndexImport } from './routes/_authenticated/school/exams/roll-slips/index'
 import { Route as AuthenticatedHrEmployeesIdEditImport } from './routes/_authenticated/hr/employees/$id.edit'
 
 // Create/Update Routes
@@ -895,6 +896,13 @@ const AuthenticatedSchoolFeesCategoriesIndexRoute =
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
+const AuthenticatedSchoolExamsRollSlipsIndexRoute =
+  AuthenticatedSchoolExamsRollSlipsIndexImport.update({
+    id: '/exams/roll-slips/',
+    path: '/exams/roll-slips/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
 const AuthenticatedHrEmployeesIdEditRoute =
   AuthenticatedHrEmployeesIdEditImport.update({
     id: '/edit',
@@ -1648,6 +1656,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrEmployeesIdEditImport
       parentRoute: typeof AuthenticatedHrEmployeesIdImport
     }
+    '/_authenticated/school/exams/roll-slips/': {
+      id: '/_authenticated/school/exams/roll-slips/'
+      path: '/exams/roll-slips'
+      fullPath: '/school/exams/roll-slips'
+      preLoaderRoute: typeof AuthenticatedSchoolExamsRollSlipsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/school/fees/categories/': {
       id: '/_authenticated/school/fees/categories/'
       path: '/fees/categories'
@@ -1779,6 +1794,7 @@ interface AuthenticatedSchoolRouteChildren {
   AuthenticatedSchoolTimetableIndexRoute: typeof AuthenticatedSchoolTimetableIndexRoute
   AuthenticatedSchoolVisitorsIndexRoute: typeof AuthenticatedSchoolVisitorsIndexRoute
   AuthenticatedSchoolWhatsappIndexRoute: typeof AuthenticatedSchoolWhatsappIndexRoute
+  AuthenticatedSchoolExamsRollSlipsIndexRoute: typeof AuthenticatedSchoolExamsRollSlipsIndexRoute
   AuthenticatedSchoolFeesCategoriesIndexRoute: typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   AuthenticatedSchoolFeesDashboardIndexRoute: typeof AuthenticatedSchoolFeesDashboardIndexRoute
   AuthenticatedSchoolFeesExpensesIndexRoute: typeof AuthenticatedSchoolFeesExpensesIndexRoute
@@ -1832,6 +1848,8 @@ const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
     AuthenticatedSchoolTimetableIndexRoute,
   AuthenticatedSchoolVisitorsIndexRoute: AuthenticatedSchoolVisitorsIndexRoute,
   AuthenticatedSchoolWhatsappIndexRoute: AuthenticatedSchoolWhatsappIndexRoute,
+  AuthenticatedSchoolExamsRollSlipsIndexRoute:
+    AuthenticatedSchoolExamsRollSlipsIndexRoute,
   AuthenticatedSchoolFeesCategoriesIndexRoute:
     AuthenticatedSchoolFeesCategoriesIndexRoute,
   AuthenticatedSchoolFeesDashboardIndexRoute:
@@ -2104,6 +2122,7 @@ export interface FileRoutesByFullPath {
   '/school/visitors': typeof AuthenticatedSchoolVisitorsIndexRoute
   '/school/whatsapp': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/school/exams/roll-slips': typeof AuthenticatedSchoolExamsRollSlipsIndexRoute
   '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
@@ -2217,6 +2236,7 @@ export interface FileRoutesByTo {
   '/school/visitors': typeof AuthenticatedSchoolVisitorsIndexRoute
   '/school/whatsapp': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/school/exams/roll-slips': typeof AuthenticatedSchoolExamsRollSlipsIndexRoute
   '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
@@ -2335,6 +2355,7 @@ export interface FileRoutesById {
   '/_authenticated/school/visitors/': typeof AuthenticatedSchoolVisitorsIndexRoute
   '/_authenticated/school/whatsapp/': typeof AuthenticatedSchoolWhatsappIndexRoute
   '/_authenticated/hr/employees/$id/edit': typeof AuthenticatedHrEmployeesIdEditRoute
+  '/_authenticated/school/exams/roll-slips/': typeof AuthenticatedSchoolExamsRollSlipsIndexRoute
   '/_authenticated/school/fees/categories/': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/_authenticated/school/fees/dashboard/': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/_authenticated/school/fees/expenses/': typeof AuthenticatedSchoolFeesExpensesIndexRoute
@@ -2454,6 +2475,7 @@ export interface FileRouteTypes {
     | '/school/visitors'
     | '/school/whatsapp'
     | '/hr/employees/$id/edit'
+    | '/school/exams/roll-slips'
     | '/school/fees/categories'
     | '/school/fees/dashboard'
     | '/school/fees/expenses'
@@ -2566,6 +2588,7 @@ export interface FileRouteTypes {
     | '/school/visitors'
     | '/school/whatsapp'
     | '/hr/employees/$id/edit'
+    | '/school/exams/roll-slips'
     | '/school/fees/categories'
     | '/school/fees/dashboard'
     | '/school/fees/expenses'
@@ -2682,6 +2705,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/visitors/'
     | '/_authenticated/school/whatsapp/'
     | '/_authenticated/hr/employees/$id/edit'
+    | '/_authenticated/school/exams/roll-slips/'
     | '/_authenticated/school/fees/categories/'
     | '/_authenticated/school/fees/dashboard/'
     | '/_authenticated/school/fees/expenses/'
@@ -2902,6 +2926,7 @@ export const routeTree = rootRoute
         "/_authenticated/school/timetable/",
         "/_authenticated/school/visitors/",
         "/_authenticated/school/whatsapp/",
+        "/_authenticated/school/exams/roll-slips/",
         "/_authenticated/school/fees/categories/",
         "/_authenticated/school/fees/dashboard/",
         "/_authenticated/school/fees/expenses/",
@@ -3271,6 +3296,10 @@ export const routeTree = rootRoute
     "/_authenticated/hr/employees/$id/edit": {
       "filePath": "_authenticated/hr/employees/$id.edit.tsx",
       "parent": "/_authenticated/hr/employees/$id"
+    },
+    "/_authenticated/school/exams/roll-slips/": {
+      "filePath": "_authenticated/school/exams/roll-slips/index.tsx",
+      "parent": "/_authenticated/school"
     },
     "/_authenticated/school/fees/categories/": {
       "filePath": "_authenticated/school/fees/categories/index.tsx",

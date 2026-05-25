@@ -551,6 +551,14 @@ export const sidebarData: SidebarData = {
           excludedSchoolRoles: ['teacher'],
         },
         {
+          title: 'Roll Slips',
+          url: '/school/exams/roll-slips',
+          icon: ClipboardList,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
           title: 'Results',
           url: '/school/marks',
           icon: IconReportAnalytics,

@@ -191,6 +191,7 @@ export default function FeeVouchers() {
     year: now.getFullYear(),
     classId: 'all',
     status: 'all',
+    voucherType: 'all',
     search: '',
     page: 1,
     limit: 25,
@@ -224,6 +225,7 @@ export default function FeeVouchers() {
   };
   if (filters.classId !== 'all') voucherParams.classId = filters.classId;
   if (filters.status !== 'all') voucherParams.status = filters.status;
+  if (filters.voucherType !== 'all') voucherParams.voucherType = filters.voucherType;
   if (filters.search) voucherParams.search = filters.search;
 
   const { data: vouchersData, isLoading, isFetching } = useGetFeeVouchersQuery(voucherParams);
@@ -807,6 +809,16 @@ export default function FeeVouchers() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={filters.voucherType} onValueChange={(v) => setFilters({ ...filters, voucherType: v, page: 1 })}>
+          <SelectTrigger className="w-28 h-9"><SelectValue placeholder="All Types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+            <SelectItem value="exam">Exam Fee</SelectItem>
+            <SelectItem value="admission">Admission</SelectItem>
+            <SelectItem value="misc">Misc</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Voucher Table */}
@@ -870,6 +882,11 @@ export default function FeeVouchers() {
                         <span className="text-xs text-muted-foreground">#{v.studentId.admissionNumber}</span>
                       )}
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{v.classId?.name}</Badge>
+                      {v.voucherType === 'exam' && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-violet-50 text-violet-700 border-violet-200">
+                          Exam Fee
+                        </Badge>
+                      )}
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${cfg.bg} ${cfg.text}`}>
                         {cfg.label}
                       </span>
@@ -883,7 +900,12 @@ export default function FeeVouchers() {
                     </div>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-[11px] text-muted-foreground">
-                        {v.voucherNumber || '—'} · {v.month} {v.year} · Due {v.dueDate ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        {v.voucherNumber || '—'}
+                        {v.voucherType === 'exam' && v.feeItems?.[0]?.name
+                          ? ` · ${v.feeItems[0].name}`
+                          : ` · ${v.month} ${v.year}`}
+                        {' · Due '}
+                        {v.dueDate ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                       </span>
                       {v.studentId?.parent?.phone && (
                         <span className="text-[11px] text-muted-foreground">
@@ -1938,10 +1960,8 @@ ${pageHTML}
 
 function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceNote?: string): string {
   const feeItems: any[] = v.feeItems || [];
-  const feeTotal = feeItems.reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
   const discount = v.discount || 0;
   const fine = v.fine || 0;
-  const netPayable = v.netAmount && v.netAmount > 0 ? v.netAmount : feeTotal - discount + fine;
 
   const dueDate = v.dueDate
     ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -1950,10 +1970,22 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const guardianPhone = v.studentId?.parent?.phone || '—';
   const fatherName = v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName || '—';
   const otherPendingMonths: any[] = v.pendingDetails?.months || [];
-  const otherPendingTotal = Number(v.pendingDetails?.totalPending || 0);
-  const grandWithPending = netPayable + otherPendingTotal;
 
-  const itemRows = feeItems
+  const displayLineItems: { name: string; amount: number }[] = v.printLineItems?.length
+    ? v.printLineItems
+    : [
+        ...feeItems.map((fi: any) => ({ name: fi.name, amount: fi.amount || 0 })),
+        ...otherPendingMonths.map((p: any) => ({
+          name: p.feeItems?.length === 1 && p.feeItems[0]?.name
+            ? p.feeItems[0].name
+            : p.voucherType === 'exam'
+              ? `Exam Fee (${p.month || 'Exam'})`
+              : `Pending Fee (${p.month} ${p.year})`,
+          amount: Number(p.remaining || 0),
+        })),
+      ];
+
+  const itemRows = displayLineItems
     .map(
       (fi: any, i: number) =>
         `<tr>
@@ -1972,29 +2004,15 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     fine > 0
       ? `<tr><td class="sno"></td><td>Late Fine</td><td class="r">${fine.toLocaleString()}/-</td></tr>`
       : '';
-  const pendingRows = otherPendingMonths
-    .map(
-      (p: any) =>
-        `<tr>
-          <td class="sno"></td>
-          <td>Pending Fee (${p.month} ${p.year})</td>
-          <td class="r">${Number(p.remaining || 0).toLocaleString()}/-</td>
-        </tr>`
-    )
-    .join('');
 
   const paidStamp =
     v.status === 'paid'
       ? `<tr><td colspan="3" style="text-align:center;padding:2px 0"><span class="paid-stamp">PAID</span></td></tr>`
       : '';
 
-  const paidRows =
-    (v.paidAmount || 0) > 0 && v.status !== 'paid'
-      ? `<tr><td class="tlbl" style="font-size:8px;font-weight:400">Amount Received</td>
-           <td class="tamt" style="font-size:9px">${(v.paidAmount || 0).toLocaleString()}/-</td></tr>
-         <tr><td class="tlbl" style="font-size:8px;font-weight:400">Balance Due</td>
-           <td class="tamt" style="font-size:9px">${Math.max(0, netPayable - (v.paidAmount || 0)).toLocaleString()}/-</td></tr>`
-      : '';
+  const studentName = `${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''}`.trim();
+  const lineItemsTotal = displayLineItems.reduce((s, fi) => s + (fi.amount || 0), 0);
+  const totalAmount = Math.max(0, lineItemsTotal - discount + fine);
 
   return `<div class="vc">
   <div class="vc-head">
@@ -2012,8 +2030,12 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     </tr>
     <tr>
       <td class="lbl">Name</td>
-      <td class="val" colspan="4">${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''} ${fatherName !== '—' ? `(S/O ${fatherName})` : ''}</td>
+      <td class="val" colspan="4">${studentName || '—'}</td>
     </tr>
+    ${fatherName !== '—' ? `<tr>
+      <td class="lbl">Father Name</td>
+      <td class="val" colspan="4">${fatherName}</td>
+    </tr>` : ''}
     <tr>
       <td class="lbl">Adm #</td>
       <td class="val">${v.studentId?.admissionNumber || '—'}</td>
@@ -2038,24 +2060,13 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       ${itemRows}
       ${discountRow}
       ${fineRow}
-      ${pendingRows}
       ${paidStamp}
     </tbody>
   </table>
   <table class="vc-total">
-    ${paidRows}
-    ${
-      otherPendingTotal > 0
-        ? `<tr><td class="tlbl">Pending Amount (${otherPendingMonths.length} month${otherPendingMonths.length > 1 ? 's' : ''}):</td><td class="tamt">${otherPendingTotal.toLocaleString()}/-</td></tr>`
-        : ''
-    }
     <tr>
-      <td class="tlbl">Current Voucher (Rs.):</td>
-      <td class="tamt">${netPayable.toLocaleString()}/-</td>
-    </tr>
-    <tr>
-      <td class="tlbl">Total with Pending (Rs.):</td>
-      <td class="tamt">${grandWithPending.toLocaleString()}/-</td>
+      <td class="tlbl">Total Amount (Rs.):</td>
+      <td class="tamt">${totalAmount.toLocaleString()}/-</td>
     </tr>
   </table>
   <div class="vc-sigs">

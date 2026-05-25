@@ -316,7 +316,9 @@ const getExamStudents = catchAsync(async (req, res) => {
   const { classIds } = await resolveAssignedScope(teacher, scope);
   if (!classIds.length || !req.query.examId) return res.send([]);
 
-  const exam = await Exam.findOne({ ...scope, _id: req.query.examId }).lean();
+  const exam = await Exam.findOne({ ...scope, _id: req.query.examId })
+    .populate({ path: 'subjects.subjectId', select: 'name code' })
+    .lean();
   if (!exam || !classIds.includes(String(exam.classId))) {
     throw new ApiError(httpStatus.FORBIDDEN, 'Exam not in your assigned classes');
   }

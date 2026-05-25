@@ -119,6 +119,15 @@ const feeVoucherSchema = mongoose.Schema(
       type: String,
       trim: true,
     },
+    voucherType: {
+      type: String,
+      enum: ['monthly', 'exam', 'admission', 'misc'],
+      default: 'monthly',
+    },
+    examId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Exam',
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -199,10 +208,22 @@ feeVoucherSchema.pre('save', async function (next) {
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, studentId: 1 });
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, status: 1 });
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, month: 1, year: 1 });
-// Prevent duplicate vouchers for same student+month+year
+feeVoucherSchema.index({ organizationId: 1, branchId: 1, examId: 1 });
+// Prevent duplicate monthly vouchers for same student+month+year
 feeVoucherSchema.index(
   { organizationId: 1, studentId: 1, month: 1, year: 1 },
-  { unique: true, sparse: true }
+  {
+    unique: true,
+    partialFilterExpression: { voucherType: { $in: ['monthly', 'admission', 'misc'] } },
+  }
+);
+// Prevent duplicate exam fee vouchers per student+exam
+feeVoucherSchema.index(
+  { organizationId: 1, studentId: 1, examId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { voucherType: 'exam', examId: { $exists: true } },
+  }
 );
 
 const FeeVoucher = mongoose.model('FeeVoucher', feeVoucherSchema);

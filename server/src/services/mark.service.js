@@ -28,9 +28,17 @@ const calcGrade = (obtained, total, isAbsent) => {
 };
 
 const createBulkMarks = async (records, context) => {
-  const docs = records.map((r) => {
+  const results = [];
+  for (const r of records) {
     const { percentage, grade } = calcGrade(r.obtainedMarks, r.totalMarks, r.isAbsent);
-    return {
+    const filter = {
+      organizationId: context.organizationId,
+      branchId: context.branchId,
+      examId: r.examId,
+      studentId: r.studentId,
+      subjectId: r.subjectId,
+    };
+    const update = {
       ...r,
       percentage,
       grade,
@@ -38,13 +46,10 @@ const createBulkMarks = async (records, context) => {
       branchId: context.branchId,
       createdBy: context.createdBy,
     };
-  });
-  return Mark.insertMany(docs, { ordered: false }).catch((err) => {
-    if (err.code === 11000) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Duplicate marks entries found');
-    }
-    throw err;
-  });
+    const doc = await Mark.findOneAndUpdate(filter, update, { upsert: true, new: true, runValidators: true });
+    results.push(doc);
+  }
+  return { saved: results.length, results };
 };
 
 const queryMarks = async (filter, options) => {

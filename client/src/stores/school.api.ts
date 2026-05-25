@@ -278,7 +278,15 @@ export const schoolApi = createApi({
     }),
     deleteExam: builder.mutation({
       query: (id) => ({ url: `/exams/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Exam', 'Mark', 'FeeVoucher', 'FeeAccountingDashboard', 'SchoolDashboard'],
+    }),
+    bulkUpdateExams: builder.mutation({
+      query: (data) => ({ url: '/exams/bulk-update', method: 'POST', body: data }),
       invalidatesTags: ['Exam', 'SchoolDashboard'],
+    }),
+    bulkDeleteExams: builder.mutation({
+      query: (data) => ({ url: '/exams/bulk-delete', method: 'POST', body: data }),
+      invalidatesTags: ['Exam', 'Mark', 'FeeVoucher', 'FeeAccountingDashboard', 'SchoolDashboard'],
     }),
 
     // Marks
@@ -742,6 +750,10 @@ export const schoolApi = createApi({
       query: (data) => ({ url: '/fee-vouchers/bulk', method: 'POST', body: data }),
       invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard'],
     }),
+    bulkGenerateExamFeeVouchers: builder.mutation({
+      query: (data) => ({ url: '/fee-vouchers/bulk-exam', method: 'POST', body: data }),
+      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard'],
+    }),
     payFeeVoucher: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/fee-vouchers/${id}/pay`, method: 'POST', body: data }),
       invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
@@ -1158,6 +1170,8 @@ export const {
   useCreateExamMutation,
   useUpdateExamMutation,
   useDeleteExamMutation,
+  useBulkUpdateExamsMutation,
+  useBulkDeleteExamsMutation,
   // Marks
   useGetMarksQuery,
   useGetMarkQuery,
@@ -1278,6 +1292,7 @@ export const {
   useGetFeeVoucherStatsQuery,
   useCreateFeeVoucherMutation,
   useBulkGenerateFeeVouchersMutation,
+  useBulkGenerateExamFeeVouchersMutation,
   usePayFeeVoucherMutation,
   useUpdateFeeVoucherMutation,
   useDeleteFeeVoucherMutation,

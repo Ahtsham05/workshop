@@ -80,6 +80,8 @@ const getVouchers = catchAsync(async (req, res) => {
 
   if (req.query.classId) filter.classId = req.query.classId;
   if (req.query.studentId) filter.studentId = req.query.studentId;
+  if (req.query.examId) filter.examId = req.query.examId;
+  if (req.query.voucherType) filter.voucherType = req.query.voucherType;
   if (req.query.month) filter.month = req.query.month;
   if (req.query.year) filter.year = parseInt(req.query.year, 10);
   if (req.query.status) filter.status = req.query.status;
@@ -272,9 +274,24 @@ const getYearlyFeeReport = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const bulkGenerateExamVouchers = catchAsync(async (req, res) => {
+  const scope = {
+    organizationId: req.user.organizationId,
+    branchId: req.branchId,
+    createdBy: req.user._id,
+  };
+  const { examId, amount, dueDate } = req.body;
+  const result = await feeVoucherService.bulkGenerateExamVouchers(examId, scope, { amount, dueDate });
+  res.status(httpStatus.CREATED).send({
+    message: 'Exam fee vouchers generated',
+    ...result,
+  });
+});
+
 module.exports = {
   createVoucher,
   bulkGenerateVouchers,
+  bulkGenerateExamVouchers,
   getVouchers,
   getVoucher,
   getStudentVouchers,

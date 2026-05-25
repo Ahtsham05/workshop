@@ -73,6 +73,8 @@ const getStudents = catchAsync(async (req, res) => {
     filter.$or = [
       { firstName: { $regex: escaped, $options: 'i' } },
       { lastName: { $regex: escaped, $options: 'i' } },
+      { rollNumber: { $regex: escaped, $options: 'i' } },
+      { 'parent.fatherName': { $regex: escaped, $options: 'i' } },
       { 'parent.phone': { $regex: escaped, $options: 'i' } },
       { admissionNumber: { $regex: escaped, $options: 'i' } },
     ];

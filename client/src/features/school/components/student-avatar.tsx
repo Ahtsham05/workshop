@@ -69,7 +69,7 @@ export function StudentAvatar({ photoUrl, gender, className = '', style }: Stude
       }}
     >
       {photoUrl ? (
-        <img src={photoUrl} alt="Student" className="w-full h-full object-cover" />
+        <img src={photoUrl} alt="Student" loading="lazy" decoding="async" className="w-full h-full object-cover" />
       ) : (
         isFemale ? <FemaleSVG /> : <MaleSVG />
       )}

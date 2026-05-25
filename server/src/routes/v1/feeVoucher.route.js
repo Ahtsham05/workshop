@@ -15,6 +15,7 @@ router
   .get(validate(feeVoucherValidation.getVouchers), feeVoucherController.getVouchers);
 
 router.route('/bulk').post(validate(feeVoucherValidation.bulkGenerateVouchers), feeVoucherController.bulkGenerateVouchers);
+router.route('/bulk-exam').post(validate(feeVoucherValidation.bulkGenerateExamVouchers), feeVoucherController.bulkGenerateExamVouchers);
 router.route('/print').post(validate(feeVoucherValidation.getVouchersForPrint), feeVoucherController.getVouchersForPrint);
 router.route('/stats').get(feeVoucherController.getDashboardStats);
 router.route('/reconcile').post(feeVoucherController.reconcileVouchers);

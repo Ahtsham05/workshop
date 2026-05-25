@@ -89,6 +89,25 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => 
       );
       logger.info('Created expensecategories unique index with transactionType');
     }
+
+    const feeVouchersCol = db.collection('feevouchers');
+    const feeVoucherIndexes = await feeVouchersCol.indexes();
+    // Drop legacy unique index that blocked exam + monthly vouchers in the same calendar month
+    const staleFeeVoucherIndexes = feeVoucherIndexes.filter(
+      (i) =>
+        i.unique &&
+        i.key &&
+        i.key.organizationId !== undefined &&
+        i.key.studentId !== undefined &&
+        i.key.month !== undefined &&
+        i.key.year !== undefined &&
+        i.key.examId === undefined &&
+        !i.partialFilterExpression,
+    );
+    for (const idx of staleFeeVoucherIndexes) {
+      await feeVouchersCol.dropIndex(idx.name);
+      logger.info(`Dropped stale feevouchers index: ${idx.name}`);
+    }
   } catch (err) {
     logger.warn('Index migration warning (non-fatal):', err.message);
   }

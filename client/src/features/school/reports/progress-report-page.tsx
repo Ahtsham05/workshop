@@ -2,25 +2,22 @@
  * Student Progress Report — printable A4 report card
  * /school/reports/progress
  */
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   Printer, User, BookOpen, CreditCard,
-  CheckCircle2, ChevronsUpDown, Check, Search,
+  CheckCircle2, Search,
 } from 'lucide-react';
 import {
-  useGetStudentsQuery,
   useGetExamsQuery,
   useGetStudentProgressReportQuery,
-  useGetSchoolClassesQuery,
 } from '@/stores/school.api';
 import StudentAvatar from '../components/student-avatar';
+import StudentSearchPicker from '../components/student-search-picker';
 
 // ─── Grade colours ───────────────────────────────────────────────────────────
 
@@ -242,13 +239,9 @@ function SummaryBox({ title, rows, accent }: { title: string; rows: [string, str
 export default function ProgressReportPage() {
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedExam, setSelectedExam] = useState('all');
-  const [classFilter, setClassFilter] = useState('all');
-  const [studentOpen, setStudentOpen] = useState(false);
   const printRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: studentsData, isLoading: studentsLoading } = useGetStudentsQuery({ limit: 100, status: 'active' });
   const { data: examsData } = useGetExamsQuery({ limit: 100 });
-  const { data: classesData } = useGetSchoolClassesQuery({ limit: 100, sortBy: 'order:asc' });
 
   const skip = !selectedStudent;
   const { data: reportData, isLoading: reportLoading, isFetching } = useGetStudentProgressReportQuery(
@@ -268,24 +261,7 @@ export default function ProgressReportPage() {
     `,
   });
 
-  const allStudents = studentsData?.results ?? [];
   const exams = examsData?.results ?? [];
-  const classes = classesData?.results ?? [];
-
-  // Filter students by class
-  const filteredStudents = useMemo(() => {
-    if (classFilter === 'all') return allStudents;
-    return allStudents.filter((s: any) => {
-      const cId = s.classId?._id || s.classId?.id || s.classId;
-      return cId === classFilter;
-    });
-  }, [allStudents, classFilter]);
-
-  // Find selected student object for display
-  const selectedStudentObj = allStudents.find((s: any) => (s.id || s._id) === selectedStudent);
-  const selectedStudentLabel = selectedStudentObj
-    ? `${selectedStudentObj.firstName} ${selectedStudentObj.lastName || ''} — ${selectedStudentObj.admissionNumber}`.trim()
-    : '';
 
   const loading = reportLoading || isFetching;
 
@@ -310,83 +286,14 @@ export default function ProgressReportPage() {
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
             {/* Searchable Student Picker */}
             <div className="sm:col-span-6 min-w-0">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Student *</p>
-              <Popover open={studentOpen} onOpenChange={setStudentOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={studentOpen}
-                    title={selectedStudentLabel || (studentsLoading ? 'Loading…' : 'Search student…')}
-                    className="w-full min-w-0 justify-between gap-2 font-normal h-9 text-sm"
-                  >
-                    <span className="truncate text-left">
-                      {selectedStudentLabel || (studentsLoading ? 'Loading…' : 'Search student…')}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[340px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search by name, admission no…" />
-                    {/* Class filter inside the picker */}
-                    {classes.length > 1 && (
-                      <div className="px-2 py-1.5 border-b">
-                        <Select value={classFilter} onValueChange={setClassFilter}>
-                          <SelectTrigger className="h-8 text-xs [&>span]:truncate">
-                            <SelectValue placeholder="All Classes" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Classes</SelectItem>
-                          {classes.map((c: any) => (
-                            <SelectItem key={c.id || c._id} value={c.id || c._id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    <CommandList>
-                      <CommandEmpty>No student found.</CommandEmpty>
-                      <CommandGroup>
-                        {filteredStudents.map((s: any) => {
-                          const sid = s.id || s._id;
-                          const label = `${s.firstName} ${s.lastName || ''}`.trim();
-                          return (
-                            <CommandItem
-                              key={sid}
-                              value={`${label} ${s.admissionNumber} ${s.classId?.name || ''}`}
-                              onSelect={() => {
-                                setSelectedStudent(sid);
-                                setSelectedExam('all');
-                                setStudentOpen(false);
-                              }}
-                            >
-                              <div className="flex items-center gap-2 w-full">
-                                <StudentAvatar
-                                  photoUrl={s.photoUrl?.url}
-                                  gender={s.gender}
-                                  className="h-6 w-6 rounded-full shrink-0"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium truncate">{label}</div>
-                                  <div className="text-xs text-muted-foreground truncate">
-                                    {s.admissionNumber} · {s.classId?.name || ''}
-                                  </div>
-                                </div>
-                                {sid === selectedStudent && (
-                                  <Check className="h-4 w-4 text-blue-600 shrink-0" />
-                                )}
-                              </div>
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <StudentSearchPicker
+                label="Student *"
+                value={selectedStudent}
+                onChange={(sid) => {
+                  setSelectedStudent(sid);
+                  setSelectedExam('all');
+                }}
+              />
             </div>
 
             {/* Exam filter */}
