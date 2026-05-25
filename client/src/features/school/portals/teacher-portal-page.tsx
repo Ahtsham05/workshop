@@ -56,6 +56,13 @@ const ATT_COLORS: Record<AttStatus, string> = {
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+type TeacherSubjectCol = {
+  id: string;
+  name: string;
+  totalMarks: number;
+  passingMarks: number;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function today() {
@@ -218,7 +225,7 @@ export default function TeacherPortalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedExamId, examStudentsData]);
 
-  const teacherSubjectColumns = useMemo(() => {
+  const teacherSubjectColumns = useMemo((): TeacherSubjectCol[] => {
     const exam = examStudentsData?.exam as any;
     const subjectLookup = new Map(
       (subjects as any[]).map((s) => [String(s._id || s.id), s.name])
