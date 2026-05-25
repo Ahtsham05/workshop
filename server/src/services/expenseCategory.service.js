@@ -67,13 +67,6 @@ const normalizeTransactionType = (value) => {
 };
 
 const seedDefaultsForType = async (organizationId, branchId, userId, transactionType) => {
-  const existing = await ExpenseCategory.countDocuments({
-    organizationId,
-    branchId,
-    transactionType,
-  });
-  if (existing > 0) return;
-
   const defaults =
     transactionType === 'business_expense'
       ? BUSINESS_EXPENSE_DEFAULTS
@@ -81,17 +74,25 @@ const seedDefaultsForType = async (organizationId, branchId, userId, transaction
 
   if (defaults.length === 0) return;
 
-  await ExpenseCategory.insertMany(
-    defaults.map((c) => ({
-      organizationId,
-      branchId,
-      name: c.name,
-      color: c.color,
-      transactionType,
-      isDefault: true,
-      createdBy: userId,
-    })),
-  );
+  const ops = defaults.map((c) => ({
+    updateOne: {
+      filter: { organizationId, branchId, name: c.name, transactionType },
+      update: {
+        $setOnInsert: {
+          organizationId,
+          branchId,
+          name: c.name,
+          color: c.color,
+          transactionType,
+          isDefault: true,
+          createdBy: userId,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  await ExpenseCategory.bulkWrite(ops, { ordered: false });
 };
 
 const getCategories = async (organizationId, branchId, userId, transactionType = 'business_expense') => {
@@ -120,14 +121,21 @@ const createCategory = async (data, organizationId, branchId, userId) => {
     throw new ApiError(httpStatus.CONFLICT, `Category "${name}" already exists`);
   }
 
-  return ExpenseCategory.create({
-    name,
-    color: data.color || '#6366f1',
-    transactionType,
-    organizationId,
-    branchId,
-    createdBy: userId,
-  });
+  try {
+    return await ExpenseCategory.create({
+      name,
+      color: data.color || '#6366f1',
+      transactionType,
+      organizationId,
+      branchId,
+      createdBy: userId,
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      throw new ApiError(httpStatus.CONFLICT, `Category "${name}" already exists`);
+    }
+    throw err;
+  }
 };
 
 const updateCategory = async (id, data, organizationId) => {

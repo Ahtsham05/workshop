@@ -42,15 +42,52 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => 
   // Drop stale indexes that conflict with the current schema
   try {
     const db = mongoose.connection.db;
+
     const studentsCol = db.collection('students');
-    const indexes = await studentsCol.indexes();
+    const studentIndexes = await studentsCol.indexes();
     // Drop any index referencing the old 'admissionNo' field
-    const staleIndexes = indexes.filter(
+    const staleStudentIndexes = studentIndexes.filter(
       (i) => i.key && (i.key.admissionNo !== undefined || i.name === 'admissionNo_1_organizationId_1')
     );
-    for (const idx of staleIndexes) {
+    for (const idx of staleStudentIndexes) {
       await studentsCol.dropIndex(idx.name);
       logger.info(`Dropped stale students index: ${idx.name}`);
+    }
+
+    const expenseCatCol = db.collection('expensecategories');
+    let expenseCatIndexes = await expenseCatCol.indexes();
+    const staleExpenseCatIndexes = expenseCatIndexes.filter(
+      (i) =>
+        i.unique &&
+        i.key &&
+        i.key.organizationId !== undefined &&
+        i.key.branchId !== undefined &&
+        i.key.name !== undefined &&
+        i.key.transactionType === undefined,
+    );
+    for (const idx of staleExpenseCatIndexes) {
+      await expenseCatCol.dropIndex(idx.name);
+      logger.info(`Dropped stale expensecategories index: ${idx.name}`);
+    }
+
+    const backfill = await expenseCatCol.updateMany(
+      { $or: [{ transactionType: { $exists: false } }, { transactionType: null }] },
+      { $set: { transactionType: 'business_expense' } },
+    );
+    if (backfill.modifiedCount > 0) {
+      logger.info(`Backfilled transactionType on ${backfill.modifiedCount} expense category docs`);
+    }
+
+    expenseCatIndexes = await expenseCatCol.indexes();
+    const hasTransactionTypeIndex = expenseCatIndexes.some(
+      (i) => i.unique && i.key && i.key.transactionType !== undefined,
+    );
+    if (!hasTransactionTypeIndex) {
+      await expenseCatCol.createIndex(
+        { organizationId: 1, branchId: 1, name: 1, transactionType: 1 },
+        { unique: true, name: 'organizationId_1_branchId_1_name_1_transactionType_1' },
+      );
+      logger.info('Created expensecategories unique index with transactionType');
     }
   } catch (err) {
     logger.warn('Index migration warning (non-fatal):', err.message);
