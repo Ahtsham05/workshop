@@ -18,7 +18,10 @@ const getWallets = catchAsync(async (req, res) => {
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await walletService.queryWallets(filter, options);
-  res.send(result);
+  res.send({
+    ...result,
+    results: result.results.map((doc) => (typeof doc.toJSON === 'function' ? doc.toJSON() : doc)),
+  });
 });
 
 const deleteWallet = catchAsync(async (req, res) => {

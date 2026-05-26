@@ -490,6 +490,13 @@ export const mobileShopApi = createApi({
     }),
     getWallets: builder.query<PaginatedResult<WalletRecord>, void>({
       query: () => '/wallets?limit=100',
+      transformResponse: (response: PaginatedResult<WalletRecord & { _id?: string }>) => ({
+        ...response,
+        results: (response.results || []).map((w) => ({
+          ...w,
+          id: w.id || (w._id != null ? String(w._id) : ''),
+        })),
+      }),
       providesTags: ['Wallets'],
     }),
     upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; id?: string }>({
