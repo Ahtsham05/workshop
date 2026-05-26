@@ -1,6 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
+import {
+  CustomerAccountTypePicker,
+  resolveAccountTypeLabel,
+} from '../components/customer-account-type-picker'
+import { useGetCustomerAccountTypesQuery } from '@/stores/customerAccountType.api'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
@@ -121,7 +126,7 @@ type WithdrawalFormState = {
   customerId: string
   customerName: string
   customerNumber: string
-  customerAccountType: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
+  customerAccountType: string
   commissionRate: string
   extraCharge: string
   notes: string
@@ -132,7 +137,7 @@ type BulkWithdrawalEntry = {
   amount: string
   customerName: string
   customerNumber: string
-  customerAccountType: 'jazzcash' | 'easypaisa' | 'bank' | 'other'
+  customerAccountType: string
   extraCharge: string
   notes: string
 }
@@ -154,13 +159,6 @@ const makeEmptyBulkEntry = (): BulkWithdrawalEntry => ({
   extraCharge: '0',
   notes: '',
 })
-
-const customerAccountTypeOptions: Array<{ value: 'jazzcash' | 'easypaisa' | 'bank' | 'other'; label: string }> = [
-  { value: 'jazzcash', label: 'JazzCash' },
-  { value: 'easypaisa', label: 'EasyPaisa' },
-  { value: 'bank', label: 'Bank' },
-  { value: 'other', label: 'Other' },
-]
 
 const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   walletId: '',
@@ -224,6 +222,7 @@ type LoadManagementPageProps = {
 export default function LoadManagementPage({ mode = 'load' }: LoadManagementPageProps) {
   const isCashManagementMode = mode === 'cash-management'
   const dispatch = useDispatch<any>()
+  const { data: customerAccountTypes = [] } = useGetCustomerAccountTypesQuery()
 
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchaseForm)
   const [saleForm, setSaleForm] = useState<LoadSaleFormState>(initialSaleForm)
@@ -1729,22 +1728,13 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                                     className='h-8'
                                   />
                                 </td>
-                                <td className='p-2'>
-                                  <Select
+                                <td className='p-2 min-w-[140px]'>
+                                  <CustomerAccountTypePicker
+                                    hideLabel
                                     value={entry.customerAccountType}
-                                    onValueChange={(v) => handleBulkEntryChange(idx, 'customerAccountType', v)}
-                                  >
-                                    <SelectTrigger className='h-8'>
-                                      <SelectValue placeholder='Type' />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {customerAccountTypeOptions.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    onChange={(v) => handleBulkEntryChange(idx, 'customerAccountType', v)}
+                                    triggerClassName='h-8 text-xs'
+                                  />
                                 </td>
                                 <td className='p-2'>
                                   <Input
@@ -1900,24 +1890,11 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                       <Label htmlFor='customer-number'>Customer Account / Phone</Label>
                       <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} {...withdrawalEnter.enterProps('customer-number')} />
                     </div>
-                    <div className='space-y-2'>
-                      <Label htmlFor='customer-account-type'>Account Type</Label>
-                      <Select
-                        value={withdrawalForm.customerAccountType}
-                        onValueChange={(v) => handleWithdrawalChange('customerAccountType', v)}
-                      >
-                        <SelectTrigger id='customer-account-type' {...withdrawalEnter.enterProps('customer-account-type')}>
-                          <SelectValue placeholder='Select account type' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customerAccountTypeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <CustomerAccountTypePicker
+                      id='customer-account-type'
+                      value={withdrawalForm.customerAccountType}
+                      onChange={(v) => handleWithdrawalChange('customerAccountType', v)}
+                    />
                   </div>
 
                   <div className='space-y-2'>
@@ -2106,7 +2083,9 @@ export default function LoadManagementPage({ mode = 'load' }: LoadManagementPage
                           <TableCell className='font-medium'>{w.walletType}</TableCell>
                           <TableCell>{w.customerName?.trim() ? w.customerName : 'Walk-in Customer'}</TableCell>
                           <TableCell>{w.customerNumber || '-'}</TableCell>
-                          <TableCell className='capitalize'>{w.customerAccountType || '-'}</TableCell>
+                          <TableCell>
+                            {resolveAccountTypeLabel(w.customerAccountType, customerAccountTypes)}
+                          </TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}>
                             {w.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(w.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
                           </TableCell>

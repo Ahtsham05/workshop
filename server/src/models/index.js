@@ -12,6 +12,7 @@ module.exports.GeneralLedger = require('./generalLedger.model');
 module.exports.Voucher = require('./voucher.model');
 module.exports.Expense = require('./expense.model');
 module.exports.ExpenseCategory = require('./expenseCategory.model');
+module.exports.CustomerAccountType = require('./customerAccountType.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
 module.exports.PersonalLedger = require('./personalLedger.model');

@@ -56,7 +56,7 @@ const cashWithdrawalSchema = new mongoose.Schema(
     },
     customerAccountType: {
       type: String,
-      enum: ['jazzcash', 'easypaisa', 'bank', 'other'],
+      trim: true,
       default: 'other',
     },
     commissionRate: {

@@ -1,9 +1,25 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableFooter,
+} from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +34,11 @@ import {
   Search,
   ArrowDownLeft,
   ArrowUpRight,
+  Receipt,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  X,
 } from 'lucide-react';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -71,6 +92,21 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+
+const UNCATEGORIZED = 'Uncategorized';
+
+const CATEGORY_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
+  '#6366f1', '#94a3b8',
+];
+
+interface CategoryBreakdown {
+  _id: string;
+  totalAmount: number;
+  expenseCount: number;
+  avgAmount: number;
+}
 
 function EntryForm({
   editingEntry,
@@ -284,6 +320,10 @@ export function PersonalLedger() {
   const [startDate, setStartDate] = useState(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [openingBalanceValue, setOpeningBalanceValue] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [categoryDetailEntries, setCategoryDetailEntries] = useState<LedgerEntry[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchEntries();
@@ -395,6 +435,7 @@ export function PersonalLedger() {
     e.preventDefault();
     setCurrentPage(1);
     fetchEntries();
+    fetchReportEntries();
   };
 
   const handleDelete = async (entry: LedgerEntry) => {
@@ -423,6 +464,71 @@ export function PersonalLedger() {
     fetchOpeningBalance();
     fetchSummary();
   };
+
+  const resolveCategoryName = useCallback(
+    (entry: LedgerEntry) => entry.category?.trim() || UNCATEGORIZED,
+    [],
+  );
+
+  const expenseCategoryBreakdown = useMemo((): CategoryBreakdown[] => {
+    const map = new Map<string, { totalAmount: number; expenseCount: number }>();
+    for (const entry of reportEntries) {
+      if (entry.transactionType !== 'expense' || !(entry.debit > 0)) continue;
+      const cat = resolveCategoryName(entry);
+      const existing = map.get(cat) || { totalAmount: 0, expenseCount: 0 };
+      existing.totalAmount += entry.debit;
+      existing.expenseCount += 1;
+      map.set(cat, existing);
+    }
+    return Array.from(map.entries())
+      .map(([name, data]) => ({
+        _id: name,
+        totalAmount: data.totalAmount,
+        expenseCount: data.expenseCount,
+        avgAmount: data.expenseCount ? data.totalAmount / data.expenseCount : 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [reportEntries, resolveCategoryName]);
+
+  const totalWalletExpenses = useMemo(
+    () => expenseCategoryBreakdown.reduce((sum, c) => sum + c.totalAmount, 0),
+    [expenseCategoryBreakdown],
+  );
+
+  const openCategoryDetail = useCallback(
+    (catName: string) => {
+      setActiveCategory(catName);
+      setSheetOpen(true);
+      setExpandedRows(new Set());
+      const filtered = reportEntries.filter((entry) => {
+        if (entry.transactionType !== 'expense' || !(entry.debit > 0)) return false;
+        return resolveCategoryName(entry) === catName;
+      });
+      setCategoryDetailEntries(filtered);
+    },
+    [reportEntries, resolveCategoryName],
+  );
+
+  const toggleRow = useCallback((i: number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }, []);
+
+  const toggleAllDetailRows = useCallback(() => {
+    setExpandedRows((prev) => {
+      if (prev.size === categoryDetailEntries.length) return new Set();
+      return new Set(categoryDetailEntries.map((_, i) => i));
+    });
+  }, [categoryDetailEntries]);
+
+  const categoryDetailTotal = useMemo(
+    () => categoryDetailEntries.reduce((sum, e) => sum + (e.debit || 0), 0),
+    [categoryDetailEntries],
+  );
 
   const reportAnalytics = useMemo(() => {
     if (!reportEntries.length) {
@@ -590,6 +696,61 @@ export function PersonalLedger() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Wallet expenses by category */}
+      {expenseCategoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('expense_by_category')}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t('Click a category to view its details')}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {expenseCategoryBreakdown.map((cat, idx) => {
+                const share = totalWalletExpenses
+                  ? ((cat.totalAmount / totalWalletExpenses) * 100).toFixed(1)
+                  : '0';
+                const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                return (
+                  <button
+                    key={cat._id}
+                    type="button"
+                    onClick={() => openCategoryDetail(cat._id)}
+                    className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
+                        style={{ backgroundColor: color }}
+                      >
+                        {cat._id.charAt(0).toUpperCase()}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">{share}%</Badge>
+                    </div>
+                    <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
+                    <p className="text-xl font-bold" style={{ color }}>{formatCurrency(cat.totalAmount)}</p>
+                    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{cat.expenseCount} {t('entries')}</span>
+                      <span>{t('avg')} {formatCurrency(cat.avgAmount)}</span>
+                    </div>
+                    <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${share}%`, backgroundColor: color }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                      {t('Click to view details →')}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -780,6 +941,133 @@ export function PersonalLedger() {
           )}
         </CardContent>
       </Card>
+
+      {/* Category expense detail panel */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="text-lg">
+                {activeCategory} — {t('Expense Details')}
+              </SheetTitle>
+              <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {categoryDetailEntries.length > 0 && (
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-sm text-muted-foreground">
+                  {categoryDetailEntries.length} {t('entries')} · {formatCurrency(categoryDetailTotal)} {t('total')}
+                </p>
+                <Button variant="outline" size="sm" onClick={toggleAllDetailRows} className="h-7 text-xs gap-1">
+                  <ChevronsUpDown className="h-3 w-3" />
+                  {expandedRows.size === categoryDetailEntries.length ? t('Collapse All') : t('Expand All')}
+                </Button>
+              </div>
+            )}
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {reportLoading ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
+            ) : categoryDetailEntries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                <Receipt className="h-10 w-10 mb-2 opacity-30" />
+                <p>{t('No expenses found for this category')}</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>{t('Date')}</TableHead>
+                    <TableHead>{t('Description')}</TableHead>
+                    <TableHead>{t('Payment')}</TableHead>
+                    <TableHead className="text-right">{t('Amount')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categoryDetailEntries.map((entry, idx) => (
+                    <Fragment key={entry.id || entry._id || idx}>
+                      <TableRow
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => toggleRow(idx)}
+                      >
+                        <TableCell className="py-2">
+                          {expandedRows.has(idx)
+                            ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                            : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </TableCell>
+                        <TableCell className="py-2 text-sm whitespace-nowrap">
+                          {format(new Date(entry.transactionDate), 'dd MMM yyyy')}
+                        </TableCell>
+                        <TableCell className="py-2 text-sm font-medium">{entry.description}</TableCell>
+                        <TableCell className="py-2">
+                          <Badge variant="outline" className="text-xs">
+                            {entry.paymentMethod || '—'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-2 text-right font-semibold text-sm text-red-600">
+                          {formatCurrency(entry.debit)}
+                        </TableCell>
+                      </TableRow>
+                      {expandedRows.has(idx) && (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell />
+                          <TableCell colSpan={4} className="py-3 px-4">
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                              <div>
+                                <span className="font-medium text-foreground">{t('Reference')}: </span>
+                                {entry.reference || '—'}
+                              </div>
+                              <div>
+                                <span className="font-medium text-foreground">{t('Category')}: </span>
+                                {entry.category || UNCATEGORIZED}
+                              </div>
+                              {entry.notes && (
+                                <div className="col-span-2">
+                                  <span className="font-medium text-foreground">{t('Notes')}: </span>
+                                  {entry.notes}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={4} className="font-semibold">
+                      {t('Total')}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-base text-red-600">
+                      {formatCurrency(categoryDetailTotal)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            )}
+          </div>
+
+          {categoryDetailEntries.length > 0 && (
+            <div className="border-t px-6 py-4 flex-shrink-0">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">
+                  {format(new Date(startDate), 'dd MMM yyyy')} — {format(new Date(endDate), 'dd MMM yyyy')}
+                </span>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">{t('Total Expense')}</p>
+                  <p className="font-bold text-lg text-red-600">{formatCurrency(categoryDetailTotal)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

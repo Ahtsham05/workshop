@@ -13,6 +13,7 @@ const purchaseOrderRoute = require('./purchaseOrder.route');
 const invoiceRoute = require('./invoice.route');
 const expenseRoute = require('./expense.route');
 const expenseCategoryRoute = require('./expenseCategory.route');
+const customerAccountTypeRoute = require('./customerAccountType.route');
 const customerLedgerRoute = require('./customerLedger.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
 const personalLedgerRoute = require('./personalLedger.route');
@@ -149,6 +150,10 @@ const defaultRoutes = [
   {
     path: '/expense-categories',
     route: expenseCategoryRoute
+  },
+  {
+    path: '/customer-account-types',
+    route: customerAccountTypeRoute
   },
   {
     path: '/customer-ledger',

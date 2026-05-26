@@ -24,6 +24,7 @@ import { mobileShopApi } from './mobile-shop.api';
 import { returnsApi } from './returns.api';
 import { schoolApi } from './school.api';
 import { expenseCategoryApi } from './expenseCategory.api';
+import { customerAccountTypeApi } from './customerAccountType.api';
 import { restaurantApi } from './restaurant.api';
 import { businessWhatsappApi } from './businessWhatsapp.api';
 import { cashRegisterApi } from './cashRegister.api';
@@ -55,6 +56,7 @@ export const store = configureStore({
     [returnsApi.reducerPath]: returnsApi.reducer,
     [schoolApi.reducerPath]: schoolApi.reducer,
     [expenseCategoryApi.reducerPath]: expenseCategoryApi.reducer,
+    [customerAccountTypeApi.reducerPath]: customerAccountTypeApi.reducer,
     [restaurantApi.reducerPath]: restaurantApi.reducer,
     [businessWhatsappApi.reducerPath]: businessWhatsappApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
@@ -80,6 +82,7 @@ export const store = configureStore({
       returnsApi.middleware,
       schoolApi.middleware,
       expenseCategoryApi.middleware,
+      customerAccountTypeApi.middleware,
       restaurantApi.middleware,
       businessWhatsappApi.middleware,
       cashRegisterApi.middleware,
