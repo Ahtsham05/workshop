@@ -6,6 +6,19 @@ export type WalletLike = {
   commissionRate?: number
   withdrawalCommissionRate?: number
   depositCommissionRate?: number
+  updatedAt?: string
+  isActive?: boolean
+}
+
+/** Wallets whose name contains "load" use load purchase/sale flows */
+export const isLoadWalletName = (name: string) => /load/i.test(name)
+
+export function filterLoadWallets<T extends WalletLike>(wallets: T[]): T[] {
+  return wallets.filter((w) => isLoadWalletName(w.type || ''))
+}
+
+export function filterCashWallets<T extends WalletLike>(wallets: T[]): T[] {
+  return wallets.filter((w) => !isLoadWalletName(w.type || ''))
 }
 
 /** Normalize wallet id from API (id or legacy _id) */

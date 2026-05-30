@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { resolveWalletId } from '@/features/mobile-shop/utils/wallet-utils'
+import { isLoadWalletName, resolveWalletId } from '@/features/mobile-shop/utils/wallet-utils'
 import {
   makeEnterChain,
   MOBILE_FORM_KEYBOARD_HINT,
@@ -48,9 +48,6 @@ const formatWalletBalance = (value?: number) => {
   const safeValue = Number.isFinite(numericValue) ? numericValue : 0
   return safeValue.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-
-/** Wallets whose name contains "load" use load purchase/sale flows */
-export const isLoadWalletName = (name: string) => /load/i.test(name)
 
 type WalletRecord = {
   id: string

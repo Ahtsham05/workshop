@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
-import { useRouterState } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { store } from '@/stores/store'
 import {
@@ -8,8 +8,15 @@ import {
   findWalletForNavigation,
   readWalletNavFromUrl,
   mergeWalletNavSearch,
+  filterLoadWallets,
+  filterCashWallets,
+  isLoadWalletName,
   type WalletLike,
 } from '@/features/mobile-shop/utils/wallet-utils'
+import {
+  WalletSelectionGrid,
+  type WalletSelectionAction,
+} from '@/features/mobile-shop/components/wallet-selection-grid'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
   CustomerAccountTypePicker,
@@ -71,7 +78,7 @@ import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
@@ -284,6 +291,7 @@ export default function LoadManagementPage({
   initialAction,
 }: LoadManagementPageProps) {
   const isCashManagementMode = mode === 'cash-management'
+  const navigate = useNavigate()
   const dispatch = useDispatch<any>()
   const { data: customerAccountTypes = [] } = useGetCustomerAccountTypesQuery()
 
@@ -309,7 +317,7 @@ export default function LoadManagementPage({
   const navTab = mergedNav.tab
   const hasNavWalletTarget = Boolean(navWalletId?.trim() || navWalletType?.trim())
 
-  const { data: walletsData } = useGetWalletsQuery(undefined, {
+  const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery(undefined, {
     refetchOnMountOrArgChange: false,
   })
 
@@ -318,8 +326,106 @@ export default function LoadManagementPage({
     [walletsData?.results],
   )
 
+  const pageWallets = useMemo(
+    () => (isCashManagementMode ? filterCashWallets(wallets) : filterLoadWallets(wallets)),
+    [wallets, isCashManagementMode],
+  )
+
   const resolveNavWallet = (list: WalletLike[]) =>
     findWalletForNavigation(list, navWalletId, navWalletType)
+
+  const navWallet = useMemo(
+    () => (hasNavWalletTarget ? resolveNavWallet(wallets) : undefined),
+    [hasNavWalletTarget, navWalletId, navWalletType, wallets],
+  )
+
+  const navWalletMatchesPage = useMemo(() => {
+    if (!navWallet) return false
+    const load = isLoadWalletName(navWallet.type || '')
+    return isCashManagementMode ? !load : load
+  }, [navWallet, isCashManagementMode])
+
+  const showWalletPicker = !hasNavWalletTarget || !navWalletMatchesPage
+
+  const managementPath = isCashManagementMode
+    ? '/mobile-shop/cash-management'
+    : '/mobile-shop/load'
+
+  const applyWalletToForms = (
+    wallet: WalletLike,
+    opts?: { tab?: 'purchase' | 'sell'; action?: 'withdrawal' | 'deposit' },
+  ) => {
+    const walletId = resolveWalletId(wallet) || navWalletId?.trim() || ''
+    const walletType = wallet.type?.trim() || navWalletType || ''
+
+    if (isCashManagementMode) {
+      const txAction = opts?.action ?? navAction ?? 'withdrawal'
+      const next = buildWithdrawalFormWithWallet(wallet, txAction)
+      setWithdrawalForm(next)
+      setBulkWithdrawalForm((prev) => ({
+        ...prev,
+        walletId: next.walletId || walletId,
+        walletType: next.walletType || walletType,
+        transactionType: next.transactionType,
+        commissionRate: next.commissionRate,
+      }))
+      setActiveTab('withdrawal')
+      return
+    }
+
+    const tab = opts?.tab ?? (navTab === 'purchase' ? 'purchase' : 'sell')
+    setActiveTab(tab)
+    const commission = String(wallet.commissionRate ?? 0)
+    const patchWallet = (prev: { walletId: string; walletType: string; commissionRate: string }) => {
+      if (prev.walletId === walletId && prev.walletType === walletType && prev.commissionRate === commission) {
+        return prev
+      }
+      return { ...prev, walletId, walletType, commissionRate: commission }
+    }
+    setPurchaseForm(patchWallet)
+    setSaleForm(patchWallet)
+  }
+
+  const selectWallet = (wallet: WalletLike, action?: WalletSelectionAction) => {
+    const walletId = resolveWalletId(wallet)
+    const walletType = wallet.type?.trim()
+    if (!walletId && !walletType) return
+
+    const tab = action && 'tab' in action ? action.tab : undefined
+    const txAction = action && 'action' in action ? action.action : undefined
+
+    applyWalletToForms(wallet, { tab, action: txAction })
+
+    navigate({
+      to: managementPath,
+      search: {
+        walletId: walletId || undefined,
+        walletType: walletType || undefined,
+        ...(isCashManagementMode
+          ? { action: txAction ?? 'withdrawal' }
+          : { tab: tab ?? 'sell' }),
+      },
+    })
+  }
+
+  const handleLoadTabChange = (value: string) => {
+    setActiveTab(value)
+    if (!navWallet || isCashManagementMode) return
+    const tab = value === 'purchase' ? 'purchase' : 'sell'
+    applyWalletToForms(navWallet, { tab })
+    navigate({
+      to: managementPath,
+      search: {
+        walletId: resolveWalletId(navWallet) || navWalletId || undefined,
+        walletType: navWallet.type?.trim() || navWalletType || undefined,
+        tab,
+      },
+    })
+  }
+
+  const clearWalletSelection = () => {
+    navigate({ to: managementPath, search: {} })
+  }
 
   const navWalletAtInit =
     resolveNavWallet(getCachedWalletsFromStore()) ?? resolveNavWallet(wallets)
@@ -359,6 +465,15 @@ export default function LoadManagementPage({
       commissionRate: base.commissionRate,
     }
   })
+
+  const selectedPurchaseWalletId =
+    purchaseForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
+  const selectedSaleWalletId =
+    saleForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
+  const selectedWithdrawalWalletId =
+    withdrawalForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
+  const selectedBulkWalletId =
+    bulkWithdrawalForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
 
   // Pagination state for each history table
   const [purchasePage, setPurchasePage] = useState(1)
@@ -417,53 +532,19 @@ export default function LoadManagementPage({
   }, [dispatch, suppliers.length])
 
   useLayoutEffect(() => {
-    if (!hasNavWalletTarget || wallets.length === 0) return
-
-    const wallet = resolveNavWallet(wallets)
-    if (!wallet) return
-
-    const walletId = resolveWalletId(wallet)
-    if (!walletId) return
-
-    if (isCashManagementMode) {
-      const next = buildWithdrawalFormWithWallet(wallet, navAction)
-      setWithdrawalForm((prev) =>
-        prev.walletId === next.walletId && prev.transactionType === next.transactionType
-          ? prev
-          : next,
-      )
-      setBulkWithdrawalForm((prev) =>
-        prev.walletId === next.walletId && prev.transactionType === next.transactionType
-          ? prev
-          : {
-              ...prev,
-              walletId: next.walletId,
-              walletType: next.walletType,
-              transactionType: next.transactionType,
-              commissionRate: next.commissionRate,
-            },
-      )
-      setActiveTab('withdrawal')
-      return
-    }
-
-    const tab = navTab === 'purchase' ? 'purchase' : 'sell'
-    setActiveTab(tab)
-    if (tab === 'purchase') {
-      const next = buildPurchaseFormWithWallet(wallet)
-      setPurchaseForm((prev) => (prev.walletId === next.walletId ? prev : next))
-    } else {
-      const next = buildSaleFormWithWallet(wallet)
-      setSaleForm((prev) => (prev.walletId === next.walletId ? prev : next))
-    }
+    if (showWalletPicker || !navWallet) return
+    applyWalletToForms(navWallet, {
+      tab: navTab === 'purchase' ? 'purchase' : 'sell',
+      action: navAction,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync forms when URL wallet changes
   }, [
-    hasNavWalletTarget,
+    showWalletPicker,
     navWalletId,
     navWalletType,
     navTab,
     navAction,
     isCashManagementMode,
-    wallets,
     wallets.length,
   ])
 
@@ -1274,7 +1355,32 @@ export default function LoadManagementPage({
         invoiceNote={branchData?.invoiceNote}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {showWalletPicker ? (
+        <WalletSelectionGrid
+          wallets={pageWallets}
+          variant={isCashManagementMode ? 'cash' : 'load'}
+          isLoading={walletsLoading}
+          onWalletAction={selectWallet}
+        />
+      ) : (
+      <>
+      {navWallet ? (
+        <div className='mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3'>
+          <div className='min-w-0'>
+            <p className='text-xs text-muted-foreground'>Selected wallet</p>
+            <p className='truncate font-semibold'>{navWallet.type}</p>
+            <p className='text-sm text-green-600'>
+              Rs {Number(navWallet.balance ?? 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <Button type='button' variant='outline' size='sm' onClick={clearWalletSelection}>
+            <ArrowLeft className='mr-1.5 h-4 w-4' />
+            Change wallet
+          </Button>
+        </div>
+      ) : null}
+
+      <Tabs value={activeTab} onValueChange={isCashManagementMode ? setActiveTab : handleLoadTabChange}>
         {!isCashManagementMode && (
           <TabsList className='mb-4'>
             <TabsTrigger value='purchase'>📥 Purchase Load</TabsTrigger>
@@ -1296,22 +1402,22 @@ export default function LoadManagementPage({
                     <div className='space-y-2'>
                       <Label htmlFor='purchase-wallet'>Select Wallet *</Label>
                       <Select
-                        value={purchaseForm.walletId || undefined}
+                        value={selectedPurchaseWalletId || undefined}
                         onValueChange={(v) => handlePurchaseChange('walletId', v)}
                       >
                         <SelectTrigger id='purchase-wallet' {...purchaseEnter.enterProps('purchase-wallet')}>
-                          {purchaseForm.walletId ? (
+                          {selectedPurchaseWalletId ? (
                             <span className='truncate'>
-                              {formatWalletSelectLabel(purchaseForm.walletId, purchaseForm.walletType)}
+                              {formatWalletSelectLabel(selectedPurchaseWalletId, purchaseForm.walletType)}
                             </span>
                           ) : (
                             <SelectValue placeholder='Choose wallet...' />
                           )}
                         </SelectTrigger>
                         <SelectContent>
-                          {wallets.length === 0 ? (
-                            <div className='p-2 text-sm text-muted-foreground'>No wallets available. Create one in Wallet Management.</div>
-                          ) : wallets.filter((w) => resolveWalletId(w)).map((wallet) => (
+                          {pageWallets.length === 0 ? (
+                            <div className='p-2 text-sm text-muted-foreground'>No load wallets available. Create one in Wallet Management.</div>
+                          ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
                               {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
                             </SelectItem>
@@ -1540,22 +1646,22 @@ export default function LoadManagementPage({
                     <div className='space-y-2'>
                       <Label htmlFor='sale-wallet'>Select Wallet *</Label>
                       <Select
-                        value={saleForm.walletId || undefined}
+                        value={selectedSaleWalletId || undefined}
                         onValueChange={(v) => handleSaleChange('walletId', v)}
                       >
                         <SelectTrigger id='sale-wallet' {...saleEnter.enterProps('sale-wallet')}>
-                          {saleForm.walletId ? (
+                          {selectedSaleWalletId ? (
                             <span className='truncate'>
-                              {formatWalletSelectLabel(saleForm.walletId, saleForm.walletType)}
+                              {formatWalletSelectLabel(selectedSaleWalletId, saleForm.walletType)}
                             </span>
                           ) : (
                             <SelectValue placeholder='Choose wallet...' />
                           )}
                         </SelectTrigger>
                         <SelectContent>
-                          {wallets.length === 0 ? (
-                            <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
-                          ) : wallets.filter((w) => resolveWalletId(w)).map((wallet) => (
+                          {pageWallets.length === 0 ? (
+                            <div className='p-2 text-sm text-muted-foreground'>No load wallets available.</div>
+                          ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
                               {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
                             </SelectItem>
@@ -1845,14 +1951,14 @@ export default function LoadManagementPage({
                       <div className='space-y-2'>
                         <Label>Select Wallet *</Label>
                         <Select
-                          value={bulkWithdrawalForm.walletId || undefined}
+                          value={selectedBulkWalletId || undefined}
                           onValueChange={handleBulkWithdrawalWalletChange}
                         >
                           <SelectTrigger>
-                            {bulkWithdrawalForm.walletId ? (
+                            {selectedBulkWalletId ? (
                               <span className='truncate'>
                                 {formatWalletSelectLabel(
-                                  bulkWithdrawalForm.walletId,
+                                  selectedBulkWalletId,
                                   bulkWithdrawalForm.walletType,
                                 )}
                               </span>
@@ -1861,9 +1967,9 @@ export default function LoadManagementPage({
                             )}
                           </SelectTrigger>
                           <SelectContent>
-                            {wallets.length === 0 ? (
-                              <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
-                            ) : wallets.filter((w) => resolveWalletId(w)).map((wallet) => (
+                            {pageWallets.length === 0 ? (
+                              <div className='p-2 text-sm text-muted-foreground'>No cash wallets available.</div>
+                            ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                               <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
                                 {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
                               </SelectItem>
@@ -2060,22 +2166,22 @@ export default function LoadManagementPage({
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-wallet'>Select Wallet *</Label>
                       <Select
-                        value={withdrawalForm.walletId || undefined}
+                        value={selectedWithdrawalWalletId || undefined}
                         onValueChange={(v) => handleWithdrawalChange('walletId', v)}
                       >
                         <SelectTrigger id='withdrawal-wallet' {...withdrawalEnter.enterProps('withdrawal-wallet')}>
-                          {withdrawalForm.walletId ? (
+                          {selectedWithdrawalWalletId ? (
                             <span className='truncate'>
-                              {formatWalletSelectLabel(withdrawalForm.walletId, withdrawalForm.walletType)}
+                              {formatWalletSelectLabel(selectedWithdrawalWalletId, withdrawalForm.walletType)}
                             </span>
                           ) : (
                             <SelectValue placeholder='Choose wallet...' />
                           )}
                         </SelectTrigger>
                         <SelectContent>
-                          {wallets.length === 0 ? (
-                            <div className='p-2 text-sm text-muted-foreground'>No wallets available.</div>
-                          ) : wallets.filter((w) => resolveWalletId(w)).map((wallet) => (
+                          {pageWallets.length === 0 ? (
+                            <div className='p-2 text-sm text-muted-foreground'>No cash wallets available.</div>
+                          ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
                               {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
                             </SelectItem>
@@ -2354,6 +2460,8 @@ export default function LoadManagementPage({
         </TabsContent>
         )}
       </Tabs>
+      </>
+      )}
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
