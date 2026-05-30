@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,10 +41,22 @@ import {
   type TransactionCategoryType,
 } from '@/stores/expenseCategory.api'
 
+type PickerCategory = ExpenseCategory & { fromLedger?: boolean }
+
 interface Props {
   transactionType: TransactionCategoryType
   value: string
   onChange: (value: string) => void
+  /** When provided, use this list instead of fetching (keeps create/edit in sync) */
+  apiCategories?: ExpenseCategory[]
+  /** Category names used on ledger entries but not yet in the expense-category list */
+  extraCategories?: string[]
+  /** My Wallet only — not product or business expense categories */
+  walletMode?: boolean
+  /** create = full list; edit = saved category pinned + all wallet categories */
+  formMode?: 'create' | 'edit'
+  /** Category stored on the entry being edited */
+  savedCategory?: string
   required?: boolean
   error?: string
   className?: string
@@ -52,16 +64,25 @@ interface Props {
 
 const resolveCategoryId = (cat: ExpenseCategory) => cat.id || cat._id || ''
 
+const isPersistedCategory = (cat: PickerCategory) =>
+  Boolean(resolveCategoryId(cat)) && !cat.fromLedger
+
 export function TransactionCategoryPicker({
   transactionType,
   value,
   onChange,
+  apiCategories,
+  extraCategories = [],
+  walletMode = false,
+  formMode = 'create',
+  savedCategory = '',
   required = false,
   error,
   className,
 }: Props) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const [newCatName, setNewCatName] = useState('')
   const [creatingCat, setCreatingCat] = useState(false)
   const [categoryEditor, setCategoryEditor] = useState<ExpenseCategory | null>(null)
@@ -71,7 +92,102 @@ export function TransactionCategoryPicker({
   const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null)
   const [deletingCat, setDeletingCat] = useState(false)
 
-  const { data: categories = [] } = useGetExpenseCategoriesQuery({ transactionType })
+  const skipFetch = walletMode || apiCategories !== undefined
+  const { data: fetchedCategories = [] } = useGetExpenseCategoriesQuery(
+    { transactionType },
+    {
+      skip: skipFetch,
+      refetchOnMountOrArgChange: false,
+      refetchOnFocus: false,
+    },
+  )
+
+  const categories = useMemo(() => {
+    const byKey = new Map<string, ExpenseCategory>()
+    const add = (cat: ExpenseCategory) => {
+      const key = cat.name.trim().toLowerCase()
+      if (!key) return
+      if (!byKey.has(key)) byKey.set(key, cat)
+    }
+    const source = apiCategories ?? fetchedCategories
+    for (const cat of source) add(cat)
+    return Array.from(byKey.values())
+  }, [fetchedCategories, apiCategories])
+
+  useEffect(() => {
+    setSearch('')
+    setNewCatName('')
+  }, [transactionType])
+
+  const displayCategories = useMemo((): PickerCategory[] => {
+    const byKey = new Map<string, PickerCategory>()
+    const add = (cat: PickerCategory) => {
+      const key = cat.name.trim().toLowerCase()
+      if (!key) return
+      if (!byKey.has(key)) byKey.set(key, cat)
+    }
+
+    for (const cat of categories) {
+      add(cat)
+    }
+    for (const name of extraCategories) {
+      const trimmed = name.trim()
+      if (!trimmed) continue
+      add({
+        id: `ledger-${trimmed.toLowerCase()}`,
+        name: trimmed,
+        color: '#94a3b8',
+        isDefault: false,
+        fromLedger: true,
+      })
+    }
+    const current = value.trim()
+    if (current) {
+      add({
+        id: `current-${current.toLowerCase()}`,
+        name: current,
+        color: '#94a3b8',
+        isDefault: false,
+        fromLedger: true,
+      })
+    }
+
+    const list = Array.from(byKey.values())
+    list.sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? 1 : -1
+      return a.name.localeCompare(b.name)
+    })
+    return list
+  }, [categories, extraCategories, value])
+
+  const filteredBySearch = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return displayCategories
+    return displayCategories.filter((c) => c.name.toLowerCase().includes(q))
+  }, [displayCategories, search])
+
+  const { savedCategoryItem, allCategoryItems } = useMemo(() => {
+    const savedName =
+      formMode === 'edit' && savedCategory?.trim() ? savedCategory.trim() : ''
+    if (!savedName) {
+      return { savedCategoryItem: null as PickerCategory | null, allCategoryItems: filteredBySearch }
+    }
+    const key = savedName.toLowerCase()
+    let saved =
+      filteredBySearch.find((c) => c.name.trim().toLowerCase() === key) ?? null
+    if (!saved) {
+      saved = {
+        id: `saved-${key}`,
+        name: savedName,
+        color: '#6366f1',
+        isDefault: false,
+        fromLedger: true,
+      }
+    }
+    const rest = filteredBySearch.filter((c) => c.name.trim().toLowerCase() !== key)
+    return { savedCategoryItem: saved, allCategoryItems: rest }
+  }, [filteredBySearch, formMode, savedCategory])
+
   const [createCategory] = useCreateExpenseCategoryMutation()
   const [updateCategory] = useUpdateExpenseCategoryMutation()
   const [deleteCategoryMut] = useDeleteExpenseCategoryMutation()
@@ -82,6 +198,72 @@ export function TransactionCategoryPicker({
     setEditCatColor(cat.color || '#6366f1')
   }
 
+  const renderCategoryItem = (cat: PickerCategory) => (
+    <CommandItem
+      key={`${resolveCategoryId(cat) || cat.name}-${cat.fromLedger ? 'ledger' : 'api'}`}
+      value={cat.name}
+      onSelect={() => {
+        onChange(cat.name)
+        setOpen(false)
+      }}
+    >
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: cat.color }}
+        />
+        <span className="flex-1 truncate">{cat.name}</span>
+        {value === cat.name && <Check className="h-4 w-4 shrink-0 text-primary" />}
+        {isPersistedCategory(cat) ? (
+          <div
+            className="flex shrink-0 items-center gap-0.5"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title={t('Edit category')}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setOpen(false)
+                openEditCategory(cat)
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            {!cat.isDefault && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive"
+                title={t('Delete category')}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setOpen(false)
+                  setCategoryToDelete(cat)
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </CommandItem>
+  )
+
+  const listIsEmpty =
+    !savedCategoryItem && allCategoryItems.length === 0
+
   const handleCreateCategory = async () => {
     const name = newCatName.trim()
     if (!name) return
@@ -90,6 +272,7 @@ export function TransactionCategoryPicker({
       const created = await createCategory({ name, transactionType }).unwrap()
       onChange(created.name)
       setNewCatName('')
+      setSearch('')
       setOpen(false)
       toast.success(t('Category created'))
     } catch (err: any) {
@@ -132,7 +315,10 @@ export function TransactionCategoryPicker({
         toast.error(t('Failed to delete category'))
         return
       }
-      await deleteCategoryMut(categoryId).unwrap()
+      await deleteCategoryMut({
+        id: categoryId,
+        transactionType: categoryToDelete.transactionType ?? transactionType,
+      }).unwrap()
       if (value === categoryToDelete.name) {
         onChange('')
       }
@@ -149,10 +335,24 @@ export function TransactionCategoryPicker({
     <>
       <div className={cn('space-y-1', className)}>
         <Label>
-          {t('Category')}
+          {walletMode ? t('Wallet Category') : t('Category')}
           {required ? <span className="text-red-500"> *</span> : null}
         </Label>
-        <Popover open={open} onOpenChange={setOpen}>
+        {walletMode ? (
+          <p className="text-xs text-muted-foreground">
+            {t('Categories here are only for My Wallet, not Products or Business Expenses.')}
+          </p>
+        ) : null}
+        <Popover
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next)
+            if (!next) {
+              setSearch('')
+              setNewCatName('')
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               type="button"
@@ -166,71 +366,31 @@ export function TransactionCategoryPicker({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-            <Command className="max-h-80 overflow-hidden">
-              <CommandInput placeholder={t('Search or create category...')} />
-              <CommandEmpty>{t('No categories found')}</CommandEmpty>
-              <CommandList className="max-h-52 overflow-y-auto">
-                <CommandGroup heading={t('Categories')}>
-                  {categories.map((cat) => (
-                    <CommandItem
-                      key={resolveCategoryId(cat) || cat.name}
-                      value={`${cat.name} ${resolveCategoryId(cat)}`}
-                      onSelect={() => {
-                        onChange(cat.name)
-                        setOpen(false)
-                      }}
-                    >
-                      <div className="flex w-full min-w-0 items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: cat.color }}
-                        />
-                        <span className="flex-1 truncate">{cat.name}</span>
-                        {value === cat.name && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                        <div
-                          className="flex shrink-0 items-center gap-0.5"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                        >
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={t('Edit category')}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setOpen(false)
-                              openEditCategory(cat)
-                            }}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {!cat.isDefault && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              title={t('Delete category')}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setOpen(false)
-                                setCategoryToDelete(cat)
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))}
+            <Command
+              key={`${transactionType}-${formMode}`}
+              shouldFilter={false}
+              className="max-h-80 overflow-hidden"
+            >
+              <CommandInput
+                placeholder={t('Search or create category...')}
+                value={search}
+                onValueChange={setSearch}
+              />
+              {listIsEmpty ? <CommandEmpty>{t('No categories found')}</CommandEmpty> : null}
+              <CommandList className="max-h-64 overflow-y-auto">
+                {savedCategoryItem ? (
+                  <CommandGroup heading={t('Saved on this entry')}>
+                    {renderCategoryItem(savedCategoryItem)}
+                  </CommandGroup>
+                ) : null}
+                <CommandGroup
+                  heading={
+                    formMode === 'edit'
+                      ? t('All wallet categories')
+                      : t('Categories')
+                  }
+                >
+                  {allCategoryItems.map((cat) => renderCategoryItem(cat))}
                 </CommandGroup>
                 <CommandSeparator />
                 <CommandGroup heading={t('Create new')}>
@@ -244,6 +404,12 @@ export function TransactionCategoryPicker({
                         if (e.key === 'Enter') {
                           e.preventDefault()
                           handleCreateCategory()
+                        }
+                      }}
+                      onBlur={() => {
+                        const draft = newCatName.trim()
+                        if (draft && !value.trim()) {
+                          onChange(draft)
                         }
                       }}
                     />

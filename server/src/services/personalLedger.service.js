@@ -118,11 +118,18 @@ const recalculateBalances = async (organizationId, branchId, fromDate) => {
   }
 };
 
+const normalizeCategory = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const trimmed = String(value).trim();
+  return trimmed || undefined;
+};
+
 /**
  * Create a personal ledger entry
  */
 const createEntry = async (body) => {
-  const entry = await PersonalLedger.create({ ...body, balance: 0 });
+  const payload = { ...body, category: normalizeCategory(body.category) };
+  const entry = await PersonalLedger.create({ ...payload, balance: 0 });
   await recalculateBalances(body.organizationId, body.branchId, body.transactionDate);
   const saved = await PersonalLedger.findById(entry._id);
   await syncCashBookFromPersonalLedger(saved);
@@ -217,6 +224,9 @@ const updateEntry = async (id, updateBody) => {
   delete updateBody.organizationId;
   delete updateBody.branchId;
 
+  if (updateBody.category !== undefined) {
+    updateBody.category = normalizeCategory(updateBody.category);
+  }
   Object.assign(entry, updateBody);
   await entry.save();
   const refreshed = await PersonalLedger.findById(id);

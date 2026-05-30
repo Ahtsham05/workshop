@@ -140,7 +140,10 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
         toast.error(t('Failed to delete category'))
         return
       }
-      await deleteCategoryMut(categoryId).unwrap()
+      await deleteCategoryMut({
+        id: categoryId,
+        transactionType: 'business_expense',
+      }).unwrap()
       if (formData.category === categoryToDelete.name) {
         handleChange('category', '')
       }

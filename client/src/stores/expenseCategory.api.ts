@@ -18,6 +18,9 @@ export interface ExpenseCategory {
   transactionType?: TransactionCategoryType
 }
 
+const categoryTagId = (transactionType?: TransactionCategoryType) =>
+  transactionType ?? 'business_expense'
+
 export const expenseCategoryApi = createApi({
   reducerPath: 'expenseCategoryApi',
   baseQuery,
@@ -31,25 +34,38 @@ export const expenseCategoryApi = createApi({
         url: '/expense-categories',
         params: params?.transactionType ? { transactionType: params.transactionType } : undefined,
       }),
-      providesTags: ['ExpenseCategory'],
+      serializeQueryArgs: ({ queryArgs }) => categoryTagId(queryArgs?.transactionType),
+      providesTags: (_result, _error, arg) => [
+        { type: 'ExpenseCategory', id: categoryTagId(arg?.transactionType) },
+      ],
+      keepUnusedDataFor: 300,
     }),
     createExpenseCategory: builder.mutation<
       ExpenseCategory,
       { name: string; color?: string; transactionType?: TransactionCategoryType }
     >({
       query: (body) => ({ url: '/expense-categories', method: 'POST', body }),
-      invalidatesTags: ['ExpenseCategory'],
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'ExpenseCategory', id: categoryTagId(arg?.transactionType) },
+      ],
     }),
     updateExpenseCategory: builder.mutation<
       ExpenseCategory,
       { id: string; name?: string; color?: string; transactionType?: TransactionCategoryType }
     >({
       query: ({ id, ...body }) => ({ url: `/expense-categories/${id}`, method: 'PATCH', body }),
-      invalidatesTags: ['ExpenseCategory'],
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'ExpenseCategory', id: categoryTagId(arg?.transactionType) },
+      ],
     }),
-    deleteExpenseCategory: builder.mutation<void, string>({
-      query: (id) => ({ url: `/expense-categories/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['ExpenseCategory'],
+    deleteExpenseCategory: builder.mutation<
+      void,
+      { id: string; transactionType?: TransactionCategoryType }
+    >({
+      query: ({ id }) => ({ url: `/expense-categories/${id}`, method: 'DELETE' }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'ExpenseCategory', id: categoryTagId(arg.transactionType) },
+      ],
     }),
   }),
 })

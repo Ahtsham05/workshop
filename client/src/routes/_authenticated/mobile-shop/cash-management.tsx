@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import LoadManagementPage from '@/features/mobile-shop/load'
+import { LoadManagementPage } from '@/features/mobile-shop/load/index'
 import { MobileShopGuard } from '@/components/mobile-shop-guard'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 

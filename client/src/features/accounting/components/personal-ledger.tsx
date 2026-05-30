@@ -49,7 +49,15 @@ import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/context/language-context';
 import { TransactionCategoryPicker } from './transaction-category-picker';
-import type { TransactionCategoryType } from '@/stores/expenseCategory.api';
+import {
+  useCreateExpenseCategoryMutation,
+  type ExpenseCategory,
+  type TransactionCategoryType,
+} from '@/stores/expenseCategory.api';
+import {
+  EMPTY_WALLET_CATEGORY_CATALOG,
+  useWalletLedgerCategoryCatalog,
+} from '../hooks/use-wallet-ledger-category-catalog';
 
 interface LedgerEntry {
   _id?: string;
@@ -95,6 +103,48 @@ const formatCurrency = (value: number) =>
 
 const UNCATEGORIZED = 'Uncategorized';
 
+/** Treat blank / legacy uncategorized labels as "no category" on the entry */
+const normalizeWalletCategoryName = (name?: string | null) => {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed.toLowerCase() === UNCATEGORIZED.toLowerCase()) return '';
+  return trimmed;
+};
+
+type CategoryFlow = 'income' | 'expense';
+
+const isIncomeLedgerType = (type: string) =>
+  type === 'income' || type === 'opening_balance';
+
+function buildCategoryBreakdown(
+  entries: LedgerEntry[],
+  flow: CategoryFlow,
+  resolveCategoryName: (entry: LedgerEntry) => string,
+): CategoryBreakdown[] {
+  const map = new Map<string, { totalAmount: number; expenseCount: number }>();
+  for (const entry of entries) {
+    if (flow === 'expense') {
+      if (entry.transactionType !== 'expense' || !(entry.debit > 0)) continue;
+    } else if (!isIncomeLedgerType(entry.transactionType) || !(entry.credit > 0)) {
+      continue;
+    }
+    const amount = flow === 'expense' ? entry.debit : entry.credit;
+    const cat = resolveCategoryName(entry);
+    const existing = map.get(cat) || { totalAmount: 0, expenseCount: 0 };
+    existing.totalAmount += amount;
+    existing.expenseCount += 1;
+    map.set(cat, existing);
+  }
+  return Array.from(map.entries())
+    .map(([name, data]) => ({
+      _id: name,
+      totalAmount: data.totalAmount,
+      expenseCount: data.expenseCount,
+      avgAmount: data.expenseCount ? data.totalAmount / data.expenseCount : 0,
+    }))
+    .sort((a, b) => b.totalAmount - a.totalAmount);
+}
+
 const CATEGORY_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
@@ -110,15 +160,23 @@ interface CategoryBreakdown {
 
 function EntryForm({
   editingEntry,
+  categoryNamesByType = {},
+  categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
+  onCatalogRefresh,
   onSuccess,
   onCancel,
 }: {
   editingEntry: LedgerEntry | null;
+  categoryNamesByType?: Record<string, string[]>;
+  categoryCatalogByType?: Record<string, ExpenseCategory[]>;
+  onCatalogRefresh: (transactionType: TransactionCategoryType) => void;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
+  const [createCategory] = useCreateExpenseCategoryMutation();
   const [form, setForm] = useState<EntryFormData>({
     transactionType: editingEntry?.transactionType || 'income',
     transactionDate: editingEntry
@@ -132,7 +190,46 @@ function EntryForm({
     notes: editingEntry?.notes || '',
   });
 
+  useEffect(() => {
+    if (!editingEntry) return;
+    setForm({
+      transactionType: editingEntry.transactionType || 'income',
+      transactionDate: format(new Date(editingEntry.transactionDate), 'yyyy-MM-dd'),
+      description: editingEntry.description || '',
+      category: editingEntry.category?.trim() || '',
+      reference: editingEntry.reference || '',
+      amount: String(editingEntry.credit || editingEntry.debit || ''),
+      paymentMethod: editingEntry.paymentMethod || '',
+      notes: editingEntry.notes || '',
+    });
+    setCategoryError('');
+  }, [editingEntry]);
+
   const isIncomeType = (type: string) => type === 'income' || type === 'opening_balance';
+
+  const ensureWalletCategoryExists = async (
+    name: string,
+    transactionType: TransactionCategoryType,
+  ) => {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    const catalog = categoryCatalogByType?.[transactionType] ?? [];
+    if (catalog.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      return true;
+    }
+    try {
+      await createCategory({ name: trimmed, transactionType }).unwrap();
+      onCatalogRefresh(transactionType);
+      return true;
+    } catch (err: any) {
+      const msg = String(err?.data?.message || '');
+      if (err?.status === 409 || /already exists/i.test(msg)) {
+        onCatalogRefresh(transactionType);
+        return true;
+      }
+      return false;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,9 +237,24 @@ function EntryForm({
       toast.error(t('Description is required'));
       return;
     }
+    const categoryName = form.category.trim();
+    if (!categoryName) {
+      setCategoryError(t('Category is required'));
+      toast.error(t('Category is required'));
+      return;
+    }
+    setCategoryError('');
+
     const amount = parseFloat(form.amount);
     if (!form.amount || isNaN(amount) || amount <= 0) {
       toast.error(t('Please enter a valid amount'));
+      return;
+    }
+
+    const txnType = form.transactionType as TransactionCategoryType;
+    const categoryReady = await ensureWalletCategoryExists(categoryName, txnType);
+    if (!categoryReady) {
+      toast.error(t('Failed to save category'));
       return;
     }
 
@@ -151,12 +263,12 @@ function EntryForm({
       transactionType: form.transactionType,
       transactionDate: new Date(form.transactionDate).toISOString(),
       description: form.description.trim(),
-      category: form.category || undefined,
-      reference: form.reference || undefined,
+      category: categoryName,
+      reference: form.reference.trim() || undefined,
       debit: isCredit ? 0 : amount,
       credit: isCredit ? amount : 0,
       paymentMethod: form.paymentMethod || undefined,
-      notes: form.notes || undefined,
+      notes: form.notes.trim() || undefined,
     };
 
     try {
@@ -166,7 +278,7 @@ function EntryForm({
         await Axios.patch(`${summery.updatePersonalLedgerEntry.url}/${entryId}`, {
           transactionDate: payload.transactionDate,
           description: payload.description,
-          category: payload.category,
+          category: categoryName,
           reference: payload.reference,
           paymentMethod: payload.paymentMethod,
           notes: payload.notes,
@@ -185,6 +297,31 @@ function EntryForm({
   };
 
   const categoryType = form.transactionType as TransactionCategoryType;
+  const savedCategoryOnEntry = normalizeWalletCategoryName(editingEntry?.category);
+
+  const extraCategories = useMemo(() => {
+    // Edit with no saved category: show only wallet catalog (same as create), not names from other rows
+    if (editingEntry && !savedCategoryOnEntry) {
+      return [];
+    }
+    const names = new Set<string>();
+    if (savedCategoryOnEntry) {
+      names.add(savedCategoryOnEntry);
+    }
+    if (!editingEntry) {
+      for (const name of categoryNamesByType[form.transactionType] ?? []) {
+        const normalized = normalizeWalletCategoryName(name);
+        if (normalized) names.add(normalized);
+      }
+    }
+    return Array.from(names);
+  }, [
+    categoryNamesByType,
+    form.transactionType,
+    editingEntry,
+    savedCategoryOnEntry,
+  ]);
+  const apiCategories = categoryCatalogByType[form.transactionType] ?? [];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -266,9 +403,20 @@ function EntryForm({
 
       <div className="grid grid-cols-2 gap-4">
         <TransactionCategoryPicker
+          key={`${categoryType}-${editingEntry?.id || editingEntry?._id || 'new'}`}
           transactionType={categoryType}
           value={form.category}
-          onChange={(category) => setForm((f) => ({ ...f, category }))}
+          apiCategories={apiCategories}
+          extraCategories={extraCategories}
+          walletMode
+          formMode={editingEntry && savedCategoryOnEntry ? 'edit' : 'create'}
+          savedCategory={savedCategoryOnEntry}
+          required
+          error={categoryError}
+          onChange={(category) => {
+            setCategoryError('');
+            setForm((f) => ({ ...f, category }));
+          }}
         />
 
         <div className="space-y-1">
@@ -304,6 +452,10 @@ function EntryForm({
 export function PersonalLedger() {
   const { t } = useLanguage();
   const dispatch = useDispatch();
+  const {
+    byType: categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
+    refreshType: refreshWalletCategoryType,
+  } = useWalletLedgerCategoryCatalog();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [reportEntries, setReportEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -322,13 +474,52 @@ export function PersonalLedger() {
   const [openingBalanceValue, setOpeningBalanceValue] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategoryFlow, setActiveCategoryFlow] = useState<CategoryFlow>('expense');
   const [categoryDetailEntries, setCategoryDetailEntries] = useState<LedgerEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [allLedgerCategoryNamesByType, setAllLedgerCategoryNamesByType] = useState<
+    Record<string, string[]>
+  >({});
+
+  const buildCategoryNamesByType = useCallback((ledgerRows: LedgerEntry[]) => {
+    const map = new Map<string, Set<string>>();
+    for (const entry of ledgerRows) {
+      const name = entry.category?.trim();
+      if (!name) continue;
+      const type = entry.transactionType;
+      if (!map.has(type)) map.set(type, new Set());
+      map.get(type)!.add(name);
+    }
+    return Object.fromEntries(
+      Array.from(map.entries()).map(([type, names]) => [type, Array.from(names).sort()]),
+    );
+  }, []);
+
+  const fetchAllLedgerCategoryNames = useCallback(async () => {
+    try {
+      const response = await Axios.get(summery.fetchPersonalLedgerEntries.url, {
+        params: {
+          sortBy: 'transactionDate:desc',
+          page: 1,
+          limit: 10000,
+        },
+      });
+      setAllLedgerCategoryNamesByType(
+        buildCategoryNamesByType(response.data.results || []),
+      );
+    } catch {
+      setAllLedgerCategoryNamesByType({});
+    }
+  }, [buildCategoryNamesByType]);
 
   useEffect(() => {
     fetchEntries();
     fetchReportEntries();
   }, [currentPage, pageSize, filterType, startDate, endDate]);
+
+  useEffect(() => {
+    fetchAllLedgerCategoryNames();
+  }, [fetchAllLedgerCategoryNames]);
 
   useEffect(() => {
     fetchOpeningBalance();
@@ -438,6 +629,22 @@ export function PersonalLedger() {
     fetchReportEntries();
   };
 
+  const openEditEntry = useCallback(async (entry: LedgerEntry) => {
+    const id = entry.id || entry._id;
+    if (!id) {
+      setEditingEntry(entry);
+      setShowForm(true);
+      return;
+    }
+    try {
+      const { data } = await Axios.get(`${summery.fetchPersonalLedgerEntries.url}/${id}`);
+      setEditingEntry(data);
+    } catch {
+      setEditingEntry(entry);
+    }
+    setShowForm(true);
+  }, []);
+
   const handleDelete = async (entry: LedgerEntry) => {
     if (!confirm(t('Are you sure you want to delete this entry?'))) return;
     try {
@@ -445,6 +652,7 @@ export function PersonalLedger() {
       await Axios.delete(`${summery.deletePersonalLedgerEntry.url}/${id}`);
       toast.success(t('Entry deleted successfully'));
       invalidateCashBookCaches();
+      fetchAllLedgerCategoryNames();
       fetchEntries();
       fetchReportEntries();
       fetchOpeningBalance();
@@ -459,6 +667,7 @@ export function PersonalLedger() {
     setEditingEntry(null);
     setCurrentPage(1);
     invalidateCashBookCaches();
+    fetchAllLedgerCategoryNames();
     fetchEntries();
     fetchReportEntries();
     fetchOpeningBalance();
@@ -470,25 +679,35 @@ export function PersonalLedger() {
     [],
   );
 
-  const expenseCategoryBreakdown = useMemo((): CategoryBreakdown[] => {
-    const map = new Map<string, { totalAmount: number; expenseCount: number }>();
-    for (const entry of reportEntries) {
-      if (entry.transactionType !== 'expense' || !(entry.debit > 0)) continue;
-      const cat = resolveCategoryName(entry);
-      const existing = map.get(cat) || { totalAmount: 0, expenseCount: 0 };
-      existing.totalAmount += entry.debit;
-      existing.expenseCount += 1;
-      map.set(cat, existing);
-    }
-    return Array.from(map.entries())
-      .map(([name, data]) => ({
-        _id: name,
-        totalAmount: data.totalAmount,
-        expenseCount: data.expenseCount,
-        avgAmount: data.expenseCount ? data.totalAmount / data.expenseCount : 0,
-      }))
-      .sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [reportEntries, resolveCategoryName]);
+  const categoryNamesByType = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const addNames = (byType: Record<string, string[]>) => {
+      for (const [type, names] of Object.entries(byType)) {
+        if (!map.has(type)) map.set(type, new Set());
+        for (const name of names) map.get(type)!.add(name);
+      }
+    };
+    addNames(allLedgerCategoryNamesByType);
+    addNames(buildCategoryNamesByType(reportEntries));
+    return Object.fromEntries(
+      Array.from(map.entries()).map(([type, names]) => [type, Array.from(names).sort()]),
+    );
+  }, [allLedgerCategoryNamesByType, reportEntries, buildCategoryNamesByType]);
+
+  const incomeCategoryBreakdown = useMemo(
+    () => buildCategoryBreakdown(reportEntries, 'income', resolveCategoryName),
+    [reportEntries, resolveCategoryName],
+  );
+
+  const expenseCategoryBreakdown = useMemo(
+    () => buildCategoryBreakdown(reportEntries, 'expense', resolveCategoryName),
+    [reportEntries, resolveCategoryName],
+  );
+
+  const totalWalletIncome = useMemo(
+    () => incomeCategoryBreakdown.reduce((sum, c) => sum + c.totalAmount, 0),
+    [incomeCategoryBreakdown],
+  );
 
   const totalWalletExpenses = useMemo(
     () => expenseCategoryBreakdown.reduce((sum, c) => sum + c.totalAmount, 0),
@@ -496,12 +715,17 @@ export function PersonalLedger() {
   );
 
   const openCategoryDetail = useCallback(
-    (catName: string) => {
+    (catName: string, flow: CategoryFlow) => {
       setActiveCategory(catName);
+      setActiveCategoryFlow(flow);
       setSheetOpen(true);
       setExpandedRows(new Set());
       const filtered = reportEntries.filter((entry) => {
-        if (entry.transactionType !== 'expense' || !(entry.debit > 0)) return false;
+        if (flow === 'expense') {
+          if (entry.transactionType !== 'expense' || !(entry.debit > 0)) return false;
+        } else if (!isIncomeLedgerType(entry.transactionType) || !(entry.credit > 0)) {
+          return false;
+        }
         return resolveCategoryName(entry) === catName;
       });
       setCategoryDetailEntries(filtered);
@@ -526,8 +750,13 @@ export function PersonalLedger() {
   }, [categoryDetailEntries]);
 
   const categoryDetailTotal = useMemo(
-    () => categoryDetailEntries.reduce((sum, e) => sum + (e.debit || 0), 0),
-    [categoryDetailEntries],
+    () =>
+      categoryDetailEntries.reduce(
+        (sum, e) =>
+          sum + (activeCategoryFlow === 'expense' ? e.debit || 0 : e.credit || 0),
+        0,
+      ),
+    [categoryDetailEntries, activeCategoryFlow],
   );
 
   const reportAnalytics = useMemo(() => {
@@ -608,6 +837,55 @@ export function PersonalLedger() {
   };
 
   const balanceColor = summary.netBalance >= 0 ? 'text-green-600' : 'text-red-600';
+
+  const renderCategoryBreakdownCards = (
+    items: CategoryBreakdown[],
+    total: number,
+    flow: CategoryFlow,
+    accentColor: string,
+  ) => (
+    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {items.map((cat, idx) => {
+        const share = total ? ((cat.totalAmount / total) * 100).toFixed(1) : '0';
+        const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+        return (
+          <button
+            key={`${flow}-${cat._id}`}
+            type="button"
+            onClick={() => openCategoryDetail(cat._id, flow)}
+            className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
+                style={{ backgroundColor: color }}
+              >
+                {cat._id.charAt(0).toUpperCase()}
+              </span>
+              <Badge variant="secondary" className="text-xs">{share}%</Badge>
+            </div>
+            <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
+            <p className="text-xl font-bold" style={{ color: accentColor }}>
+              {formatCurrency(cat.totalAmount)}
+            </p>
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>{cat.expenseCount} {t('entries')}</span>
+              <span>{t('avg')} {formatCurrency(cat.avgAmount)}</span>
+            </div>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${share}%`, backgroundColor: color }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+              {t('Click to view details →')}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -697,57 +975,42 @@ export function PersonalLedger() {
         </Card>
       </div>
 
-      {/* Wallet expenses by category */}
+      {/* Income by category (Money In) */}
+      {incomeCategoryBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('income_by_category')}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t('money_in_by_category')}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {renderCategoryBreakdownCards(
+              incomeCategoryBreakdown,
+              totalWalletIncome,
+              'income',
+              '#16a34a',
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Expenses by category (Money Out) */}
       {expenseCategoryBreakdown.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>{t('expense_by_category')}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {t('Click a category to view its details')}
+              {t('money_out_by_category')}
             </p>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-              {expenseCategoryBreakdown.map((cat, idx) => {
-                const share = totalWalletExpenses
-                  ? ((cat.totalAmount / totalWalletExpenses) * 100).toFixed(1)
-                  : '0';
-                const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-                return (
-                  <button
-                    key={cat._id}
-                    type="button"
-                    onClick={() => openCategoryDetail(cat._id)}
-                    className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
-                        style={{ backgroundColor: color }}
-                      >
-                        {cat._id.charAt(0).toUpperCase()}
-                      </span>
-                      <Badge variant="secondary" className="text-xs">{share}%</Badge>
-                    </div>
-                    <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
-                    <p className="text-xl font-bold" style={{ color }}>{formatCurrency(cat.totalAmount)}</p>
-                    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{cat.expenseCount} {t('entries')}</span>
-                      <span>{t('avg')} {formatCurrency(cat.avgAmount)}</span>
-                    </div>
-                    <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${share}%`, backgroundColor: color }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                      {t('Click to view details →')}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+            {renderCategoryBreakdownCards(
+              expenseCategoryBreakdown,
+              totalWalletExpenses,
+              'expense',
+              '#dc2626',
+            )}
           </CardContent>
         </Card>
       )}
@@ -831,7 +1094,11 @@ export function PersonalLedger() {
           </DialogHeader>
           {showForm && (
             <EntryForm
+              key={editingEntry?.id || editingEntry?._id || 'new'}
               editingEntry={editingEntry}
+              categoryNamesByType={categoryNamesByType}
+              categoryCatalogByType={categoryCatalogByType}
+              onCatalogRefresh={refreshWalletCategoryType}
               onSuccess={handleFormSuccess}
               onCancel={() => { setShowForm(false); setEditingEntry(null); }}
             />
@@ -882,8 +1149,14 @@ export function PersonalLedger() {
                       <TableCell className="max-w-[180px] truncate" title={entry.description}>
                         {entry.description}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {entry.category || '-'}
+                      <TableCell className="text-sm">
+                        {entry.category?.trim() ? (
+                          <Badge variant="secondary" className="font-normal">
+                            {entry.category.trim()}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-green-600 font-medium">
                         {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
@@ -900,7 +1173,7 @@ export function PersonalLedger() {
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0"
-                            onClick={() => { setEditingEntry(entry); setShowForm(true); }}
+                            onClick={() => openEditEntry(entry)}
                             title={t('Edit')}
                           >
                             <Edit className="w-4 h-4" />
@@ -948,7 +1221,10 @@ export function PersonalLedger() {
           <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
             <div className="flex items-center justify-between">
               <SheetTitle className="text-lg">
-                {activeCategory} — {t('Expense Details')}
+                {activeCategory} —{' '}
+                {activeCategoryFlow === 'income'
+                  ? t('income_category_details')
+                  : t('Expense Details')}
               </SheetTitle>
               <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
                 <X className="h-4 w-4" />
@@ -975,7 +1251,11 @@ export function PersonalLedger() {
             ) : categoryDetailEntries.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                 <Receipt className="h-10 w-10 mb-2 opacity-30" />
-                <p>{t('No expenses found for this category')}</p>
+                <p>
+                  {activeCategoryFlow === 'income'
+                    ? t('no_income_for_category')
+                    : t('No expenses found for this category')}
+                </p>
               </div>
             ) : (
               <Table>
@@ -1009,8 +1289,14 @@ export function PersonalLedger() {
                             {entry.paymentMethod || '—'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="py-2 text-right font-semibold text-sm text-red-600">
-                          {formatCurrency(entry.debit)}
+                        <TableCell
+                          className={`py-2 text-right font-semibold text-sm ${
+                            activeCategoryFlow === 'income' ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {formatCurrency(
+                            activeCategoryFlow === 'income' ? entry.credit : entry.debit,
+                          )}
                         </TableCell>
                       </TableRow>
                       {expandedRows.has(idx) && (
@@ -1044,7 +1330,11 @@ export function PersonalLedger() {
                     <TableCell colSpan={4} className="font-semibold">
                       {t('Total')}
                     </TableCell>
-                    <TableCell className="text-right font-bold text-base text-red-600">
+                    <TableCell
+                      className={`text-right font-bold text-base ${
+                        activeCategoryFlow === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}
+                    >
                       {formatCurrency(categoryDetailTotal)}
                     </TableCell>
                   </TableRow>

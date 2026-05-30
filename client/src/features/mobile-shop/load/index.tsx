@@ -288,7 +288,7 @@ type LoadManagementPageProps = {
   initialAction?: 'withdrawal' | 'deposit'
 }
 
-export default function LoadManagementPage({
+function LoadManagementPage({
   mode = 'load',
   initialWalletId,
   initialWalletType,
@@ -2508,3 +2508,6 @@ export default function LoadManagementPage({
     </MobilePageShell>
   )
 }
+
+export default LoadManagementPage
+export { LoadManagementPage }
