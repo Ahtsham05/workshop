@@ -290,7 +290,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
         {(data?.withdrawalSummary?.totalCount ?? 0) > 0 && (
           <>
             <div>
-              <h3 className='mb-3 text-base font-semibold text-muted-foreground uppercase tracking-wide'>Cash Withdrawal &amp; Deposit</h3>
+              <h3 className='mb-3 text-base font-semibold text-muted-foreground uppercase tracking-wide'>Cash Received &amp; Send</h3>
               <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
                 <Card className={kpiCardClass('slate')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
@@ -302,13 +302,13 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                   <CardContent>
                     <div className='text-2xl font-bold'>{data!.withdrawalSummary.totalCount}</div>
                     <p className='text-xs text-muted-foreground'>
-                      {data!.withdrawalSummary.totalWithdrawals} withdrawals · {data!.withdrawalSummary.totalDeposits} deposits
+                      {data!.withdrawalSummary.totalWithdrawals} received · {data!.withdrawalSummary.totalDeposits} send
                     </p>
                   </CardContent>
                 </Card>
                 <Card className={kpiCardClass('sky')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Withdrawals (cash out)</CardTitle>
+                    <CardTitle className='text-sm font-medium'>Received (cash out)</CardTitle>
                     <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
                       <ArrowUpCircle className='h-4 w-4' />
                     </div>
@@ -320,7 +320,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                 </Card>
                 <Card className={kpiCardClass('orange')}>
                   <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Deposits (cash in)</CardTitle>
+                    <CardTitle className='text-sm font-medium'>Send (cash in)</CardTitle>
                     <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
                       <ArrowDownCircle className='h-4 w-4' />
                     </div>
@@ -339,7 +339,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold text-green-600'>{fmt(data!.withdrawalSummary.totalProfit)}</div>
-                    <p className='text-xs text-muted-foreground'>earned from withdrawal &amp; deposit commission</p>
+                    <p className='text-xs text-muted-foreground'>earned from received &amp; send commission</p>
                   </CardContent>
                 </Card>
               </div>
@@ -348,7 +348,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
             {(data?.withdrawalDatewise?.length ?? 0) > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Withdrawal / Deposit — Date-wise</CardTitle>
+                  <CardTitle>Received / Send — Date-wise</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -356,8 +356,8 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead className='text-right'>Count</TableHead>
-                        <TableHead className='text-right'>Withdrawals</TableHead>
-                        <TableHead className='text-right'>Deposits</TableHead>
+                        <TableHead className='text-right'>Received</TableHead>
+                        <TableHead className='text-right'>Send</TableHead>
                         <TableHead className='text-right'>Commission Profit</TableHead>
                       </TableRow>
                     </TableHeader>

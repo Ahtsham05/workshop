@@ -626,7 +626,8 @@ function CashWithdrawalDetailDialogContent({
     cw.customerName?.trim() ||
     fallbackCustomerName;
 
-  const typeLabel = cw.transactionType === 'withdrawal' ? t('Withdrawal') : t('Deposit');
+  const typeLabel =
+    cw.transactionType === 'withdrawal' ? t('Received') : t('Send');
 
   return (
     <div className="space-y-6">

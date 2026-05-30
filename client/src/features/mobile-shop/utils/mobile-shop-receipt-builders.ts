@@ -1,5 +1,6 @@
 import type { MobileReceiptData } from '@/features/mobile-shop/components/mobile-shop-receipt'
 import { fmtRs } from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { cashTxLabel } from '@/features/mobile-shop/utils/cash-transaction-labels'
 import type {
   CashWithdrawalRecord,
   LoadPurchaseRecord,
@@ -72,18 +73,19 @@ export function buildLoadSaleReceipt(record: LoadTransactionRecord): MobileRecei
 }
 
 export function buildCashWithdrawalReceipt(record: CashWithdrawalRecord): MobileReceiptData {
-  const isWithdrawal = record.transactionType === 'withdrawal'
+  const isReceived = record.transactionType === 'withdrawal'
+  const typeLabel = cashTxLabel(record.transactionType)
   return {
-    title: isWithdrawal ? 'Cash withdrawal' : 'Cash deposit',
+    title: `Cash ${typeLabel.toLowerCase()}`,
     reference: refFromId(record.id),
     issuedAt: formatDate(record.date),
     lines: [
-      { label: 'Type', value: isWithdrawal ? 'Withdrawal' : 'Deposit' },
+      { label: 'Type', value: typeLabel },
       { label: 'Customer', value: record.customerName?.trim() || 'Walk-in Customer' },
       { label: 'Phone', value: record.customerNumber || '—' },
       { label: 'Total amount', value: fmtRs(record.amount) },
       {
-        label: isWithdrawal ? 'Cash paid' : 'Cash received',
+        label: isReceived ? 'Cash paid' : 'Cash received',
         value: fmtRs(record.cashAmount ?? 0),
       },
       { label: 'Wallet', value: record.walletType, previewOnly: true },
@@ -131,11 +133,11 @@ export function buildBulkCashReceipt(input: {
   date: string
   rows: Array<{ amount: number; customerName?: string }>
 }): MobileReceiptData {
-  const isWithdrawal = input.transactionType === 'withdrawal'
+  const typeLabel = cashTxLabel(input.transactionType)
   const totalAmt = input.rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
 
   return {
-    title: isWithdrawal ? 'Bulk cash withdrawals' : 'Bulk cash deposits',
+    title: `Bulk cash ${typeLabel.toLowerCase()}`,
     subtitle: `${input.rows.length} entries`,
     issuedAt: formatDate(input.date),
     lines: [

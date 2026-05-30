@@ -29,6 +29,13 @@ import {
 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import { cn } from '@/lib/utils'
+import {
+  CASH_RECEIVED_COMMISSION_LABEL,
+  CASH_SEND_COMMISSION_LABEL,
+  CASH_WALLET_RATES_SECTION,
+  cashReceivedCommissionBadge,
+  cashSendCommissionBadge,
+} from '@/features/mobile-shop/utils/cash-transaction-labels'
 import { isLoadWalletName, resolveWalletId } from '@/features/mobile-shop/utils/wallet-utils'
 import {
   makeEnterChain,
@@ -224,9 +231,9 @@ export default function WalletPage() {
                 <p className='text-xs text-muted-foreground'>Auto-filled when selling load</p>
               </div>
               <div className='border rounded-lg p-3 space-y-3 bg-muted/30'>
-                <p className='text-sm font-medium text-muted-foreground'>Cash Withdrawal / Deposit Rates</p>
+                <p className='text-sm font-medium text-muted-foreground'>{CASH_WALLET_RATES_SECTION}</p>
                 <div className='space-y-2'>
-                  <Label htmlFor='withdrawal-rate'>Withdrawal Commission (%)</Label>
+                  <Label htmlFor='withdrawal-rate'>{CASH_RECEIVED_COMMISSION_LABEL}</Label>
                   <Input
                     id='withdrawal-rate'
                     min='0'
@@ -240,7 +247,7 @@ export default function WalletPage() {
                   />
                 </div>
                 <div className='space-y-2'>
-                  <Label htmlFor='deposit-rate'>Deposit Commission (%)</Label>
+                  <Label htmlFor='deposit-rate'>{CASH_SEND_COMMISSION_LABEL}</Label>
                   <Input
                     id='deposit-rate'
                     min='0'
@@ -358,12 +365,12 @@ export default function WalletPage() {
                         )}
                         {!loadWallet && Number(wallet.withdrawalCommissionRate ?? 0) > 0 && (
                           <span className='rounded-md bg-orange-50 text-orange-700 px-2 py-1'>
-                            Withdrawal {Number(wallet.withdrawalCommissionRate).toFixed(2)}%
+                            {cashReceivedCommissionBadge(Number(wallet.withdrawalCommissionRate))}
                           </span>
                         )}
                         {!loadWallet && Number(wallet.depositCommissionRate ?? 0) > 0 && (
                           <span className='rounded-md bg-purple-50 text-purple-700 px-2 py-1'>
-                            Deposit {Number(wallet.depositCommissionRate).toFixed(2)}%
+                            {cashSendCommissionBadge(Number(wallet.depositCommissionRate))}
                           </span>
                         )}
                       </div>
@@ -401,7 +408,7 @@ export default function WalletPage() {
                               onClick={() => navigateWithWallet(wallet, { action: 'deposit' }, '/mobile-shop/cash-management')}
                             >
                               <ArrowDownLeft className='h-4 w-4 mr-1.5 shrink-0' />
-                              Deposit
+                              Send
                             </Button>
                             <Button
                               type='button'
@@ -410,7 +417,7 @@ export default function WalletPage() {
                               onClick={() => navigateWithWallet(wallet, { action: 'withdrawal' }, '/mobile-shop/cash-management')}
                             >
                               <ArrowUpRight className='h-4 w-4 mr-1.5 shrink-0' />
-                              Withdrawal
+                              Received
                             </Button>
                           </>
                         )}

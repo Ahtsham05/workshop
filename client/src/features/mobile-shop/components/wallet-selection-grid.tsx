@@ -10,6 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import {
+  cashReceivedCommissionBadge,
+  cashSendCommissionBadge,
+} from '@/features/mobile-shop/utils/cash-transaction-labels'
 import { resolveWalletId, type WalletLike } from '@/features/mobile-shop/utils/wallet-utils'
 
 const formatWalletDate = (dateValue?: string) => {
@@ -71,7 +75,7 @@ export function WalletSelectionGrid({
       <p className='text-sm text-muted-foreground'>
         {isLoad
           ? 'Choose a load wallet and action (purchase or sale)'
-          : 'Choose a cash wallet and action (deposit or withdrawal)'}
+          : 'Choose a cash wallet and action (received or send)'}
       </p>
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
         {wallets.map((wallet) => (
@@ -123,12 +127,12 @@ export function WalletSelectionGrid({
                 )}
                 {!isLoad && Number(wallet.withdrawalCommissionRate ?? 0) > 0 && (
                   <span className='rounded-md bg-orange-50 px-2 py-1 text-orange-700'>
-                    Withdrawal {Number(wallet.withdrawalCommissionRate).toFixed(2)}%
+                    {cashReceivedCommissionBadge(Number(wallet.withdrawalCommissionRate))}
                   </span>
                 )}
                 {!isLoad && Number(wallet.depositCommissionRate ?? 0) > 0 && (
                   <span className='rounded-md bg-purple-50 px-2 py-1 text-purple-700'>
-                    Deposit {Number(wallet.depositCommissionRate).toFixed(2)}%
+                    {cashSendCommissionBadge(Number(wallet.depositCommissionRate))}
                   </span>
                 )}
               </div>
@@ -164,7 +168,7 @@ export function WalletSelectionGrid({
                       onClick={() => onWalletAction(wallet, { action: 'deposit' })}
                     >
                       <ArrowDownLeft className='mr-1.5 h-4 w-4 shrink-0' />
-                      Deposit
+                      Send
                     </Button>
                     <Button
                       type='button'
@@ -173,7 +177,7 @@ export function WalletSelectionGrid({
                       onClick={() => onWalletAction(wallet, { action: 'withdrawal' })}
                     >
                       <ArrowUpRight className='mr-1.5 h-4 w-4 shrink-0' />
-                      Withdrawal
+                      Received
                     </Button>
                   </>
                 )}

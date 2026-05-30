@@ -139,7 +139,7 @@ const en: Record<string, string> = {
     "gross_profit": "Gross Profit",
     "expenses_section": "Expenses Section",
     "recent_load_sales": "Recent Load Sales",
-    "recent_cash_management": "Recent Cash Withdrawals & Deposits",
+    "recent_cash_management": "Recent Cash Received & Send",
     "no_load_sales_yet": "No load sales yet",
     "no_cash_transactions_yet": "No cash transactions yet",
     "open": "Open",

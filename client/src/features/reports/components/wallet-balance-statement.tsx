@@ -254,7 +254,7 @@ export function WalletBalanceStatement({
                 <Card className={kpiCardClass('emerald')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
-                      <p className='text-xs text-muted-foreground'>Withdrawals (+)</p>
+                      <p className='text-xs text-muted-foreground'>Received (+)</p>
                       <ArrowDownCircle className='h-3.5 w-3.5 text-green-500' />
                     </div>
                     <p className='text-lg font-bold text-green-600'>{fmt(totalWithdrawals)}</p>
@@ -264,7 +264,7 @@ export function WalletBalanceStatement({
                 <Card className={kpiCardClass('orange')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
-                      <p className='text-xs text-muted-foreground'>Deposits (−)</p>
+                      <p className='text-xs text-muted-foreground'>Send (−)</p>
                       <ArrowUpCircle className='h-3.5 w-3.5 text-orange-500' />
                     </div>
                     <p className='text-lg font-bold text-orange-600'>{fmt(totalDeposits)}</p>
@@ -306,8 +306,8 @@ export function WalletBalanceStatement({
                       <>
                         <TableHead className='text-right'>Opening Balance</TableHead>
                         <TableHead className='text-right'>Load Sold</TableHead>
-                        <TableHead className='text-right text-green-600'>W.Draw (+)</TableHead>
-                        <TableHead className='text-right text-orange-600'>Deposit (−)</TableHead>
+                        <TableHead className='text-right text-green-600'>Received (+)</TableHead>
+                        <TableHead className='text-right text-orange-600'>Send (−)</TableHead>
                         <TableHead className='text-right'>Profit</TableHead>
                         <TableHead className='text-right'>Txns</TableHead>
                         <TableHead className='text-right'>Closing Balance</TableHead>

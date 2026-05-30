@@ -109,8 +109,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
             { Metric: 'Service Profit', Value: roiData.breakdown.profit.serviceProfit },
             { Metric: 'Sim Sale Profit', Value: roiData.breakdown.profit.simSaleProfit },
             { Metric: 'Bill Payment Profit', Value: roiData.breakdown.profit.billPaymentProfit },
-            { Metric: 'Withdrawal Profit', Value: roiData.breakdown.profit.withdrawalProfit },
-            { Metric: 'Deposit Profit', Value: roiData.breakdown.profit.depositProfit },
+            { Metric: 'Received Profit', Value: roiData.breakdown.profit.withdrawalProfit },
+            { Metric: 'Send Profit', Value: roiData.breakdown.profit.depositProfit },
             { Metric: 'Expense Deduction', Value: -roiData.breakdown.profit.expenseDeduction },
             { Metric: 'Sales Returns Impact', Value: -roiData.breakdown.profit.salesReturnsImpact },
           ]
@@ -314,8 +314,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                 { label: 'Service Profit', value: b?.profit.serviceProfit ?? 0, color: 'text-indigo-600', mobileOnly: true },
                 { label: 'Sim Sale Profit', value: b?.profit.simSaleProfit ?? 0, color: 'text-sky-600', mobileOnly: true },
                 { label: 'Bill Payment Profit', value: b?.profit.billPaymentProfit ?? 0, color: 'text-cyan-600', mobileOnly: true },
-                { label: 'Withdrawal Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600', mobileOnly: true },
-                { label: 'Deposit Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600', mobileOnly: true },
+                { label: 'Received Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600', mobileOnly: true },
+                { label: 'Send Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600', mobileOnly: true },
                 { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500', mobileOnly: false },
                 { label: 'Sales Returns Impact', value: -(b?.profit.salesReturnsImpact ?? 0), color: 'text-rose-500', mobileOnly: false },
               ].filter(({ mobileOnly }) => !mobileOnly || isMobileShop).map(({ label, value, color }) => (

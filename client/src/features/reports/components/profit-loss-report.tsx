@@ -77,8 +77,8 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             { Section: '', Category: 'Service Profit', Amount: data.additionalProfits.serviceProfit },
             { Section: '', Category: 'Sim Sale Profit', Amount: data.additionalProfits.simSaleProfit },
             { Section: '', Category: 'Bill Payment Profit', Amount: data.additionalProfits.billProfit },
-            { Section: '', Category: 'Withdrawal Profit', Amount: data.additionalProfits.withdrawalProfit },
-            { Section: '', Category: 'Deposit Profit', Amount: data.additionalProfits.depositProfit },
+            { Section: '', Category: 'Received Profit', Amount: data.additionalProfits.withdrawalProfit },
+            { Section: '', Category: 'Send Profit', Amount: data.additionalProfits.depositProfit },
             { Section: 'Expenses', Category: t('total_expenses'), Amount: -data.expenses },
             { Section: 'Summary', Category: t('net_profit'), Amount: data.netProfit },
             { Section: '', Category: 'Net Profit Margin', Amount: `${data.netProfitMargin}%` },
@@ -251,8 +251,8 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             {isMobileShop && <Row label='Service Profit' value={fmt(add?.serviceProfit ?? 0)} valueClass='text-indigo-600' />}
             {isMobileShop && <Row label='Sim Sale Profit' value={fmt(add?.simSaleProfit ?? 0)} valueClass='text-sky-600' />}
             {isMobileShop && <Row label='Bill Payment Profit' value={fmt(add?.billProfit ?? 0)} valueClass='text-cyan-600' />}
-            {isMobileShop && <Row label='Withdrawal Profit' value={fmt(add?.withdrawalProfit ?? 0)} valueClass='text-orange-600' />}
-            {isMobileShop && <Row label='Deposit Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />}
+            {isMobileShop && <Row label='Received Profit' value={fmt(add?.withdrawalProfit ?? 0)} valueClass='text-orange-600' />}
+            {isMobileShop && <Row label='Send Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />}
             <Row
               label='Total Additional'
               value={fmt((add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.serviceProfit ?? 0) + (add?.simSaleProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0))}
