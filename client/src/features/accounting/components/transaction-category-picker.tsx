@@ -47,16 +47,14 @@ interface Props {
   transactionType: TransactionCategoryType
   value: string
   onChange: (value: string) => void
-  /** When provided, use this list instead of fetching (keeps create/edit in sync) */
+  /** Optional catalog supplement (wallet: merged with live API fetch so create/edit match) */
   apiCategories?: ExpenseCategory[]
   /** Category names used on ledger entries but not yet in the expense-category list */
   extraCategories?: string[]
   /** My Wallet only — not product or business expense categories */
   walletMode?: boolean
-  /** create = full list; edit = saved category pinned + all wallet categories */
-  formMode?: 'create' | 'edit'
-  /** Category stored on the entry being edited */
-  savedCategory?: string
+  /** Wallet form: block interaction while parent catalog loads */
+  categoriesLoading?: boolean
   required?: boolean
   error?: string
   className?: string
@@ -74,8 +72,7 @@ export function TransactionCategoryPicker({
   apiCategories,
   extraCategories = [],
   walletMode = false,
-  formMode = 'create',
-  savedCategory = '',
+  categoriesLoading = false,
   required = false,
   error,
   className,
@@ -92,15 +89,17 @@ export function TransactionCategoryPicker({
   const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null)
   const [deletingCat, setDeletingCat] = useState(false)
 
-  const skipFetch = walletMode || apiCategories !== undefined
-  const { data: fetchedCategories = [] } = useGetExpenseCategoriesQuery(
-    { transactionType },
-    {
-      skip: skipFetch,
-      refetchOnMountOrArgChange: false,
-      refetchOnFocus: false,
-    },
-  )
+  const skipFetch =
+    !walletMode && apiCategories !== undefined && apiCategories.length > 0
+  const { data: fetchedCategories = [], isFetching: fetchingCategories } =
+    useGetExpenseCategoriesQuery(
+      { transactionType },
+      {
+        skip: skipFetch,
+        refetchOnMountOrArgChange: false,
+        refetchOnFocus: false,
+      },
+    )
 
   const categories = useMemo(() => {
     const byKey = new Map<string, ExpenseCategory>()
@@ -109,8 +108,10 @@ export function TransactionCategoryPicker({
       if (!key) return
       if (!byKey.has(key)) byKey.set(key, cat)
     }
-    const source = apiCategories ?? fetchedCategories
-    for (const cat of source) add(cat)
+    for (const cat of fetchedCategories) add(cat)
+    if (apiCategories) {
+      for (const cat of apiCategories) add(cat)
+    }
     return Array.from(byKey.values())
   }, [fetchedCategories, apiCategories])
 
@@ -160,33 +161,13 @@ export function TransactionCategoryPicker({
     return list
   }, [categories, extraCategories, value])
 
-  const filteredBySearch = useMemo(() => {
+  const filteredCategories = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return displayCategories
     return displayCategories.filter((c) => c.name.toLowerCase().includes(q))
   }, [displayCategories, search])
 
-  const { savedCategoryItem, allCategoryItems } = useMemo(() => {
-    const savedName =
-      formMode === 'edit' && savedCategory?.trim() ? savedCategory.trim() : ''
-    if (!savedName) {
-      return { savedCategoryItem: null as PickerCategory | null, allCategoryItems: filteredBySearch }
-    }
-    const key = savedName.toLowerCase()
-    let saved =
-      filteredBySearch.find((c) => c.name.trim().toLowerCase() === key) ?? null
-    if (!saved) {
-      saved = {
-        id: `saved-${key}`,
-        name: savedName,
-        color: '#6366f1',
-        isDefault: false,
-        fromLedger: true,
-      }
-    }
-    const rest = filteredBySearch.filter((c) => c.name.trim().toLowerCase() !== key)
-    return { savedCategoryItem: saved, allCategoryItems: rest }
-  }, [filteredBySearch, formMode, savedCategory])
+  const listLoading = categoriesLoading || (walletMode && fetchingCategories && categories.length === 0)
 
   const [createCategory] = useCreateExpenseCategoryMutation()
   const [updateCategory] = useUpdateExpenseCategoryMutation()
@@ -261,8 +242,7 @@ export function TransactionCategoryPicker({
     </CommandItem>
   )
 
-  const listIsEmpty =
-    !savedCategoryItem && allCategoryItems.length === 0
+  const listIsEmpty = !listLoading && filteredCategories.length === 0
 
   const handleCreateCategory = async () => {
     const name = newCatName.trim()
@@ -359,15 +339,25 @@ export function TransactionCategoryPicker({
               variant="outline"
               role="combobox"
               aria-expanded={open}
+              disabled={listLoading}
               className={cn('w-full justify-between font-normal', error && 'border-red-500')}
             >
-              {value || <span className="text-muted-foreground">{t('Select category')}</span>}
+              {listLoading ? (
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('Loading categories...')}
+                </span>
+              ) : value ? (
+                value
+              ) : (
+                <span className="text-muted-foreground">{t('Select category')}</span>
+              )}
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
             <Command
-              key={`${transactionType}-${formMode}`}
+              key={transactionType}
               shouldFilter={false}
               className="max-h-80 overflow-hidden"
             >
@@ -375,23 +365,21 @@ export function TransactionCategoryPicker({
                 placeholder={t('Search or create category...')}
                 value={search}
                 onValueChange={setSearch}
+                disabled={listLoading}
               />
+              {listLoading ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('Loading categories...')}
+                </div>
+              ) : null}
               {listIsEmpty ? <CommandEmpty>{t('No categories found')}</CommandEmpty> : null}
               <CommandList className="max-h-64 overflow-y-auto">
-                {savedCategoryItem ? (
-                  <CommandGroup heading={t('Saved on this entry')}>
-                    {renderCategoryItem(savedCategoryItem)}
+                {!listLoading ? (
+                  <CommandGroup heading={t('Categories')}>
+                    {filteredCategories.map((cat) => renderCategoryItem(cat))}
                   </CommandGroup>
                 ) : null}
-                <CommandGroup
-                  heading={
-                    formMode === 'edit'
-                      ? t('All wallet categories')
-                      : t('Categories')
-                  }
-                >
-                  {allCategoryItems.map((cat) => renderCategoryItem(cat))}
-                </CommandGroup>
                 <CommandSeparator />
                 <CommandGroup heading={t('Create new')}>
                   <div className="flex items-center gap-2 px-2 py-1.5">

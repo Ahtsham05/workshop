@@ -58,6 +58,7 @@ import {
   EMPTY_WALLET_CATEGORY_CATALOG,
   useWalletLedgerCategoryCatalog,
 } from '../hooks/use-wallet-ledger-category-catalog';
+import { mergeWalletCategoriesForPicker } from '../utils/merge-wallet-categories';
 
 interface LedgerEntry {
   _id?: string;
@@ -162,6 +163,7 @@ function EntryForm({
   editingEntry,
   categoryNamesByType = {},
   categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
+  isCategoryCatalogLoading = false,
   onCatalogRefresh,
   onSuccess,
   onCancel,
@@ -169,6 +171,7 @@ function EntryForm({
   editingEntry: LedgerEntry | null;
   categoryNamesByType?: Record<string, string[]>;
   categoryCatalogByType?: Record<string, ExpenseCategory[]>;
+  isCategoryCatalogLoading?: boolean;
   onCatalogRefresh: (transactionType: TransactionCategoryType) => void;
   onSuccess: () => void;
   onCancel: () => void;
@@ -296,32 +299,27 @@ function EntryForm({
     }
   };
 
-  const categoryType = form.transactionType as TransactionCategoryType;
-  const savedCategoryOnEntry = normalizeWalletCategoryName(editingEntry?.category);
-
+  /** Same extra names in create and edit so the picker list always matches */
   const extraCategories = useMemo(() => {
-    // Edit with no saved category: show only wallet catalog (same as create), not names from other rows
-    if (editingEntry && !savedCategoryOnEntry) {
-      return [];
-    }
     const names = new Set<string>();
-    if (savedCategoryOnEntry) {
-      names.add(savedCategoryOnEntry);
-    }
-    if (!editingEntry) {
-      for (const name of categoryNamesByType[form.transactionType] ?? []) {
-        const normalized = normalizeWalletCategoryName(name);
-        if (normalized) names.add(normalized);
-      }
+    for (const name of categoryNamesByType[form.transactionType] ?? []) {
+      const normalized = normalizeWalletCategoryName(name);
+      if (normalized) names.add(normalized);
     }
     return Array.from(names);
-  }, [
-    categoryNamesByType,
-    form.transactionType,
-    editingEntry,
-    savedCategoryOnEntry,
-  ]);
-  const apiCategories = categoryCatalogByType[form.transactionType] ?? [];
+  }, [categoryNamesByType, form.transactionType]);
+
+  const categoryType = form.transactionType as TransactionCategoryType;
+  const catalogForType = categoryCatalogByType[categoryType] ?? [];
+  const walletCategoriesForPicker = useMemo(
+    () =>
+      mergeWalletCategoriesForPicker(
+        catalogForType,
+        extraCategories,
+        form.category,
+      ),
+    [catalogForType, extraCategories, form.category],
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -406,11 +404,9 @@ function EntryForm({
           key={`${categoryType}-${editingEntry?.id || editingEntry?._id || 'new'}`}
           transactionType={categoryType}
           value={form.category}
-          apiCategories={apiCategories}
-          extraCategories={extraCategories}
+          apiCategories={walletCategoriesForPicker}
           walletMode
-          formMode={editingEntry && savedCategoryOnEntry ? 'edit' : 'create'}
-          savedCategory={savedCategoryOnEntry}
+          categoriesLoading={isCategoryCatalogLoading}
           required
           error={categoryError}
           onChange={(category) => {
@@ -454,6 +450,7 @@ export function PersonalLedger() {
   const dispatch = useDispatch();
   const {
     byType: categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
+    isLoading: isCategoryCatalogLoading,
     refreshType: refreshWalletCategoryType,
   } = useWalletLedgerCategoryCatalog();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
@@ -520,6 +517,12 @@ export function PersonalLedger() {
   useEffect(() => {
     fetchAllLedgerCategoryNames();
   }, [fetchAllLedgerCategoryNames]);
+
+  useEffect(() => {
+    if (!showForm) return;
+    const type = (editingEntry?.transactionType || 'income') as TransactionCategoryType;
+    refreshWalletCategoryType(type);
+  }, [showForm, editingEntry?.transactionType, refreshWalletCategoryType]);
 
   useEffect(() => {
     fetchOpeningBalance();
@@ -1098,6 +1101,7 @@ export function PersonalLedger() {
               editingEntry={editingEntry}
               categoryNamesByType={categoryNamesByType}
               categoryCatalogByType={categoryCatalogByType}
+              isCategoryCatalogLoading={isCategoryCatalogLoading}
               onCatalogRefresh={refreshWalletCategoryType}
               onSuccess={handleFormSuccess}
               onCancel={() => { setShowForm(false); setEditingEntry(null); }}
