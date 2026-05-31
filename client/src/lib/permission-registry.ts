@@ -141,7 +141,7 @@ export function buildAllPermissionsTrue(): Permission {
 
 export function getGroupsForTab(tab: PermissionTabId): PermissionGroupDef[] {
   const ids = PERMISSION_TAB_GROUPS[tab];
-  return PERMISSION_GROUPS.filter((group) => ids.includes(group.id as typeof ids[number]));
+  return PERMISSION_GROUPS.filter((group) => (ids as readonly string[]).includes(group.id));
 }
 
 export function formatPermissionLabel(key: PermissionKey, t: (key: string) => string): string {

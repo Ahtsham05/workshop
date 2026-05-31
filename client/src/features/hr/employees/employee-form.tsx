@@ -16,8 +16,10 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, X } from 'lucide-react';
+import { getEntityId } from '@/lib/entity-id';
+import toast from 'react-hot-toast';
 
-const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+const numericField = z.coerce.number().min(0);
 
 const employeeSchema = z.object({
   // Personal Information
@@ -46,9 +48,9 @@ const employeeSchema = z.object({
   
   // Salary Information
   salary: z.object({
-    basicSalary: z.number().min(0, 'Basic salary must be positive'),
-    allowances: z.number().min(0),
-    deductions: z.number().min(0),
+    basicSalary: numericField,
+    allowances: numericField,
+    deductions: numericField,
   }),
   
   // Bank Information
@@ -92,6 +94,8 @@ export default function EmployeeForm({
 }: EmployeeFormProps) {
   const { t } = useLanguage();
 
+  const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
   const sanitizeObjectId = (value?: string) => {
     if (!value || !OBJECT_ID_REGEX.test(value)) {
       return undefined;
@@ -115,6 +119,7 @@ export default function EmployeeForm({
     formState: { errors },
     setValue,
     watch,
+    reset,
   } = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
     defaultValues: initialData || {
@@ -134,17 +139,27 @@ export default function EmployeeForm({
 
   useEffect(() => {
     if (initialData) {
-      Object.keys(initialData).forEach((key) => {
-        setValue(key as any, initialData[key]);
+      reset({
+        ...initialData,
+        salary: {
+          basicSalary: Number(initialData.salary?.basicSalary || 0),
+          allowances: Number(initialData.salary?.allowances || 0),
+          deductions: Number(initialData.salary?.deductions || 0),
+        },
+        department: getEntityId(initialData.department) || initialData.department,
+        reportingManager: getEntityId(initialData.reportingManager) || '',
+        shift: getEntityId(initialData.shift) || '',
       });
     }
-  }, [initialData, setValue]);
+  }, [initialData, reset]);
 
   return (
     <form
-      onSubmit={handleSubmit(async (values) => {
+      onSubmit={handleSubmit(
+        async (values) => {
         const payload: any = {
           ...values,
+          department: getEntityId(values.department) || values.department,
           shift: sanitizeObjectId(values.shift),
           reportingManager: sanitizeObjectId(values.reportingManager),
         };
@@ -174,7 +189,12 @@ export default function EmployeeForm({
         }
 
         await onSubmit(payload);
-      })}
+        },
+        (formErrors) => {
+          const firstError = Object.values(formErrors)[0] as { message?: string } | undefined;
+          toast.error(firstError?.message || t('Please fix the form errors before saving'));
+        },
+      )}
       className="space-y-4"
     >
       <Tabs defaultValue="personal" className="w-full">
@@ -296,7 +316,7 @@ export default function EmployeeForm({
                     </SelectTrigger>
                     <SelectContent>
                       {departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
+                        <SelectItem key={getEntityId(dept)} value={getEntityId(dept)}>
                           {dept.name}
                         </SelectItem>
                       ))}
@@ -374,7 +394,7 @@ export default function EmployeeForm({
                   </SelectTrigger>
                   <SelectContent>
                     {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
+                      <SelectItem key={getEntityId(emp)} value={getEntityId(emp)}>
                         {emp.firstName} {emp.lastName}
                       </SelectItem>
                     ))}

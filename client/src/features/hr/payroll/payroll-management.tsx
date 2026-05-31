@@ -48,6 +48,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EmployeePayrollMonthlySummary } from './employee-payroll-monthly';
 
 const toLocalDateInputValue = (value = new Date()) => {
   const d = value instanceof Date ? value : new Date(value);
@@ -68,6 +69,7 @@ export default function PayrollManagement() {
   const [showLedgerPayDialog, setShowLedgerPayDialog] = useState(false);
   const [showLedgerEditDialog, setShowLedgerEditDialog] = useState(false);
   const [selectedEmployeeLedger, setSelectedEmployeeLedger] = useState('');
+  const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
   const [selectedLedgerEntry, setSelectedLedgerEntry] = useState<any>(null);
   const [selectedPayroll, setSelectedPayroll] = useState<any>(null);
   const [editPayrollData, setEditPayrollData] = useState({
@@ -601,6 +603,12 @@ export default function PayrollManagement() {
 
           {selectedEmployeeLedger && (
             <>
+              <EmployeePayrollMonthlySummary
+                employeeId={selectedEmployeeLedger}
+                year={summaryYear}
+                onYearChange={setSummaryYear}
+              />
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="p-3 rounded-lg bg-blue-50">
                   <p className="text-xs text-muted-foreground">{t('Total Payable')}</p>

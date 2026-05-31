@@ -19,6 +19,14 @@ router
   .post(auth('createPayroll'), validate(payrollValidation.generatePayroll), payrollController.generatePayroll);
 
 router
+  .route('/employee/:employeeId/monthly-summary')
+  .get(
+    auth('getPayroll'),
+    validate(payrollValidation.getEmployeeMonthlySummary),
+    payrollController.getEmployeeMonthlySummary,
+  );
+
+router
   .route('/:payrollId/process')
   .patch(auth('processPayroll'), validate(payrollValidation.processPayroll), payrollController.processPayroll);
 

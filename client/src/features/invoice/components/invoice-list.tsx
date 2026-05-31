@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
-import { permissionMessage, apiPermissionMessage } from '@/lib/permission-messages'
+import { permissionMessage } from '@/lib/permission-messages'
 import {
   Select,
   SelectContent,

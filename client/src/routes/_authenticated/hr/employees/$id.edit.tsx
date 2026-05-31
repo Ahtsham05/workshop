@@ -8,6 +8,7 @@ import {
   useGetDepartmentsQuery,
   useGetEmployeesQuery,
 } from '@/stores/hr.api';
+import { getEntityId } from '@/lib/entity-id';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { IconArrowLeft, IconLoader } from '@tabler/icons-react';
@@ -102,15 +103,15 @@ function EmployeeEditPage() {
 
     // Professional Information
     employeeId: employee.employeeId,
-    department: employee.department?._id || employee.department,
-    designation: employee.designation?._id || employee.designation,
-    reportingManager: employee.reportingManager?._id || employee.reportingManager || '',
+    department: getEntityId(employee.department) || employee.department,
+    designation: getEntityId(employee.designation) || employee.designation,
+    reportingManager: getEntityId(employee.reportingManager) || '',
     joiningDate: employee.joiningDate
       ? new Date(employee.joiningDate).toISOString().split('T')[0]
       : '',
     employmentType: employee.employmentType,
     employmentStatus: employee.employmentStatus || 'Active',
-    shift: employee.shift?._id || employee.shift,
+    shift: getEntityId(employee.shift) || '',
     skills: employee.skills || [],
 
     // Salary Information
@@ -137,7 +138,7 @@ function EmployeeEditPage() {
   const departments = departmentsData?.results || [];
   // Filter out current employee from managers list
   const employees =
-    employeesData?.results?.filter((e: any) => e._id !== id) || [];
+    employeesData?.results?.filter((e: any) => getEntityId(e) !== id) || [];
 
   return (
     <div className="space-y-6">

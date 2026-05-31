@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Payroll, Employee, Attendance, Leave } = require('../models');
+const { Payroll, Employee, Attendance, Leave, EmployeeLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const employeeLedgerService = require('./employeeLedger.service');
 
@@ -240,6 +240,150 @@ const markPayrollPaid = async (payrollId, paymentDate, paymentMethod, amount) =>
   return payroll;
 };
 
+const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) => {
+  const employee = await Employee.findById(employeeId);
+  if (!employee) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  }
+
+  const tenantFilter = {};
+  if (scope.organizationId) tenantFilter.organizationId = scope.organizationId;
+  if (scope.branchId) tenantFilter.branchId = scope.branchId;
+
+  const entriesBeforeYear = await EmployeeLedger.find({
+    employee: employeeId,
+    ...tenantFilter,
+    transactionDate: { $lt: new Date(year, 0, 1) },
+  }).sort({ transactionDate: 1, createdAt: 1 });
+
+  let runningBalance = 0;
+  entriesBeforeYear.forEach((entry) => {
+    runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+  });
+
+  const months = [];
+
+  for (let month = 1; month <= 12; month += 1) {
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    const daysInMonth = monthEnd.getDate();
+
+    const payroll = await Payroll.findOne({
+      employee: employeeId,
+      month,
+      year,
+      ...tenantFilter,
+    });
+
+    const ledgerEntries = await EmployeeLedger.find({
+      employee: employeeId,
+      ...tenantFilter,
+      transactionDate: { $gte: monthStart, $lte: monthEnd },
+    }).sort({ transactionDate: 1, createdAt: 1 });
+
+    const openingBalance = runningBalance;
+    const overpaymentFromPreviousMonth = Math.max(0, -openingBalance);
+
+    let workingDays = daysInMonth;
+    let presentDays = 0;
+    let absentDays = 0;
+    let leaveDays = 0;
+
+    if (payroll) {
+      workingDays = payroll.workingDays || daysInMonth;
+      presentDays = payroll.presentDays || 0;
+      absentDays = payroll.absentDays || 0;
+      leaveDays = payroll.leaveDays || 0;
+    } else {
+      const attendances = await Attendance.find({
+        employee: employeeId,
+        date: { $gte: monthStart, $lte: monthEnd },
+      });
+      presentDays = attendances.filter((a) => a.status === 'Present' || a.status === 'Late').length;
+      absentDays = attendances.filter((a) => a.status === 'Absent').length;
+
+      const leaves = await Leave.find({
+        employee: employeeId,
+        status: 'Approved',
+        startDate: { $lte: monthEnd },
+        endDate: { $gte: monthStart },
+      });
+      leaveDays = leaves.reduce(
+        (sum, leave) => sum + getOverlappingLeaveDays(leave, monthStart, monthEnd),
+        0,
+      );
+    }
+
+    const payableFromLedger = ledgerEntries
+      .filter((entry) => entry.transactionType === 'salary_payable')
+      .reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
+
+    const grossSalary = payroll
+      ? Number(payroll.grossSalary || 0)
+      : Number(employee.salary?.basicSalary || 0) + Number(employee.salary?.allowances || 0);
+
+    const totalSalary = payroll ? Number(payroll.netSalary || 0) : payableFromLedger;
+
+    const salaryPaid = ledgerEntries
+      .filter((entry) => entry.transactionType === 'salary_payment')
+      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
+
+    const advancePaid = ledgerEntries
+      .filter((entry) => entry.transactionType === 'advance_payment')
+      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
+
+    const advanceDeduction = payroll ? Number(payroll.deductions?.advance || 0) : 0;
+
+    ledgerEntries.forEach((entry) => {
+      runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+    });
+
+    const closingBalance = runningBalance;
+    const totalPaid = salaryPaid + advancePaid;
+    const remainingPayable = Math.max(0, closingBalance);
+    const extraPaidThisMonth = Math.max(
+      0,
+      totalPaid - Math.max(0, totalSalary - overpaymentFromPreviousMonth),
+    );
+
+    months.push({
+      month,
+      year,
+      payrollId: payroll?._id?.toString() || payroll?.id || null,
+      status: payroll?.status || (totalSalary > 0 || totalPaid > 0 ? 'Ledger Only' : 'No Record'),
+      grossSalary,
+      totalSalary,
+      salaryPaid,
+      advancePaid,
+      totalPaid,
+      advanceDeduction,
+      overpaymentFromPreviousMonth,
+      extraPaidThisMonth,
+      overpaymentToNextMonth: Math.max(0, -closingBalance),
+      workingDays,
+      presentDays,
+      absentDays,
+      leaveDays,
+      openingBalance,
+      closingBalance,
+      remainingPayable,
+      hasActivity: Boolean(payroll || ledgerEntries.length > 0 || presentDays > 0 || absentDays > 0),
+    });
+  }
+
+  return {
+    employee: {
+      id: employee._id?.toString() || employee.id,
+      employeeId: employee.employeeId,
+      name: `${employee.firstName} ${employee.lastName}`.trim(),
+      basicSalary: Number(employee.salary?.basicSalary || 0),
+    },
+    year,
+    months,
+    currentBalance: runningBalance,
+  };
+};
+
 module.exports = {
   createPayroll,
   queryPayrolls,
@@ -249,4 +393,5 @@ module.exports = {
   generatePayroll,
   processPayroll,
   markPayrollPaid,
+  getEmployeeMonthlyPayrollSummary,
 };

@@ -151,7 +151,6 @@ const ur: Record<string, string> = {
     "permission_denied": "آپ کو یہ عمل کرنے کی اجازت نہیں ہے۔",
     "invoice_deleted_successfully": "انوائس کامیابی سے حذف ہو گئی!",
     "failed_to_delete_invoice": "انوائس حذف کرنے میں ناکامی",
-    "viewDashboard": "ڈیش بورڈ دیکھیں",
     "sim_sale_by_product": "مصنوعات کے لحاظ سے SIM فروخت",
     "Click a product to view its details": "تفصیلات دیکھنے کے لیے مصنوعات پر کلک کریں",
     "SIM Sale Details": "SIM فروخت کی تفصیلات",

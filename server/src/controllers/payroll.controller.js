@@ -75,6 +75,16 @@ const markPayrollPaid = catchAsync(async (req, res) => {
   res.send(payroll);
 });
 
+const getEmployeeMonthlySummary = catchAsync(async (req, res) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const summary = await payrollService.getEmployeeMonthlyPayrollSummary(
+    req.params.employeeId,
+    year,
+    getBranchContext(req),
+  );
+  res.send(summary);
+});
+
 module.exports = {
   createPayroll,
   getPayrolls,
@@ -84,4 +94,5 @@ module.exports = {
   generatePayroll,
   processPayroll,
   markPayrollPaid,
+  getEmployeeMonthlySummary,
 };

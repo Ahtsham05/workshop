@@ -1,15 +1,15 @@
 const PKR_DENOMINATIONS = [
-  { value: 5000, kind: 'note', label: 'Rs 5,000' },
-  { value: 1000, kind: 'note', label: 'Rs 1,000' },
-  { value: 500, kind: 'note', label: 'Rs 500' },
-  { value: 100, kind: 'note', label: 'Rs 100' },
-  { value: 50, kind: 'note', label: 'Rs 50' },
-  { value: 20, kind: 'note', label: 'Rs 20' },
   { value: 10, kind: 'note', label: 'Rs 10' },
-  { value: 10, kind: 'coin', label: 'Rs 10 coin' },
-  { value: 5, kind: 'coin', label: 'Rs 5 coin' },
-  { value: 2, kind: 'coin', label: 'Rs 2 coin' },
+  { value: 20, kind: 'note', label: 'Rs 20' },
+  { value: 50, kind: 'note', label: 'Rs 50' },
+  { value: 100, kind: 'note', label: 'Rs 100' },
+  { value: 500, kind: 'note', label: 'Rs 500' },
+  { value: 1000, kind: 'note', label: 'Rs 1,000' },
+  { value: 5000, kind: 'note', label: 'Rs 5,000' },
   { value: 1, kind: 'coin', label: 'Rs 1 coin' },
+  { value: 2, kind: 'coin', label: 'Rs 2 coin' },
+  { value: 5, kind: 'coin', label: 'Rs 5 coin' },
+  { value: 10, kind: 'coin', label: 'Rs 10 coin' },
 ];
 
 const denominationKey = (value, kind) => `${kind}:${value}`;

@@ -154,11 +154,17 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
   // If shift is not a valid ObjectId, remove it
   if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
     delete cleanedBody.shift;
+  } else if (cleanedBody.shift === '' || cleanedBody.shift === null) {
+    cleanedBody.shift = undefined;
+    employee.shift = undefined;
   }
   
   // If reportingManager is not a valid ObjectId, remove it
   if (cleanedBody.reportingManager && !cleanedBody.reportingManager.match(/^[0-9a-fA-F]{24}$/)) {
     delete cleanedBody.reportingManager;
+  } else if (cleanedBody.reportingManager === '' || cleanedBody.reportingManager === null) {
+    cleanedBody.reportingManager = undefined;
+    employee.reportingManager = undefined;
   }
   
   // Keep employeeId system-managed and designation hidden in HR form workflow.

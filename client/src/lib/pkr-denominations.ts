@@ -1,15 +1,15 @@
 export const PKR_DENOMINATIONS = [
-  { value: 5000, kind: 'note' as const, label: 'Rs 5,000 note' },
-  { value: 1000, kind: 'note' as const, label: 'Rs 1,000 note' },
-  { value: 500, kind: 'note' as const, label: 'Rs 500 note' },
-  { value: 100, kind: 'note' as const, label: 'Rs 100 note' },
-  { value: 50, kind: 'note' as const, label: 'Rs 50 note' },
-  { value: 20, kind: 'note' as const, label: 'Rs 20 note' },
   { value: 10, kind: 'note' as const, label: 'Rs 10 note' },
-  { value: 10, kind: 'coin' as const, label: 'Rs 10 coin' },
-  { value: 5, kind: 'coin' as const, label: 'Rs 5 coin' },
-  { value: 2, kind: 'coin' as const, label: 'Rs 2 coin' },
+  { value: 20, kind: 'note' as const, label: 'Rs 20 note' },
+  { value: 50, kind: 'note' as const, label: 'Rs 50 note' },
+  { value: 100, kind: 'note' as const, label: 'Rs 100 note' },
+  { value: 500, kind: 'note' as const, label: 'Rs 500 note' },
+  { value: 1000, kind: 'note' as const, label: 'Rs 1,000 note' },
+  { value: 5000, kind: 'note' as const, label: 'Rs 5,000 note' },
   { value: 1, kind: 'coin' as const, label: 'Rs 1 coin' },
+  { value: 2, kind: 'coin' as const, label: 'Rs 2 coin' },
+  { value: 5, kind: 'coin' as const, label: 'Rs 5 coin' },
+  { value: 10, kind: 'coin' as const, label: 'Rs 10 coin' },
 ] as const
 
 export type DenominationKind = 'note' | 'coin'

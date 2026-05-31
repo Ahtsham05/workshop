@@ -113,6 +113,7 @@ import { Route as AuthenticatedSchoolStudentsCreateImport } from './routes/_auth
 import { Route as AuthenticatedSchoolStudentsIdImport } from './routes/_authenticated/school/students/$id'
 import { Route as AuthenticatedSchoolReportsResultSheetImport } from './routes/_authenticated/school/reports/result-sheet'
 import { Route as AuthenticatedSchoolPortalsTeacherImport } from './routes/_authenticated/school/portals/teacher'
+import { Route as AuthenticatedSchoolPortalsStudentImport } from './routes/_authenticated/school/portals/student'
 import { Route as AuthenticatedSchoolPortalsParentImport } from './routes/_authenticated/school/portals/parent'
 import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
 import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
@@ -818,6 +819,13 @@ const AuthenticatedSchoolPortalsTeacherRoute =
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
+const AuthenticatedSchoolPortalsStudentRoute =
+  AuthenticatedSchoolPortalsStudentImport.update({
+    id: '/portals/student',
+    path: '/portals/student',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
 const AuthenticatedSchoolPortalsParentRoute =
   AuthenticatedSchoolPortalsParentImport.update({
     id: '/portals/parent',
@@ -1411,6 +1419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSchoolPortalsParentImport
       parentRoute: typeof AuthenticatedSchoolImport
     }
+    '/_authenticated/school/portals/student': {
+      id: '/_authenticated/school/portals/student'
+      path: '/portals/student'
+      fullPath: '/school/portals/student'
+      preLoaderRoute: typeof AuthenticatedSchoolPortalsStudentImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/school/portals/teacher': {
       id: '/_authenticated/school/portals/teacher'
       path: '/portals/teacher'
@@ -1767,6 +1782,7 @@ const AuthenticatedSchoolStudentsIdRouteWithChildren =
 interface AuthenticatedSchoolRouteChildren {
   AuthenticatedSchoolIndexRoute: typeof AuthenticatedSchoolIndexRoute
   AuthenticatedSchoolPortalsParentRoute: typeof AuthenticatedSchoolPortalsParentRoute
+  AuthenticatedSchoolPortalsStudentRoute: typeof AuthenticatedSchoolPortalsStudentRoute
   AuthenticatedSchoolPortalsTeacherRoute: typeof AuthenticatedSchoolPortalsTeacherRoute
   AuthenticatedSchoolReportsResultSheetRoute: typeof AuthenticatedSchoolReportsResultSheetRoute
   AuthenticatedSchoolStudentsIdRoute: typeof AuthenticatedSchoolStudentsIdRouteWithChildren
@@ -1807,6 +1823,8 @@ interface AuthenticatedSchoolRouteChildren {
 const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
   AuthenticatedSchoolIndexRoute: AuthenticatedSchoolIndexRoute,
   AuthenticatedSchoolPortalsParentRoute: AuthenticatedSchoolPortalsParentRoute,
+  AuthenticatedSchoolPortalsStudentRoute:
+    AuthenticatedSchoolPortalsStudentRoute,
   AuthenticatedSchoolPortalsTeacherRoute:
     AuthenticatedSchoolPortalsTeacherRoute,
   AuthenticatedSchoolReportsResultSheetRoute:
@@ -2087,6 +2105,7 @@ export interface FileRoutesByFullPath {
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
   '/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
   '/school/students/$id': typeof AuthenticatedSchoolStudentsIdRouteWithChildren
@@ -2202,6 +2221,7 @@ export interface FileRoutesByTo {
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
   '/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
   '/school/students/create': typeof AuthenticatedSchoolStudentsCreateRoute
@@ -2320,6 +2340,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
+  '/_authenticated/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/_authenticated/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
   '/_authenticated/school/reports/result-sheet': typeof AuthenticatedSchoolReportsResultSheetRoute
   '/_authenticated/school/students/$id': typeof AuthenticatedSchoolStudentsIdRouteWithChildren
@@ -2440,6 +2461,7 @@ export interface FileRouteTypes {
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/school/portals/parent'
+    | '/school/portals/student'
     | '/school/portals/teacher'
     | '/school/reports/result-sheet'
     | '/school/students/$id'
@@ -2554,6 +2576,7 @@ export interface FileRouteTypes {
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/school/portals/parent'
+    | '/school/portals/student'
     | '/school/portals/teacher'
     | '/school/reports/result-sheet'
     | '/school/students/create'
@@ -2670,6 +2693,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
     | '/_authenticated/school/portals/parent'
+    | '/_authenticated/school/portals/student'
     | '/_authenticated/school/portals/teacher'
     | '/_authenticated/school/reports/result-sheet'
     | '/_authenticated/school/students/$id'
@@ -2899,6 +2923,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/school/",
         "/_authenticated/school/portals/parent",
+        "/_authenticated/school/portals/student",
         "/_authenticated/school/portals/teacher",
         "/_authenticated/school/reports/result-sheet",
         "/_authenticated/school/students/$id",
@@ -3152,6 +3177,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/school/portals/parent": {
       "filePath": "_authenticated/school/portals/parent.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/portals/student": {
+      "filePath": "_authenticated/school/portals/student.tsx",
       "parent": "/_authenticated/school"
     },
     "/_authenticated/school/portals/teacher": {

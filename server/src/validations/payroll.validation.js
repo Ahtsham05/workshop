@@ -116,6 +116,15 @@ const markPayrollPaid = {
   }),
 };
 
+const getEmployeeMonthlySummary = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    year: Joi.number().integer().min(2020).max(2100),
+  }),
+};
+
 module.exports = {
   createPayroll,
   getPayrolls,
@@ -125,4 +134,5 @@ module.exports = {
   generatePayroll,
   processPayroll,
   markPayrollPaid,
+  getEmployeeMonthlySummary,
 };
