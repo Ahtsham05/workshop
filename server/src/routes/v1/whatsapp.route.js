@@ -2,12 +2,13 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { whatsappController } = require('../../controllers');
 
 const router = express.Router();
 
 // All WhatsApp routes require authentication, branch scope, and school_management feature
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
 // Connection management (schoolAdmin only)
 router.get('/status', auth('manageSchool'), whatsappController.getStatus);

@@ -1,6 +1,11 @@
 const httpStatus = require('http-status');
 const { Role } = require('../models');
 const ApiError = require('../utils/ApiError');
+const {
+  sanitizePermissions,
+  buildAdminPermissions,
+  buildPermissionsPayload,
+} = require('../config/permission-registry');
 
 /**
  * Create a role
@@ -11,7 +16,11 @@ const createRole = async (roleBody) => {
   if (await Role.isNameTaken(roleBody.name)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already taken');
   }
-  return Role.create(roleBody);
+  const payload = { ...roleBody };
+  if (payload.permissions) {
+    payload.permissions = sanitizePermissions(payload.permissions);
+  }
+  return Role.create(payload);
 };
 
 /**
@@ -63,6 +72,9 @@ const updateRoleById = async (roleId, updateBody) => {
   if (updateBody.name && (await Role.isNameTaken(updateBody.name, roleId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already taken');
   }
+  if (updateBody.permissions) {
+    updateBody.permissions = sanitizePermissions(updateBody.permissions);
+  }
   Object.assign(role, updateBody);
   await role.save();
   return role;
@@ -105,7 +117,7 @@ const updateRolePermissions = async (roleId, permissions) => {
   if (role.isSystemRole) {
     throw new ApiError(httpStatus.FORBIDDEN, 'Cannot modify permissions of system roles');
   }
-  role.permissions = { ...role.permissions.toObject(), ...permissions };
+  role.permissions = buildPermissionsPayload(permissions);
   await role.save();
   return role;
 };
@@ -115,21 +127,7 @@ const updateRolePermissions = async (roleId, permissions) => {
  * @returns {Promise<void>}
  */
 const createDefaultRoles = async () => {
-  const adminPermissions = {
-    viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
-    viewInvoices: true, createInvoices: true, editInvoices: true, deleteInvoices: true, printInvoices: true,
-    viewPurchases: true, createPurchases: true, editPurchases: true, deletePurchases: true,
-    viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, deletePurchaseOrders: true, receivePurchaseOrders: true,
-    viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
-    viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
-    viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,
-    viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
-    viewCustomerReports: true, viewSupplierReports: true, viewProductReports: true, exportReports: true,
-    viewUsers: true, createUsers: true, editUsers: true, deleteUsers: true,
-    viewRoles: true, createRoles: true, editRoles: true, deleteRoles: true,
-    viewSettings: true, editSettings: true, viewDashboard: true,
-    viewPayments: true, createPayments: true, editPayments: true, deletePayments: true,
-  };
+  const adminPermissions = buildAdminPermissions();
 
   const defaultRoles = [
     {
@@ -147,10 +145,31 @@ const createDefaultRoles = async () => {
         viewInvoices: true, createInvoices: true, editInvoices: true, printInvoices: true,
         viewPurchases: true, createPurchases: true, editPurchases: true,
         viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, receivePurchaseOrders: true,
+        viewSalesReturns: true, createSalesReturns: true, editSalesReturns: true,
+        viewPurchaseReturns: true, createPurchaseReturns: true, editPurchaseReturns: true,
         viewCustomers: true, createCustomers: true, editCustomers: true,
         viewSuppliers: true, createSuppliers: true, editSuppliers: true,
         viewCategories: true, createCategories: true, editCategories: true,
+        viewAccounting: true, manageExpenses: true, manageLedgers: true, managePersonalWallet: true,
+        viewCashBook: true, manageCashBook: true, viewCashRegister: true, manageCashRegister: true,
+        viewAccountsSystem: true, manageAccountsSystem: true,
+        viewWallet: true, manageWallet: true,
+        viewLoadManagement: true, manageLoadManagement: true,
+        viewSimSales: true, manageSimSales: true,
+        viewCashManagement: true, manageCashManagement: true,
+        viewRepairs: true, manageRepairs: true,
+        viewServices: true, manageServices: true,
+        viewBillPayments: true, manageBillPayments: true,
+        viewInstallments: true, manageInstallments: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
+        viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
+        viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,
+        viewWalletReports: true, viewInstallmentReports: true,
+        getEmployees: true, createEmployees: true, manageEmployees: true,
+        getDepartments: true, createDepartments: true, manageDepartments: true,
+        getAttendance: true, createAttendance: true, manageAttendance: true,
+        getLeaves: true, createLeaves: true, manageLeaves: true, approveLeaves: true,
+        getPayroll: true, createPayroll: true, managePayroll: true, processPayroll: true,
         viewDashboard: true,
       },
       isSystemRole: true,
@@ -173,9 +192,16 @@ const createDefaultRoles = async () => {
       description: 'Read-only access to view data',
       permissions: {
         viewProducts: true, viewInvoices: true, viewPurchases: true,
-        viewPurchaseOrders: true,
+        viewPurchaseOrders: true, viewSalesReturns: true, viewPurchaseReturns: true,
         viewCustomers: true, viewSuppliers: true, viewCategories: true,
+        viewAccounting: true, viewCashBook: true, viewCashRegister: true, viewAccountsSystem: true,
+        viewWallet: true, viewLoadManagement: true, viewSimSales: true, viewCashManagement: true,
+        viewRepairs: true, viewServices: true, viewBillPayments: true, viewInstallments: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
+        viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
+        viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,
+        viewWalletReports: true, viewInstallmentReports: true,
+        getEmployees: true, getDepartments: true, getAttendance: true, getLeaves: true, getPayroll: true,
         viewDashboard: true,
       },
       isSystemRole: true,

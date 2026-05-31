@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Role, Permission, useUpdateRolePermissionsMutation } from '@/stores/roles.api';
 import {
   Dialog,
@@ -14,21 +14,19 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
+import { Shield, Search } from 'lucide-react';
 import {
-  ShoppingCart,
-  FileText,
-  Package,
-  Users,
-  Truck,
-  FolderOpen,
-  BarChart3,
-  Shield,
-  Settings,
-  LayoutDashboard,
-  CreditCard,
-} from 'lucide-react';
+  getGroupsForTab,
+  buildPermissionsState,
+  buildPermissionsPayload,
+  formatPermissionLabel,
+  type PermissionGroupDef,
+  type PermissionKey,
+  type PermissionTabId,
+} from '@/lib/permission-registry';
 
 interface PermissionsDialogProps {
   open: boolean;
@@ -37,172 +35,40 @@ interface PermissionsDialogProps {
   onSuccess: () => void;
 }
 
-interface PermissionGroup {
-  title: string;
-  icon: React.ReactNode;
-  permissions: {
-    key: keyof Permission;
-    label: string;
-  }[];
-}
+const TAB_CONFIG: { id: PermissionTabId; labelKey: string; fallback: string }[] = [
+  { id: 'business', labelKey: 'business_permissions', fallback: 'Business' },
+  { id: 'mobile_shop', labelKey: 'mobile_shop_permissions', fallback: 'Mobile Shop' },
+  { id: 'reports_hr', labelKey: 'reports_hr_permissions', fallback: 'Reports & HR' },
+  { id: 'administration', labelKey: 'administration_permissions', fallback: 'Administration' },
+];
 
 export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: PermissionsDialogProps) {
   const { t } = useLanguage();
   const [permissions, setPermissions] = useState<Permission>({});
+  const [search, setSearch] = useState('');
   const [updatePermissions, { isLoading }] = useUpdateRolePermissionsMutation();
 
   useEffect(() => {
     if (role) {
-      setPermissions(role.permissions || {});
+      setPermissions(buildPermissionsState(role.permissions || {}));
     }
   }, [role]);
 
-  const permissionGroups: PermissionGroup[] = [
-    {
-      title: t('products') || 'Products',
-      icon: <ShoppingCart className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewProducts', label: t('view_products') || 'View Products' },
-        { key: 'createProducts', label: t('create_products') || 'Create Products' },
-        { key: 'editProducts', label: t('edit_products') || 'Edit Products' },
-        { key: 'deleteProducts', label: t('delete_products') || 'Delete Products' },
-      ],
-    },
-    {
-      title: t('invoices') || 'Invoices',
-      icon: <FileText className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewInvoices', label: t('view_invoices') || 'View Invoices' },
-        { key: 'createInvoices', label: t('create_invoices') || 'Create Invoices' },
-        { key: 'editInvoices', label: t('edit_invoices') || 'Edit Invoices' },
-        { key: 'deleteInvoices', label: t('delete_invoices') || 'Delete Invoices' },
-        { key: 'printInvoices', label: t('print_invoices') || 'Print Invoices' },
-      ],
-    },
-    {
-      title: t('purchases') || 'Purchases',
-      icon: <Package className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewPurchases', label: t('view_purchases') || 'View Purchases' },
-        { key: 'createPurchases', label: t('create_purchases') || 'Create Purchases' },
-        { key: 'editPurchases', label: t('edit_purchases') || 'Edit Purchases' },
-        { key: 'deletePurchases', label: t('delete_purchases') || 'Delete Purchases' },
-      ],
-    },
-    {
-      title: t('purchase_orders') || 'Purchase Orders',
-      icon: <Package className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewPurchaseOrders', label: t('view_purchase_orders') || 'View Purchase Orders' },
-        { key: 'createPurchaseOrders', label: t('create_purchase_orders') || 'Create Purchase Orders' },
-        { key: 'editPurchaseOrders', label: t('edit_purchase_orders') || 'Edit Purchase Orders' },
-        { key: 'deletePurchaseOrders', label: t('delete_purchase_orders') || 'Delete Purchase Orders' },
-        { key: 'receivePurchaseOrders', label: t('receive_purchase_orders') || 'Receive Purchase Orders' },
-      ],
-    },
-    {
-      title: t('customers') || 'Customers',
-      icon: <Users className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewCustomers', label: t('view_customers') || 'View Customers' },
-        { key: 'createCustomers', label: t('create_customers') || 'Create Customers' },
-        { key: 'editCustomers', label: t('edit_customers') || 'Edit Customers' },
-        { key: 'deleteCustomers', label: t('delete_customers') || 'Delete Customers' },
-      ],
-    },
-    {
-      title: t('suppliers') || 'Suppliers',
-      icon: <Truck className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewSuppliers', label: t('view_suppliers') || 'View Suppliers' },
-        { key: 'createSuppliers', label: t('create_suppliers') || 'Create Suppliers' },
-        { key: 'editSuppliers', label: t('edit_suppliers') || 'Edit Suppliers' },
-        { key: 'deleteSuppliers', label: t('delete_suppliers') || 'Delete Suppliers' },
-      ],
-    },
-    {
-      title: t('categories') || 'Categories',
-      icon: <FolderOpen className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewCategories', label: t('view_categories') || 'View Categories' },
-        { key: 'createCategories', label: t('create_categories') || 'Create Categories' },
-        { key: 'editCategories', label: t('edit_categories') || 'Edit Categories' },
-        { key: 'deleteCategories', label: t('delete_categories') || 'Delete Categories' },
-      ],
-    },
-    {
-      title: t('reports') || 'Reports',
-      icon: <BarChart3 className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewReports', label: t('view_reports') || 'View Reports' },
-        { key: 'viewSalesReports', label: t('view_sales_reports') || 'View Sales Reports' },
-        { key: 'viewPurchaseReports', label: t('view_purchase_reports') || 'View Purchase Reports' },
-        { key: 'viewInventoryReports', label: t('view_inventory_reports') || 'View Inventory Reports' },
-        { key: 'viewCustomerReports', label: t('view_customer_reports') || 'View Customer Reports' },
-        { key: 'viewSupplierReports', label: t('view_supplier_reports') || 'View Supplier Reports' },
-        { key: 'viewProductReports', label: t('view_product_reports') || 'View Product Reports' },
-        { key: 'exportReports', label: t('export_reports') || 'Export Reports' },
-      ],
-    },
-    {
-      title: t('user_management') || 'User Management',
-      icon: <Shield className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewUsers', label: t('view_users') || 'View Users' },
-        { key: 'createUsers', label: t('create_users') || 'Create Users' },
-        { key: 'editUsers', label: t('edit_users') || 'Edit Users' },
-        { key: 'deleteUsers', label: t('delete_users') || 'Delete Users' },
-      ],
-    },
-    {
-      title: t('role_management') || 'Role Management',
-      icon: <Shield className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewRoles', label: t('view_roles') || 'View Roles' },
-        { key: 'createRoles', label: t('create_roles') || 'Create Roles' },
-        { key: 'editRoles', label: t('edit_roles') || 'Edit Roles' },
-        { key: 'deleteRoles', label: t('delete_roles') || 'Delete Roles' },
-      ],
-    },
-  ];
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
 
-  const otherPermissions: PermissionGroup[] = [
-    {
-      title: t('settings') || 'Settings',
-      icon: <Settings className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewSettings', label: t('view_settings') || 'View Settings' },
-        { key: 'editSettings', label: t('edit_settings') || 'Edit Settings' },
-      ],
-    },
-    {
-      title: t('dashboard') || 'Dashboard',
-      icon: <LayoutDashboard className="w-4 h-4" />,
-      permissions: [{ key: 'viewDashboard', label: t('view_dashboard') || 'View Dashboard' }],
-    },
-    {
-      title: t('payments') || 'Payments',
-      icon: <CreditCard className="w-4 h-4" />,
-      permissions: [
-        { key: 'viewPayments', label: t('view_payments') || 'View Payments' },
-        { key: 'createPayments', label: t('create_payments') || 'Create Payments' },
-        { key: 'editPayments', label: t('edit_payments') || 'Edit Payments' },
-        { key: 'deletePayments', label: t('delete_payments') || 'Delete Payments' },
-      ],
-    },
-  ];
-
-  const handlePermissionChange = (key: keyof Permission, checked: boolean) => {
+  const handlePermissionChange = (key: PermissionKey, checked: boolean) => {
     setPermissions((prev) => ({
       ...prev,
       [key]: checked,
     }));
   };
 
-  const handleSelectAll = (group: PermissionGroup, checked: boolean) => {
+  const handleSelectAll = (group: PermissionGroupDef, checked: boolean) => {
     const updates: Partial<Permission> = {};
     group.permissions.forEach((perm) => {
-      updates[perm.key] = checked;
+      updates[perm] = checked;
     });
     setPermissions((prev) => ({
       ...prev,
@@ -214,7 +80,7 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
     if (!role) return;
 
     try {
-      await updatePermissions({ id: role.id, permissions }).unwrap();
+      await updatePermissions({ id: role.id, permissions: buildPermissionsPayload(permissions) }).unwrap();
       toast.success(t('permissions_updated_successfully') || 'Permissions updated successfully');
       onSuccess();
       onOpenChange(false);
@@ -223,19 +89,92 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
     }
   };
 
-  const getCheckedCount = (group: PermissionGroup) => {
-    return group.permissions.filter((perm) => permissions[perm.key] === true).length;
+  const getCheckedCount = (group: PermissionGroupDef) =>
+    group.permissions.filter((perm) => permissions[perm] === true).length;
+
+  const allChecked = (group: PermissionGroupDef) =>
+    group.permissions.every((perm) => permissions[perm] === true);
+
+  const filterGroups = (groups: PermissionGroupDef[]) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        permissions: group.permissions.filter((perm) => {
+          const label = formatPermissionLabel(perm, t).toLowerCase();
+          return label.includes(q) || perm.toLowerCase().includes(q) || group.label.toLowerCase().includes(q);
+        }),
+      }))
+      .filter((group) => group.permissions.length > 0);
   };
 
-  const allChecked = (group: PermissionGroup) => {
-    return group.permissions.every((perm) => permissions[perm.key] === true);
+  const enabledCount = useMemo(
+    () => Object.values(permissions).filter(Boolean).length,
+    [permissions],
+  );
+
+  const renderGroupList = (tab: PermissionTabId) => {
+    const groups = filterGroups(getGroupsForTab(tab));
+    if (groups.length === 0) {
+      return (
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          {t('no_permissions_found') || 'No permissions match your search'}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.id} className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-semibold text-sm truncate">{group.label}</h3>
+                <Badge variant="secondary" className="text-xs shrink-0">
+                  {getCheckedCount(group)}/{group.permissions.length}
+                </Badge>
+              </div>
+              {!role?.isSystemRole && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => handleSelectAll(group, !allChecked(group))}
+                >
+                  {allChecked(group) ? t('deselect_all') || 'Deselect All' : t('select_all') || 'Select All'}
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {group.permissions.map((perm) => (
+                <div key={perm} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${role?.id}-${perm}`}
+                    checked={permissions[perm] === true}
+                    onCheckedChange={(checked) => handlePermissionChange(perm, checked as boolean)}
+                    disabled={role?.isSystemRole}
+                  />
+                  <Label
+                    htmlFor={`${role?.id}-${perm}`}
+                    className="text-sm font-normal cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {formatPermissionLabel(perm, t)}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   if (!role) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-5xl max-h-[92vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5" />
@@ -244,109 +183,39 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
           <DialogDescription>
             {role.isSystemRole
               ? t('system_role_warning') || 'This is a system role. Permissions cannot be modified.'
-              : t('Manage Permission Description') || 'Configure permissions for this role'}
+              : t('Manage Permission Description') || 'Configure access for every module in the system'}
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="main" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="main">{t('main_permissions') || 'Main Permissions'}</TabsTrigger>
-            <TabsTrigger value="other">{t('other_permissions') || 'Other Permissions'}</TabsTrigger>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Badge variant="outline">{enabledCount} {t('permissions_enabled') || 'permissions enabled'}</Badge>
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('search_permissions') || 'Search permissions...'}
+              className="pl-8"
+            />
+          </div>
+        </div>
+
+        <Tabs defaultValue="business" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto">
+            {TAB_CONFIG.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id} className="text-xs sm:text-sm">
+                {t(tab.labelKey) || tab.fallback}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="main">
-            <ScrollArea className="h-[500px] pr-4">
-              <div className="space-y-6">
-                {permissionGroups.map((group) => (
-                  <div key={group.title} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {group.icon}
-                        <h3 className="font-semibold text-sm">{group.title}</h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {getCheckedCount(group)}/{group.permissions.length}
-                        </Badge>
-                      </div>
-                      {!role.isSystemRole && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSelectAll(group, !allChecked(group))}
-                        >
-                          {allChecked(group) ? t('deselect_all') || 'Deselect All' : t('select_all') || 'Select All'}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 ml-6">
-                      {group.permissions.map((perm) => (
-                        <div key={perm.key} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={perm.key}
-                            checked={permissions[perm.key] === true}
-                            onCheckedChange={(checked) => handlePermissionChange(perm.key, checked as boolean)}
-                            disabled={role.isSystemRole}
-                          />
-                          <Label
-                            htmlFor={perm.key}
-                            className="text-sm font-normal cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            {perm.label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="other">
-            <ScrollArea className="h-[500px] pr-4">
-              <div className="space-y-6">
-                {otherPermissions.map((group) => (
-                  <div key={group.title} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {group.icon}
-                        <h3 className="font-semibold text-sm">{group.title}</h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {getCheckedCount(group)}/{group.permissions.length}
-                        </Badge>
-                      </div>
-                      {!role.isSystemRole && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSelectAll(group, !allChecked(group))}
-                        >
-                          {allChecked(group) ? t('deselect_all') || 'Deselect All' : t('select_all') || 'Select All'}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 ml-6">
-                      {group.permissions.map((perm) => (
-                        <div key={perm.key} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={perm.key}
-                            checked={permissions[perm.key] === true}
-                            onCheckedChange={(checked) => handlePermissionChange(perm.key, checked as boolean)}
-                            disabled={role.isSystemRole}
-                          />
-                          <Label
-                            htmlFor={perm.key}
-                            className="text-sm font-normal cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            {perm.label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </TabsContent>
+          {TAB_CONFIG.map((tab) => (
+            <TabsContent key={tab.id} value={tab.id}>
+              <ScrollArea className="h-[460px] pr-4">
+                {renderGroupList(tab.id)}
+              </ScrollArea>
+            </TabsContent>
+          ))}
         </Tabs>
 
         <DialogFooter>

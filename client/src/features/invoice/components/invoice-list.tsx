@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
+import { permissionMessage, apiPermissionMessage } from '@/lib/permission-messages'
 import {
   Select,
   SelectContent,
@@ -98,6 +100,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   initialTypeFilter,
 }: InvoiceListProps) {
   const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const canCreate = hasExplicitPermission('createInvoices')
+  const canEdit = hasExplicitPermission('editInvoices')
+  const canDelete = hasExplicitPermission('deleteInvoices')
+  const canPrint = hasExplicitPermission('printInvoices')
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -272,6 +279,10 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   }
 
   const handlePrintInvoice = async (invoice: any, format: 'receipt' | 'a4' = 'receipt') => {
+    if (!canPrint) {
+      toast.error(permissionMessage(t, 'no_permission_print_invoice'))
+      return
+    }
     try {
       setPrintingInvoiceId(invoice._id)
       
@@ -374,6 +385,10 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   }
 
   const handleDelete = (invoice: any) => {
+    if (!canDelete) {
+      toast.error(permissionMessage(t, 'no_permission_delete_invoice'))
+      return
+    }
     setInvoiceToDelete(invoice)
     setDeleteDialogOpen(true)
   }
@@ -437,10 +452,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <Clock className="h-4 w-4 mr-2" />
             {t('convert_pending_invoices')}
           </Button>
-          <Button className="whitespace-nowrap" onClick={onCreateNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('create_invoice')}
-          </Button>
+          {canCreate && (
+            <Button className="whitespace-nowrap" onClick={onCreateNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('create_invoice')}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -661,44 +678,50 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           </DialogContent>
                         </Dialog>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onEdit?.(invoice)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onEdit?.(invoice)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
 
-                        {/* Print Receipt Button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handlePrintInvoice(invoice, 'receipt')}
-                          disabled={printingInvoiceId === invoice._id}
-                          title="Print receipt"
-                        >
-                          <Printer className="h-4 w-4" />
-                        </Button>
+                        {canPrint && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintInvoice(invoice, 'receipt')}
+                              disabled={printingInvoiceId === invoice._id}
+                              title="Print receipt"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
 
-                        {/* Print A4 Button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handlePrintInvoice(invoice, 'a4')}
-                          disabled={printingInvoiceId === invoice._id}
-                          title="Print A4 invoice"
-                        >
-                          <Receipt className="h-4 w-4" />
-                        </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintInvoice(invoice, 'a4')}
+                              disabled={printingInvoiceId === invoice._id}
+                              title="Print A4 invoice"
+                            >
+                              <Receipt className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(invoice)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(invoice)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

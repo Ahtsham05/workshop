@@ -2,13 +2,14 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { schoolAccountingController } = require('../../controllers');
 const { objectId } = require('../../validations/custom.validation');
 const Joi = require('joi');
 const validate = require('../../middlewares/validate');
 
 const router = express.Router();
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
 // Accounting Dashboard
 router.route('/dashboard').get(schoolAccountingController.getAccountingDashboard);

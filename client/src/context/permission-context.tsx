@@ -1,9 +1,16 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { Permission } from '@/stores/roles.api';
+import {
+  PERMISSION_FALLBACKS,
+  resolvePermission,
+  hasExplicitPermission as checkExplicit,
+} from '@/lib/permission-resolve';
 
 interface PermissionContextType {
   permissions: Permission | null;
   hasPermission: (permission: keyof Permission) => boolean;
+  /** Direct role flag only — no legacy fallbacks (use for create/edit/delete). */
+  hasExplicitPermission: (permission: keyof Permission) => boolean;
   hasAnyPermission: (...permissions: (keyof Permission)[]) => boolean;
   hasAllPermissions: (...permissions: (keyof Permission)[]) => boolean;
 }
@@ -23,23 +30,14 @@ interface PermissionProviderProps {
   permissions: Permission | null;
 }
 
-/** Users with purchase access get PO access until roles are re-seeded with explicit PO flags. */
-const PURCHASE_ORDER_FALLBACKS: Partial<Record<keyof Permission, keyof Permission>> = {
-  viewPurchaseOrders: 'viewPurchases',
-  createPurchaseOrders: 'createPurchases',
-  editPurchaseOrders: 'editPurchases',
-  deletePurchaseOrders: 'deletePurchases',
-  receivePurchaseOrders: 'createPurchases',
-};
+export { PERMISSION_FALLBACKS };
 
 export const PermissionProvider = ({ children, permissions }: PermissionProviderProps) => {
-  const hasPermission = (permission: keyof Permission): boolean => {
-    if (!permissions) return false;
-    if (permissions[permission] === true) return true;
-    const fallback = PURCHASE_ORDER_FALLBACKS[permission];
-    if (fallback) return permissions[fallback] === true;
-    return false;
-  };
+  const hasPermission = (permission: keyof Permission): boolean =>
+    resolvePermission(permissions, permission as keyof Permission & string);
+
+  const hasExplicitPermission = (permission: keyof Permission): boolean =>
+    checkExplicit(permissions, permission as keyof Permission & string);
 
   const hasAnyPermission = (...requiredPermissions: (keyof Permission)[]): boolean => {
     if (!permissions) return false;
@@ -52,7 +50,7 @@ export const PermissionProvider = ({ children, permissions }: PermissionProvider
   };
 
   return (
-    <PermissionContext.Provider value={{ permissions, hasPermission, hasAnyPermission, hasAllPermissions }}>
+    <PermissionContext.Provider value={{ permissions, hasPermission, hasExplicitPermission, hasAnyPermission, hasAllPermissions }}>
       {children}
     </PermissionContext.Provider>
   );

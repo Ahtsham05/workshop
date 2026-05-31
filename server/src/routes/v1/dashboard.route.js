@@ -8,27 +8,27 @@ router.use(auth(), branchScope());
 
 router
   .route('/stats')
-  .get(auth(), dashboardController.getDashboardStats);
+  .get(auth('viewDashboard'), dashboardController.getDashboardStats);
 
 router
   .route('/revenue')
-  .get(auth(), dashboardController.getRevenueData);
+  .get(auth('viewDashboard'), dashboardController.getRevenueData);
 
 router
   .route('/top-products')
-  .get(auth(), dashboardController.getTopProducts);
+  .get(auth('viewDashboard'), dashboardController.getTopProducts);
 
 router
   .route('/top-customers')
-  .get(auth(), dashboardController.getTopCustomers);
+  .get(auth('viewDashboard'), dashboardController.getTopCustomers);
 
 router
   .route('/low-stock')
-  .get(auth(), dashboardController.getLowStockProducts);
+  .get(auth('viewDashboard'), dashboardController.getLowStockProducts);
 
 router
   .route('/recent-activities')
-  .get(auth(), dashboardController.getRecentActivities);
+  .get(auth('viewDashboard'), dashboardController.getRecentActivities);
 
 module.exports = router;
 

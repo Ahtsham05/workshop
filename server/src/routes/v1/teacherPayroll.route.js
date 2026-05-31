@@ -3,11 +3,12 @@ const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { teacherPayrollValidation } = require('../../validations');
 const { teacherPayrollController } = require('../../controllers');
 
 const router = express.Router();
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
 router
   .route('/')

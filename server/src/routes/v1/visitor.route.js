@@ -3,11 +3,12 @@ const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { visitorValidation } = require('../../validations');
 const { visitorController } = require('../../controllers');
 
 const router = express.Router();
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
 router.get('/stats', auth('getSchool'), visitorController.getDashboardStats);
 router.get('/check-duplicate', auth('getSchool'), visitorController.checkDuplicate);

@@ -6,6 +6,7 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { StatCard, type StatCardLink } from './components/stat-card'
 import { Card } from '@/components/ui/card'
 import { RevenueChart } from './components/revenue-chart'
@@ -27,12 +28,16 @@ import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package 
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
+import { getDefaultHomeRoute } from '@/lib/default-home-route'
 import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle, ShoppingBag } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
 
 export default function Dashboard() {
   const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const isPlatformAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
   const [dateRange, setDateRange] = useState<DashboardDateRange>(getDefaultDashboardDateRange)
   const dateParams = dashboardRangeQueryParams(dateRange)
   const { data: stats, isLoading, isFetching, refetch } = useGetDashboardStatsQuery(dateParams)
@@ -52,13 +57,16 @@ export default function Dashboard() {
   )
   // const { data: usageData } = useGetSubscriptionUsageQuery()
   const { data: orgData } = useGetMyOrganizationQuery()
-  const user = useSelector((state: RootState) => state.auth.data?.user)
   // const planType = usageData?.subscription?.planType
   // Use organization's businessType as the source of truth; fall back to user's businessType
   const businessType = orgData?.businessType ?? user?.businessType
   // Show the mobile-shop dashboard section for any mobile_shop organisation.
   // Individual cards that require a paid feature are further gated inside the section.
   const showMobileCards = isMobileShopBusiness(businessType)
+
+  if (!isPlatformAdmin && !hasExplicitPermission('viewDashboard')) {
+    return <Navigate to={getDefaultHomeRoute(user)} replace />
+  }
 
   if (isRestaurantBusiness(businessType)) {
     return <Navigate to='/restaurant' replace />

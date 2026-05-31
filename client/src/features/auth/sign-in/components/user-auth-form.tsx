@@ -19,6 +19,9 @@ import { PasswordInput } from '@/components/password-input'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { signinWithEmailPassword } from '@/stores/auth.slice'
+import { getUserHome } from '@/lib/rbac'
+import type { AppUser } from '@/lib/rbac'
+import { resolveRouteAccess } from '@/lib/route-permissions'
 import toast from 'react-hot-toast'
 
 type UserAuthFormProps = HTMLAttributes<HTMLFormElement>
@@ -77,7 +80,7 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
         }
 
         // School teachers go directly to their portal — never to the admin area
-        const loggedInUser = action.payload?.user
+        const loggedInUser = action.payload?.user as AppUser
         const isSchoolTeacher =
           loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
         if (isSchoolTeacher) {
@@ -85,9 +88,20 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
           return
         }
 
-        // Navigate to redirect URL or home page
-        const redirectTo = search.redirect || '/'
-        navigate({ to: redirectTo, replace: true })
+        if (loggedInUser?.schoolRole === 'parent') {
+          navigate({ to: '/school/portals/parent', replace: true })
+          return
+        }
+
+        if (loggedInUser?.schoolRole === 'student') {
+          navigate({ to: '/school/portals/student', replace: true })
+          return
+        }
+
+        const defaultHome = getUserHome(loggedInUser)
+        const requested = search.redirect || defaultHome
+        const access = resolveRouteAccess(loggedInUser, requested)
+        navigate({ to: access.allowed ? requested : defaultHome, replace: true })
       } else {
         toast.error('Login failed. Please check your credentials.')
       }

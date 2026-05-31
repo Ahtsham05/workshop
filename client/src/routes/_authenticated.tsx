@@ -8,6 +8,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
+import { resolveRouteAccess } from '@/lib/route-permissions'
 
 /**
  * Authenticated layout component.
@@ -76,9 +77,8 @@ export const Route = createFileRoute('/_authenticated')({
       }
 
       // ── Teacher portal guard ─────────────────────────────────────────────
-      // School teachers may ONLY access their portal and leave page.
-      // Every other route is blocked here so they can never land on admin pages
-      // via direct URL navigation or browser back/forward.
+      // School teachers/parents/students: enforced by resolveRouteAccess below.
+      // Legacy inline teacher guard kept for fast redirect before full parse.
       const schoolRole: string | null =
         userData?.schoolRole || (userData?.linkedTeacherId ? 'teacher' : null)
       if (schoolRole === 'teacher') {
@@ -94,6 +94,32 @@ export const Route = createFileRoute('/_authenticated')({
         if (!allowed) {
           throw redirect({ to: '/school/portals/teacher' })
         }
+      } else if (schoolRole === 'parent') {
+        const PARENT_ALLOWED: string[] = ['/school/portals/parent']
+        const allowed = PARENT_ALLOWED.some(
+          (p) =>
+            location.pathname === p ||
+            location.pathname.startsWith(p + '/'),
+        )
+        if (!allowed) {
+          throw redirect({ to: '/school/portals/parent' })
+        }
+      } else if (schoolRole === 'student') {
+        const STUDENT_ALLOWED: string[] = ['/school/portals/student']
+        const allowed = STUDENT_ALLOWED.some(
+          (p) =>
+            location.pathname === p ||
+            location.pathname.startsWith(p + '/'),
+        )
+        if (!allowed) {
+          throw redirect({ to: '/school/portals/student' })
+        }
+      }
+
+      // ── ERP role permission guard ──────────────────────────────────────────
+      const access = resolveRouteAccess(userData, location.pathname)
+      if (!access.allowed) {
+        throw redirect({ to: access.redirectTo || '/403' })
       }
       // ─────────────────────────────────────────────────────────────────────
     } catch (error) {

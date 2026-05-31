@@ -6,6 +6,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
+import { permissionMessage } from '@/lib/permission-messages'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearch } from '@tanstack/react-router'
 import { useDispatch, useSelector } from 'react-redux'
@@ -163,7 +164,7 @@ export interface Category {
 
 export default function InvoicePage() {
   const { t } = useLanguage()
-  const { hasPermission } = usePermissions()
+  const { hasExplicitPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const search = useSearch({ from: '/_authenticated/invoice/' })
@@ -1018,6 +1019,10 @@ export default function InvoicePage() {
   }, [invoice, calculateTotals])
 
   const handleCreateNew = () => {
+    if (!hasExplicitPermission('createInvoices')) {
+      toast.error(permissionMessage(t, 'no_permission_create_invoice'))
+      return
+    }
     // Restore stock for current invoice items before creating new (only if not saved)
     if (!invoiceSaved && invoice.items.length > 0) {
       setProducts(prevProducts => {
@@ -1077,8 +1082,8 @@ export default function InvoicePage() {
 
   const handleEdit = (invoiceData: any) => {
     // Check permission before allowing edit
-    if (!hasPermission('editInvoices' as any)) {
-      toast.error(t('no_permission_edit_invoice') || 'You do not have permission to edit invoices')
+    if (!hasExplicitPermission('editInvoices')) {
+      toast.error(permissionMessage(t, 'no_permission_edit_invoice'))
       return
     }
 

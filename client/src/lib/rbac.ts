@@ -25,10 +25,11 @@ import { normalizeBusinessType } from '@/lib/business-types'
 import {
   deriveSchoolRole,
   getSchoolRoleHome,
-  isPathAllowedForSchoolRole,
   SCHOOL_PERMISSIONS,
   type SchoolRole,
 } from '@/lib/school-permissions'
+import { canAccessRoute } from '@/lib/route-permissions'
+import { getDefaultHomeRoute } from '@/lib/default-home-route'
 
 // ── Type helpers ───────────────────────────────────────────────────────────────
 
@@ -131,12 +132,6 @@ export function getUserRoleFromStorage(): EffectiveRole {
 
 // ── Home route resolver ────────────────────────────────────────────────────────
 
-const SYSTEM_ROLE_HOME: Record<string, string> = {
-  superAdmin: '/admin',
-  system_admin: '/admin',
-  staff: '/',
-}
-
 /**
  * Returns the first route the user should land on after login / redirect.
  */
@@ -149,8 +144,11 @@ export function getUserHome(user: AppUser | null | undefined): string {
     return getSchoolRoleHome(deriveSchoolRole(user))
   }
 
-  const role = getUserRole(user)
-  return SYSTEM_ROLE_HOME[role] ?? '/'
+  if (user.systemRole === 'superAdmin' || user.systemRole === 'system_admin') {
+    return '/admin'
+  }
+
+  return getDefaultHomeRoute(user)
 }
 
 // ── Path guard ─────────────────────────────────────────────────────────────────
@@ -166,18 +164,7 @@ export function canAccessPath(
   user: AppUser | null | undefined,
   pathname: string,
 ): boolean {
-  if (!user) return false
-
-  const role = getUserRole(user)
-
-  if (role === 'superAdmin') return true
-
-  const businessType = normalizeBusinessType(user.businessType)
-  if (businessType === 'school') {
-    return isPathAllowedForSchoolRole(pathname, deriveSchoolRole(user))
-  }
-
-  return true
+  return canAccessRoute(user, pathname)
 }
 
 // ── Fine-grained permission check ─────────────────────────────────────────────

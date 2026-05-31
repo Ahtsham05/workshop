@@ -1,6 +1,36 @@
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 
+const PERMISSION_LABELS = {
+  viewProducts: 'view products',
+  createProducts: 'create products',
+  editProducts: 'edit products',
+  deleteProducts: 'delete products',
+  viewInvoices: 'view invoices',
+  createInvoices: 'create invoices',
+  editInvoices: 'edit invoices',
+  deleteInvoices: 'delete invoices',
+  printInvoices: 'print invoices',
+  viewDashboard: 'view the dashboard',
+  viewReports: 'view reports',
+  exportReports: 'export reports',
+  viewRoles: 'manage roles',
+  editRoles: 'edit roles',
+  deleteRoles: 'delete roles',
+  createRoles: 'create roles',
+  viewUsers: 'view users',
+  createUsers: 'create users',
+  editUsers: 'edit users',
+  deleteUsers: 'delete users',
+};
+
+const formatPermissionError = (permissions) => {
+  const labels = permissions.map(
+    (permission) => PERMISSION_LABELS[permission] || permission.replace(/([A-Z])/g, ' $1').trim().toLowerCase(),
+  );
+  return `You do not have permission to ${labels.join(' or ')}.`;
+};
+
 /**
  * Check if user has permission
  * @param {string|string[]} permission - Permission(s) to check
@@ -37,10 +67,7 @@ const checkPermission = (...permissions) => {
       const hasPermission = permissions.some(permission => userPermissions[permission] === true);
 
       if (!hasPermission) {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          `Insufficient permissions. Required: ${permissions.join(' or ')}`
-        );
+        throw new ApiError(httpStatus.FORBIDDEN, formatPermissionError(permissions));
       }
 
       next();
@@ -86,10 +113,7 @@ const checkAllPermissions = (...permissions) => {
       const hasAllPermissions = permissions.every(permission => userPermissions[permission] === true);
 
       if (!hasAllPermissions) {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          `Insufficient permissions. Required: ${permissions.join(', ')}`
-        );
+        throw new ApiError(httpStatus.FORBIDDEN, formatPermissionError(permissions));
       }
 
       next();

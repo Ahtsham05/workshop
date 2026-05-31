@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useDeleteInvoiceMutation } from '@/stores/invoice.api'
+import { usePermissions } from '@/context/permission-context'
+import { useLanguage } from '@/context/language-context'
+import { apiPermissionMessage, permissionMessage } from '@/lib/permission-messages'
 import toast from 'react-hot-toast'
-// import { useLanguage } from '@/context/language-context'
 
 interface Props {
   open: boolean
@@ -19,19 +21,25 @@ interface Props {
 export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
   const [value, setValue] = useState('')
   const [deleteInvoice, { isLoading }] = useDeleteInvoiceMutation()
-  // const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const { t } = useLanguage()
 
   const handleDelete = async () => {
+    if (!hasExplicitPermission('deleteInvoices')) {
+      toast.error(permissionMessage(t, 'no_permission_delete_invoice'))
+      onOpenChange(false)
+      return
+    }
     if (value.trim() !== currentRow.invoiceNumber) return
 
     try {
       await deleteInvoice(currentRow._id).unwrap()
-      toast.success('Invoice deleted successfully!')
+      toast.success(t('invoice_deleted_successfully') || 'Invoice deleted successfully!')
       onOpenChange(false)
       setValue('')
     } catch (error: any) {
       console.error('Failed to delete invoice:', error)
-      toast.error(error?.data?.message || 'Failed to delete invoice')
+      toast.error(apiPermissionMessage(t, error, 'no_permission_delete_invoice'))
     }
   }
 

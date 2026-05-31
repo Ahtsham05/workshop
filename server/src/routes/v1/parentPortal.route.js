@@ -6,10 +6,16 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolRole } = require('../../middlewares/schoolAccess');
 const { parentPortalController } = require('../../controllers');
 
 const router = express.Router();
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(
+  auth(),
+  branchScope(false),
+  checkFeatureAccess('school_management'),
+  requireSchoolRole('parent'),
+);
 
 router.get('/children', parentPortalController.getMyChildren);
 router.get('/results', parentPortalController.getMyChildResults);

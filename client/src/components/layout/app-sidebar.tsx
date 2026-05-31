@@ -11,6 +11,7 @@ import { TeamSwitcher } from '@/components/layout/team-switcher'
 import { BranchSwitcher } from '@/components/branch-switcher'
 import { sidebarData } from './data/sidebar-data'
 import { usePermissions } from '@/context/permission-context'
+import { useLanguage } from '@/context/language-context'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { GitBranch } from 'lucide-react'
@@ -19,7 +20,8 @@ import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, hasExplicitPermission } = usePermissions()
+  const { t } = useLanguage()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   // Use organization businessType as the source of truth, fall back to user's own field
@@ -51,6 +53,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     } catch (_e) {}
     return undefined
   })()
+
+  const checkItemPermission = (permission: string) => {
+    if (permission === 'viewDashboard') {
+      return hasExplicitPermission('viewDashboard')
+    }
+    return hasPermission(permission as any)
+  }
 
   const canAccessItem = (item: any) => {
     // ── Teacher role: STRICT ALLOW-LIST ──────────────────────────────────────
@@ -102,7 +111,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         return allowed.includes('system_admin')
       }
       if (!item.permission) return true
-      return hasPermission(item.permission as any)
+      return checkItemPermission(item.permission)
     }
 
     // superAdmin bypasses feature-access restrictions
@@ -123,8 +132,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return true
     }
 
-    return hasPermission(item.permission as any)
+    return checkItemPermission(item.permission)
   }
+
+  const sidebarPlan = hasExplicitPermission('viewRoles')
+    ? t('admin_dashboard') || 'Admin Dashboard'
+    : hasExplicitPermission('viewDashboard')
+      ? t('dashboard') || 'Dashboard'
+      : t('employee_portal') || 'Employee Portal'
+
+  const teams = sidebarData.teams.map((team, index) =>
+    index === 0 ? { ...team, plan: sidebarPlan } : team,
+  )
 
   // Filter nav groups and items based on permissions
   const filteredNavGroups = sidebarData.navGroups
@@ -202,7 +221,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible='icon' variant='floating' {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
+        <TeamSwitcher teams={teams} />
         {/* Branch switcher for admins; read-only branch badge for school-role users */}
         {!schoolRole ? (
           <div className="px-2 pb-1">

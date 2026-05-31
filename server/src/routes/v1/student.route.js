@@ -4,12 +4,13 @@ const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
+const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { studentValidation } = require('../../validations');
 const { studentController } = require('../../controllers');
 const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
-router.use(auth(), branchScope(false), checkFeatureAccess('school_management'));
+router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
 // Separate multer instance that accepts Excel files only
 const xlsxUpload = multer({

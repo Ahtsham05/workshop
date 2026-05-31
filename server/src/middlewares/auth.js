@@ -1,10 +1,10 @@
 const passport = require('passport');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
+const { checkPermission } = require('./permission');
 
 const verifyCallback = (req, resolve, reject) => async (err, user, info) => {
   if (err) {
-    // A real error (e.g. MongoNetworkError) — propagate as-is, not masked as 401
     return reject(err);
   }
   if (info || !user) {
@@ -14,12 +14,26 @@ const verifyCallback = (req, resolve, reject) => async (err, user, info) => {
   resolve();
 };
 
-const auth = () => async (req, res, next) => {
-  return new Promise((resolve, reject) => {
-    passport.authenticate('jwt', { session: false }, verifyCallback(req, resolve, reject))(req, res, next);
-  })
-    .then(() => next())
-    .catch((err) => next(err));
+/**
+ * JWT auth middleware. When permission names are passed (e.g. auth('deleteInvoices')),
+ * also enforces role permissions after authentication.
+ */
+const auth = (...requiredPermissions) => async (req, res, next) => {
+  try {
+    if (!req.user) {
+      await new Promise((resolve, reject) => {
+        passport.authenticate('jwt', { session: false }, verifyCallback(req, resolve, reject))(req, res, next);
+      });
+    }
+
+    if (requiredPermissions.length === 0) {
+      return next();
+    }
+
+    return checkPermission(...requiredPermissions)(req, res, next);
+  } catch (err) {
+    return next(err);
+  }
 };
 
 module.exports = auth;

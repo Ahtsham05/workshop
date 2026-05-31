@@ -11,7 +11,7 @@ router.use(auth(), branchScope());
 
 router
   .route('/upload-image')
-  .post(upload.single('image'), customerController.uploadCustomerImage);
+  .post(auth('createCustomers'), upload.single('image'), customerController.uploadCustomerImage);
 
 router
   .route('/scan-image')

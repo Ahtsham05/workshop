@@ -57,6 +57,10 @@ export const PARENT_ALLOWED_PATHS: string[] = [
   '/school/portals/parent',
 ]
 
+export const STUDENT_ALLOWED_PATHS: string[] = [
+  '/school/portals/student',
+]
+
 // ── Home routes per role ──────────────────────────────────────────────────────
 
 const ROLE_HOME: Record<string, string> = {
@@ -88,7 +92,9 @@ export function isPathAllowedForSchoolRole(
       ? TEACHER_ALLOWED_PATHS
       : schoolRole === 'parent'
         ? PARENT_ALLOWED_PATHS
-        : null // schoolAdmin / student have their own rules or full access
+        : schoolRole === 'student'
+          ? STUDENT_ALLOWED_PATHS
+          : null // schoolAdmin has full school access
 
   if (!allowList) return true // schoolAdmin sees everything
 
