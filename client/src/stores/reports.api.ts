@@ -602,6 +602,7 @@ export interface SimSaleReport {
   byWallet: SimSaleByWallet[]
   datewise: SimSaleDatewise[]
   recentSales: SimSaleRecentRecord[]
+  productSales?: SimSaleRecentRecord[]
   period: { startDate: string; endDate: string }
 }
 
@@ -908,13 +909,14 @@ export const reportsApi = createApi({
       },
       providesTags: ['MonthlyRoi'],
     }),
-    getSimSaleReport: builder.query<SimSaleReport, { startDate?: string; endDate?: string; productId?: string; walletType?: string }>({
+    getSimSaleReport: builder.query<SimSaleReport, { startDate?: string; endDate?: string; productId?: string; walletType?: string; productName?: string }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.startDate) searchParams.set('startDate', params.startDate)
         if (params.endDate) searchParams.set('endDate', params.endDate)
         if (params.productId) searchParams.set('productId', params.productId)
         if (params.walletType) searchParams.set('walletType', params.walletType)
+        if (params.productName) searchParams.set('productName', params.productName)
         return `/sim-sales?${searchParams.toString()}`
       },
       providesTags: ['SimSaleReport'],
@@ -957,5 +959,6 @@ export const {
   useGetRoiReportQuery,
   useGetMonthlyRoiQuery,
   useGetSimSaleReportQuery,
+  useLazyGetSimSaleReportQuery,
   useGetInstallmentReportQuery,
 } = reportsApi

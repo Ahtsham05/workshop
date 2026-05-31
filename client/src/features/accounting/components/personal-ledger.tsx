@@ -407,6 +407,7 @@ function EntryForm({
           apiCategories={walletCategoriesForPicker}
           walletMode
           categoriesLoading={isCategoryCatalogLoading}
+          onCategoryCreated={onCatalogRefresh}
           required
           error={categoryError}
           onChange={(category) => {

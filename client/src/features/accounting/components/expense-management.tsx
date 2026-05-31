@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { ExpenseList } from './expense-list';
 import { ExpenseForm } from './expense-form';
+import { ExpenseCategorySection } from './expense-category-section';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
-import { MobileShopGuard } from '@/components/mobile-shop-guard';
-import { AccountsMobileShopLists } from './accounts-mobile-shop-lists';
 
 type ViewMode = 'list' | 'create' | 'edit';
 
@@ -60,7 +59,7 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t('Expense Management')}</h2>
@@ -78,9 +77,7 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
         refreshTrigger={refreshTrigger}
       />
 
-      <MobileShopGuard fallback={null}>
-        <AccountsMobileShopLists />
-      </MobileShopGuard>
+      <ExpenseCategorySection refreshTrigger={refreshTrigger} />
     </div>
   );
 }

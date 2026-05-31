@@ -1740,13 +1740,16 @@ async function getServiceReport(req, res) {
 const getSimSaleReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { start, end } = parseRange(req.query);
-  const { productId, walletType } = req.query;
+  const { productId, walletType, productName } = req.query;
 
   const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
   if (productId && mongoose.Types.ObjectId.isValid(productId)) {
     baseMatch.productId = new mongoose.Types.ObjectId(productId);
   }
   if (walletType) baseMatch.walletType = walletType;
+
+  const detailMatch = { ...baseMatch };
+  if (productName) detailMatch.productName = String(productName).trim();
 
   const orgOid = scope.organizationId;
   const productUrduStages =
@@ -1775,7 +1778,7 @@ const getSimSaleReport = catchAsync(async (req, res) => {
         ]
       : [];
 
-  const [summary, byProduct, byWallet, datewise, recentSalesRaw] = await Promise.all([
+  const [summary, byProduct, byWallet, datewise, recentSalesRaw, productSalesRaw] = await Promise.all([
     SimSale.aggregate([
       { $match: baseMatch },
       {
@@ -1830,24 +1833,33 @@ const getSimSaleReport = catchAsync(async (req, res) => {
       { $sort: { _id: 1 } },
     ]),
     SimSale.find(baseMatch).sort({ date: -1 }).limit(20).lean(),
+    productName
+      ? SimSale.find(detailMatch).sort({ date: -1 }).lean()
+      : Promise.resolve([]),
   ]);
 
-  let recentSales = recentSalesRaw;
-  const pids = [...new Set(recentSales.map((s) => s.productId).filter(Boolean).map((id) => String(id)))];
-  const cids = [...new Set(recentSales.map((s) => s.customerId).filter(Boolean).map((id) => String(id)))];
-  if (pids.length || cids.length) {
-    const [prows, crows] = await Promise.all([
-      pids.length ? Product.find({ _id: { $in: pids } }).select('nameUrdu').lean() : [],
-      cids.length ? Customer.find({ _id: { $in: cids } }).select('nameUrdu').lean() : [],
-    ]);
-    const pm = Object.fromEntries(prows.map((p) => [String(p._id), p.nameUrdu || '']));
-    const cm = Object.fromEntries(crows.map((c) => [String(c._id), c.nameUrdu || '']));
-    recentSales = recentSales.map((s) => ({
-      ...s,
-      productNameUrdu: s.productId ? pm[String(s.productId)] || '' : '',
-      customerNameUrdu: s.customerId ? cm[String(s.customerId)] || '' : '',
-    }));
-  }
+  const enrichSimSaleRows = async (rows) => {
+    let enriched = rows;
+    const pids = [...new Set(enriched.map((s) => s.productId).filter(Boolean).map((id) => String(id)))];
+    const cids = [...new Set(enriched.map((s) => s.customerId).filter(Boolean).map((id) => String(id)))];
+    if (pids.length || cids.length) {
+      const [prows, crows] = await Promise.all([
+        pids.length ? Product.find({ _id: { $in: pids } }).select('nameUrdu').lean() : [],
+        cids.length ? Customer.find({ _id: { $in: cids } }).select('nameUrdu').lean() : [],
+      ]);
+      const pm = Object.fromEntries(prows.map((p) => [String(p._id), p.nameUrdu || '']));
+      const cm = Object.fromEntries(crows.map((c) => [String(c._id), c.nameUrdu || '']));
+      enriched = enriched.map((s) => ({
+        ...s,
+        productNameUrdu: s.productId ? pm[String(s.productId)] || '' : '',
+        customerNameUrdu: s.customerId ? cm[String(s.customerId)] || '' : '',
+      }));
+    }
+    return enriched;
+  };
+
+  let recentSales = await enrichSimSaleRows(recentSalesRaw);
+  const productSales = productName ? await enrichSimSaleRows(productSalesRaw) : [];
 
   const sm = summary[0] || {
     totalSales: 0, totalSimAmount: 0, totalLoadAmount: 0,
@@ -1860,6 +1872,7 @@ const getSimSaleReport = catchAsync(async (req, res) => {
     byWallet,
     datewise,
     recentSales,
+    productSales,
     period: { startDate: start, endDate: end },
   });
 });

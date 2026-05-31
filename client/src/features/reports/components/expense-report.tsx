@@ -1,4 +1,4 @@
-import { useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -54,6 +54,8 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 interface ExpenseReportProps {
   startDate: string
   endDate: string
+  mode?: 'full' | 'categories'
+  refreshTrigger?: number
 }
 
 const COLORS = [
@@ -66,9 +68,10 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 }).format(v)
 
 export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseReportProps>(
-  ({ startDate, endDate }, ref) => {
+  ({ startDate, endDate, mode = 'full', refreshTrigger = 0 }, ref) => {
+    const categoriesOnly = mode === 'categories'
     const { t } = useLanguage()
-    const { data, isLoading } = useGetExpenseReportQuery({ startDate, endDate })
+    const { data, isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })
     const [fetchCategory] = useLazyGetExpenseReportQuery()
 
     const [sheetOpen, setSheetOpen] = useState(false)
@@ -76,6 +79,12 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
     const [detailData, setDetailData] = useState<any[]>([])
     const [detailLoading, setDetailLoading] = useState(false)
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+
+    useEffect(() => {
+      if (refreshTrigger > 0) {
+        refetch()
+      }
+    }, [refreshTrigger, refetch])
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -140,7 +149,9 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       }
     }, [expandedRows.size, detailData])
 
-    if (isLoading) return <Skeleton className="h-[500px] w-full" />
+    if (isLoading) {
+      return <Skeleton className={categoriesOnly ? 'h-[280px] w-full' : 'h-[500px] w-full'} />
+    }
 
     const categories = data?.categoryBreakdown || []
     const totalExpenses = data?.summary?.totalExpenses || 0
@@ -159,10 +170,58 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
 
     const detailTotal = detailData.reduce((s, e) => s + (e.amount || 0), 0)
 
+    const categoryCards = (
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {categories.map((cat, idx) => {
+          const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
+          const color = COLORS[idx % COLORS.length]
+          return (
+            <button
+              key={cat._id}
+              onClick={() => openCategoryDetail(cat._id)}
+              className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
+                  style={{ backgroundColor: color }}
+                >
+                  {cat._id.charAt(0).toUpperCase()}
+                </span>
+                <Badge variant="secondary" className="text-xs">{share}%</Badge>
+              </div>
+              <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
+              <p className="text-xl font-bold" style={{ color }}>{fmt(cat.totalAmount)}</p>
+              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>{cat.expenseCount} {t('entries')}</span>
+                <span>{t('avg')} {fmt(cat.avgAmount || 0)}</span>
+              </div>
+              <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${share}%`, backgroundColor: color }}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                {t('Click to view details →')}
+              </p>
+            </button>
+          )
+        })}
+      </div>
+    )
+
+    const emptyCategoryState = (
+      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+        <Receipt className="h-10 w-10 mb-2 opacity-30" />
+        <p>{t('No expense data available')}</p>
+      </div>
+    )
+
     return (
       <div className="space-y-6">
         {/* ── Summary KPI bar ── */}
-        <div className="grid gap-4 md:grid-cols-3">
+        {!categoriesOnly && <div className="grid gap-4 md:grid-cols-3">
           <Card className={kpiCardClass('rose')}>
             <CardContent className="pt-5 flex items-center gap-4">
               <div className={cn('rounded-xl p-3', toneIconWrapClass('rose'))}>
@@ -196,63 +255,27 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>}
 
         {/* ── Category Cards ── */}
-        {categories.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('expense_by_category')}</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {t('Click a category to view its details')}
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                {categories.map((cat, idx) => {
-                  const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
-                  const color = COLORS[idx % COLORS.length]
-                  return (
-                    <button
-                      key={cat._id}
-                      onClick={() => openCategoryDetail(cat._id)}
-                      className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <span
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
-                          style={{ backgroundColor: color }}
-                        >
-                          {cat._id.charAt(0).toUpperCase()}
-                        </span>
-                        <Badge variant="secondary" className="text-xs">{share}%</Badge>
-                      </div>
-                      <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
-                      <p className="text-xl font-bold" style={{ color }}>{fmt(cat.totalAmount)}</p>
-                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{cat.expenseCount} {t('entries')}</span>
-                        <span>{t('avg')} {fmt(cat.avgAmount || 0)}</span>
-                      </div>
-                      {/* Share bar */}
-                      <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${share}%`, backgroundColor: color }}
-                        />
-                      </div>
-                      <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                        {t('Click to view details →')}
-                      </p>
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+        {(categories.length > 0 || categoriesOnly) && (
+          categoriesOnly ? (
+            categories.length === 0 ? emptyCategoryState : categoryCards
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('expense_by_category')}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {t('Click a category to view its details')}
+                </p>
+              </CardHeader>
+              <CardContent>{categoryCards}</CardContent>
+            </Card>
+          )
         )}
 
         {/* ── Charts Row ── */}
-        {trendData.length > 0 && (
+        {!categoriesOnly && trendData.length > 0 && (
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>

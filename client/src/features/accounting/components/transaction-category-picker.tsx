@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -55,6 +55,8 @@ interface Props {
   walletMode?: boolean
   /** Wallet form: block interaction while parent catalog loads */
   categoriesLoading?: boolean
+  /** Called after a category is created, updated, or deleted so parent catalogs can refresh */
+  onCategoryCreated?: (transactionType: TransactionCategoryType) => void
   required?: boolean
   error?: string
   className?: string
@@ -73,6 +75,7 @@ export function TransactionCategoryPicker({
   extraCategories = [],
   walletMode = false,
   categoriesLoading = false,
+  onCategoryCreated,
   required = false,
   error,
   className,
@@ -88,6 +91,7 @@ export function TransactionCategoryPicker({
   const [savingCat, setSavingCat] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null)
   const [deletingCat, setDeletingCat] = useState(false)
+  const skipPendingCreateOnCloseRef = useRef(false)
 
   const skipFetch =
     !walletMode && apiCategories !== undefined && apiCategories.length > 0
@@ -184,7 +188,10 @@ export function TransactionCategoryPicker({
       key={`${resolveCategoryId(cat) || cat.name}-${cat.fromLedger ? 'ledger' : 'api'}`}
       value={cat.name}
       onSelect={() => {
+        skipPendingCreateOnCloseRef.current = true
         onChange(cat.name)
+        setNewCatName('')
+        setSearch('')
         setOpen(false)
       }}
     >
@@ -244,19 +251,32 @@ export function TransactionCategoryPicker({
 
   const listIsEmpty = !listLoading && filteredCategories.length === 0
 
-  const handleCreateCategory = async () => {
-    const name = newCatName.trim()
+  const handleCreateCategory = async (nameOverride?: string) => {
+    const name = (nameOverride ?? newCatName).trim()
     if (!name) return
     try {
       setCreatingCat(true)
       const created = await createCategory({ name, transactionType }).unwrap()
       onChange(created.name)
+      skipPendingCreateOnCloseRef.current = true
       setNewCatName('')
       setSearch('')
       setOpen(false)
+      onCategoryCreated?.(transactionType)
       toast.success(t('Category created'))
     } catch (err: any) {
-      toast.error(err?.data?.message || t('Failed to create category'))
+      const msg = String(err?.data?.message || '')
+      if (err?.status === 409 || /already exists/i.test(msg)) {
+        onChange(name)
+        skipPendingCreateOnCloseRef.current = true
+        setNewCatName('')
+        setSearch('')
+        setOpen(false)
+        onCategoryCreated?.(transactionType)
+        toast.success(t('Category created'))
+        return
+      }
+      toast.error(msg || t('Failed to create category'))
     } finally {
       setCreatingCat(false)
     }
@@ -278,6 +298,7 @@ export function TransactionCategoryPicker({
         onChange(name)
       }
       setCategoryEditor(null)
+      onCategoryCreated?.(transactionType)
       toast.success(t('Category updated'))
     } catch (err: any) {
       toast.error(err?.data?.message || t('Failed to update category'))
@@ -303,6 +324,7 @@ export function TransactionCategoryPicker({
         onChange('')
       }
       setCategoryToDelete(null)
+      onCategoryCreated?.(transactionType)
       toast.success(t('Category deleted'))
     } catch (err: any) {
       toast.error(err?.data?.message || t('Failed to delete category'))
@@ -326,11 +348,28 @@ export function TransactionCategoryPicker({
         <Popover
           open={open}
           onOpenChange={(next) => {
-            setOpen(next)
             if (!next) {
-              setSearch('')
-              setNewCatName('')
+              if (skipPendingCreateOnCloseRef.current) {
+                skipPendingCreateOnCloseRef.current = false
+                setSearch('')
+                setNewCatName('')
+              } else {
+                const pending = newCatName.trim()
+                setSearch('')
+                setNewCatName('')
+                if (pending) {
+                  const existing = displayCategories.find(
+                    (cat) => cat.name.toLowerCase() === pending.toLowerCase(),
+                  )
+                  if (existing) {
+                    onChange(existing.name)
+                  } else {
+                    void handleCreateCategory(pending)
+                  }
+                }
+              }
             }
+            setOpen(next)
           }}
         >
           <PopoverTrigger asChild>
@@ -391,13 +430,7 @@ export function TransactionCategoryPicker({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
-                          handleCreateCategory()
-                        }
-                      }}
-                      onBlur={() => {
-                        const draft = newCatName.trim()
-                        if (draft && !value.trim()) {
-                          onChange(draft)
+                          void handleCreateCategory()
                         }
                       }}
                     />
@@ -405,7 +438,7 @@ export function TransactionCategoryPicker({
                       type="button"
                       size="sm"
                       className="h-7 shrink-0 px-2"
-                      onClick={handleCreateCategory}
+                      onClick={() => void handleCreateCategory()}
                       disabled={creatingCat || !newCatName.trim()}
                     >
                       {creatingCat ? (
