@@ -18,7 +18,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { RootState } from '@/stores/store';
 import StudentSearchPicker from '../components/student-search-picker';
 import { buildProgressReportPrintHtml, openProgressReportPrint } from './progress-report-print-html';
-import { mapReportToPrintInput } from './progress-report-utils';
+import { mapReportToPrintInput, type ProgressReportExamResult } from './progress-report-utils';
 import ClassBatchProgressReports from './progress-report-class-batch';
 
 const GRADE_COLOR: Record<string, string> = {
@@ -224,7 +224,7 @@ export default function ProgressReportPage() {
             </Card>
           )}
 
-          {reportData.exams.map((exam, i) => (
+          {reportData.exams.map((exam: ProgressReportExamResult, i: number) => (
             <Card key={i}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center justify-between flex-wrap gap-2">
@@ -262,7 +262,7 @@ export default function ProgressReportPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {exam.subjects.map((sub, j) => (
+                      {exam.subjects.map((sub: ProgressReportExamResult['subjects'][number], j: number) => (
                         <tr key={j} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 pr-4 font-medium">{sub.subjectName}</td>
                           <td className="text-center py-2 px-3 text-muted-foreground">{sub.totalMarks}</td>

@@ -1,17 +1,20 @@
 import type { ProgressReportPrintInput } from './progress-report-print-html';
 
-type ProgressReportApi = {
+export type ProgressReportExamResult = {
+  exam?: { name?: string; type?: string };
+  subjects: NonNullable<ProgressReportPrintInput['exam']>['subjects'];
+  totalMax: number;
+  totalObtained: number;
+  percentage: number;
+  grade: string;
+  highestPercentageInClass?: number | null;
+};
+
+export type ProgressReportApi = {
   student: ProgressReportPrintInput['student'];
   attendance: ProgressReportPrintInput['attendance'];
   classStrength?: number;
-  exams: Array<{
-    subjects: NonNullable<ProgressReportPrintInput['exam']>['subjects'];
-    totalMax: number;
-    totalObtained: number;
-    percentage: number;
-    grade: string;
-    highestPercentageInClass?: number | null;
-  }>;
+  exams: ProgressReportExamResult[];
 };
 
 export function mapReportToPrintInput(

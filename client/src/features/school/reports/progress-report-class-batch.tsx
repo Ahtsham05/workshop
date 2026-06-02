@@ -22,8 +22,9 @@ import type { AppDispatch } from '@/stores/store';
 import {
   buildBulkProgressReportPrintHtml,
   openProgressReportPrint,
+  type ProgressReportPrintInput,
 } from './progress-report-print-html';
-import { mapReportToPrintInput, studentRowId } from './progress-report-utils';
+import { mapReportToPrintInput, studentRowId, type ProgressReportApi } from './progress-report-utils';
 
 type Props = {
   schoolName: string;
@@ -134,8 +135,8 @@ export default function ClassBatchProgressReports({ schoolName }: Props) {
         ).unwrap();
 
         const inputs = (bulk.reports ?? [])
-          .map((report) => mapReportToPrintInput(report, schoolName, examTitle))
-          .filter((r): r is NonNullable<typeof r> => r !== null);
+          .map((report: ProgressReportApi) => mapReportToPrintInput(report, schoolName, examTitle))
+          .filter((r: ProgressReportPrintInput | null): r is ProgressReportPrintInput => r !== null);
 
         if (!inputs.length) {
           toast.error('No exam results found for selected students');
