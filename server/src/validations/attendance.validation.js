@@ -67,6 +67,49 @@ const markCheckOut = {
   }),
 };
 
+const markBulkAttendance = {
+  body: Joi.object().keys({
+    records: Joi.array()
+      .items(
+        Joi.object().keys({
+          employee: Joi.string().custom(objectId).required(),
+          date: Joi.date().required(),
+          status: Joi.string().valid('Present', 'Absent', 'Late', 'Half-Day', 'On Leave', 'Holiday').required(),
+          notes: Joi.string().allow(''),
+          location: Joi.string().valid('Office', 'Remote', 'Field'),
+        }),
+      )
+      .min(1)
+      .required(),
+  }),
+};
+
+const getDailySummary = {
+  query: Joi.object().keys({
+    date: Joi.date().required(),
+  }),
+};
+
+const getEmployeeStats = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    startDate: Joi.date().required(),
+    endDate: Joi.date().required(),
+  }),
+};
+
+const getEmployeeDailyBreakdown = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    month: Joi.number().integer().min(1).max(12).required(),
+    year: Joi.number().integer().min(2000).max(2100).required(),
+  }),
+};
+
 module.exports = {
   createAttendance,
   getAttendances,
@@ -75,4 +118,8 @@ module.exports = {
   deleteAttendance,
   markCheckIn,
   markCheckOut,
+  markBulkAttendance,
+  getDailySummary,
+  getEmployeeStats,
+  getEmployeeDailyBreakdown,
 };

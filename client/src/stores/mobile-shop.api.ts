@@ -324,6 +324,8 @@ export interface BillDueSummary {
   totalBillAmount: number
   totalServiceCharges: number
   totalReceived: number
+  dueTodayCount: number
+  overdueCount: number
 }
 
 export interface BillPaymentReceipt {

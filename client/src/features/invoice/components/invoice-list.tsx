@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
+import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
 import {
@@ -1007,11 +1008,14 @@ function InvoiceDetails({
         )}
       </div>
 
-      {/* Notes */}
+      {/* Terms & Conditions */}
       {invoice.notes && (
         <div>
-          <Label className="text-sm">{t('notes')}</Label>
-          <p className="text-sm bg-muted p-2 rounded">{invoice.notes}</p>
+          <Label className="text-sm">{t('terms_and_conditions')}</Label>
+          <div
+            className="text-sm bg-muted p-2 rounded [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline"
+            dangerouslySetInnerHTML={{ __html: invoiceTermsToSafeHtml(invoice.notes) }}
+          />
         </div>
       )}
     </div>

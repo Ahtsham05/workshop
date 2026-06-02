@@ -9,6 +9,7 @@ import {
   useDeleteLeaveMutation,
   useGetAttendancesQuery,
   useGetEmployeesQuery,
+  useGetEmployeeDailyBreakdownQuery,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { getEntityId } from '@/lib/entity-id';
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
@@ -200,79 +202,54 @@ export default function LeaveManagement() {
     }
   };
 
+  const { data: dailyBreakdown } = useGetEmployeeDailyBreakdownQuery(
+    {
+      employeeId: reportEmployeeId,
+      month: reportMonth,
+      year: reportYear,
+    },
+    { skip: !reportEmployeeId },
+  );
+
   const monthlyProgress = useMemo(() => {
     const attendances = monthlyAttendanceData?.results || [];
     const leaves = monthlyLeavesData?.results || [];
-    const presentDays = attendances.filter((a: any) => a.status === 'Present').length;
-    const lateDays = attendances.filter((a: any) => a.status === 'Late').length;
-    const absentDays = attendances.filter((a: any) => a.status === 'Absent').length;
-    const leaveDays = attendances.filter((a: any) => a.status === 'On Leave').length;
-    const halfDays = attendances.filter((a: any) => a.status === 'Half-Day').length;
-    const workingHours = attendances.reduce((sum: number, a: any) => sum + Number(a.workingHours || 0), 0);
-    const overtimeHours = attendances.reduce((sum: number, a: any) => sum + Number(a.overtime || 0), 0);
-    const approvedLeaves = leaves.filter((l: any) => l.status === 'Approved').length;
+    const stats = dailyBreakdown?.stats || {};
+    const approvedLeaveRequests = leaves.filter((l: any) => l.status === 'Approved').length;
+    const pendingLeaveRequests = leaves.filter((l: any) => l.status === 'Pending').length;
     const rejectedLeaves = leaves.filter((l: any) => l.status === 'Rejected').length;
+
     return {
       attendanceCount: attendances.length,
-      presentDays,
-      lateDays,
-      absentDays,
-      leaveDays,
-      halfDays,
-      workingHours,
-      overtimeHours,
-      approvedLeaves,
+      workingDays: stats.workingDays || 0,
+      presentDays: stats.presentDays || 0,
+      lateDays: stats.lateDays || 0,
+      absentDays: stats.absentDays || 0,
+      leaveDays: stats.leaveDays || 0,
+      pendingLeaveDays: stats.pendingLeaveDays || 0,
+      unpaidLeaveDays: stats.unpaidLeaveDays || 0,
+      halfDays: stats.halfDays || 0,
+      workingHours: attendances.reduce((sum: number, a: any) => sum + Number(a.workingHours || 0), 0),
+      overtimeHours: stats.overtimeHours || 0,
+      leaveRequests: approvedLeaveRequests,
+      pendingLeaveRequests,
       rejectedLeaves,
     };
-  }, [monthlyAttendanceData?.results, monthlyLeavesData?.results]);
+  }, [monthlyAttendanceData?.results, monthlyLeavesData?.results, dailyBreakdown?.stats]);
 
   const dateWiseProgressRows = useMemo(() => {
-    const rowsByDate = new Map<string, any>();
-    const attendances = monthlyAttendanceData?.results || [];
-    const leaves = monthlyLeavesData?.results || [];
-
-    attendances.forEach((attendance: any) => {
-      const dateKey = format(new Date(attendance.date), 'yyyy-MM-dd');
-      rowsByDate.set(dateKey, {
-        date: dateKey,
-        status: attendance.status || '-',
-        checkIn: attendance.checkIn ? format(new Date(attendance.checkIn), 'p') : '-',
-        checkOut: attendance.checkOut ? format(new Date(attendance.checkOut), 'p') : '-',
-        workingHours: Number(attendance.workingHours || 0),
-        overtime: Number(attendance.overtime || 0),
-        leaveType: '-',
-        leaveStatus: '-',
-      });
-    });
-
-    leaves.forEach((leave: any) => {
-      const start = new Date(leave.startDate);
-      const end = new Date(leave.endDate);
-      const cursor = new Date(start);
-      while (cursor <= end) {
-        const dateKey = format(cursor, 'yyyy-MM-dd');
-        const existing = rowsByDate.get(dateKey) || {
-          date: dateKey,
-          status: '-',
-          checkIn: '-',
-          checkOut: '-',
-          workingHours: 0,
-          overtime: 0,
-          leaveType: '-',
-          leaveStatus: '-',
-        };
-        existing.leaveType = leave.leaveType || '-';
-        existing.leaveStatus = leave.status || '-';
-        if (leave.status === 'Approved' && (existing.status === '-' || existing.status === 'Absent')) {
-          existing.status = 'On Leave';
-        }
-        rowsByDate.set(dateKey, existing);
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    });
-
-    return Array.from(rowsByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [monthlyAttendanceData?.results, monthlyLeavesData?.results]);
+    if (!dailyBreakdown?.days?.length) return [];
+    return dailyBreakdown.days.map((row: any) => ({
+      date: row.date,
+      status: row.status,
+      checkIn: row.checkIn ? format(new Date(row.checkIn), 'p') : '-',
+      checkOut: row.checkOut ? format(new Date(row.checkOut), 'p') : '-',
+      workingHours: Number(row.workingHours || 0),
+      overtime: Number(row.overtime || 0),
+      leaveType: row.leaveType || '-',
+      leaveStatus: row.leaveStatus || '-',
+    }));
+  }, [dailyBreakdown?.days]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
@@ -296,6 +273,21 @@ export default function LeaveManagement() {
 
   const getLeaveTypeLabel = (value: string) => {
     return leaveTypes.find(type => type.value === value)?.label || value;
+  };
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
+
+  const getLeaveImpactDisplay = (leave: any) => {
+    const impact = leave.salaryImpact;
+    if (!impact || !impact.amount) return '-';
+    if (impact.type === 'paid') {
+      return `${formatCurrency(impact.amount)} (${t('Paid leave amount')})`;
+    }
+    if (impact.type === 'deduction') {
+      return `${formatCurrency(impact.amount)} (${t(impact.label || 'Salary deduction')})`;
+    }
+    return '-';
   };
 
   return (
@@ -418,6 +410,7 @@ export default function LeaveManagement() {
                   <TableHead>{t('Start Date')}</TableHead>
                   <TableHead>{t('End Date')}</TableHead>
                   <TableHead>{t('Days')}</TableHead>
+                  <TableHead>{t('Salary Impact')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead className="text-right">{t('Actions')}</TableHead>
                 </TableRow>
@@ -425,13 +418,13 @@ export default function LeaveManagement() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       {t('Loading...')}
                     </TableCell>
                   </TableRow>
                 ) : data?.results?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {t('No leave requests found')}
                     </TableCell>
                   </TableRow>
@@ -446,6 +439,9 @@ export default function LeaveManagement() {
                       <TableCell>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
                         {leave.totalDays} {leave.isHalfDay ? '(Half Day)' : ''}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {getLeaveImpactDisplay(leave)}
                       </TableCell>
                       <TableCell>
                         <Badge {...getStatusBadge(leave.status)}>{leave.status}</Badge>
@@ -567,11 +563,15 @@ export default function LeaveManagement() {
                   <SelectValue placeholder={t('Select employee')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {employeesData?.results?.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.employeeId})
-                    </SelectItem>
-                  ))}
+                  {employeesData?.results?.map((emp: any) => {
+                    const empId = getEntityId(emp);
+                    if (!empId) return null;
+                    return (
+                      <SelectItem key={empId} value={empId}>
+                        {emp.firstName} {emp.lastName} ({emp.employeeId})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -610,14 +610,17 @@ export default function LeaveManagement() {
           {reportEmployeeId && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="p-3 rounded bg-slate-100"><p className="text-xs text-muted-foreground">{t('Working Days')}</p><p className="font-semibold">{monthlyProgress.workingDays}</p></div>
                 <div className="p-3 rounded bg-blue-50"><p className="text-xs text-muted-foreground">{t('Present')}</p><p className="font-semibold">{monthlyProgress.presentDays}</p></div>
                 <div className="p-3 rounded bg-yellow-50"><p className="text-xs text-muted-foreground">{t('Late')}</p><p className="font-semibold">{monthlyProgress.lateDays}</p></div>
                 <div className="p-3 rounded bg-red-50"><p className="text-xs text-muted-foreground">{t('Absent')}</p><p className="font-semibold">{monthlyProgress.absentDays}</p></div>
-                <div className="p-3 rounded bg-gray-100"><p className="text-xs text-muted-foreground">{t('On Leave')}</p><p className="font-semibold">{monthlyProgress.leaveDays}</p></div>
+                <div className="p-3 rounded bg-gray-100"><p className="text-xs text-muted-foreground">{t('Leave Days')}</p><p className="font-semibold">{monthlyProgress.leaveDays}</p></div>
+                <div className="p-3 rounded bg-amber-50"><p className="text-xs text-muted-foreground">{t('Pending Leave (Absent)')}</p><p className="font-semibold">{monthlyProgress.pendingLeaveDays}</p></div>
                 <div className="p-3 rounded bg-purple-50"><p className="text-xs text-muted-foreground">{t('Half Day')}</p><p className="font-semibold">{monthlyProgress.halfDays}</p></div>
+                <div className="p-3 rounded bg-rose-50"><p className="text-xs text-muted-foreground">{t('Unpaid Leave Days')}</p><p className="font-semibold">{monthlyProgress.unpaidLeaveDays}</p></div>
                 <div className="p-3 rounded bg-green-50"><p className="text-xs text-muted-foreground">{t('Working Hours')}</p><p className="font-semibold">{monthlyProgress.workingHours.toFixed(2)}</p></div>
                 <div className="p-3 rounded bg-orange-50"><p className="text-xs text-muted-foreground">{t('Overtime Hours')}</p><p className="font-semibold">{monthlyProgress.overtimeHours.toFixed(2)}</p></div>
-                <div className="p-3 rounded bg-emerald-50"><p className="text-xs text-muted-foreground">{t('Approved Leaves')}</p><p className="font-semibold">{monthlyProgress.approvedLeaves}</p></div>
+                <div className="p-3 rounded bg-emerald-50"><p className="text-xs text-muted-foreground">{t('Leave Requests')}</p><p className="font-semibold">{monthlyProgress.leaveRequests}</p></div>
                 <div className="p-3 rounded bg-rose-50"><p className="text-xs text-muted-foreground">{t('Rejected Leaves')}</p><p className="font-semibold">{monthlyProgress.rejectedLeaves}</p></div>
                 <div className="p-3 rounded bg-slate-100"><p className="text-xs text-muted-foreground">{t('Attendance Records')}</p><p className="font-semibold">{monthlyProgress.attendanceCount}</p></div>
               </div>
@@ -682,11 +685,15 @@ export default function LeaveManagement() {
                   <SelectValue placeholder={t('Select employee')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {employeesData?.results?.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.employeeId})
-                    </SelectItem>
-                  ))}
+                  {employeesData?.results?.map((emp: any) => {
+                    const empId = getEntityId(emp);
+                    if (!empId) return null;
+                    return (
+                      <SelectItem key={empId} value={empId}>
+                        {emp.firstName} {emp.lastName} ({emp.employeeId})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

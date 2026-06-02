@@ -2,7 +2,7 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
-const { leaveService } = require('../services');
+const { leaveService, payrollService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
@@ -28,16 +28,39 @@ const getLeaves = catchAsync(async (req, res) => {
       ? { $in: employeeIds.filter((id) => String(id) === String(filter.employee)) }
       : { $in: employeeIds };
   }
-  if (filter.startDate || filter.endDate) {
-    const dateFilter = {};
-    if (filter.startDate) dateFilter.$gte = new Date(filter.startDate);
-    if (filter.endDate) dateFilter.$lte = new Date(filter.endDate);
-    filter.startDate = dateFilter;
+  if (req.query.startDate || req.query.endDate) {
+    delete filter.startDate;
     delete filter.endDate;
+
+    if (req.query.startDate) {
+      const rangeStart = new Date(req.query.startDate);
+      rangeStart.setHours(0, 0, 0, 0);
+      filter.endDate = { $gte: rangeStart };
+    }
+    if (req.query.endDate) {
+      const rangeEnd = new Date(req.query.endDate);
+      rangeEnd.setHours(23, 59, 59, 999);
+      filter.startDate = { $lte: rangeEnd };
+    }
   }
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  options.populate = 'employee,approvedBy';
+  options.populate = [
+    { path: 'employee', select: 'firstName lastName employeeId salary' },
+    { path: 'approvedBy', select: 'name email' },
+  ];
   const result = await leaveService.queryLeaves(filter, options);
+
+  if (result?.results?.length) {
+    result.results = result.results.map((leave) => {
+      const plain = leave.toObject ? leave.toObject() : leave;
+      const employeeDoc = plain.employee;
+      return {
+        ...plain,
+        salaryImpact: payrollService.computeLeaveSalaryImpact(plain, employeeDoc),
+      };
+    });
+  }
+
   res.send(result);
 });
 

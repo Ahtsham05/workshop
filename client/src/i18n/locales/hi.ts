@@ -164,7 +164,7 @@ const hi: Record<string, string> = {
   "customer_balance": "ग्राहक बकाया",
   "Previous Balance": "पिछला बकाया",
   "Net Balance": "शुद्ध बकाया",
-  "Current Invoice": "वर्तमान चालान",
+  "Current Amount": "वर्तमान राशि",
   "Paid Now": "अभी भुगतान",
 
   // Auth

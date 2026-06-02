@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote } from 'lucide-react'
@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { normalizeInvoiceNotesHtml } from '@/lib/rich-text-utils'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
@@ -167,6 +168,7 @@ export function InvoicePanel({
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
+  const [printAsQuotation, setPrintAsQuotation] = useState(false)
   // Print functionality using utility
   const printInvoice = useCallback(async (invoiceData: any) => {
     try {
@@ -221,6 +223,7 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
+        printAsQuotation,
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData)
 
@@ -252,7 +255,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers, printAsQuotation])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback(async (invoiceData: any) => {
@@ -308,6 +311,7 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
+        printAsQuotation,
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData)
 
@@ -339,7 +343,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers, printAsQuotation])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -671,7 +675,7 @@ export function InvoicePanel({
         totalCost: invoice.totalCost,
         paidAmount: invoice.paidAmount,
         balance: invoice.balance,
-        notes: invoice.notes,
+        notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
         deliveryCharge: invoice.deliveryCharge,
         serviceCharge: invoice.serviceCharge,
         roundingAdjustment: invoice.roundingAdjustment,
@@ -775,6 +779,7 @@ export function InvoicePanel({
           language: result.language || invoice.language,
           isUrduOnly: result.isUrduOnly ?? invoice.isUrduOnly,
           invoiceDate: result.invoiceDate || invoice.invoiceDate,
+          notes: result.notes ?? invoice.notes,
         }
 
         if (printType === 'receipt') {
@@ -845,9 +850,9 @@ export function InvoicePanel({
               {t('invoice_details')}
             </CardTitle>
 
-            <div className='flex w-full flex-col gap-3 sm:max-w-[min(100%,20rem)] lg:w-auto lg:max-w-xs'>
-              <div className='flex items-center justify-between gap-3'>
-                <Label htmlFor='invoice-print-urdu-header' className='text-sm font-normal'>
+            <div className='flex w-full flex-wrap items-center gap-x-6 gap-y-2 lg:w-auto lg:justify-end'>
+              <div className='flex items-center gap-2'>
+                <Label htmlFor='invoice-print-urdu-header' className='text-sm font-normal whitespace-nowrap'>
                   {t('urdu_print')}
                 </Label>
                 <Switch
@@ -857,6 +862,16 @@ export function InvoicePanel({
                     setPrintReceiptInUrdu(v)
                     setInvoicePrintInUrdu(v)
                   }}
+                />
+              </div>
+              <div className='flex items-center gap-2'>
+                <Label htmlFor='invoice-print-quotation-header' className='text-sm font-normal whitespace-nowrap'>
+                  {t('quotation_print')}
+                </Label>
+                <Switch
+                  id='invoice-print-quotation-header'
+                  checked={printAsQuotation}
+                  onCheckedChange={setPrintAsQuotation}
                 />
               </div>
             </div>
@@ -1856,7 +1871,7 @@ export function InvoicePanel({
                     </span>
                   </div>
                   <div className='flex justify-between items-center text-sm'>
-                    <span className="font-medium">{t('Current Invoice')}:</span>
+                    <span className="font-medium">{t('Current Amount')}:</span>
                     <span className="font-bold text-red-600">Rs{invoice.total.toFixed(2)} (Dr)</span>
                   </div>
                   {invoice.paidAmount > 0 && (
@@ -1877,16 +1892,15 @@ export function InvoicePanel({
             )}
           </div>
 
-          {/* Notes */}
-          <div>
-            <Label htmlFor="notes">{t('notes')}</Label>
-            <Textarea
-              value={invoice.notes || ''}
-              onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder={t('add_notes')}
-              rows={2}
-            />
-          </div>
+          {/* Terms & Conditions */}
+          <RichTextEditor
+            value={invoice.notes || ''}
+            onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
+            fieldLabel={t('terms_and_conditions')}
+            addButtonLabel={t('add_terms_and_conditions')}
+            placeholder={t('terms_and_conditions_placeholder')}
+            defaultExpanded={Boolean(invoice.notes?.trim())}
+          />
 
           {/* Save Buttons */}
           <div className='grid grid-cols-1 gap-3'>

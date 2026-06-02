@@ -117,6 +117,27 @@ export const hrApi = createApi({
       query: (id) => ({ url: `/attendance/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Attendance'],
     }),
+    markBulkAttendance: builder.mutation({
+      query: (data) => ({ url: '/attendance/bulk', method: 'POST', body: data }),
+      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance', 'Payroll'],
+    }),
+    getDailyAttendanceSummary: builder.query({
+      query: (params: { date: string }) => ({ url: '/attendance/daily-summary', params }),
+      providesTags: [{ type: 'Attendance', id: 'SUMMARY' }],
+    }),
+    getEmployeeAttendanceStats: builder.query({
+      query: ({ employeeId, startDate, endDate }: { employeeId: string; startDate: string; endDate: string }) => ({
+        url: `/attendance/employee/${employeeId}/stats`,
+        params: { startDate, endDate },
+      }),
+    }),
+    getEmployeeDailyBreakdown: builder.query({
+      query: ({ employeeId, month, year }: { employeeId: string; month: number; year: number }) => ({
+        url: `/attendance/employee/${employeeId}/daily-breakdown`,
+        params: { month, year },
+      }),
+      providesTags: ['Attendance', 'Leave', 'Payroll'],
+    }),
     
     // Leaves
     getLeaves: builder.query({
@@ -129,19 +150,19 @@ export const hrApi = createApi({
     }),
     createLeave: builder.mutation({
       query: (data) => ({ url: '/leaves', method: 'POST', body: data }),
-      invalidatesTags: ['Leave'],
+      invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     updateLeave: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/leaves/${id}`, method: 'PATCH', body: data }),
-      invalidatesTags: ['Leave'],
+      invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     deleteLeave: builder.mutation({
       query: (id) => ({ url: `/leaves/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['Leave'],
+      invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     approveLeave: builder.mutation({
       query: ({ id }) => ({ url: `/leaves/${id}/approve`, method: 'PATCH' }),
-      invalidatesTags: ['Leave'],
+      invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     rejectLeave: builder.mutation({
       query: ({ id, rejectionReason }) => ({ url: `/leaves/${id}/reject`, method: 'PATCH', body: { rejectionReason } }),
@@ -247,6 +268,10 @@ export const {
   useMarkCheckOutMutation,
   useUpdateAttendanceMutation,
   useDeleteAttendanceMutation,
+  useMarkBulkAttendanceMutation,
+  useGetDailyAttendanceSummaryQuery,
+  useGetEmployeeAttendanceStatsQuery,
+  useGetEmployeeDailyBreakdownQuery,
   useGetLeavesQuery,
   useGetLeaveQuery,
   useCreateLeaveMutation,

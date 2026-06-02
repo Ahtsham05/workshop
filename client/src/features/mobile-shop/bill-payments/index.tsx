@@ -60,7 +60,6 @@ import {
   useCreateBillPaymentsBatchMutation,
   useDeleteBillPaymentMutation,
   useUpdateBillPaymentMutation,
-  useGetBillPaymentReportQuery,
   useGetUtilityCompaniesQuery,
   useGetBillPaymentReceiptQuery,
   useGetBillDueSummaryQuery,
@@ -170,15 +169,23 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 
 // ─── Overall Summary Cards ────────────────────────────────────────────────────
 
-function OverallReportCards() {
-  const { data: report, isLoading } = useGetBillPaymentReportQuery()
+interface OverallReportCardsProps {
+  dueStartDate: string
+  dueEndDate: string
+}
+
+function OverallReportCards({ dueStartDate, dueEndDate }: OverallReportCardsProps) {
+  const { data: summary, isLoading } = useGetBillDueSummaryQuery({
+    dueStartDate: dueStartDate || undefined,
+    dueEndDate: dueEndDate || undefined,
+  })
 
   const cards = [
-    { label: 'Total Bills', value: report?.totalBills ?? 0, icon: FileText, cls: '', fmt: (v: number) => String(v) },
-    { label: 'Total Collection', value: report?.totalCollection ?? 0, icon: Banknote, cls: '', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
-    { label: 'Service Profit', value: report?.totalServiceCharges ?? 0, icon: TrendingUp, cls: 'text-green-600', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
-    { label: 'Due Today', value: report?.totalDueToday ?? 0, icon: Clock, cls: 'text-yellow-600', fmt: (v: number) => String(v) },
-    { label: 'Overdue', value: report?.totalOverdue ?? 0, icon: AlertCircle, cls: 'text-red-500', fmt: (v: number) => String(v) },
+    { label: 'Total Bills', value: summary?.totalBills ?? 0, icon: FileText, cls: '', fmt: (v: number) => String(v) },
+    { label: 'Total Collection', value: summary?.totalReceived ?? 0, icon: Banknote, cls: '', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
+    { label: 'Service Profit', value: summary?.totalServiceCharges ?? 0, icon: TrendingUp, cls: 'text-green-600', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
+    { label: 'Due Today', value: summary?.dueTodayCount ?? 0, icon: Clock, cls: 'text-yellow-600', fmt: (v: number) => String(v) },
+    { label: 'Overdue', value: summary?.overdueCount ?? 0, icon: AlertCircle, cls: 'text-red-500', fmt: (v: number) => String(v) },
   ]
 
   return (
@@ -227,9 +234,10 @@ function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, 
     }
   }
 
-  const skip = !dueStartDate && !dueEndDate
-  const summaryParams = skip ? undefined : { dueStartDate: dueStartDate || undefined, dueEndDate: dueEndDate || undefined }
-  const { data: summary, isFetching } = useGetBillDueSummaryQuery(summaryParams, { skip })
+  const { data: summary, isFetching } = useGetBillDueSummaryQuery({
+    dueStartDate: dueStartDate || undefined,
+    dueEndDate: dueEndDate || undefined,
+  })
 
   const PRESETS: { key: DatePreset; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -285,9 +293,8 @@ function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, 
           </div>
         </div>
 
-        {/* Dynamic summary (only when a date filter is active) */}
-        {!skip && (
-          <div className={`flex flex-wrap gap-4 rounded-md bg-muted px-4 py-3 text-sm transition-opacity ${isFetching ? 'opacity-40' : ''}`}>
+        {/* Dynamic summary for the active due-date range */}
+        <div className={`flex flex-wrap gap-4 rounded-md bg-muted px-4 py-3 text-sm transition-opacity ${isFetching ? 'opacity-40' : ''}`}>
             <div>
               <span className='text-muted-foreground'>Bills: </span>
               <strong>{summary?.totalBills ?? 0}</strong>
@@ -305,7 +312,6 @@ function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, 
               <strong>Rs. {(summary?.totalReceived ?? 0).toLocaleString()}</strong>
             </div>
           </div>
-        )}
       </CardContent>
     </Card>
   )
@@ -665,7 +671,7 @@ export default function BillPaymentsPage() {
       description={`Collect utility bills (electricity, gas, water, internet) and earn service charges. · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
       {/* Summary Cards */}
-      <OverallReportCards />
+      <OverallReportCards dueStartDate={dueStartDate} dueEndDate={dueEndDate} />
 
       <div className='mt-6'>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>

@@ -23,6 +23,22 @@ router
   .post(auth('createAttendance'), validate(attendanceValidation.markCheckOut), attendanceController.markCheckOut);
 
 router
+  .route('/bulk')
+  .post(auth('manageAttendance'), validate(attendanceValidation.markBulkAttendance), attendanceController.markBulkAttendance);
+
+router
+  .route('/daily-summary')
+  .get(auth('getAttendance'), validate(attendanceValidation.getDailySummary), attendanceController.getDailySummary);
+
+router
+  .route('/employee/:employeeId/daily-breakdown')
+  .get(auth('getAttendance'), validate(attendanceValidation.getEmployeeDailyBreakdown), attendanceController.getEmployeeDailyBreakdown);
+
+router
+  .route('/employee/:employeeId/stats')
+  .get(auth('getAttendance'), validate(attendanceValidation.getEmployeeStats), attendanceController.getEmployeeStats);
+
+router
   .route('/employee/:employeeId')
   .get(auth('getAttendance'), attendanceController.getEmployeeAttendance);
 

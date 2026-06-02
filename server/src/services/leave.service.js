@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Leave, Employee, Attendance } = require('../models');
 const ApiError = require('../utils/ApiError');
+const payrollService = require('./payroll.service');
 
 const AUTO_LEAVE_SYNC_NOTE = '[AUTO_LEAVE_SYNC]';
 
@@ -37,15 +38,15 @@ const syncAttendanceForApprovedLeave = async (leave) => {
         branchId: leave.branchId,
         employee: leave.employee,
         date,
-        status: 'On Leave',
+        status: leave.isHalfDay ? 'Half-Day' : 'On Leave',
         notes: AUTO_LEAVE_SYNC_NOTE,
       });
       continue;
     }
 
-    // Do not overwrite manually marked check in/out records.
+    // Approved leave always overrides Present/Late unless employee has check-in/out.
     if (existing.checkIn || existing.checkOut) continue;
-    existing.status = 'On Leave';
+    existing.status = leave.isHalfDay ? 'Half-Day' : 'On Leave';
     existing.notes = existing.notes ? `${existing.notes} ${AUTO_LEAVE_SYNC_NOTE}` : AUTO_LEAVE_SYNC_NOTE;
     await existing.save();
   }
@@ -68,7 +69,7 @@ const cleanupAttendanceForLeave = async (leave) => {
       await existing.deleteOne();
     } else {
       existing.notes = cleanedNotes;
-      existing.status = 'Absent';
+      existing.status = 'Present';
       await existing.save();
     }
   }
@@ -96,6 +97,12 @@ const createLeave = async (leaveBody) => {
   leaveBody.endDate = endDate;
   leaveBody.reason = String(leaveBody.reason || '').trim();
   leaveBody.totalDays = leaveBody.isHalfDay ? 0.5 : diffDays;
+
+  const maxEndDate = new Date(startDate);
+  maxEndDate.setDate(maxEndDate.getDate() + Math.max(0, Math.ceil(leaveBody.totalDays) - 1));
+  if (endDate > maxEndDate && !leaveBody.isHalfDay) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'End date does not match the number of leave days');
+  }
   
   // Check for overlapping leaves
   const overlappingLeave = await Leave.findOne({
@@ -111,8 +118,10 @@ const createLeave = async (leaveBody) => {
   if (overlappingLeave) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Leave already exists for this period');
   }
-  
-  return Leave.create(leaveBody);
+
+  const leave = await Leave.create(leaveBody);
+  await payrollService.syncPayrollForLeave(leave, leaveBody.createdBy);
+  return leave;
 };
 
 const queryLeaves = async (filter, options) => {
@@ -160,6 +169,7 @@ const updateLeaveById = async (leaveId, updateBody) => {
     await cleanupAttendanceForLeave({ ...leave.toObject(), ...oldLeaveRange });
     await syncAttendanceForApprovedLeave(leave);
   }
+  await payrollService.syncPayrollForLeave(leave, updateBody.updatedBy);
   return leave;
 };
 
@@ -168,6 +178,10 @@ const deleteLeaveById = async (leaveId) => {
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
+  if (leave.status === 'Approved') {
+    await cleanupAttendanceForLeave(leave);
+  }
+  await payrollService.syncPayrollForLeave(leave, null);
   await leave.deleteOne();
   return leave;
 };
@@ -187,6 +201,7 @@ const approveLeave = async (leaveId, approvedBy) => {
   leave.approvalDate = new Date();
   await leave.save();
   await syncAttendanceForApprovedLeave(leave);
+  await payrollService.syncPayrollForLeave(leave, approvedBy);
   return leave;
 };
 
@@ -205,6 +220,7 @@ const rejectLeave = async (leaveId, rejectionReason, _approvedBy) => {
   leave.approvedBy = null;
   leave.approvalDate = null;
   await leave.save();
+  await payrollService.syncPayrollForLeave(leave, _approvedBy);
   return leave;
 };
 
@@ -224,6 +240,7 @@ const cancelLeave = async (leaveId) => {
   if (wasApproved) {
     await cleanupAttendanceForLeave(leave);
   }
+  await payrollService.syncPayrollForLeave(leave, null);
   return leave;
 };
 

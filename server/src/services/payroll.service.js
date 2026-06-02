@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { Payroll, Employee, Attendance, Leave, EmployeeLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const employeeLedgerService = require('./employeeLedger.service');
+const { computeAttendanceStatsFromData } = require('../utils/attendanceStats');
 
 const getOverlappingLeaveDays = (leave, periodStart, periodEnd) => {
   const leaveStart = new Date(leave.startDate);
@@ -15,6 +16,172 @@ const getOverlappingLeaveDays = (leave, periodStart, periodEnd) => {
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
   if (leave.isHalfDay) return Math.min(0.5, diffDays);
   return diffDays;
+};
+
+const getMonthsInRange = (startDate, endDate) => {
+  const months = [];
+  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  while (cursor <= end) {
+    months.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear() });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return months;
+};
+
+const calculatePayrollSnapshot = async (employee, month, year, scope = {}) => {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+  const attendances = await Attendance.find({
+    employee: employee._id,
+    date: { $gte: startDate, $lte: endDate },
+  });
+
+  const leaves = await Leave.find({
+    employee: employee._id,
+    status: { $in: ['Approved', 'Pending'] },
+    startDate: { $lte: endDate },
+    endDate: { $gte: startDate },
+  });
+
+  const stats = computeAttendanceStatsFromData({
+    periodStart: startDate,
+    periodEnd: endDate,
+    joiningDate: employee.joiningDate,
+    attendances,
+    leaves,
+  });
+
+  const basicSalary = Number(employee.salary?.basicSalary || 0);
+  const perDaySalary = stats.workingDays > 0 ? basicSalary / stats.workingDays : 0;
+  const absentDeduction = perDaySalary * stats.absentDays;
+  const leaveDeduction = perDaySalary * stats.unpaidLeaveDays;
+  const overtimeAllowance = stats.overtimeHours * 100;
+  const allowances = {
+    houseRent: Number(employee.salary?.allowances || 0),
+    overtime: overtimeAllowance,
+  };
+  const totalAllowances = Object.values(allowances).reduce((sum, val) => sum + (val || 0), 0);
+  const grossSalary = basicSalary + totalAllowances;
+
+  return {
+    ...stats,
+    basicSalary,
+    perDaySalary,
+    absentDeduction,
+    leaveDeduction,
+    allowances,
+    grossSalary,
+    totalAllowances,
+    notes: `Present: ${stats.presentDays}, Absent: ${stats.absentDays}, Leave: ${stats.leaveDays}, Pending leave (absent): ${stats.pendingLeaveDays}, Unpaid leave deduction days: ${stats.unpaidLeaveDays}`,
+  };
+};
+
+const computeLeaveSalaryImpact = (leave, employee) => {
+  const basicSalary = Number(employee?.salary?.basicSalary || 0);
+  const startDate = new Date(leave.startDate);
+  const endDate = new Date(leave.endDate);
+  const months = getMonthsInRange(startDate, endDate);
+  let totalAmount = 0;
+
+  months.forEach(({ month, year }) => {
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    const overlapDays = getOverlappingLeaveDays(leave, monthStart, monthEnd);
+    if (!overlapDays) return;
+    const workingDays = monthEnd.getDate();
+    const perDaySalary = workingDays > 0 ? basicSalary / workingDays : 0;
+    totalAmount += perDaySalary * overlapDays;
+  });
+
+  if (leave.status === 'Pending') {
+    return {
+      amount: totalAmount,
+      type: 'deduction',
+      label: 'Absent until approved',
+    };
+  }
+  if (leave.status === 'Approved' && leave.leaveType === 'Unpaid') {
+    return {
+      amount: totalAmount,
+      type: 'deduction',
+      label: 'Salary deduction',
+    };
+  }
+  if (leave.status === 'Approved') {
+    return {
+      amount: totalAmount,
+      type: 'paid',
+      label: 'Paid leave amount',
+    };
+  }
+  return {
+    amount: 0,
+    type: 'none',
+    label: '-',
+  };
+};
+
+const syncPayrollForMonth = async (employeeId, month, year, userId, scope = {}) => {
+  const tenantFilter = {};
+  if (scope.organizationId) tenantFilter.organizationId = scope.organizationId;
+  if (scope.branchId) tenantFilter.branchId = scope.branchId;
+
+  const payroll = await Payroll.findOne({ employee: employeeId, month, year, ...tenantFilter });
+  if (!payroll) return null;
+
+  const employee = await Employee.findById(employeeId);
+  if (!employee) return null;
+
+  const snapshot = await calculatePayrollSnapshot(employee, month, year, scope);
+  const currentLedgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, {
+    organizationId: scope.organizationId || employee.organizationId,
+    branchId: scope.branchId || employee.branchId,
+  });
+  const carryForwardAdvance = Math.max(0, -Number(currentLedgerSummary.currentBalance || 0));
+
+  const deductions = {
+    absent: snapshot.absentDeduction,
+    other: snapshot.leaveDeduction,
+    advance: Number(payroll.deductions?.advance || carryForwardAdvance),
+  };
+  const totalDeductions = Object.values(deductions).reduce((sum, val) => sum + (val || 0), 0);
+
+  payroll.basicSalary = snapshot.basicSalary;
+  payroll.allowances = snapshot.allowances;
+  payroll.deductions = deductions;
+  payroll.workingDays = snapshot.workingDays;
+  payroll.presentDays = snapshot.presentDays;
+  payroll.absentDays = snapshot.absentDays;
+  payroll.leaveDays = snapshot.leaveDays;
+  payroll.overtimeHours = snapshot.overtimeHours;
+  payroll.totalAllowances = snapshot.totalAllowances;
+  payroll.totalDeductions = totalDeductions;
+  payroll.grossSalary = snapshot.grossSalary;
+  payroll.netSalary = Math.max(0, snapshot.grossSalary - totalDeductions);
+  payroll.notes = snapshot.notes;
+  payroll.updatedBy = userId;
+  await payroll.save();
+  await employeeLedgerService.upsertSalaryPayableFromPayroll(
+    payroll,
+    userId || payroll.processedBy || payroll.createdBy,
+  );
+  return payroll;
+};
+
+const syncPayrollForLeave = async (leave, userId) => {
+  const months = getMonthsInRange(new Date(leave.startDate), new Date(leave.endDate));
+  const scope = {
+    organizationId: leave.organizationId,
+    branchId: leave.branchId,
+  };
+  const results = [];
+  for (const { month, year } of months) {
+    const synced = await syncPayrollForMonth(leave.employee, month, year, userId, scope);
+    if (synced) results.push(synced);
+  }
+  return results;
 };
 
 const createPayroll = async (payrollBody) => {
@@ -112,66 +279,35 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
     throw new ApiError(httpStatus.BAD_REQUEST, 'Payroll already exists for this month');
   }
   
-  // Get attendance data for the month
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0);
-  const daysInMonth = endDate.getDate();
-  
-  const attendances = await Attendance.find({
-    employee: employeeId,
-    date: { $gte: startDate, $lte: endDate },
-  });
-  
-  const presentDays = attendances.filter(a => a.status === 'Present' || a.status === 'Late').length;
-  const absentDays = attendances.filter(a => a.status === 'Absent').length;
-  
-  // Get leave data
-  const leaves = await Leave.find({
-    employee: employeeId,
-    status: 'Approved',
-    startDate: { $lte: endDate },
-    endDate: { $gte: startDate },
-  });
-  
-  const leaveDays = leaves.reduce((sum, leave) => sum + getOverlappingLeaveDays(leave, startDate, endDate), 0);
-  
-  // Calculate overtime
-  const overtimeHours = attendances.reduce((sum, a) => sum + (a.overtime || 0), 0);
-  
-  // Calculate salary components
-  const basicSalary = employee.salary.basicSalary;
-  const perDaySalary = basicSalary / daysInMonth;
-  const absentDeduction = perDaySalary * absentDays;
-  const leaveDeduction = perDaySalary * leaveDays;
+  // Calculate payroll from live attendance + leave data
+  const snapshot = await calculatePayrollSnapshot(employee, month, year, scope);
   const currentLedgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, {
     organizationId: scope.organizationId || employee.organizationId,
     branchId: scope.branchId || employee.branchId,
   });
   const carryForwardAdvance = Math.max(0, -Number(currentLedgerSummary.currentBalance || 0));
-  
+
   const payrollData = {
     organizationId: scope.organizationId || employee.organizationId,
     branchId: scope.branchId || employee.branchId,
     employee: employeeId,
     month,
     year,
-    basicSalary,
-    allowances: {
-      houseRent: employee.salary.allowances || 0,
-      overtime: overtimeHours * 100, // 100 per hour overtime
-    },
+    basicSalary: snapshot.basicSalary,
+    allowances: snapshot.allowances,
     deductions: {
-      absent: absentDeduction,
-      other: leaveDeduction,
+      absent: snapshot.absentDeduction,
+      other: snapshot.leaveDeduction,
       advance: carryForwardAdvance,
     },
-    workingDays: daysInMonth,
-    presentDays,
-    absentDays,
-    leaveDays,
-    overtimeHours,
+    workingDays: snapshot.workingDays,
+    presentDays: snapshot.presentDays,
+    absentDays: snapshot.absentDays,
+    leaveDays: snapshot.leaveDays,
+    overtimeHours: snapshot.overtimeHours,
     status: 'Pending',
     processedBy,
+    notes: snapshot.notes,
   };
   
   // Calculate totals
@@ -288,41 +424,29 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
     let presentDays = 0;
     let absentDays = 0;
     let leaveDays = 0;
+    let pendingLeaveDays = 0;
 
-    if (payroll) {
-      workingDays = payroll.workingDays || daysInMonth;
-      presentDays = payroll.presentDays || 0;
-      absentDays = payroll.absentDays || 0;
-      leaveDays = payroll.leaveDays || 0;
-    } else {
-      const attendances = await Attendance.find({
-        employee: employeeId,
-        date: { $gte: monthStart, $lte: monthEnd },
-      });
-      presentDays = attendances.filter((a) => a.status === 'Present' || a.status === 'Late').length;
-      absentDays = attendances.filter((a) => a.status === 'Absent').length;
-
-      const leaves = await Leave.find({
-        employee: employeeId,
-        status: 'Approved',
-        startDate: { $lte: monthEnd },
-        endDate: { $gte: monthStart },
-      });
-      leaveDays = leaves.reduce(
-        (sum, leave) => sum + getOverlappingLeaveDays(leave, monthStart, monthEnd),
-        0,
-      );
-    }
+    const snapshot = await calculatePayrollSnapshot(employee, month, year, tenantFilter);
+    workingDays = snapshot.workingDays;
+    presentDays = snapshot.presentDays;
+    absentDays = snapshot.absentDays;
+    leaveDays = snapshot.leaveDays;
+    pendingLeaveDays = snapshot.pendingLeaveDays;
 
     const payableFromLedger = ledgerEntries
       .filter((entry) => entry.transactionType === 'salary_payable')
       .reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
 
-    const grossSalary = payroll
-      ? Number(payroll.grossSalary || 0)
-      : Number(employee.salary?.basicSalary || 0) + Number(employee.salary?.allowances || 0);
-
-    const totalSalary = payroll ? Number(payroll.netSalary || 0) : payableFromLedger;
+    const grossSalary = snapshot.grossSalary;
+    const advanceDeduction = payroll ? Number(payroll.deductions?.advance || 0) : 0;
+    const absentDeduction = snapshot.absentDeduction;
+    const leaveDeduction = snapshot.leaveDeduction;
+    const paidLeaveAmount = snapshot.perDaySalary * (snapshot.paidLeaveDays || 0);
+    const netFromSnapshot = Math.max(
+      0,
+      snapshot.grossSalary - snapshot.absentDeduction - snapshot.leaveDeduction - advanceDeduction,
+    );
+    const totalSalary = payroll ? netFromSnapshot : payableFromLedger;
 
     const salaryPaid = ledgerEntries
       .filter((entry) => entry.transactionType === 'salary_payment')
@@ -331,8 +455,6 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
     const advancePaid = ledgerEntries
       .filter((entry) => entry.transactionType === 'advance_payment')
       .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
-
-    const advanceDeduction = payroll ? Number(payroll.deductions?.advance || 0) : 0;
 
     ledgerEntries.forEach((entry) => {
       runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
@@ -364,6 +486,10 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
       presentDays,
       absentDays,
       leaveDays,
+      pendingLeaveDays,
+      absentDeduction,
+      leaveDeduction,
+      paidLeaveAmount,
       openingBalance,
       closingBalance,
       remainingPayable,
@@ -394,4 +520,9 @@ module.exports = {
   processPayroll,
   markPayrollPaid,
   getEmployeeMonthlyPayrollSummary,
+  calculatePayrollSnapshot,
+  computeLeaveSalaryImpact,
+  syncPayrollForMonth,
+  syncPayrollForLeave,
+  getOverlappingLeaveDays,
 };

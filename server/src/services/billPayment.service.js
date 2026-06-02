@@ -7,6 +7,12 @@ const cashBookService = require('./cashBook.service');
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
 
+const endOfDueDate = (dateStr) => {
+  const end = new Date(dateStr);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
 /**
  * Auto-update overdue statuses for a given org/branch scope.
  * Called before any list/summary query that depends on status accuracy.
@@ -145,7 +151,7 @@ const queryBillPayments = async (filter, options) => {
       delete queryOptions.dueStartDate;
     }
     if (queryOptions.dueEndDate) {
-      queryFilter.dueDate.$lte = new Date(queryOptions.dueEndDate);
+      queryFilter.dueDate.$lte = endOfDueDate(queryOptions.dueEndDate);
       delete queryOptions.dueEndDate;
     }
   }
@@ -367,31 +373,60 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
 
 /**
  * Summary of pending/overdue bills within a dueDate range.
- * Used by the "Due Date Filter" panel on the frontend.
+ * Used by summary cards and the due-date filter panel on the frontend.
  */
 const getDueDateRangeSummary = async ({ organizationId, branchId, dueStartDate, dueEndDate }) => {
+  await refreshOverdueStatuses(organizationId, branchId);
+
   const filter = { organizationId: toObjectId(organizationId), status: { $in: ['pending', 'overdue'] } };
   if (branchId) filter.branchId = toObjectId(branchId);
   if (dueStartDate || dueEndDate) {
     filter.dueDate = {};
     if (dueStartDate) filter.dueDate.$gte = new Date(dueStartDate);
-    if (dueEndDate) filter.dueDate.$lte = new Date(dueEndDate);
+    if (dueEndDate) filter.dueDate.$lte = endOfDueDate(dueEndDate);
   }
 
-  const agg = await BillPayment.aggregate([
-    { $match: filter },
-    {
-      $group: {
-        _id: null,
-        totalBills: { $sum: 1 },
-        totalBillAmount: { $sum: '$billAmount' },
-        totalServiceCharges: { $sum: '$serviceCharge' },
-        totalReceived: { $sum: '$totalReceived' },
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+  const dueTodayFilter = {
+    ...filter,
+    status: 'pending',
+    dueDate: { $gte: startOfToday, $lte: endOfToday },
+  };
+
+  const overdueFilter = {
+    organizationId: toObjectId(organizationId),
+    status: 'overdue',
+  };
+  if (branchId) overdueFilter.branchId = toObjectId(branchId);
+  if (filter.dueDate) overdueFilter.dueDate = filter.dueDate;
+
+  const [agg, dueTodayCount, overdueCount] = await Promise.all([
+    BillPayment.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalBills: { $sum: 1 },
+          totalBillAmount: { $sum: '$billAmount' },
+          totalServiceCharges: { $sum: '$serviceCharge' },
+          totalReceived: { $sum: '$totalReceived' },
+        },
       },
-    },
+    ]),
+    BillPayment.countDocuments(dueTodayFilter),
+    BillPayment.countDocuments(overdueFilter),
   ]);
 
-  return agg[0] || { totalBills: 0, totalBillAmount: 0, totalServiceCharges: 0, totalReceived: 0 };
+  const result = agg[0] || { totalBills: 0, totalBillAmount: 0, totalServiceCharges: 0, totalReceived: 0 };
+
+  return {
+    ...result,
+    dueTodayCount,
+    overdueCount,
+  };
 };
 
 module.exports = {

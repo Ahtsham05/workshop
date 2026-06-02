@@ -115,6 +115,43 @@ const getEmployeeAttendance = catchAsync(async (req, res) => {
   res.send(attendances);
 });
 
+const markBulkAttendance = catchAsync(async (req, res) => {
+  const result = await attendanceService.markBulkAttendance(req.body.records, {
+    ...getBranchContext(req),
+    userId: req.user?.id,
+  });
+  res.status(httpStatus.OK).send(result);
+});
+
+const getDailySummary = catchAsync(async (req, res) => {
+  const summary = await attendanceService.getDailyAttendanceSummary(req.query.date, getBranchContext(req));
+  res.send(summary);
+});
+
+const getEmployeeStats = catchAsync(async (req, res) => {
+  const { employeeId } = req.params;
+  const { startDate, endDate } = req.query;
+  const stats = await attendanceService.computeEmployeeAttendanceStats(
+    employeeId,
+    startDate,
+    endDate,
+    getBranchContext(req),
+  );
+  res.send(stats);
+});
+
+const getEmployeeDailyBreakdown = catchAsync(async (req, res) => {
+  const { employeeId } = req.params;
+  const { month, year } = req.query;
+  const breakdown = await attendanceService.getEmployeeDailyBreakdown(
+    employeeId,
+    Number(month),
+    Number(year),
+    getBranchContext(req),
+  );
+  res.send(breakdown);
+});
+
 module.exports = {
   createAttendance,
   getAttendances,
@@ -124,4 +161,8 @@ module.exports = {
   markCheckIn,
   markCheckOut,
   getEmployeeAttendance,
+  markBulkAttendance,
+  getDailySummary,
+  getEmployeeStats,
+  getEmployeeDailyBreakdown,
 };

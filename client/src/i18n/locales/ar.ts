@@ -165,7 +165,7 @@ const ar: Record<string, string> = {
   "customer_balance": "رصيد العميل",
   "Previous Balance": "الرصيد السابق",
   "Net Balance": "صافي الرصيد",
-  "Current Invoice": "الفاتورة الحالية",
+  "Current Amount": "المبلغ الحالي",
   "Paid Now": "مدفوع الآن",
 
   // Reports

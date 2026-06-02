@@ -25,6 +25,10 @@ type MonthlyPayrollRow = {
   presentDays: number;
   absentDays: number;
   leaveDays: number;
+  pendingLeaveDays?: number;
+  absentDeduction?: number;
+  leaveDeduction?: number;
+  paidLeaveAmount?: number;
   totalSalary: number;
   salaryPaid: number;
   advancePaid: number;
@@ -146,6 +150,14 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
                   <SummaryTile label={t('Leave Days')} value={String(monthRow.leaveDays)} tone="orange" />
                 </div>
 
+                {(monthRow.pendingLeaveDays || 0) > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {t('Pending Leave (Absent)')}: <strong>{monthRow.pendingLeaveDays}</strong>
+                    {' — '}
+                    {t('Unapproved leave is deducted as absent from salary.')}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                   <SummaryTile
                     label={t('Total Salary')}
@@ -169,11 +181,26 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-lg border p-3">
                     <p className="text-muted-foreground">{t('Gross Salary')}</p>
                     <p className="font-semibold">{formatCurrency(monthRow.grossSalary)}</p>
                   </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">{t('Absent Deduction')}</p>
+                    <p className="font-semibold text-red-600">{formatCurrency(monthRow.absentDeduction || 0)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">{t('Unpaid Leave Deduction')}</p>
+                    <p className="font-semibold text-red-600">{formatCurrency(monthRow.leaveDeduction || 0)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">{t('Paid Leave Amount')}</p>
+                    <p className="font-semibold text-green-600">{formatCurrency(monthRow.paidLeaveAmount || 0)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div className="rounded-lg border p-3">
                     <p className="text-muted-foreground">{t('Advance Deduction')}</p>
                     <p className="font-semibold">{formatCurrency(monthRow.advanceDeduction)}</p>
@@ -181,6 +208,10 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
                   <div className="rounded-lg border p-3">
                     <p className="text-muted-foreground">{t('Total Paid This Month')}</p>
                     <p className="font-semibold">{formatCurrency(monthRow.totalPaid)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">{t('Net Salary')}</p>
+                    <p className="font-semibold">{formatCurrency(monthRow.totalSalary)}</p>
                   </div>
                 </div>
 

@@ -1,4 +1,5 @@
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
+import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
 import {
   buildPrintActionsLabels,
@@ -75,6 +76,36 @@ export interface PrintInvoiceData {
   customerWhatsapp?: string
   /** Invoice date (YYYY-MM-DD) for PDF filename; defaults to today when omitted. */
   invoiceDate?: string
+  /** When true, print title uses Quotation and number prefix INV- becomes QUO-. */
+  printAsQuotation?: boolean
+}
+
+/** INV-202605-000195 → QUO-202605-000195 when printing as quotation. */
+export function resolvePrintDocumentNumber(invoiceNumber: string, printAsQuotation?: boolean): string {
+  const num = String(invoiceNumber || '').trim()
+  if (!printAsQuotation || !num) return num
+  if (/^QUO-/i.test(num)) return num
+  if (/^INV-/i.test(num)) return num.replace(/^INV-/i, 'QUO-')
+  return `QUO-${num}`
+}
+
+function resolvePrintDocumentTitle(
+  data: PrintInvoiceData,
+  labels: { invoice_title: string; quotation_title?: string },
+): string {
+  if (data.printAsQuotation) {
+    return labels.quotation_title || 'Quotation'
+  }
+  return labels.invoice_title
+}
+
+function resolvePrintDocumentDate(data: PrintInvoiceData): Date {
+  const raw = data.invoiceDate?.trim()
+  if (raw) {
+    const parsed = new Date(raw.includes('T') ? raw : `${raw}T12:00:00`)
+    if (!Number.isNaN(parsed.getTime())) return parsed
+  }
+  return new Date()
 }
 
 function resolvePrintLanguage(data: PrintInvoiceData): InvoiceLanguage {
@@ -194,6 +225,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     business_name: headerBusinessName || labels.business_name,
   }
 
+  const termsHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+  const printNumber = resolvePrintDocumentNumber(invoiceNumber, data.printAsQuotation)
+  const documentTitle = resolvePrintDocumentTitle(data, labels)
+  const documentDate = resolvePrintDocumentDate(data)
+  const formattedDocumentDate = documentDate.toLocaleDateString(locale)
+
   const getTypeText = (type: string) => {
     switch(type) {
       case 'cash': return urduTexts.cash
@@ -223,7 +260,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
 <html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
-  <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
+  <title>${documentTitle} ${printNumber}</title>
   <style>
     ${printActionsBarStyles}
     @media print {
@@ -461,6 +498,34 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       padding: 8px 0;
       border-top: 1px dashed #000;
       font-size: 9px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .notes-section .notes-content {
+      line-height: 1.45;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    .notes-section .notes-content b,
+    .notes-section .notes-content strong {
+      font-weight: bold;
+    }
+
+    .notes-section .notes-content i,
+    .notes-section .notes-content em {
+      font-style: italic;
+    }
+
+    .notes-section .notes-content u {
+      text-decoration: underline;
+    }
+
+    .notes-section .notes-content ul,
+    .notes-section .notes-content ol {
+      margin: 4px 0;
+      padding-left: 16px;
     }
 
     .invoice-branch-note {
@@ -555,12 +620,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="invoice-info">
     <div class="info-row">
-      <span class="info-label">${urduTexts.invoice_number}:</span>
-      <span class="highlight">${invoiceNumber}</span>
+      <span class="info-label">${data.printAsQuotation ? (urduTexts.quotation_number || 'Quotation No') : urduTexts.invoice_number}:</span>
+      <span class="highlight">${printNumber}</span>
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.date}:</span>
-      <span>${new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale)}</span>
+      <span>${formattedDocumentDate} ${new Date().toLocaleTimeString(locale)}</span>
     </div>
     <div class="info-row">
       <span class="info-label">${urduTexts.type}:</span>
@@ -678,14 +743,14 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="barcode-section">
     <div style="font-size: 10px; margin-bottom: 4px;">${urduTexts.invoice_number}</div>
-    <div class="barcode">${generateBarcodeText(invoiceNumber)}</div>
-    <div class="barcode-text">${invoiceNumber}</div>
+    <div class="barcode">${generateBarcodeText(printNumber)}</div>
+    <div class="barcode-text">${printNumber}</div>
   </div>
   
-  ${notes ? `
+  ${termsHtml ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.notes}:</div>
-      <div>${notes}</div>
+      <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.terms_and_conditions}:</div>
+      <div class="notes-content">${termsHtml}</div>
     </div>
   ` : ''}
 
@@ -747,12 +812,12 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     business_name: headerBusinessName || labels.business_name,
   }
 
-  const getTypeText = (type: string) => {
-    switch(type) {
+  const getTypeText = (typeValue: string) => {
+    switch (typeValue) {
       case 'cash': return urduTexts.cash
       case 'credit': return urduTexts.credit
       case 'pending': return urduTexts.pending
-      default: return type
+      default: return typeValue
     }
   }
 
@@ -765,6 +830,9 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     urduTexts.not_available,
     language,
   )
+
+  const printNumber = resolvePrintDocumentNumber(invoiceNumber, data.printAsQuotation)
+  const documentTitle = resolvePrintDocumentTitle(data, labels)
 
   const printActions = buildPrintWindowActionsBlock(
     data,
@@ -794,6 +862,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   }
   if (chunks.length === 0) chunks.push([])
 
+  const detailsSectionTitle = data.printAsQuotation
+    ? (urduTexts.quotation_details || 'Quotation Details')
+    : urduTexts.invoice_details
+
+  const documentDate = resolvePrintDocumentDate(data)
+  const formattedDocumentDate = documentDate.toLocaleDateString(locale)
+
   const headerBlock = `
 <div class="invoice-header">
     <div class="company-info">
@@ -807,10 +882,10 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       ` : ''}
     </div>
     <div class="invoice-details">
-      <div class="invoice-title">${urduTexts.invoice_title}</div>
+      <div class="invoice-title">${documentTitle}</div>
       <div class="invoice-meta">
-        <div><strong>#${invoiceNumber}</strong></div>
-        <div>${urduTexts.date}: ${new Date().toLocaleDateString(locale)}</div>
+        <div><strong>#${printNumber}</strong></div>
+        <div>${urduTexts.date}: ${formattedDocumentDate}</div>
         <div>${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>
     </div>
@@ -822,21 +897,14 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       <div class="customer-bill-line">
         <span class="customer-field-label">${urduTexts.customer}</span>
         <span class="bill-to-customer-name">${customerNameHtml}</span>
-      </div>
-      <div class="bill-to-meta">
-        <span class="info-label payment-type-label">${urduTexts.type}</span>
-        <span class="status-badge status-${type}">${getTypeText(type)}</span>
+        <span class="bill-to-invoice-type status-badge status-${type}">${getTypeText(type)}</span>
       </div>
     </div>
     <div class="info-section invoice-details-section">
-      <div class="info-title">${urduTexts.invoice_details}</div>
+      <div class="info-title">${detailsSectionTitle}</div>
       <div class="info-row detail-row">
         <span class="info-label">${urduTexts.issue_date}</span>
-        <span class="detail-value">${data.invoiceDate ? new Date(data.invoiceDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)}</span>
-      </div>
-      <div class="info-row detail-row">
-        <span class="info-label">${urduTexts.invoice_number}</span>
-        <span class="detail-value"><strong>${invoiceNumber}</strong></span>
+        <span class="detail-value">${formattedDocumentDate}</span>
       </div>
     </div>
   </div>
@@ -890,6 +958,8 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 `
     : ''
 
+  const termsHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+
   const totalsBlock = `
 ${itemizedTotalsTable}
 
@@ -917,10 +987,10 @@ ${itemizedTotalsTable}
   ` : ''}
 
   
-  ${notes ? `
+  ${termsHtml ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.additional_notes}:</div>
-      <div style="font-size: 14px;">${notes}</div>
+      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.terms_and_conditions}:</div>
+      <div class="notes-content" style="font-size: 14px;">${termsHtml}</div>
     </div>
   ` : ''}
   
@@ -942,7 +1012,7 @@ ${itemizedTotalsTable}
 
       const continuationBanner =
         pi > 0
-          ? `<div class="continuation-banner"><strong>#${invoiceNumber}</strong> — ${urduTexts.continuation} (${pageIndicator(pi + 1, totalPages)})</div>`
+          ? `<div class="continuation-banner"><strong>#${printNumber}</strong> — ${urduTexts.continuation} (${pageIndicator(pi + 1, totalPages)})</div>`
           : ''
 
       const rowStart = pi * itemsPerPage
@@ -1001,7 +1071,7 @@ ${itemizedTotalsTable}
 <html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
-  <title>${urduTexts.invoice_title} ${invoiceNumber}</title>
+  <title>${documentTitle} ${printNumber}</title>
   <style>
     ${printActionsBarStyles}
     @media print {
@@ -1133,20 +1203,17 @@ ${itemizedTotalsTable}
       flex-direction: row;
       align-items: baseline;
       justify-content: flex-start;
-      align-self: flex-start;
-      gap: 10px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      gap: 4px;
       width: 100%;
       max-width: 100%;
-      margin-top: 6px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #e9ecef;
+      margin-top: 0;
       text-align: start;
     }
 
     .customer-field-label {
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 600;
       color: #555;
       flex-shrink: 0;
       white-space: nowrap;
@@ -1154,7 +1221,7 @@ ${itemizedTotalsTable}
 
     .customer-field-label::after {
       content: ':';
-      margin-inline-start: 3px;
+      margin-inline-start: 2px;
     }
 
     .info-row.detail-row {
@@ -1195,18 +1262,27 @@ ${itemizedTotalsTable}
     }
 
     .bill-to-customer-name {
-      font-size: 20px;
-      font-weight: 800;
+      font-size: 13px;
+      font-weight: 500;
       color: #000;
-      line-height: 1.4;
+      line-height: 1.45;
       text-align: inherit;
       min-width: 0;
+      flex: 1 1 auto;
+      white-space: normal;
       word-wrap: break-word;
       overflow-wrap: anywhere;
       background: transparent;
       border: none;
       padding: 0;
       margin: 0;
+    }
+
+    .bill-to-invoice-type {
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      align-self: center;
     }
 
     .customer-name-highlight {
@@ -1430,6 +1506,38 @@ ${itemizedTotalsTable}
       background: #f8f9fa;
       border-right: 4px solid black;
       border-radius: 8px 0 0 8px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .notes-section .notes-content {
+      line-height: 1.5;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    .notes-section .notes-content div {
+      margin-bottom: 4px;
+    }
+
+    .notes-section .notes-content b,
+    .notes-section .notes-content strong {
+      font-weight: bold;
+    }
+
+    .notes-section .notes-content i,
+    .notes-section .notes-content em {
+      font-style: italic;
+    }
+
+    .notes-section .notes-content u {
+      text-decoration: underline;
+    }
+
+    .notes-section .notes-content ul,
+    .notes-section .notes-content ol {
+      margin: 6px 0;
+      padding-left: 20px;
     }
 
     .invoice-branch-note {
