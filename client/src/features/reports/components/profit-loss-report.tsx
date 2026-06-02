@@ -79,6 +79,27 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             { Section: '', Category: 'Bill Payment Profit', Amount: data.additionalProfits.billProfit },
             { Section: '', Category: 'Received Profit', Amount: data.additionalProfits.withdrawalProfit },
             { Section: '', Category: 'Send Profit', Amount: data.additionalProfits.depositProfit },
+            {
+              Section: '',
+              Category: 'Total Additional',
+              Amount:
+                data.additionalProfits.loadProfit +
+                data.additionalProfits.repairProfit +
+                data.additionalProfits.serviceProfit +
+                data.additionalProfits.simSaleProfit +
+                data.additionalProfits.billProfit +
+                data.additionalProfits.withdrawalProfit +
+                data.additionalProfits.depositProfit,
+            },
+            { Section: '', Category: t('total_profit'), Amount: data.revenue.grossProfit + (
+              data.additionalProfits.loadProfit +
+              data.additionalProfits.repairProfit +
+              data.additionalProfits.serviceProfit +
+              data.additionalProfits.simSaleProfit +
+              data.additionalProfits.billProfit +
+              data.additionalProfits.withdrawalProfit +
+              data.additionalProfits.depositProfit
+            ) },
             { Section: 'Expenses', Category: t('total_expenses'), Amount: -data.expenses },
             { Section: 'Summary', Category: t('net_profit'), Amount: data.netProfit },
             { Section: '', Category: 'Net Profit Margin', Amount: `${data.netProfitMargin}%` },
@@ -104,6 +125,15 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
     const isPositiveRoi  = (data?.roi ?? 0) >= 0
     const rev            = data?.revenue
     const add            = data?.additionalProfits
+    const totalAdditional =
+      (add?.loadProfit ?? 0) +
+      (add?.repairProfit ?? 0) +
+      (add?.serviceProfit ?? 0) +
+      (add?.simSaleProfit ?? 0) +
+      (add?.billProfit ?? 0) +
+      (add?.withdrawalProfit ?? 0) +
+      (add?.depositProfit ?? 0)
+    const totalProfit = (rev?.grossProfit ?? 0) + totalAdditional
 
     return (
       <div className='space-y-6'>
@@ -240,7 +270,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
         </Card>
 
         {/* Additional profits */}
-        {(isMobileShop || (add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.serviceProfit ?? 0) + (add?.simSaleProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0) > 0) && (
+        {(isMobileShop || totalAdditional > 0) && (
         <Card>
           <CardHeader>
             <CardTitle>Additional Profits</CardTitle>
@@ -255,7 +285,14 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
             {isMobileShop && <Row label='Send Profit' value={fmt(add?.depositProfit ?? 0)} valueClass='text-purple-600' />}
             <Row
               label='Total Additional'
-              value={fmt((add?.loadProfit ?? 0) + (add?.repairProfit ?? 0) + (add?.serviceProfit ?? 0) + (add?.simSaleProfit ?? 0) + (add?.billProfit ?? 0) + (add?.withdrawalProfit ?? 0) + (add?.depositProfit ?? 0))}
+              value={fmt(totalAdditional)}
+              bold
+              border
+            />
+            <Row
+              label={t('total_profit')}
+              value={fmt(totalProfit)}
+              valueClass='text-green-600'
               bold
               border
             />
