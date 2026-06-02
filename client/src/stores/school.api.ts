@@ -495,6 +495,27 @@ export const schoolApi = createApi({
       }),
       providesTags: ['Mark', 'SchoolAttendance', 'SchoolFee'],
     }),
+    getClassProgressReportsBulk: builder.query({
+      query: ({
+        classId,
+        examId,
+        sectionId,
+        studentIds,
+      }: {
+        classId: string;
+        examId: string;
+        sectionId?: string;
+        studentIds?: string[];
+      }) => ({
+        url: `/school-reports/class/${classId}/bulk`,
+        params: {
+          examId,
+          ...(sectionId ? { sectionId } : {}),
+          ...(studentIds?.length ? { studentIds: studentIds.join(',') } : {}),
+        },
+      }),
+      providesTags: ['Mark', 'SchoolAttendance', 'SchoolFee'],
+    }),
     getExamResultSheet: builder.query({
       query: (examId: string) => `/school-reports/exam/${examId}/result-sheet`,
       providesTags: ['Mark', 'Exam'],

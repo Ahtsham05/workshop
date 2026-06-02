@@ -1,4 +1,8 @@
+const mongoose = require('mongoose');
 const { Student, Mark, SchoolAttendance, FeeVoucher, Exam, Subject } = require('../models');
+
+const toObjectId = (id) =>
+  id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : null;
 
 const getTenantFilter = (scope = {}) => {
   const f = {};
@@ -20,6 +24,160 @@ const calcGrade = (pct) => {
   return { grade: 'F', label: 'Fail' };
 };
 
+/** Overall exam % from a student's marks (same rules as progress report). */
+const studentExamPercentage = (marks) => {
+  let obtained = 0;
+  let max = 0;
+  marks.forEach((m) => {
+    if (!m.isAbsent) {
+      obtained += Number(m.obtainedMarks || 0);
+      max += Number(m.totalMarks || 0);
+    }
+  });
+  return max > 0 ? Math.round((obtained / max) * 100) : null;
+};
+
+/** Highest overall percentage among active students in the class for one exam. */
+const getHighestPercentageInClass = async (examId, classId, scope = {}) => {
+  if (!examId || !classId) return null;
+  const tf = getTenantFilter(scope);
+  const classStudents = await Student.find({ ...tf, classId, status: 'active' }).select('_id').lean();
+  if (!classStudents.length) return null;
+
+  const studentIds = classStudents.map((s) => s._id);
+  const marks = await Mark.find({ ...tf, examId, studentId: { $in: studentIds } }).lean();
+
+  const byStudent = {};
+  marks.forEach((m) => {
+    const sid = String(m.studentId);
+    if (!byStudent[sid]) byStudent[sid] = [];
+    byStudent[sid].push(m);
+  });
+
+  let highest = null;
+  Object.values(byStudent).forEach((studentMarks) => {
+    const pct = studentExamPercentage(studentMarks);
+    if (pct !== null && (highest === null || pct > highest)) {
+      highest = pct;
+    }
+  });
+
+  return highest;
+};
+
+const formatStudentPayload = (student) => ({
+  id: student._id,
+  admissionNumber: student.admissionNumber,
+  rollNumber: student.rollNumber || '',
+  firstName: student.firstName,
+  lastName: student.lastName || '',
+  gender: student.gender,
+  dateOfBirth: student.dateOfBirth,
+  photoUrl: student.photoUrl?.url || null,
+  className: student.classId?.name || '—',
+  sectionName: student.sectionId?.name || '',
+  nationality: student.nationality || '',
+  parent: {
+    fatherName: student.parent?.fatherName || '',
+    motherName: student.parent?.motherName || '',
+    phone: student.parent?.phone || '',
+  },
+});
+
+const buildFeeStats = (vouchers) => {
+  const feeStats = vouchers.reduce(
+    (acc, v) => {
+      acc.totalDue += v.netAmount || v.totalAmount || 0;
+      acc.totalPaid += v.paidAmount || 0;
+      return acc;
+    },
+    { totalDue: 0, totalPaid: 0 }
+  );
+  feeStats.balance = Math.max(0, feeStats.totalDue - feeStats.totalPaid);
+  feeStats.voucherCount = vouchers.length;
+  feeStats.unpaidCount = vouchers.filter((v) => v.status !== 'paid').length;
+  return feeStats;
+};
+
+const buildAttendancePayload = (total, present) => {
+  const attendancePct = total > 0 ? Math.round((present / total) * 100) : null;
+  return {
+    total,
+    present,
+    absent: total - present,
+    percentage: attendancePct,
+    hasRecords: total > 0,
+  };
+};
+
+const buildExamResultFromMarks = (marks, highestPercentageInClass = null) => {
+  if (!marks.length) return null;
+
+  const exam = marks[0].examId;
+  let totalObtained = 0;
+  let totalMax = 0;
+  const subjects = marks.map((m) => {
+    const pct = m.isAbsent ? 0 : m.totalMarks > 0 ? Math.round((m.obtainedMarks / m.totalMarks) * 100) : 0;
+    if (!m.isAbsent) {
+      totalObtained += m.obtainedMarks || 0;
+      totalMax += m.totalMarks || 0;
+    }
+    return {
+      subjectId: m.subjectId?._id,
+      subjectName: m.subjectId?.name || '—',
+      subjectCode: m.subjectId?.code || '',
+      totalMarks: m.totalMarks,
+      obtainedMarks: m.isAbsent ? null : m.obtainedMarks,
+      percentage: m.isAbsent ? null : pct,
+      grade: m.isAbsent ? 'AB' : calcGrade(pct).grade,
+      isAbsent: m.isAbsent,
+      remarks: m.remarks || '',
+    };
+  });
+
+  const pct = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
+  return {
+    exam,
+    subjects,
+    totalObtained,
+    totalMax,
+    percentage: pct,
+    ...calcGrade(pct),
+    highestPercentageInClass,
+  };
+};
+
+const buildExamsFromMarks = async (marks, classId, scope) => {
+  const examMap = {};
+  marks.forEach((m) => {
+    const eid = m.examId?._id?.toString() || String(m.examId);
+    if (!examMap[eid]) {
+      examMap[eid] = {
+        exam: m.examId,
+        marks: [],
+      };
+    }
+    examMap[eid].marks.push(m);
+  });
+
+  return Promise.all(
+    Object.values(examMap).map(async (entry) => {
+      const examRefId = entry.exam?._id || entry.exam;
+      const highestPercentageInClass =
+        examRefId && classId ? await getHighestPercentageInClass(examRefId, classId, scope) : null;
+      return buildExamResultFromMarks(entry.marks, highestPercentageInClass);
+    })
+  );
+};
+
+const indexByStudentId = (rows, key = '_id') => {
+  const map = {};
+  rows.forEach((row) => {
+    map[String(row[key])] = row;
+  });
+  return map;
+};
+
 /**
  * Generate complete progress report for a student.
  * Optionally filter by a specific examId.
@@ -34,6 +192,11 @@ const getStudentProgressReport = async (studentId, scope = {}, examId = null) =>
     .lean();
 
   if (!student) return null;
+
+  const classId = student.classId?._id || student.classId;
+  const classStrength = classId
+    ? await Student.countDocuments({ ...tf, classId, status: 'active' })
+    : 0;
 
   // 2. Marks — for one exam or all exams
   const marksFilter = { ...tf, studentId };
@@ -50,60 +213,11 @@ const getStudentProgressReport = async (studentId, scope = {}, examId = null) =>
     SchoolAttendance.countDocuments(attFilter),
     SchoolAttendance.countDocuments({ ...attFilter, status: 'present' }),
   ]);
-  const attendancePct = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : null;
-
-  // 4. Fee summary — query FeeVoucher (active vouchers, not cancelled)
+  // 4. Fee summary
   const vouchers = await FeeVoucher.find({ ...tf, studentId, status: { $ne: 'cancelled' } }).lean();
-  const feeStats = vouchers.reduce(
-    (acc, v) => {
-      acc.totalDue += v.netAmount || v.totalAmount || 0;
-      acc.totalPaid += v.paidAmount || 0;
-      return acc;
-    },
-    { totalDue: 0, totalPaid: 0 }
-  );
-  feeStats.balance = Math.max(0, feeStats.totalDue - feeStats.totalPaid);
-  feeStats.voucherCount = vouchers.length;
-  feeStats.unpaidCount = vouchers.filter(v => v.status !== 'paid').length;
+  const feeStats = buildFeeStats(vouchers);
 
-  // 5. Group marks by exam
-  const examMap = {};
-  marks.forEach((m) => {
-    const eid = m.examId?._id?.toString() || String(m.examId);
-    if (!examMap[eid]) {
-      examMap[eid] = {
-        exam: m.examId,
-        subjects: [],
-        totalObtained: 0,
-        totalMax: 0,
-      };
-    }
-    const pct = m.isAbsent ? 0 : m.totalMarks > 0 ? Math.round((m.obtainedMarks / m.totalMarks) * 100) : 0;
-    examMap[eid].subjects.push({
-      subjectId: m.subjectId?._id,
-      subjectName: m.subjectId?.name || '—',
-      subjectCode: m.subjectId?.code || '',
-      totalMarks: m.totalMarks,
-      obtainedMarks: m.isAbsent ? null : m.obtainedMarks,
-      percentage: m.isAbsent ? null : pct,
-      grade: m.isAbsent ? 'AB' : calcGrade(pct).grade,
-      isAbsent: m.isAbsent,
-      remarks: m.remarks || '',
-    });
-    if (!m.isAbsent) {
-      examMap[eid].totalObtained += m.obtainedMarks || 0;
-      examMap[eid].totalMax += m.totalMarks || 0;
-    }
-  });
-
-  const examsResult = Object.values(examMap).map((e) => {
-    const pct = e.totalMax > 0 ? Math.round((e.totalObtained / e.totalMax) * 100) : 0;
-    return {
-      ...e,
-      percentage: pct,
-      ...calcGrade(pct),
-    };
-  });
+  const examsResult = await buildExamsFromMarks(marks, classId, scope);
 
   // 6. Overall aggregate (across all exams in report)
   let grandObtained = 0;
@@ -116,30 +230,9 @@ const getStudentProgressReport = async (studentId, scope = {}, examId = null) =>
   const overall = calcGrade(overallPct);
 
   return {
-    student: {
-      id: student._id,
-      admissionNumber: student.admissionNumber,
-      rollNumber: student.rollNumber || '',
-      firstName: student.firstName,
-      lastName: student.lastName || '',
-      gender: student.gender,
-      dateOfBirth: student.dateOfBirth,
-      photoUrl: student.photoUrl?.url || null,
-      className: student.classId?.name || '—',
-      sectionName: student.sectionId?.name || '',
-      nationality: student.nationality || '',
-      parent: {
-        fatherName: student.parent?.fatherName || '',
-        motherName: student.parent?.motherName || '',
-        phone: student.parent?.phone || '',
-      },
-    },
-    attendance: {
-      total: totalAtt,
-      present: presentAtt,
-      absent: totalAtt - presentAtt,
-      percentage: attendancePct,
-    },
+    student: formatStudentPayload(student),
+    attendance: buildAttendancePayload(totalAtt, presentAtt),
+    classStrength,
     fees: feeStats,
     exams: examsResult,
     overall: {
@@ -148,6 +241,161 @@ const getStudentProgressReport = async (studentId, scope = {}, examId = null) =>
       percentage: overallPct,
       grade: overall.grade,
       label: overall.label,
+    },
+  };
+};
+
+/**
+ * Bulk progress reports for a class + exam in one request.
+ * @param {{ classId: string, examId: string, sectionId?: string, studentIds?: string[] }} params
+ */
+const getClassProgressReportsBulk = async ({ classId, examId, sectionId, studentIds }, scope = {}) => {
+  const tf = getTenantFilter(scope);
+  const classOid = toObjectId(classId);
+  const examOid = toObjectId(examId);
+  if (!classOid || !examOid) return null;
+
+  const exam = await Exam.findOne({ _id: examOid, ...tf }).lean();
+  if (!exam) return null;
+
+  const examClassId = exam.classId?._id || exam.classId;
+  if (String(examClassId) !== String(classOid)) {
+    return { exam: null, error: 'Exam does not belong to this class' };
+  }
+
+  const studentFilter = { ...tf, classId: classOid, status: 'active' };
+  if (sectionId) {
+    const sectionOid = toObjectId(sectionId);
+    if (sectionOid) studentFilter.sectionId = sectionOid;
+  }
+  if (studentIds?.length) {
+    const ids = studentIds.map(toObjectId).filter(Boolean);
+    if (ids.length) studentFilter._id = { $in: ids };
+  }
+
+  const students = await Student.find(studentFilter)
+    .populate('classId', 'name order')
+    .populate('sectionId', 'name')
+    .sort({ rollNumber: 1, firstName: 1 })
+    .lean();
+
+  if (!students.length) {
+    return {
+      exam: { id: exam._id, name: exam.name, type: exam.type },
+      classStrength: 0,
+      highestPercentageInClass: null,
+      reports: [],
+      meta: { requested: 0, withResults: 0 },
+    };
+  }
+
+  const ids = students.map((s) => s._id);
+  const [classStrength, allMarks, attendanceRows, feeRows] = await Promise.all([
+    Student.countDocuments({ ...tf, classId: classOid, status: 'active' }),
+    Mark.find({ ...tf, examId: examOid, studentId: { $in: ids } })
+      .populate('subjectId', 'name code')
+      .populate('examId', 'name type startDate totalMarks passingMarks')
+      .lean(),
+    SchoolAttendance.aggregate([
+      { $match: { ...tf, studentId: { $in: ids } } },
+      {
+        $group: {
+          _id: '$studentId',
+          total: { $sum: 1 },
+          present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } },
+        },
+      },
+    ]),
+    FeeVoucher.aggregate([
+      { $match: { ...tf, studentId: { $in: ids }, status: { $ne: 'cancelled' } } },
+      {
+        $group: {
+          _id: '$studentId',
+          totalDue: { $sum: { $ifNull: ['$netAmount', '$totalAmount'] } },
+          totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } },
+          voucherCount: { $sum: 1 },
+          unpaidCount: {
+            $sum: { $cond: [{ $ne: ['$status', 'paid'] }, 1, 0] },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const marksByStudent = {};
+  allMarks.forEach((m) => {
+    const sid = String(m.studentId);
+    if (!marksByStudent[sid]) marksByStudent[sid] = [];
+    marksByStudent[sid].push(m);
+  });
+
+  let highestPercentageInClass = null;
+  Object.values(marksByStudent).forEach((studentMarks) => {
+    const pct = studentExamPercentage(studentMarks);
+    if (pct !== null && (highestPercentageInClass === null || pct > highestPercentageInClass)) {
+      highestPercentageInClass = pct;
+    }
+  });
+
+  const attendanceByStudent = indexByStudentId(attendanceRows);
+  const feesByStudent = indexByStudentId(feeRows);
+
+  const emptyFees = {
+    totalDue: 0,
+    totalPaid: 0,
+    balance: 0,
+    voucherCount: 0,
+    unpaidCount: 0,
+  };
+
+  const reports = [];
+  students.forEach((student) => {
+    const sid = String(student._id);
+    const studentMarks = marksByStudent[sid];
+    if (!studentMarks?.length) return;
+
+    const att = attendanceByStudent[sid];
+    const totalAtt = att?.total || 0;
+    const presentAtt = att?.present || 0;
+
+    const feeRow = feesByStudent[sid];
+    const fees = feeRow
+      ? {
+          totalDue: feeRow.totalDue || 0,
+          totalPaid: feeRow.totalPaid || 0,
+          balance: Math.max(0, (feeRow.totalDue || 0) - (feeRow.totalPaid || 0)),
+          voucherCount: feeRow.voucherCount || 0,
+          unpaidCount: feeRow.unpaidCount || 0,
+        }
+      : { ...emptyFees };
+
+    const examResult = buildExamResultFromMarks(studentMarks, highestPercentageInClass);
+    if (!examResult) return;
+
+    reports.push({
+      student: formatStudentPayload(student),
+      attendance: buildAttendancePayload(totalAtt, presentAtt),
+      classStrength,
+      fees,
+      exams: [examResult],
+      overall: {
+        totalObtained: examResult.totalObtained,
+        totalMax: examResult.totalMax,
+        percentage: examResult.percentage,
+        grade: examResult.grade,
+        label: examResult.label,
+      },
+    });
+  });
+
+  return {
+    exam: { id: exam._id, name: exam.name, type: exam.type },
+    classStrength,
+    highestPercentageInClass,
+    reports,
+    meta: {
+      requested: students.length,
+      withResults: reports.length,
     },
   };
 };
@@ -231,4 +479,9 @@ const getExamResultSheet = async (examId, scope = {}) => {
   };
 };
 
-module.exports = { getStudentProgressReport, getExamResultSheet, calcGrade };
+module.exports = {
+  getStudentProgressReport,
+  getClassProgressReportsBulk,
+  getExamResultSheet,
+  calcGrade,
+};

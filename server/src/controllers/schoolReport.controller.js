@@ -33,4 +33,37 @@ const getExamResultSheet = catchAsync(async (req, res) => {
   res.send(sheet);
 });
 
-module.exports = { getStudentProgressReport, getExamResultSheet };
+const parseStudentIds = (value) => {
+  if (!value) return undefined;
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  return String(value)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
+/**
+ * GET /school-reports/class/:classId/bulk?examId=xxx&sectionId=&studentIds=id1,id2
+ * All progress reports for one class + exam in a single response.
+ */
+const getClassProgressReportsBulk = catchAsync(async (req, res) => {
+  const { examId } = req.query;
+  if (!examId) throw new ApiError(httpStatus.BAD_REQUEST, 'examId is required');
+
+  const result = await schoolReportService.getClassProgressReportsBulk(
+    {
+      classId: req.params.classId,
+      examId,
+      sectionId: req.query.sectionId || undefined,
+      studentIds: parseStudentIds(req.query.studentIds),
+    },
+    getScope(req)
+  );
+
+  if (!result) throw new ApiError(httpStatus.NOT_FOUND, 'Class or exam not found');
+  if (result.error) throw new ApiError(httpStatus.BAD_REQUEST, result.error);
+
+  res.send(result);
+});
+
+module.exports = { getStudentProgressReport, getClassProgressReportsBulk, getExamResultSheet };
