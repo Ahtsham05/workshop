@@ -64,7 +64,19 @@ export interface DashboardStats {
   totalBillCollection: number
   billPaymentProfit: number
   billsDueToday: number
+  billsDueInPeriod: number
   billsOverdue: number
+  totalSimSale?: number
+  totalSimSaleProfit?: number
+  simSaleCount?: number
+  totalCashSend?: number
+  totalCashSendProfit?: number
+  cashSendCount?: number
+  totalCashReceived?: number
+  totalCashReceivedProfit?: number
+  cashReceivedCount?: number
+  totalServiceIncome?: number
+  serviceInvoiceCount?: number
   period?: {
     preset: string
     startDate: string

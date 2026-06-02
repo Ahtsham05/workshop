@@ -87,6 +87,7 @@ const billPaymentSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    keepTimestampsInJSON: true,
   }
 );
 

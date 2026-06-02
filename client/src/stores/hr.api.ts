@@ -161,12 +161,16 @@ export const hrApi = createApi({
       invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     approveLeave: builder.mutation({
-      query: ({ id }) => ({ url: `/leaves/${id}/approve`, method: 'PATCH' }),
+      query: ({ id, leaveId }) => ({ url: `/leaves/${id || leaveId}/approve`, method: 'PATCH' }),
       invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     rejectLeave: builder.mutation({
-      query: ({ id, rejectionReason }) => ({ url: `/leaves/${id}/reject`, method: 'PATCH', body: { rejectionReason } }),
-      invalidatesTags: ['Leave'],
+      query: ({ id, leaveId, rejectionReason }) => ({
+        url: `/leaves/${id || leaveId}/reject`,
+        method: 'PATCH',
+        body: { rejectionReason },
+      }),
+      invalidatesTags: ['Leave', 'Attendance', 'Payroll'],
     }),
     cancelLeave: builder.mutation({
       query: ({ id }) => ({ url: `/leaves/${id}/cancel`, method: 'PATCH' }),

@@ -29,6 +29,7 @@ const getBillPayments = {
     endDate: Joi.date(),
     dueStartDate: Joi.date(),
     dueEndDate: Joi.date(),
+    dateFilterBy: Joi.string().valid('recorded', 'due'),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
@@ -82,6 +83,7 @@ const getBillDueSummary = {
   query: Joi.object().keys({
     dueStartDate: Joi.date(),
     dueEndDate: Joi.date(),
+    dateFilterBy: Joi.string().valid('recorded', 'due'),
   }),
 };
 

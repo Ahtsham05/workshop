@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
@@ -122,11 +122,31 @@ const getDashboardStats = catchAsync(async (req, res) => {
     easypaisaBalance: 0,
     walletBalance: 0,
     billsDueToday: 0,
+    billsDueInPeriod: 0,
     billsOverdue: 0,
+    totalSimSale: 0,
+    totalSimSaleProfit: 0,
+    simSaleCount: 0,
+    totalCashSend: 0,
+    totalCashSendProfit: 0,
+    cashSendCount: 0,
+    totalCashReceived: 0,
+    totalCashReceivedProfit: 0,
+    cashReceivedCount: 0,
+    totalServiceIncome: 0,
+    serviceInvoiceCount: 0,
   };
 
-  if (normalizeBusinessType(req.user.businessType) === 'mobile_shop') {
-    const organizationId = req.organizationId || req.user.organizationId;
+  const organizationId = req.organizationId || req.user.organizationId;
+  let businessType = normalizeBusinessType(req.user.businessType);
+  if (organizationId) {
+    const org = await Organization.findById(organizationId).select('businessType');
+    if (org?.businessType) {
+      businessType = normalizeBusinessType(org.businessType);
+    }
+  }
+
+  if (businessType === 'mobile_shop') {
     const { branchId } = req;
 
     const [summary, cashBookSummary] = await Promise.all([

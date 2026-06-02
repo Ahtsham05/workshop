@@ -37,6 +37,11 @@ const resolveDayStatus = (attendance, leave) => {
     return leave.isHalfDay ? 'Half-Day' : 'Absent';
   }
 
+  // Rejected leave — days are not paid; count as absent for payroll.
+  if (leave?.status === 'Rejected') {
+    return leave.isHalfDay ? 'Half-Day' : 'Absent';
+  }
+
   if (attendanceStatus === 'Half-Day') return 'Half-Day';
   if (attendanceStatus === 'On Leave') return 'On Leave';
   if (attendanceStatus === 'Late') return 'Late';
@@ -90,7 +95,7 @@ const computeAttendanceStatsFromData = ({
 
   const leaveOnDate = new Map();
   leaves
-    .filter((leave) => ['Approved', 'Pending'].includes(leave.status))
+    .filter((leave) => ['Approved', 'Pending', 'Rejected'].includes(leave.status))
     .forEach((leave) => {
       const overlapStart = normalizeDateOnly(leave.startDate) > effectiveStart
         ? normalizeDateOnly(leave.startDate)

@@ -1,4 +1,10 @@
 import { useMemo, useState } from 'react';
+
+const resolveLeaveId = (leave: { id?: string; _id?: string } | null | undefined): string => {
+  if (!leave) return '';
+  const raw = leave.id ?? leave._id;
+  return raw != null ? String(raw) : '';
+};
 import { useLanguage } from '@/context/language-context';
 import {
   useGetLeavesQuery,
@@ -147,7 +153,9 @@ export default function LeaveManagement() {
     }
   };
 
-  const handleApprove = async (leaveId: string) => {
+  const handleApprove = async (leave: { id?: string; _id?: string }) => {
+    const leaveId = resolveLeaveId(leave);
+    if (!leaveId) return toast.error(t('Invalid leave record'));
     try {
       await approveLeave({ id: leaveId }).unwrap();
       toast.success(t('Leave approved'));
@@ -157,7 +165,9 @@ export default function LeaveManagement() {
     }
   };
 
-  const handleReject = async (leaveId: string, reason: string) => {
+  const handleReject = async (leave: { id?: string; _id?: string }, reason: string) => {
+    const leaveId = resolveLeaveId(leave);
+    if (!leaveId) return toast.error(t('Invalid leave record'));
     try {
       await rejectLeave({ id: leaveId, rejectionReason: reason.trim() }).unwrap();
       toast.success(t('Leave rejected'));
@@ -171,9 +181,11 @@ export default function LeaveManagement() {
 
   const handleUpdateLeave = async () => {
     if (!editingLeave) return;
+    const leaveId = resolveLeaveId(editingLeave);
+    if (!leaveId) return toast.error(t('Invalid leave record'));
     try {
       await updateLeave({
-        id: editingLeave.id,
+        id: leaveId,
         leaveType: formData.leaveType,
         startDate: formData.startDate,
         endDate: formData.endDate,
@@ -192,7 +204,9 @@ export default function LeaveManagement() {
   const handleDeleteLeave = async () => {
     if (!leaveToDelete) return;
     try {
-      await deleteLeave(leaveToDelete.id).unwrap();
+      const leaveId = resolveLeaveId(leaveToDelete);
+      if (!leaveId) return toast.error(t('Invalid leave record'));
+      await deleteLeave(leaveId).unwrap();
       toast.success(t('Leave deleted'));
       setShowDeleteDialog(false);
       setLeaveToDelete(null);
@@ -285,7 +299,11 @@ export default function LeaveManagement() {
       return `${formatCurrency(impact.amount)} (${t('Paid leave amount')})`;
     }
     if (impact.type === 'deduction') {
-      return `${formatCurrency(impact.amount)} (${t(impact.label || 'Salary deduction')})`;
+      const label =
+        leave.status === 'Rejected'
+          ? t('Rejected — deducted from salary')
+          : t(impact.label || 'Salary deduction');
+      return `${formatCurrency(impact.amount)} (${label})`;
     }
     return '-';
   };
@@ -430,7 +448,7 @@ export default function LeaveManagement() {
                   </TableRow>
                 ) : (
                   data?.results?.map((leave: any) => (
-                    <TableRow key={leave.id}>
+                    <TableRow key={resolveLeaveId(leave) || String(leave.startDate)}>
                       <TableCell className="font-medium">
                         {leave.employee?.firstName} {leave.employee?.lastName}
                       </TableCell>
@@ -454,7 +472,7 @@ export default function LeaveManagement() {
                                 size="sm"
                                 variant="outline"
                                 className="text-green-600"
-                                onClick={() => handleApprove(leave.id)}
+                                onClick={() => handleApprove(leave)}
                                 disabled={isApproving}
                               >
                                 <Check className="h-4 w-4 mr-1" />
@@ -790,7 +808,7 @@ export default function LeaveManagement() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => selectedLeave && handleReject(selectedLeave.id, rejectionReason)}
+              onClick={() => selectedLeave && handleReject(selectedLeave, rejectionReason)}
               disabled={isRejecting || !rejectionReason.trim()}
             >
               {isRejecting ? t('Rejecting...') : t('Reject')}

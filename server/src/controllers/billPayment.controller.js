@@ -15,7 +15,17 @@ const createBillPayment = catchAsync(async (req, res) => {
 const getBillPayments = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['billType', 'companyId', 'status', 'paymentMethod']);
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate', 'dueStartDate', 'dueEndDate']);
+  const options = pick(req.query, [
+    'sortBy',
+    'limit',
+    'page',
+    'search',
+    'startDate',
+    'endDate',
+    'dueStartDate',
+    'dueEndDate',
+    'dateFilterBy',
+  ]);
   const result = await billPaymentService.queryBillPayments(filter, options);
   res.send(result);
 });
@@ -84,12 +94,13 @@ const getBillPaymentReport = catchAsync(async (req, res) => {
 
 const getBillDueSummary = catchAsync(async (req, res) => {
   const organizationId = req.organizationId || req.user.organizationId;
-  const { dueStartDate, dueEndDate } = req.query;
+  const { dueStartDate, dueEndDate, dateFilterBy } = req.query;
   const summary = await billPaymentService.getDueDateRangeSummary({
     organizationId,
     branchId: req.branchId,
     dueStartDate,
     dueEndDate,
+    dateFilterBy,
   });
   res.send(summary);
 });

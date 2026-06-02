@@ -3,14 +3,34 @@ const httpStatus = require('http-status');
 const { BillPayment } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const {
+  parseBusinessDateBoundary,
+  parseBusinessDateTime,
+  startOfBusinessDay,
+  endOfBusinessDay,
+  toBusinessCalendarDate,
+} = require('../utils/businessTimezone');
 
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
 
-const endOfDueDate = (dateStr) => {
-  const end = new Date(dateStr);
-  end.setHours(23, 59, 59, 999);
-  return end;
+/** Filter bills by collection date (createdAt) or utility due date (dueDate). */
+const buildBillDateRange = (startDate, endDate, dateFilterBy = 'due') => {
+  if (!startDate && !endDate) return null;
+
+  const range = {};
+  if (startDate) {
+    const start = parseBusinessDateBoundary(startDate, false);
+    if (start) range.$gte = start;
+  }
+  if (endDate) {
+    const end = parseBusinessDateBoundary(endDate, true);
+    if (end) range.$lte = end;
+  }
+  if (Object.keys(range).length === 0) return null;
+
+  const field = dateFilterBy === 'recorded' ? 'createdAt' : 'dueDate';
+  return { [field]: range };
 };
 
 /**
@@ -81,11 +101,14 @@ const syncBillCashEntry = async (billPayment) => {
 
 const createBillPayment = async (body) => {
   const totalReceived = Number(body.billAmount) + Number(body.serviceCharge || 0);
+  const status = body.status || 'pending';
   const billPayment = await BillPayment.create({
     ...body,
+    dueDate: parseBusinessDateTime(body.dueDate) || body.dueDate,
     totalReceived,
-    status: body.status || 'pending',
-    paymentDate: body.status === 'paid' ? (body.paymentDate || new Date()) : (body.paymentDate || null),
+    status,
+    paymentDate:
+      status === 'paid' ? parseBusinessDateTime(body.paymentDate) || body.paymentDate || new Date() : null,
   });
   await syncBillCashEntry(billPayment);
   return billPayment;
@@ -104,7 +127,7 @@ const createBillPaymentsBatch = async (body) => {
       billType,
       serviceCharge: Number(serviceCharge || 0),
       dueDate,
-      paymentDate: paymentDate || null,
+      paymentDate: null,
       paymentMethod,
       status: 'pending',
       billAmount: Number(bill.billAmount),
@@ -143,22 +166,24 @@ const queryBillPayments = async (filter, options) => {
     }
   }
 
-  // Filter by dueDate range
-  if (queryOptions.dueStartDate || queryOptions.dueEndDate) {
-    queryFilter.dueDate = {};
-    if (queryOptions.dueStartDate) {
-      queryFilter.dueDate.$gte = new Date(queryOptions.dueStartDate);
-      delete queryOptions.dueStartDate;
-    }
-    if (queryOptions.dueEndDate) {
-      queryFilter.dueDate.$lte = endOfDueDate(queryOptions.dueEndDate);
-      delete queryOptions.dueEndDate;
-    }
+  const dateFilterBy = queryOptions.dateFilterBy === 'recorded' ? 'recorded' : 'due';
+  const billDateRange = buildBillDateRange(queryOptions.dueStartDate, queryOptions.dueEndDate, dateFilterBy);
+  if (billDateRange) {
+    queryFilter.$and = [...(queryFilter.$and || []), billDateRange];
+    delete queryOptions.dueStartDate;
+    delete queryOptions.dueEndDate;
   }
+  delete queryOptions.dateFilterBy;
 
   return BillPayment.paginate(queryFilter, {
     ...queryOptions,
-    sortBy: queryOptions.sortBy || (queryFilter.dueDate ? 'dueDate:asc' : 'createdAt:desc'),
+    sortBy:
+      queryOptions.sortBy ||
+      (billDateRange
+        ? dateFilterBy === 'recorded'
+          ? 'createdAt:desc'
+          : 'dueDate:asc'
+        : 'createdAt:desc'),
     populate: 'companyId',
   });
 };
@@ -375,33 +400,43 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
  * Summary of pending/overdue bills within a dueDate range.
  * Used by summary cards and the due-date filter panel on the frontend.
  */
-const getDueDateRangeSummary = async ({ organizationId, branchId, dueStartDate, dueEndDate }) => {
+const getDueDateRangeSummary = async ({
+  organizationId,
+  branchId,
+  dueStartDate,
+  dueEndDate,
+  dateFilterBy = 'due',
+}) => {
   await refreshOverdueStatuses(organizationId, branchId);
 
+  const filterMode = dateFilterBy === 'recorded' ? 'recorded' : 'due';
   const filter = { organizationId: toObjectId(organizationId), status: { $in: ['pending', 'overdue'] } };
   if (branchId) filter.branchId = toObjectId(branchId);
-  if (dueStartDate || dueEndDate) {
-    filter.dueDate = {};
-    if (dueStartDate) filter.dueDate.$gte = new Date(dueStartDate);
-    if (dueEndDate) filter.dueDate.$lte = endOfDueDate(dueEndDate);
+
+  const billDateRange = buildBillDateRange(dueStartDate, dueEndDate, filterMode);
+  if (billDateRange) {
+    filter.$and = [...(filter.$and || []), billDateRange];
   }
 
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  const todayStr = toBusinessCalendarDate(new Date());
+  const startOfToday = startOfBusinessDay(todayStr);
+  const endOfToday = endOfBusinessDay(todayStr);
 
   const dueTodayFilter = {
-    ...filter,
+    organizationId: toObjectId(organizationId),
     status: 'pending',
     dueDate: { $gte: startOfToday, $lte: endOfToday },
   };
+  if (branchId) dueTodayFilter.branchId = toObjectId(branchId);
 
   const overdueFilter = {
     organizationId: toObjectId(organizationId),
     status: 'overdue',
   };
   if (branchId) overdueFilter.branchId = toObjectId(branchId);
-  if (filter.dueDate) overdueFilter.dueDate = filter.dueDate;
+  if (filterMode === 'due' && billDateRange) {
+    overdueFilter.$and = [...(overdueFilter.$and || []), billDateRange];
+  }
 
   const [agg, dueTodayCount, overdueCount] = await Promise.all([
     BillPayment.aggregate([

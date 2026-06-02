@@ -51,21 +51,16 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
   });
 };
 
-const recalculateBalances = async (employeeId, fromTransactionDate) => {
+const recalculateBalances = async (employeeId) => {
   const entries = await EmployeeLedger.find({ employee: employeeId }).sort({ transactionDate: 1, createdAt: 1 });
   let runningBalance = 0;
-  let shouldUpdate = false;
 
   for (const entry of entries) {
-    if (entry.transactionDate >= fromTransactionDate) shouldUpdate = true;
-    if (shouldUpdate) {
-      const newBalance = runningBalance + (entry.debit || 0) - (entry.credit || 0);
-      if (entry.balance !== newBalance) {
-        entry.balance = newBalance;
-        await entry.save();
-      }
+    runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+    if (entry.balance !== runningBalance) {
+      entry.balance = runningBalance;
+      await entry.save();
     }
-    runningBalance += (entry.debit || 0) - (entry.credit || 0);
   }
 };
 
@@ -77,7 +72,7 @@ const createLedgerEntry = async (ledgerBody) => {
     ...ledgerBody,
     balance: 0,
   });
-  await recalculateBalances(ledgerBody.employee, ledgerBody.transactionDate || new Date());
+  await recalculateBalances(ledgerBody.employee);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
   await syncCashBookFromEmployeeLedger(updatedEntry);
   return updatedEntry;
@@ -89,14 +84,11 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
 
-  const oldDate = new Date(entry.transactionDate);
   Object.assign(entry, updateBody);
   await entry.save();
 
   const employeeId = entry.employee?._id || entry.employee;
-  const newDate = new Date(entry.transactionDate);
-  const fromDate = oldDate < newDate ? oldDate : newDate;
-  await recalculateBalances(employeeId, fromDate);
+  await recalculateBalances(employeeId);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
   await syncCashBookFromEmployeeLedger(updatedEntry);
   return updatedEntry;
@@ -276,14 +268,15 @@ const upsertSalaryPayableFromPayroll = async (payroll, userId) => {
   };
 
   if (existing) {
-    const fromDate = existing.transactionDate;
     Object.assign(existing, payload);
     await existing.save();
-    await recalculateBalances(payroll.employee, fromDate);
+    await recalculateBalances(payroll.employee);
     return existing;
   }
 
-  return createLedgerEntry(payload);
+  const created = await createLedgerEntry(payload);
+  await recalculateBalances(payroll.employee);
+  return created;
 };
 
 const upsertSalaryPaymentFromPayroll = async (payroll, paymentDate, paymentMethod, userId, amount) => {
@@ -312,14 +305,15 @@ const upsertSalaryPaymentFromPayroll = async (payroll, paymentDate, paymentMetho
   };
 
   if (existing) {
-    const fromDate = existing.transactionDate;
     Object.assign(existing, payload);
     await existing.save();
-    await recalculateBalances(payroll.employee, fromDate);
+    await recalculateBalances(payroll.employee);
     return existing;
   }
 
-  return createLedgerEntry(payload);
+  const created = await createLedgerEntry(payload);
+  await recalculateBalances(payroll.employee);
+  return created;
 };
 
 const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMethod, userId, amount) => {
@@ -348,21 +342,22 @@ const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMeth
   };
 
   if (existing) {
-    const fromDate = existing.transactionDate;
     if (payload.credit <= 0) {
       await cashBookService.deleteEntriesByReference(existing._id, 'EmployeeLedger');
       await existing.deleteOne();
-      await recalculateBalances(payroll.employee, fromDate);
+      await recalculateBalances(payroll.employee);
       return null;
     }
     Object.assign(existing, payload);
     await existing.save();
-    await recalculateBalances(payroll.employee, fromDate);
+    await recalculateBalances(payroll.employee);
     return existing;
   }
 
   if (payload.credit <= 0) return null;
-  return createLedgerEntry(payload);
+  const created = await createLedgerEntry(payload);
+  await recalculateBalances(payroll.employee);
+  return created;
 };
 
 module.exports = {
@@ -373,6 +368,7 @@ module.exports = {
   getAllEmployeesWithBalances,
   createAdvancePayment,
   payEmployee,
+  recalculateBalances,
   upsertSalaryPayableFromPayroll,
   upsertSalaryPaymentFromPayroll,
   upsertAdvancePaymentFromPayroll,

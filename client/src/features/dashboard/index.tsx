@@ -29,7 +29,19 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
 import { getDefaultHomeRoute } from '@/lib/default-home-route'
-import { Smartphone, WalletCards, Wrench, Receipt, Clock, AlertCircle, ShoppingBag } from 'lucide-react'
+import {
+  Smartphone,
+  WalletCards,
+  Wrench,
+  Receipt,
+  Clock,
+  AlertCircle,
+  ShoppingBag,
+  IdCard,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Briefcase,
+} from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
 
@@ -200,10 +212,18 @@ export default function Dashboard() {
               link={reportLink('bill-payments')}
             />
             <StatCard
-              title={t('Bills Due Today')}
-              value={stats?.billsDueToday || 0}
+              title={dateRange.period === 'today' ? t('Bills Due Today') : t('Bills Due in Period')}
+              value={
+                dateRange.period === 'today'
+                  ? stats?.billsDueToday || 0
+                  : stats?.billsDueInPeriod ?? stats?.billsDueToday ?? 0
+              }
               icon={<Clock className='h-4 w-4' />}
-              description={t('Pending bills due today')}
+              description={
+                dateRange.period === 'today'
+                  ? t('Pending bills due today')
+                  : t('Pending bills due in selected period')
+              }
               isLoading={statsLoading}
               tone='amber'
               link={{ to: '/mobile-shop/bill-payments', search: { filter: 'due-today' } }}
@@ -216,6 +236,68 @@ export default function Dashboard() {
               isLoading={statsLoading}
               tone='rose'
               link={{ to: '/mobile-shop/bill-payments', search: { filter: 'overdue' } }}
+            />
+          </div>
+        )}
+
+        {/* Mobile Shop — Row 3: Sim Sale / Send / Received / Services */}
+        {showMobileCards && (
+          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
+            <StatCard
+              title={t('Sim Sale')}
+              value={stats?.totalSimSale || 0}
+              icon={<IdCard className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={
+                stats?.simSaleCount
+                  ? `${t('Profit')}: Rs ${(stats?.totalSimSaleProfit || 0).toLocaleString()} · ${stats.simSaleCount} ${t('sales')}`
+                  : t('SIM sales in selected period')
+              }
+              isLoading={statsLoading}
+              tone='violet'
+              link={reportLink('sim-sale')}
+            />
+            <StatCard
+              title={t('Send')}
+              value={stats?.totalCashSend || 0}
+              icon={<ArrowUpRight className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={
+                stats?.cashSendCount
+                  ? `${t('Profit')}: Rs ${(stats?.totalCashSendProfit || 0).toLocaleString()} · ${stats.cashSendCount} ${t('transactions')}`
+                  : t('Cash sent to customer accounts')
+              }
+              isLoading={statsLoading}
+              tone='cyan'
+              link={{ to: '/mobile-shop/cash-management' }}
+            />
+            <StatCard
+              title={t('Received')}
+              value={stats?.totalCashReceived || 0}
+              icon={<ArrowDownLeft className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={
+                stats?.cashReceivedCount
+                  ? `${t('Profit')}: Rs ${(stats?.totalCashReceivedProfit || 0).toLocaleString()} · ${stats.cashReceivedCount} ${t('transactions')}`
+                  : t('Cash received from customers')
+              }
+              isLoading={statsLoading}
+              tone='sky'
+              link={{ to: '/mobile-shop/cash-management' }}
+            />
+            <StatCard
+              title={t('Services')}
+              value={stats?.totalServiceIncome || 0}
+              icon={<Briefcase className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={
+                stats?.serviceInvoiceCount
+                  ? `${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
+                  : t('Service charges collected')
+              }
+              isLoading={statsLoading}
+              tone='emerald'
+              link={reportLink('services')}
             />
           </div>
         )}

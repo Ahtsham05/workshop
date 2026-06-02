@@ -1,23 +1,39 @@
-const { Expense, Invoice, LoadPurchase, LoadTransaction, RepairJob, Wallet, BillPayment } = require('../models');
+const mongoose = require('mongoose');
+const {
+  Expense,
+  Invoice,
+  LoadPurchase,
+  LoadTransaction,
+  RepairJob,
+  Wallet,
+  BillPayment,
+  SimSale,
+  CashWithdrawal,
+  ServiceInvoice,
+} = require('../models');
+const { startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { refreshOverdueStatuses } = require('./billPayment.service');
 
-const buildMatch = ({ organizationId, branchId, startDate, endDate }) => {
-  const match = { organizationId };
+const toObjectId = (id) =>
+  id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
 
-  if (branchId) {
-    match.branchId = branchId;
-  }
+/** Bills recorded or utility-due within the dashboard period. */
+const buildBillDashboardDateFilter = (startDate, endDate) => {
+  if (!startDate && !endDate) return {};
+  const range = {};
+  if (startDate) range.$gte = new Date(startDate);
+  if (endDate) range.$lte = new Date(endDate);
+  return {
+    $or: [{ createdAt: range }, { dueDate: range }],
+  };
+};
 
-  if (startDate || endDate) {
-    match.date = {};
-    if (startDate) {
-      match.date.$gte = new Date(startDate);
-    }
-    if (endDate) {
-      match.date.$lte = new Date(endDate);
-    }
-  }
-
-  return match;
+const buildDueDateOnlyFilter = (startDate, endDate) => {
+  if (!startDate && !endDate) return {};
+  const range = {};
+  if (startDate) range.$gte = new Date(startDate);
+  if (endDate) range.$lte = new Date(endDate);
+  return { dueDate: range };
 };
 
 const buildInvoiceMatch = ({ organizationId, branchId, startDate, endDate }) => {
@@ -63,14 +79,45 @@ const calculateSalesCash = (invoices) => {
 };
 
 const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, endDate }) => {
-  const invoiceMatch = buildInvoiceMatch({ organizationId, branchId, startDate, endDate });
-  const match = buildMatch({ organizationId, branchId, startDate, endDate });
+  const orgId = toObjectId(organizationId);
+  const branchOid = branchId ? toObjectId(branchId) : null;
+  const billBaseMatch = {
+    organizationId: orgId,
+    ...(branchOid ? { branchId: branchOid } : {}),
+  };
+  const billPeriodFilter = buildBillDashboardDateFilter(startDate, endDate);
+  const billDuePeriodFilter = buildDueDateOnlyFilter(startDate, endDate);
 
-  const [invoices, loadTransactions, loadPurchases, repairJobs, expenses, wallets, billPayments] = await Promise.all([
+  await refreshOverdueStatuses(organizationId, branchId);
+
+  const invoiceMatch = buildInvoiceMatch({ organizationId, branchId, startDate, endDate });
+
+  const txMatch = { organizationId: orgId, ...(branchOid ? { branchId: branchOid } : {}) };
+  const dateRange =
+    startDate || endDate
+      ? {
+          ...(startDate ? { $gte: new Date(startDate) } : {}),
+          ...(endDate ? { $lte: new Date(endDate) } : {}),
+        }
+      : null;
+  const datedTxMatch = dateRange ? { ...txMatch, date: dateRange } : txMatch;
+
+  const [
+    invoices,
+    loadTransactions,
+    loadPurchases,
+    repairJobs,
+    expenses,
+    wallets,
+    billPayments,
+    simSales,
+    cashSendReceive,
+    serviceInvoices,
+  ] = await Promise.all([
     Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
-    LoadTransaction.find(match).select('amount profit paymentMethod walletType'),
-    LoadPurchase.find(match).select('amount profit paymentMethod walletType'),
-    RepairJob.find(match).select('charges paymentMethod'),
+    LoadTransaction.find(datedTxMatch).select('amount profit paymentMethod walletType'),
+    LoadPurchase.find(datedTxMatch).select('amount profit paymentMethod walletType'),
+    RepairJob.find(datedTxMatch).select('charges paymentMethod'),
     Expense.find({
       organizationId,
       ...(branchId ? { branchId } : {}),
@@ -85,18 +132,12 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     }).select('amount paymentMethod'),
     Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance'),
     BillPayment.find({
-      organizationId,
-      ...(branchId ? { branchId } : {}),
-      status: 'paid',
-      ...(startDate || endDate
-        ? {
-            paymentDate: {
-              ...(startDate ? { $gte: new Date(startDate) } : {}),
-              ...(endDate ? { $lte: new Date(endDate) } : {}),
-            },
-          }
-        : {}),
+      ...billBaseMatch,
+      ...billPeriodFilter,
     }).select('totalReceived serviceCharge paymentMethod'),
+    SimSale.find(datedTxMatch).select('saleAmount commission'),
+    CashWithdrawal.find(datedTxMatch).select('amount profit transactionType'),
+    ServiceInvoice.find(datedTxMatch).select('totalAmount'),
   ]);
 
   const totalSales = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
@@ -122,20 +163,40 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     return b.paymentMethod === 'cash' ? sum + Number(b.totalReceived || 0) : sum;
   }, 0);
 
-  // Count due-today and overdue
-  const today = new Date();
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-  const [billsDueToday, billsOverdue] = await Promise.all([
+  const totalSimSale = simSales.reduce((sum, sale) => sum + Number(sale.saleAmount || 0), 0);
+  const totalSimSaleProfit = simSales.reduce((sum, sale) => sum + Number(sale.commission || 0), 0);
+  const simSaleCount = simSales.length;
+
+  // User-facing Send = deposit; Received = withdrawal (see cash-transaction-labels)
+  const cashSendTx = cashSendReceive.filter((tx) => tx.transactionType === 'deposit');
+  const cashReceivedTx = cashSendReceive.filter((tx) => tx.transactionType === 'withdrawal');
+  const totalCashSend = cashSendTx.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const totalCashSendProfit = cashSendTx.reduce((sum, tx) => sum + Number(tx.profit || 0), 0);
+  const cashSendCount = cashSendTx.length;
+  const totalCashReceived = cashReceivedTx.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const totalCashReceivedProfit = cashReceivedTx.reduce((sum, tx) => sum + Number(tx.profit || 0), 0);
+  const cashReceivedCount = cashReceivedTx.length;
+
+  const totalServiceIncome = serviceInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+  const serviceInvoiceCount = serviceInvoices.length;
+
+  // Count due-today and overdue (Pakistan calendar day)
+  const todayStr = toBusinessCalendarDate(new Date());
+  const startOfDay = startOfBusinessDay(todayStr);
+  const endOfDay = endOfBusinessDay(todayStr);
+  const [billsDueToday, billsDueInPeriod, billsOverdue] = await Promise.all([
     BillPayment.countDocuments({
-      organizationId,
-      ...(branchId ? { branchId } : {}),
+      ...billBaseMatch,
       status: 'pending',
       dueDate: { $gte: startOfDay, $lte: endOfDay },
     }),
     BillPayment.countDocuments({
-      organizationId,
-      ...(branchId ? { branchId } : {}),
+      ...billBaseMatch,
+      status: { $in: ['pending', 'overdue'] },
+      ...billDuePeriodFilter,
+    }),
+    BillPayment.countDocuments({
+      ...billBaseMatch,
       status: 'overdue',
     }),
   ]);
@@ -176,13 +237,33 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     totalRepairIncome,
     totalBillCollection,
     billPaymentProfit,
-    totalProfit: salesProfit + loadProfit + totalRepairIncome + billPaymentProfit,
+    totalProfit:
+      salesProfit +
+      loadProfit +
+      totalRepairIncome +
+      billPaymentProfit +
+      totalSimSaleProfit +
+      totalCashSendProfit +
+      totalCashReceivedProfit +
+      totalServiceIncome,
     cashInHand,
     jazzcashBalance: walletBalances.jazzcash,
     easypaisaBalance: walletBalances.easypaisa,
     walletBalance: walletBalances.total,
     billsDueToday,
+    billsDueInPeriod,
     billsOverdue,
+    totalSimSale,
+    totalSimSaleProfit,
+    simSaleCount,
+    totalCashSend,
+    totalCashSendProfit,
+    cashSendCount,
+    totalCashReceived,
+    totalCashReceivedProfit,
+    cashReceivedCount,
+    totalServiceIncome,
+    serviceInvoiceCount,
   };
 };
 

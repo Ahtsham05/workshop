@@ -838,7 +838,19 @@ export const mobileShopApi = createApi({
     // ─── Bill Payments ───────────────────────────────────────────────────────
     getBillPayments: builder.query<
       PaginatedResult<BillPaymentRecord>,
-      { page?: number; limit?: number; status?: string; billType?: string; companyId?: string; search?: string; startDate?: string; endDate?: string; dueStartDate?: string; dueEndDate?: string } | void
+      {
+        page?: number
+        limit?: number
+        status?: string
+        billType?: string
+        companyId?: string
+        search?: string
+        startDate?: string
+        endDate?: string
+        dueStartDate?: string
+        dueEndDate?: string
+        dateFilterBy?: 'recorded' | 'due'
+      } | void
     >({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
@@ -851,6 +863,7 @@ export const mobileShopApi = createApi({
         if ((params as any)?.endDate) p.set('endDate', (params as any).endDate)
         if ((params as any)?.dueStartDate) p.set('dueStartDate', (params as any).dueStartDate)
         if ((params as any)?.dueEndDate) p.set('dueEndDate', (params as any).dueEndDate)
+        if ((params as any)?.dateFilterBy) p.set('dateFilterBy', (params as any).dateFilterBy)
         return `/bill-payments?${p.toString()}`
       },
       providesTags: ['BillPayments'],
@@ -882,11 +895,15 @@ export const mobileShopApi = createApi({
       query: () => '/bill-payments/overdue',
       providesTags: ['BillPayments'],
     }),
-    getBillDueSummary: builder.query<BillDueSummary, { dueStartDate?: string; dueEndDate?: string } | void>({
+    getBillDueSummary: builder.query<
+      BillDueSummary,
+      { dueStartDate?: string; dueEndDate?: string; dateFilterBy?: 'recorded' | 'due' } | void
+    >({
       query: (params) => {
         const p = new URLSearchParams()
         if ((params as any)?.dueStartDate) p.set('dueStartDate', (params as any).dueStartDate)
         if ((params as any)?.dueEndDate) p.set('dueEndDate', (params as any).dueEndDate)
+        if ((params as any)?.dateFilterBy) p.set('dateFilterBy', (params as any).dateFilterBy)
         const qs = p.toString()
         return qs ? `/bill-payments/due-summary?${qs}` : '/bill-payments/due-summary'
       },

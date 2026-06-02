@@ -51,14 +51,18 @@ const getLeaves = catchAsync(async (req, res) => {
   const result = await leaveService.queryLeaves(filter, options);
 
   if (result?.results?.length) {
-    result.results = result.results.map((leave) => {
-      const plain = leave.toObject ? leave.toObject() : leave;
-      const employeeDoc = plain.employee;
-      return {
-        ...plain,
-        salaryImpact: payrollService.computeLeaveSalaryImpact(plain, employeeDoc),
-      };
-    });
+    result.results = await Promise.all(
+      result.results.map(async (leave) => {
+        const plain = leave.toObject ? leave.toObject() : leave;
+        const employeeDoc = plain.employee;
+        const leaveId = plain.id || plain._id?.toString?.() || String(plain._id || '');
+        return {
+          ...plain,
+          id: leaveId,
+          salaryImpact: await payrollService.computeLeaveSalaryImpact(plain, employeeDoc),
+        };
+      })
+    );
   }
 
   res.send(result);

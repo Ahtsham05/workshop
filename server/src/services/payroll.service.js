@@ -29,7 +29,7 @@ const getMonthsInRange = (startDate, endDate) => {
   return months;
 };
 
-const calculatePayrollSnapshot = async (employee, month, year, scope = {}) => {
+const calculatePayrollSnapshot = async (employee, month, year, scope = {}, options = {}) => {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
@@ -40,7 +40,7 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}) => {
 
   const leaves = await Leave.find({
     employee: employee._id,
-    status: { $in: ['Approved', 'Pending'] },
+    status: { $in: ['Approved', 'Pending', 'Rejected'] },
     startDate: { $lte: endDate },
     endDate: { $gte: startDate },
   });
@@ -53,7 +53,9 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}) => {
     leaves,
   });
 
-  const basicSalary = Number(employee.salary?.basicSalary || 0);
+  const basicSalary = Number(
+    options.basicSalary ?? employee.salary?.basicSalary ?? 0
+  );
   const perDaySalary = stats.workingDays > 0 ? basicSalary / stats.workingDays : 0;
   const absentDeduction = perDaySalary * stats.absentDays;
   const leaveDeduction = perDaySalary * stats.unpaidLeaveDays;
@@ -78,22 +80,34 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}) => {
   };
 };
 
-const computeLeaveSalaryImpact = (leave, employee) => {
-  const basicSalary = Number(employee?.salary?.basicSalary || 0);
+const getBasicSalaryForMonth = async (employee, month, year) => {
+  const payroll = await Payroll.findOne({
+    employee: employee._id || employee.id,
+    month,
+    year,
+  }).select('basicSalary');
+  if (payroll?.basicSalary != null) {
+    return Number(payroll.basicSalary);
+  }
+  return Number(employee?.salary?.basicSalary || 0);
+};
+
+const computeLeaveSalaryImpact = async (leave, employee) => {
   const startDate = new Date(leave.startDate);
   const endDate = new Date(leave.endDate);
   const months = getMonthsInRange(startDate, endDate);
   let totalAmount = 0;
 
-  months.forEach(({ month, year }) => {
+  for (const { month, year } of months) {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
     const overlapDays = getOverlappingLeaveDays(leave, monthStart, monthEnd);
-    if (!overlapDays) return;
+    if (!overlapDays) continue;
+    const basicSalary = await getBasicSalaryForMonth(employee, month, year);
     const workingDays = monthEnd.getDate();
     const perDaySalary = workingDays > 0 ? basicSalary / workingDays : 0;
     totalAmount += perDaySalary * overlapDays;
-  });
+  }
 
   if (leave.status === 'Pending') {
     return {
@@ -116,6 +130,13 @@ const computeLeaveSalaryImpact = (leave, employee) => {
       label: 'Paid leave amount',
     };
   }
+  if (leave.status === 'Rejected') {
+    return {
+      amount: totalAmount,
+      type: 'deduction',
+      label: 'Rejected — deducted from salary',
+    };
+  }
   return {
     amount: 0,
     type: 'none',
@@ -134,21 +155,19 @@ const syncPayrollForMonth = async (employeeId, month, year, userId, scope = {}) 
   const employee = await Employee.findById(employeeId);
   if (!employee) return null;
 
-  const snapshot = await calculatePayrollSnapshot(employee, month, year, scope);
-  const currentLedgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, {
-    organizationId: scope.organizationId || employee.organizationId,
-    branchId: scope.branchId || employee.branchId,
+  const lockedBasicSalary = Number(payroll.basicSalary ?? employee.salary?.basicSalary ?? 0);
+  const snapshot = await calculatePayrollSnapshot(employee, month, year, scope, {
+    basicSalary: lockedBasicSalary,
   });
-  const carryForwardAdvance = Math.max(0, -Number(currentLedgerSummary.currentBalance || 0));
 
   const deductions = {
     absent: snapshot.absentDeduction,
     other: snapshot.leaveDeduction,
-    advance: Number(payroll.deductions?.advance || carryForwardAdvance),
+    advance: Number(payroll.deductions?.advance || 0),
   };
   const totalDeductions = Object.values(deductions).reduce((sum, val) => sum + (val || 0), 0);
 
-  payroll.basicSalary = snapshot.basicSalary;
+  // Keep the salary locked on this payroll record (do not overwrite with current employee salary).
   payroll.allowances = snapshot.allowances;
   payroll.deductions = deductions;
   payroll.workingDays = snapshot.workingDays;
@@ -180,6 +199,9 @@ const syncPayrollForLeave = async (leave, userId) => {
   for (const { month, year } of months) {
     const synced = await syncPayrollForMonth(leave.employee, month, year, userId, scope);
     if (synced) results.push(synced);
+  }
+  if (results.length > 0) {
+    await employeeLedgerService.recalculateBalances(leave.employee);
   }
   return results;
 };
@@ -316,7 +338,7 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
   
   payrollData.totalAllowances = totalAllowances;
   payrollData.totalDeductions = totalDeductions;
-  payrollData.grossSalary = basicSalary + totalAllowances;
+  payrollData.grossSalary = payrollData.basicSalary + totalAllowances;
   payrollData.netSalary = Math.max(0, payrollData.grossSalary - totalDeductions);
   
   const payroll = await Payroll.create(payrollData);
@@ -426,7 +448,10 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
     let leaveDays = 0;
     let pendingLeaveDays = 0;
 
-    const snapshot = await calculatePayrollSnapshot(employee, month, year, tenantFilter);
+    const basicSalaryForMonth = payroll?.basicSalary ?? employee.salary?.basicSalary;
+    const snapshot = await calculatePayrollSnapshot(employee, month, year, tenantFilter, {
+      basicSalary: basicSalaryForMonth,
+    });
     workingDays = snapshot.workingDays;
     presentDays = snapshot.presentDays;
     absentDays = snapshot.absentDays;

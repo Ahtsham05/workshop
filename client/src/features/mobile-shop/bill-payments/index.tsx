@@ -11,6 +11,8 @@ import {
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -70,7 +72,7 @@ import {
 } from '@/stores/mobile-shop.api'
 import { openBillReceiptPrintWindow } from './bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
-import { getBusinessToday } from '@/lib/business-timezone'
+import { formatBusinessDate, getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +95,28 @@ type BatchFormState = {
 
 type ActiveTab = 'bills' | 'companies'
 type DatePreset = 'today' | 'tomorrow' | 'week' | 'all'
+type BillDateFilterBy = 'recorded' | 'due'
 type BillListFilter = 'due-today' | 'overdue'
+
+const BILL_DATE_FILTER_STORAGE_KEY = 'mobile-shop.billPayments.dateFilterBy'
+
+function loadSavedBillDateFilterBy(): BillDateFilterBy {
+  try {
+    const raw = localStorage.getItem(BILL_DATE_FILTER_STORAGE_KEY)
+    if (raw === 'recorded' || raw === 'due') return raw
+  } catch {
+    // ignore storage errors (private mode, etc.)
+  }
+  return 'due'
+}
+
+function saveBillDateFilterBy(mode: BillDateFilterBy): void {
+  try {
+    localStorage.setItem(BILL_DATE_FILTER_STORAGE_KEY, mode)
+  } catch {
+    // ignore
+  }
+}
 
 function getInitialBillListFilters(filter?: BillListFilter) {
   if (filter === 'due-today') {
@@ -102,6 +125,7 @@ function getInitialBillListFilters(filter?: BillListFilter) {
       dueDatePreset: 'today' as DatePreset,
       dueStartDate: today,
       dueEndDate: today,
+      dateFilterBy: 'due' as BillDateFilterBy,
       filterStatus: 'pending',
     }
   }
@@ -111,6 +135,7 @@ function getInitialBillListFilters(filter?: BillListFilter) {
       dueDatePreset: 'all' as DatePreset,
       dueStartDate: '',
       dueEndDate: '',
+      dateFilterBy: 'due' as BillDateFilterBy,
       filterStatus: 'overdue',
     }
   }
@@ -119,22 +144,12 @@ function getInitialBillListFilters(filter?: BillListFilter) {
     dueDatePreset: 'all' as DatePreset,
     dueStartDate: '',
     dueEndDate: '',
+    dateFilterBy: loadSavedBillDateFilterBy(),
     filterStatus: 'all',
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const toDateLocal = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-const addDays = (d: Date, n: number) => {
-  const result = new Date(d)
-  result.setDate(result.getDate() + n)
-  return result
-}
 
 const makeEmptyBillRow = (): BillRow => ({
   billAmount: '',
@@ -147,8 +162,8 @@ const makeInitialBatchForm = (): BatchFormState => ({
   companyName: '',
   billType: 'electricity',
   serviceCharge: '0',
-  dueDate: toDateLocal(new Date()),
-  paymentDate: toDateLocal(new Date()),
+  dueDate: getBusinessToday(),
+  paymentDate: '',
   paymentMethod: 'cash',
   bills: [makeEmptyBillRow()],
 })
@@ -172,12 +187,14 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 interface OverallReportCardsProps {
   dueStartDate: string
   dueEndDate: string
+  dateFilterBy: BillDateFilterBy
 }
 
-function OverallReportCards({ dueStartDate, dueEndDate }: OverallReportCardsProps) {
+function OverallReportCards({ dueStartDate, dueEndDate, dateFilterBy }: OverallReportCardsProps) {
   const { data: summary, isLoading } = useGetBillDueSummaryQuery({
     dueStartDate: dueStartDate || undefined,
     dueEndDate: dueEndDate || undefined,
+    dateFilterBy,
   })
 
   const cards = [
@@ -212,23 +229,31 @@ function OverallReportCards({ dueStartDate, dueEndDate }: OverallReportCardsProp
 interface DueDateFilterProps {
   dueStartDate: string
   dueEndDate: string
+  dateFilterBy: BillDateFilterBy
   preset: DatePreset
   onPresetChange: (preset: DatePreset, start: string, end: string) => void
   onCustomChange: (start: string, end: string) => void
+  onDateFilterByChange: (mode: BillDateFilterBy) => void
 }
 
-function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, onCustomChange }: DueDateFilterProps) {
-  const today = new Date()
-
+function DueDateFilterPanel({
+  dueStartDate,
+  dueEndDate,
+  dateFilterBy,
+  preset,
+  onPresetChange,
+  onCustomChange,
+  onDateFilterByChange,
+}: DueDateFilterProps) {
   const applyPreset = (p: DatePreset) => {
+    const today = getBusinessToday()
     if (p === 'today') {
-      const d = toDateLocal(today)
-      onPresetChange(p, d, d)
+      onPresetChange(p, today, today)
     } else if (p === 'tomorrow') {
-      const d = toDateLocal(addDays(today, 1))
+      const d = shiftBusinessCalendarDate(today, 1)
       onPresetChange(p, d, d)
     } else if (p === 'week') {
-      onPresetChange(p, toDateLocal(today), toDateLocal(addDays(today, 6)))
+      onPresetChange(p, today, shiftBusinessCalendarDate(today, 6))
     } else {
       onPresetChange('all', '', '')
     }
@@ -237,6 +262,7 @@ function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, 
   const { data: summary, isFetching } = useGetBillDueSummaryQuery({
     dueStartDate: dueStartDate || undefined,
     dueEndDate: dueEndDate || undefined,
+    dateFilterBy,
   })
 
   const PRESETS: { key: DatePreset; label: string }[] = [
@@ -250,9 +276,34 @@ function DueDateFilterPanel({ dueStartDate, dueEndDate, preset, onPresetChange, 
     <Card className='border-dashed'>
       <CardContent className='p-4 space-y-3'>
         {/* Header */}
-        <div className='flex items-center gap-2'>
-          <CalendarDays className='h-4 w-4 text-muted-foreground' />
-          <span className='text-sm font-medium'>Filter by Due Date</span>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='flex items-center gap-2'>
+            <CalendarDays className='h-4 w-4 text-muted-foreground' />
+            <span className='text-sm font-medium'>Filter by Date</span>
+          </div>
+          <div className='flex items-center gap-2 rounded-md border bg-background px-2 py-1'>
+            <span
+              className={cn(
+                'text-xs',
+                dateFilterBy === 'recorded' ? 'font-semibold text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              Collection date
+            </span>
+            <Switch
+              checked={dateFilterBy === 'due'}
+              onCheckedChange={(checked) => onDateFilterByChange(checked ? 'due' : 'recorded')}
+              aria-label='Toggle between recorded date and due date filter'
+            />
+            <span
+              className={cn(
+                'text-xs',
+                dateFilterBy === 'due' ? 'font-semibold text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              Due date
+            </span>
+          </div>
         </div>
 
         {/* Preset quick buttons */}
@@ -326,13 +377,13 @@ interface MarkPaidDialogProps {
 
 function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'jazzcash' | 'easypaisa'>('cash')
-  const [paymentDate, setPaymentDate] = useState(toDateLocal(new Date()))
+  const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [updateBill, { isLoading }] = useUpdateBillPaymentMutation()
 
   useEffect(() => {
     if (bill) {
       setPaymentMethod(bill.paymentMethod)
-      setPaymentDate(toDateLocal(new Date()))
+      setPaymentDate(getBusinessToday())
     }
   }, [bill])
 
@@ -463,12 +514,14 @@ export default function BillPaymentsPage() {
   const [dueDatePreset, setDueDatePreset] = useState<DatePreset>(initialFilters.dueDatePreset)
   const [dueStartDate, setDueStartDate] = useState(initialFilters.dueStartDate)
   const [dueEndDate, setDueEndDate] = useState(initialFilters.dueEndDate)
+  const [dateFilterBy, setDateFilterBy] = useState<BillDateFilterBy>(initialFilters.dateFilterBy)
 
   useEffect(() => {
     const next = getInitialBillListFilters(routeSearch.filter)
     setDueDatePreset(next.dueDatePreset)
     setDueStartDate(next.dueStartDate)
     setDueEndDate(next.dueEndDate)
+    setDateFilterBy(next.dateFilterBy)
     setFilterStatus(next.filterStatus)
     setPage(1)
   }, [routeSearch.filter])
@@ -484,6 +537,7 @@ export default function BillPaymentsPage() {
   if (filterBillType !== 'all') billQuery.billType = filterBillType
   if (dueStartDate) billQuery.dueStartDate = dueStartDate
   if (dueEndDate) billQuery.dueEndDate = dueEndDate
+  billQuery.dateFilterBy = dateFilterBy
 
   const { data, isLoading } = useGetBillPaymentsQuery(billQuery as any)
   const [createBatchBills, { isLoading: isCreating }] = useCreateBillPaymentsBatchMutation()
@@ -602,7 +656,6 @@ export default function BillPaymentsPage() {
       billType: form.billType as CreateBillPaymentsBatchInput['billType'],
       serviceCharge: svcCharge,
       dueDate: form.dueDate,
-      paymentDate: form.paymentDate || undefined,
       paymentMethod: form.paymentMethod,
       bills: validBills.map((b) => ({
         billAmount: parseFloat(b.billAmount),
@@ -671,7 +724,7 @@ export default function BillPaymentsPage() {
       description={`Collect utility bills (electricity, gas, water, internet) and earn service charges. · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
       {/* Summary Cards */}
-      <OverallReportCards dueStartDate={dueStartDate} dueEndDate={dueEndDate} />
+      <OverallReportCards dueStartDate={dueStartDate} dueEndDate={dueEndDate} dateFilterBy={dateFilterBy} />
 
       <div className='mt-6'>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
@@ -695,9 +748,15 @@ export default function BillPaymentsPage() {
               <DueDateFilterPanel
                 dueStartDate={dueStartDate}
                 dueEndDate={dueEndDate}
+                dateFilterBy={dateFilterBy}
                 preset={dueDatePreset}
                 onPresetChange={handlePresetChange}
                 onCustomChange={handleCustomDueDateChange}
+                onDateFilterByChange={(mode) => {
+                  saveBillDateFilterBy(mode)
+                  setDateFilterBy(mode)
+                  setPage(1)
+                }}
               />
               <Card>
               <CardHeader>
@@ -756,6 +815,7 @@ export default function BillPaymentsPage() {
                         <TableHead>Bill Amt</TableHead>
                         <TableHead>Svc Charge</TableHead>
                         <TableHead>Total</TableHead>
+                        <TableHead>Collection Date</TableHead>
                         <TableHead>Due Date</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className='text-right'>Actions</TableHead>
@@ -773,7 +833,14 @@ export default function BillPaymentsPage() {
                             Rs. {bill.totalReceived.toLocaleString()}
                           </TableCell>
                           <TableCell>
-                            {new Date(bill.dueDate).toLocaleDateString('en-PK')}
+                            {bill.createdAt
+                              ? formatBusinessDate(bill.createdAt)
+                              : bill.paymentDate
+                                ? formatBusinessDate(bill.paymentDate)
+                                : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {formatBusinessDate(bill.dueDate)}
                           </TableCell>
                           <TableCell>
                             <Badge variant={STATUS_VARIANT[bill.status] ?? 'secondary'}>
@@ -869,7 +936,7 @@ export default function BillPaymentsPage() {
               </div>
             </div>
 
-            <div className='grid gap-4 sm:grid-cols-3'>
+            <div className='grid gap-4 sm:grid-cols-2'>
               <div>
                 <Label>Due Date *</Label>
                 <Input
@@ -877,15 +944,6 @@ export default function BillPaymentsPage() {
                   value={form.dueDate}
                   onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
                   {...billHeaderEnter.enterProps('bill-due-date')}
-                />
-              </div>
-              <div>
-                <Label>Payment Date</Label>
-                <Input
-                  type='date'
-                  value={form.paymentDate}
-                  onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
-                  {...billHeaderEnter.enterProps('bill-payment-date')}
                 />
               </div>
               <div>
