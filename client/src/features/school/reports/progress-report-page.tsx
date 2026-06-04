@@ -17,8 +17,8 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { RootState } from '@/stores/store';
 import StudentSearchPicker from '../components/student-search-picker';
-import { buildProgressReportPrintHtml, openProgressReportPrint } from './progress-report-print-html';
-import { mapReportToPrintInput, type ProgressReportExamResult } from './progress-report-utils';
+import { buildProgressReportPrintHtmlReady, openProgressReportPrint } from './progress-report-print-html';
+import { mapReportToPrintInput, parseCampusFromBranchName, type ProgressReportExamResult } from './progress-report-utils';
 import ClassBatchProgressReports from './progress-report-class-batch';
 
 const GRADE_COLOR: Record<string, string> = {
@@ -80,10 +80,12 @@ export default function ProgressReportPage() {
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedExam, setSelectedExam] = useState('all');
   const user = useSelector((state: RootState) => state.auth.data?.user);
+  const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName);
 
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const schoolName = org?.name || 'School Name';
   const schoolLogo = org?.logo?.url ?? null;
+  const campusName = parseCampusFromBranchName(activeBranchName);
 
   const { data: examsData } = useGetExamsQuery({ limit: 100 });
 
@@ -102,15 +104,16 @@ export default function ProgressReportPage() {
     return first?.exam?.name || 'Progress Report';
   }, [selectedExam, examsData, reportData]);
 
-  const handlePrint = useCallback(() => {
+  const handlePrint = useCallback(async () => {
     if (!reportData) return;
     const printExam = reportData.exams[0];
     if (!printExam) return;
 
-    const input = mapReportToPrintInput(reportData, schoolName, examTitle, schoolLogo);
+    const input = mapReportToPrintInput(reportData, schoolName, examTitle, schoolLogo, campusName);
     if (!input) return;
-    openProgressReportPrint(buildProgressReportPrintHtml(input));
-  }, [reportData, schoolName, examTitle]);
+    const html = await buildProgressReportPrintHtmlReady(input);
+    openProgressReportPrint(html);
+  }, [reportData, schoolName, examTitle, schoolLogo, campusName]);
 
   const exams = examsData?.results ?? [];
   const loading = reportLoading || isFetching;
@@ -293,7 +296,7 @@ export default function ProgressReportPage() {
         </TabsContent>
 
         <TabsContent value="class" className="mt-4">
-          <ClassBatchProgressReports schoolName={schoolName} schoolLogo={schoolLogo} />
+          <ClassBatchProgressReports schoolName={schoolName} schoolLogo={schoolLogo} campusName={campusName} />
         </TabsContent>
       </Tabs>
     </div>

@@ -20,7 +20,7 @@ import { Printer, Users, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppDispatch } from '@/stores/store';
 import {
-  buildBulkProgressReportPrintHtml,
+  buildBulkProgressReportPrintHtmlReady,
   openProgressReportPrint,
   type ProgressReportPrintInput,
 } from './progress-report-print-html';
@@ -29,9 +29,10 @@ import { mapReportToPrintInput, studentRowId, type ProgressReportApi } from './p
 type Props = {
   schoolName: string;
   schoolLogo?: string | null;
+  campusName?: string | null;
 };
 
-export default function ClassBatchProgressReports({ schoolName, schoolLogo }: Props) {
+export default function ClassBatchProgressReports({ schoolName, schoolLogo, campusName }: Props) {
   const dispatch = useDispatch<AppDispatch>();
 
   const [classId, setClassId] = useState('');
@@ -136,7 +137,9 @@ export default function ClassBatchProgressReports({ schoolName, schoolLogo }: Pr
         ).unwrap();
 
         const inputs = (bulk.reports ?? [])
-          .map((report: ProgressReportApi) => mapReportToPrintInput(report, schoolName, examTitle, schoolLogo))
+          .map((report: ProgressReportApi) =>
+            mapReportToPrintInput(report, schoolName, examTitle, schoolLogo, campusName),
+          )
           .filter((r: ProgressReportPrintInput | null): r is ProgressReportPrintInput => r !== null);
 
         if (!inputs.length) {
@@ -150,7 +153,8 @@ export default function ClassBatchProgressReports({ schoolName, schoolLogo }: Pr
           toast.warning(`${withResults} of ${requested} students have results for this exam`);
         }
 
-        openProgressReportPrint(buildBulkProgressReportPrintHtml(inputs));
+        const html = await buildBulkProgressReportPrintHtmlReady(inputs);
+        openProgressReportPrint(html);
         toast.success(`Printing ${inputs.length} report card(s)`);
       } catch {
         toast.error('Failed to load reports');

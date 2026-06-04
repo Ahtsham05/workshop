@@ -1,5 +1,14 @@
 import type { ProgressReportPrintInput } from './progress-report-print-html';
 
+/** Campus label after "School Name - Campus Name" branch naming. */
+export function parseCampusFromBranchName(branchName?: string | null): string | null {
+  if (!branchName?.trim()) return null;
+  const sep = ' - ';
+  const idx = branchName.indexOf(sep);
+  if (idx === -1) return null;
+  return branchName.slice(idx + sep.length).trim() || null;
+}
+
 export type ProgressReportExamResult = {
   exam?: { name?: string; type?: string };
   subjects: NonNullable<ProgressReportPrintInput['exam']>['subjects'];
@@ -22,12 +31,14 @@ export function mapReportToPrintInput(
   schoolName: string,
   examTitle: string,
   schoolLogo?: string | null,
+  campusName?: string | null,
 ): ProgressReportPrintInput | null {
   const printExam = report.exams?.[0];
   if (!printExam) return null;
 
   return {
     schoolName,
+    campusName: campusName ?? null,
     examTitle,
     schoolLogo: schoolLogo ?? null,
     student: report.student,
