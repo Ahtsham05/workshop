@@ -28,7 +28,7 @@ export default function StudentSearchPicker({
   const [classFilter, setClassFilter] = useState('all');
 
   const { data: studentsData, isLoading, isFetching } = useGetStudentsQuery(
-    { limit: 100, status: 'active' },
+    { limit: 1000, status: 'active' },
     { skip: !open && !value },
   );
   const { data: classesData } = useGetSchoolClassesQuery(

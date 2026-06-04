@@ -83,6 +83,7 @@ export default function ProgressReportPage() {
 
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const schoolName = org?.name || 'School Name';
+  const schoolLogo = org?.logo?.url ?? null;
 
   const { data: examsData } = useGetExamsQuery({ limit: 100 });
 
@@ -106,7 +107,7 @@ export default function ProgressReportPage() {
     const printExam = reportData.exams[0];
     if (!printExam) return;
 
-    const input = mapReportToPrintInput(reportData, schoolName, examTitle);
+    const input = mapReportToPrintInput(reportData, schoolName, examTitle, schoolLogo);
     if (!input) return;
     openProgressReportPrint(buildProgressReportPrintHtml(input));
   }, [reportData, schoolName, examTitle]);
@@ -292,7 +293,7 @@ export default function ProgressReportPage() {
         </TabsContent>
 
         <TabsContent value="class" className="mt-4">
-          <ClassBatchProgressReports schoolName={schoolName} />
+          <ClassBatchProgressReports schoolName={schoolName} schoolLogo={schoolLogo} />
         </TabsContent>
       </Tabs>
     </div>

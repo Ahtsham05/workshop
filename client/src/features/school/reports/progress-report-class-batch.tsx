@@ -28,9 +28,10 @@ import { mapReportToPrintInput, studentRowId, type ProgressReportApi } from './p
 
 type Props = {
   schoolName: string;
+  schoolLogo?: string | null;
 };
 
-export default function ClassBatchProgressReports({ schoolName }: Props) {
+export default function ClassBatchProgressReports({ schoolName, schoolLogo }: Props) {
   const dispatch = useDispatch<AppDispatch>();
 
   const [classId, setClassId] = useState('');
@@ -135,7 +136,7 @@ export default function ClassBatchProgressReports({ schoolName }: Props) {
         ).unwrap();
 
         const inputs = (bulk.reports ?? [])
-          .map((report: ProgressReportApi) => mapReportToPrintInput(report, schoolName, examTitle))
+          .map((report: ProgressReportApi) => mapReportToPrintInput(report, schoolName, examTitle, schoolLogo))
           .filter((r: ProgressReportPrintInput | null): r is ProgressReportPrintInput => r !== null);
 
         if (!inputs.length) {

@@ -47,6 +47,7 @@ function infoCell(label: string, value?: string): string {
 export type ProgressReportPrintInput = {
   schoolName: string;
   examTitle: string;
+  schoolLogo?: string | null;
   student: {
     firstName: string;
     lastName?: string;
@@ -90,7 +91,7 @@ function gradeColor(g: string): string {
 }
 
 export function buildProgressReportPrintHtml(data: ProgressReportPrintInput): string {
-  const { schoolName, examTitle, student, attendance, exam } = data;
+  const { schoolName, examTitle, schoolLogo, student, attendance, exam } = data;
   const fullName = `${student.firstName} ${student.lastName || ''}`.trim();
   const classLabel = `${student.className}${student.sectionName ? ` — ${student.sectionName}` : ''}`;
   const attHas = (attendance.hasRecords ?? false) || attendance.total > 0;
@@ -144,12 +145,23 @@ export function buildProgressReportPrintHtml(data: ProgressReportPrintInput): st
     ? `<img src="${esc(photoSrc)}" class="photo-img" alt="Photo" />`
     : `<div class="photo-ph"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="7" r="4"/><path d="M5.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/></svg></div>`;
 
+  const logoSrc: string | null = (() => {
+    const u = schoolLogo;
+    if (!u) return null;
+    if (u.startsWith('http') || u.startsWith('data:') || u.startsWith('blob:')) return u;
+    return u.startsWith('/') ? u : null;
+  })();
+
+  const schoolLogoHtml = logoSrc
+    ? `<img src="${esc(logoSrc)}" class="logo-img" alt="Logo" />`
+    : `<div class="logo-ph"><svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" width="28" height="28"><path d="M12 3L2 9l10 6 10-6-10-6z"/><path d="M2 17l10 6 10-6"/><path d="M2 13l10 6 10-6"/></svg></div>`;
+
   const css = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 @page {
   size: A4 portrait;
-  margin: 8mm 10mm;
+  margin: 10mm 6mm 6mm 6mm;
 }
 
 html, body {
@@ -158,77 +170,128 @@ html, body {
   padding: 0;
   background: #fff;
   font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-  font-size: 9pt;
+  font-size: 10pt;
   color: #111827;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 .page {
-  width: 190mm;
+  width: 198mm;
+  min-height: 281mm;
   margin: 0 auto;
+  padding-top: 0;
   display: flex;
   flex-direction: column;
-  gap: 3mm;
+  justify-content: space-between;
+  gap: 3.5mm;
 }
 
 /* ── Header Banner ─────────────────────────────────────── */
 .banner {
-  background: linear-gradient(160deg, #0a2e1a 0%, #14532d 50%, #166534 100%);
+  background:
+    radial-gradient(ellipse 70% 80% at 12% 50%, rgba(74,222,128,0.13) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 70% at 88% 20%, rgba(21,128,61,0.22) 0%, transparent 55%),
+    linear-gradient(140deg, #052e16 0%, #14532d 48%, #166534 100%);
   color: #fff;
-  padding: 5mm 8mm 4.5mm;
+  padding: 5mm 8mm 5mm;
   border-radius: 2mm;
   position: relative;
   overflow: hidden;
-  border-bottom: 4px solid #ca8a04;
+  border-top: 2px solid rgba(255,255,255,0.08);
+  border-bottom: 3.5px solid #ca8a04;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.22);
 }
 .banner::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 8px,
-    rgba(255,255,255,0.025) 8px,
-    rgba(255,255,255,0.025) 16px
-  );
+  background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='0.7' fill='rgba(255,255,255,0.06)'/%3E%3C/svg%3E");
+  background-size: 24px 24px;
   pointer-events: none;
 }
-.banner-inner { position: relative; text-align: center; }
-.school-em {
-  font-size: 18pt;
-  font-weight: 800;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  line-height: 1.15;
-  text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+.banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 90% 60% at 50% 50%, rgba(255,255,255,0.04) 0%, transparent 70%);
+  pointer-events: none;
 }
-.divider-line {
-  width: 60mm;
-  height: 1px;
-  background: rgba(255,255,255,0.35);
-  margin: 2mm auto;
+.banner-inner { position: relative; z-index: 1; }
+
+/* Logo + name row */
+.banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5mm;
+}
+.logo-wrap {
+  width: 17mm;
+  height: 17mm;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(202,138,4,0.75);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(0,0,0,0.35), inset 0 0 6px rgba(255,255,255,0.08);
+}
+.logo-img { width: 100%; height: 100%; object-fit: contain; padding: 1.5mm; background: #fff; }
+.logo-ph  { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+
+.school-em {
+  font-size: 23pt;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.4);
+  text-align: center;
+}
+
+/* Golden decorative divider */
+.banner-divider {
+  width: 55%;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(202,138,4,0.9), rgba(255,255,255,0.6), rgba(202,138,4,0.9), transparent);
+  margin: 3mm auto;
+}
+
+/* Report tag + exam on one line */
+.banner-sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5mm;
+  flex-wrap: wrap;
 }
 .report-tag {
-  font-size: 8pt;
-  font-weight: 600;
-  letter-spacing: 3px;
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
+  opacity: 0.92;
+}
+.banner-dot {
+  color: #ca8a04;
+  font-size: 9pt;
+  line-height: 1;
   opacity: 0.85;
 }
-.exam-chip {
-  display: inline-block;
-  margin-top: 2.5mm;
-  background: #fefce8;
-  color: #713f12;
-  font-size: 10pt;
+.exam-inline {
+  font-size: 11.5pt;
   font-weight: 800;
-  padding: 1.5mm 12mm;
+  color: #fef9c3;
+  letter-spacing: 0.5px;
+  border: 1.5px solid rgba(202,138,4,0.75);
+  padding: 0.6mm 4.5mm;
   border-radius: 999px;
-  border: 2px solid #ca8a04;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  letter-spacing: 0.3px;
+  background: rgba(254,249,195,0.1);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+  white-space: nowrap;
 }
 
 /* ── PTM Section ───────────────────────────────────────── */
@@ -262,7 +325,7 @@ html, body {
   border: 1px solid #86efac;
   padding: 1px 3px;
   text-align: center;
-  height: 6mm;
+  height: 7mm;
   vertical-align: middle;
 }
 .ptm-table thead .ptc {
@@ -332,9 +395,9 @@ table.marks th {
 table.marks th:first-child, table.marks th:nth-child(2) { text-align: left; }
 table.marks td {
   border: 1px solid #d1d5db;
-  padding: 2px 4px;
+  padding: 2.5px 4px;
   text-align: center;
-  height: 6mm;
+  height: 7mm;
   vertical-align: middle;
 }
 table.marks td.sn { width: 6%; color: #6b7280; font-size: 7.5pt; }
@@ -441,7 +504,7 @@ table.marks tr.total-row td {
   line-height: 1.15;
   text-transform: uppercase;
 }
-.habit-b { height: 7mm; background: #fff; }
+.habit-b { height: 8.5mm; background: #fff; }
 
 /* ── Signatures ────────────────────────────────────────── */
 .sigs {
@@ -453,7 +516,7 @@ table.marks tr.total-row td {
   padding-top: 2mm;
 }
 .sig { flex: 1; text-align: center; font-size: 8pt; padding: 0 3mm; }
-.sig-line { border-top: 1.5px solid #374151; margin-top: 10mm; padding-top: 1.5mm; font-weight: 700; color: #111; }
+.sig-line { border-top: 1.5px solid #374151; margin-top: 12mm; padding-top: 1.5mm; font-weight: 700; color: #111; }
 
 /* ── Utility ───────────────────────────────────────────── */
 .blank {
@@ -466,7 +529,14 @@ table.marks tr.total-row td {
 
 @media print {
   html, body { width: 210mm !important; margin: 0 !important; padding: 0 !important; }
-  .page { width: 190mm !important; }
+  .page {
+    width: 198mm !important;
+    min-height: 281mm !important;
+    margin: 0 auto !important;
+    padding-top: 0 !important;
+    transform: scale(1.04);
+    transform-origin: top center;
+  }
 }
 `;
 
@@ -483,10 +553,16 @@ table.marks tr.total-row td {
   <!-- Banner -->
   <header class="banner">
     <div class="banner-inner">
-      <div class="school-em">${esc(schoolName)}</div>
-      <div class="divider-line"></div>
-      <div class="report-tag">Student Progress Report</div>
-      <div class="exam-chip">${esc(examTitle)}</div>
+      <div class="banner-top">
+        <div class="logo-wrap">${schoolLogoHtml}</div>
+        <div class="school-em">${esc(schoolName)}</div>
+      </div>
+      <div class="banner-divider"></div>
+      <div class="banner-sub">
+        <span class="report-tag">Student Progress Report</span>
+        <span class="banner-dot">◆</span>
+        <span class="exam-inline">${esc(examTitle)}</span>
+      </div>
     </div>
   </header>
 

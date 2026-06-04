@@ -20,7 +20,8 @@ export type ProgressReportApi = {
 export function mapReportToPrintInput(
   report: ProgressReportApi,
   schoolName: string,
-  examTitle: string
+  examTitle: string,
+  schoolLogo?: string | null,
 ): ProgressReportPrintInput | null {
   const printExam = report.exams?.[0];
   if (!printExam) return null;
@@ -28,6 +29,7 @@ export function mapReportToPrintInput(
   return {
     schoolName,
     examTitle,
+    schoolLogo: schoolLogo ?? null,
     student: report.student,
     attendance: report.attendance,
     classStrength: report.classStrength,

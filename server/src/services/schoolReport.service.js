@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Student, Mark, SchoolAttendance, FeeVoucher, Exam, Subject } = require('../models');
+const { Student, Mark, SchoolAttendance, FeeVoucher, Exam, Subject, SchoolClass } = require('../models');
 
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : null;
@@ -178,6 +178,16 @@ const indexByStudentId = (rows, key = '_id') => {
   return map;
 };
 
+/** N/Play and N/Education report half of actual active enrollment as class strength. */
+const HALF_STRENGTH_CLASS_NAMES = new Set(['n/play', 'n/education']);
+
+const applyHalfStrengthIfNeeded = (count, classRef) => {
+  if (!count || !classRef) return count;
+  const name = (classRef.name || '').trim().toLowerCase();
+  if (HALF_STRENGTH_CLASS_NAMES.has(name)) return Math.round(count / 2);
+  return count;
+};
+
 /**
  * Generate complete progress report for a student.
  * Optionally filter by a specific examId.
@@ -194,9 +204,10 @@ const getStudentProgressReport = async (studentId, scope = {}, examId = null) =>
   if (!student) return null;
 
   const classId = student.classId?._id || student.classId;
-  const classStrength = classId
+  const classStrengthRaw = classId
     ? await Student.countDocuments({ ...tf, classId, status: 'active' })
     : 0;
+  const classStrength = applyHalfStrengthIfNeeded(classStrengthRaw, student.classId);
 
   // 2. Marks — for one exam or all exams
   const marksFilter = { ...tf, studentId };
@@ -290,8 +301,9 @@ const getClassProgressReportsBulk = async ({ classId, examId, sectionId, student
   }
 
   const ids = students.map((s) => s._id);
-  const [classStrength, allMarks, attendanceRows, feeRows] = await Promise.all([
+  const [classStrengthRaw, classDoc, allMarks, attendanceRows, feeRows] = await Promise.all([
     Student.countDocuments({ ...tf, classId: classOid, status: 'active' }),
+    SchoolClass.findOne({ _id: classOid, ...tf }).select('name').lean(),
     Mark.find({ ...tf, examId: examOid, studentId: { $in: ids } })
       .populate('subjectId', 'name code')
       .populate('examId', 'name type startDate totalMarks passingMarks')
@@ -321,6 +333,8 @@ const getClassProgressReportsBulk = async ({ classId, examId, sectionId, student
       },
     ]),
   ]);
+
+  const classStrength = applyHalfStrengthIfNeeded(classStrengthRaw, classDoc);
 
   const marksByStudent = {};
   allMarks.forEach((m) => {
