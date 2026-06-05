@@ -683,6 +683,7 @@ table.marks tr.total-row td {
       <div class="rem-sigs">
         <div class="rem-sig">Teacher's Sig.</div>
         <div class="rem-sig">Principal's Sig.</div>
+        <div class="rem-sig">Parent's Sig.</div>
       </div>
     </div>
   </div>
