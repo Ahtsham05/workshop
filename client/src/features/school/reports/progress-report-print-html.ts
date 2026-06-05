@@ -556,12 +556,14 @@ table.marks tr.total-row td {
   html, body { width: 210mm !important; margin: 0 !important; padding: 0 !important; }
   .page {
     width: 198mm !important;
-    min-height: 281mm !important;
+    min-height: auto !important;
+    justify-content: flex-start !important;
     margin: 0 auto !important;
     padding-top: 0 !important;
     transform: scale(1.04);
     transform-origin: top center;
   }
+  .sigs { display: none !important; }
 }
 `;
 
