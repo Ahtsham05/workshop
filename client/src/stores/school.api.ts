@@ -615,7 +615,7 @@ export const schoolApi = createApi({
       query: (id: string) => ({ url: `/notifications/${id}/read`, method: 'POST' }),
       invalidatesTags: ['Notification', 'NotificationCount'],
     }),
-    markAllNotificationsRead: builder.mutation({
+    markAllNotificationsRead: builder.mutation<{ ok: boolean; marked?: number }, void>({
       query: () => ({ url: '/notifications/read-all', method: 'POST' }),
       invalidatesTags: ['Notification', 'NotificationCount'],
     }),
@@ -703,7 +703,7 @@ export const schoolApi = createApi({
 
     // Daily Diary (admin / teacher management)
     getDiaries: builder.query({
-      query: (params: { classId?: string; sectionId?: string; dateFrom?: string; dateTo?: string; limit?: number; page?: number }) => ({
+      query: (params: { classId?: string; sectionId?: string; dateFrom?: string; dateTo?: string; limit?: number; page?: number; sortBy?: string }) => ({
         url: '/diaries',
         params,
       }),
