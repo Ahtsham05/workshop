@@ -15,6 +15,7 @@ import { useLanguage } from '@/context/language-context'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { GitBranch } from 'lucide-react'
+import { NotificationBell } from '@/components/notification-bell'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -231,6 +232,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <div className="px-2 pb-1 flex items-center gap-2 text-xs text-sidebar-foreground/75 border border-sidebar-border rounded-md bg-sidebar-accent/20 p-2 mx-1">
             <GitBranch className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/70" />
             <span className="truncate font-medium">{activeBranchName}</span>
+            {schoolRole === 'teacher' && <div className="ml-auto"><NotificationBell /></div>}
+          </div>
+        ) : schoolRole === 'teacher' ? (
+          <div className="px-2 pb-1 flex items-center justify-end">
+            <NotificationBell />
           </div>
         ) : null}
       </SidebarHeader>

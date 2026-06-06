@@ -91,10 +91,12 @@ import { Route as AuthenticatedSchoolSubjectsIndexImport } from './routes/_authe
 import { Route as AuthenticatedSchoolStudentsIndexImport } from './routes/_authenticated/school/students/index'
 import { Route as AuthenticatedSchoolSectionsIndexImport } from './routes/_authenticated/school/sections/index'
 import { Route as AuthenticatedSchoolReportsIndexImport } from './routes/_authenticated/school/reports/index'
+import { Route as AuthenticatedSchoolNotificationsIndexImport } from './routes/_authenticated/school/notifications/index'
 import { Route as AuthenticatedSchoolMarksIndexImport } from './routes/_authenticated/school/marks/index'
 import { Route as AuthenticatedSchoolIdCardsIndexImport } from './routes/_authenticated/school/id-cards/index'
 import { Route as AuthenticatedSchoolFeesIndexImport } from './routes/_authenticated/school/fees/index'
 import { Route as AuthenticatedSchoolExamsIndexImport } from './routes/_authenticated/school/exams/index'
+import { Route as AuthenticatedSchoolDiaryIndexImport } from './routes/_authenticated/school/diary/index'
 import { Route as AuthenticatedSchoolClassesIndexImport } from './routes/_authenticated/school/classes/index'
 import { Route as AuthenticatedSchoolClassOverviewIndexImport } from './routes/_authenticated/school/class-overview/index'
 import { Route as AuthenticatedSchoolAttendanceIndexImport } from './routes/_authenticated/school/attendance/index'
@@ -122,6 +124,7 @@ import { Route as AuthenticatedSchoolFeesVouchersIndexImport } from './routes/_a
 import { Route as AuthenticatedSchoolFeesTransactionsIndexImport } from './routes/_authenticated/school/fees/transactions/index'
 import { Route as AuthenticatedSchoolFeesStructuresIndexImport } from './routes/_authenticated/school/fees/structures/index'
 import { Route as AuthenticatedSchoolFeesReportsIndexImport } from './routes/_authenticated/school/fees/reports/index'
+import { Route as AuthenticatedSchoolFeesPaymentApprovalsIndexImport } from './routes/_authenticated/school/fees/payment-approvals/index'
 import { Route as AuthenticatedSchoolFeesExpensesIndexImport } from './routes/_authenticated/school/fees/expenses/index'
 import { Route as AuthenticatedSchoolFeesDashboardIndexImport } from './routes/_authenticated/school/fees/dashboard/index'
 import { Route as AuthenticatedSchoolFeesCategoriesIndexImport } from './routes/_authenticated/school/fees/categories/index'
@@ -664,6 +667,13 @@ const AuthenticatedSchoolReportsIndexRoute =
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
+const AuthenticatedSchoolNotificationsIndexRoute =
+  AuthenticatedSchoolNotificationsIndexImport.update({
+    id: '/notifications/',
+    path: '/notifications/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
 const AuthenticatedSchoolMarksIndexRoute =
   AuthenticatedSchoolMarksIndexImport.update({
     id: '/marks/',
@@ -689,6 +699,13 @@ const AuthenticatedSchoolExamsIndexRoute =
   AuthenticatedSchoolExamsIndexImport.update({
     id: '/exams/',
     path: '/exams/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolDiaryIndexRoute =
+  AuthenticatedSchoolDiaryIndexImport.update({
+    id: '/diary/',
+    path: '/diary/',
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
@@ -880,6 +897,13 @@ const AuthenticatedSchoolFeesReportsIndexRoute =
   AuthenticatedSchoolFeesReportsIndexImport.update({
     id: '/fees/reports/',
     path: '/fees/reports/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolFeesPaymentApprovalsIndexRoute =
+  AuthenticatedSchoolFeesPaymentApprovalsIndexImport.update({
+    id: '/fees/payment-approvals/',
+    path: '/fees/payment-approvals/',
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
@@ -1552,6 +1576,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSchoolClassesIndexImport
       parentRoute: typeof AuthenticatedSchoolImport
     }
+    '/_authenticated/school/diary/': {
+      id: '/_authenticated/school/diary/'
+      path: '/diary'
+      fullPath: '/school/diary'
+      preLoaderRoute: typeof AuthenticatedSchoolDiaryIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/school/exams/': {
       id: '/_authenticated/school/exams/'
       path: '/exams'
@@ -1578,6 +1609,13 @@ declare module '@tanstack/react-router' {
       path: '/marks'
       fullPath: '/school/marks'
       preLoaderRoute: typeof AuthenticatedSchoolMarksIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
+    '/_authenticated/school/notifications/': {
+      id: '/_authenticated/school/notifications/'
+      path: '/notifications'
+      fullPath: '/school/notifications'
+      preLoaderRoute: typeof AuthenticatedSchoolNotificationsIndexImport
       parentRoute: typeof AuthenticatedSchoolImport
     }
     '/_authenticated/school/reports/': {
@@ -1699,6 +1737,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSchoolFeesExpensesIndexImport
       parentRoute: typeof AuthenticatedSchoolImport
     }
+    '/_authenticated/school/fees/payment-approvals/': {
+      id: '/_authenticated/school/fees/payment-approvals/'
+      path: '/fees/payment-approvals'
+      fullPath: '/school/fees/payment-approvals'
+      preLoaderRoute: typeof AuthenticatedSchoolFeesPaymentApprovalsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/school/fees/reports/': {
       id: '/_authenticated/school/fees/reports/'
       path: '/fees/reports'
@@ -1794,10 +1839,12 @@ interface AuthenticatedSchoolRouteChildren {
   AuthenticatedSchoolAttendanceIndexRoute: typeof AuthenticatedSchoolAttendanceIndexRoute
   AuthenticatedSchoolClassOverviewIndexRoute: typeof AuthenticatedSchoolClassOverviewIndexRoute
   AuthenticatedSchoolClassesIndexRoute: typeof AuthenticatedSchoolClassesIndexRoute
+  AuthenticatedSchoolDiaryIndexRoute: typeof AuthenticatedSchoolDiaryIndexRoute
   AuthenticatedSchoolExamsIndexRoute: typeof AuthenticatedSchoolExamsIndexRoute
   AuthenticatedSchoolFeesIndexRoute: typeof AuthenticatedSchoolFeesIndexRoute
   AuthenticatedSchoolIdCardsIndexRoute: typeof AuthenticatedSchoolIdCardsIndexRoute
   AuthenticatedSchoolMarksIndexRoute: typeof AuthenticatedSchoolMarksIndexRoute
+  AuthenticatedSchoolNotificationsIndexRoute: typeof AuthenticatedSchoolNotificationsIndexRoute
   AuthenticatedSchoolReportsIndexRoute: typeof AuthenticatedSchoolReportsIndexRoute
   AuthenticatedSchoolSectionsIndexRoute: typeof AuthenticatedSchoolSectionsIndexRoute
   AuthenticatedSchoolStudentsIndexRoute: typeof AuthenticatedSchoolStudentsIndexRoute
@@ -1814,6 +1861,7 @@ interface AuthenticatedSchoolRouteChildren {
   AuthenticatedSchoolFeesCategoriesIndexRoute: typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   AuthenticatedSchoolFeesDashboardIndexRoute: typeof AuthenticatedSchoolFeesDashboardIndexRoute
   AuthenticatedSchoolFeesExpensesIndexRoute: typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  AuthenticatedSchoolFeesPaymentApprovalsIndexRoute: typeof AuthenticatedSchoolFeesPaymentApprovalsIndexRoute
   AuthenticatedSchoolFeesReportsIndexRoute: typeof AuthenticatedSchoolFeesReportsIndexRoute
   AuthenticatedSchoolFeesStructuresIndexRoute: typeof AuthenticatedSchoolFeesStructuresIndexRoute
   AuthenticatedSchoolFeesTransactionsIndexRoute: typeof AuthenticatedSchoolFeesTransactionsIndexRoute
@@ -1845,10 +1893,13 @@ const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
   AuthenticatedSchoolClassOverviewIndexRoute:
     AuthenticatedSchoolClassOverviewIndexRoute,
   AuthenticatedSchoolClassesIndexRoute: AuthenticatedSchoolClassesIndexRoute,
+  AuthenticatedSchoolDiaryIndexRoute: AuthenticatedSchoolDiaryIndexRoute,
   AuthenticatedSchoolExamsIndexRoute: AuthenticatedSchoolExamsIndexRoute,
   AuthenticatedSchoolFeesIndexRoute: AuthenticatedSchoolFeesIndexRoute,
   AuthenticatedSchoolIdCardsIndexRoute: AuthenticatedSchoolIdCardsIndexRoute,
   AuthenticatedSchoolMarksIndexRoute: AuthenticatedSchoolMarksIndexRoute,
+  AuthenticatedSchoolNotificationsIndexRoute:
+    AuthenticatedSchoolNotificationsIndexRoute,
   AuthenticatedSchoolReportsIndexRoute: AuthenticatedSchoolReportsIndexRoute,
   AuthenticatedSchoolSectionsIndexRoute: AuthenticatedSchoolSectionsIndexRoute,
   AuthenticatedSchoolStudentsIndexRoute: AuthenticatedSchoolStudentsIndexRoute,
@@ -1874,6 +1925,8 @@ const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
     AuthenticatedSchoolFeesDashboardIndexRoute,
   AuthenticatedSchoolFeesExpensesIndexRoute:
     AuthenticatedSchoolFeesExpensesIndexRoute,
+  AuthenticatedSchoolFeesPaymentApprovalsIndexRoute:
+    AuthenticatedSchoolFeesPaymentApprovalsIndexRoute,
   AuthenticatedSchoolFeesReportsIndexRoute:
     AuthenticatedSchoolFeesReportsIndexRoute,
   AuthenticatedSchoolFeesStructuresIndexRoute:
@@ -2124,10 +2177,12 @@ export interface FileRoutesByFullPath {
   '/school/attendance': typeof AuthenticatedSchoolAttendanceIndexRoute
   '/school/class-overview': typeof AuthenticatedSchoolClassOverviewIndexRoute
   '/school/classes': typeof AuthenticatedSchoolClassesIndexRoute
+  '/school/diary': typeof AuthenticatedSchoolDiaryIndexRoute
   '/school/exams': typeof AuthenticatedSchoolExamsIndexRoute
   '/school/fees': typeof AuthenticatedSchoolFeesIndexRoute
   '/school/id-cards': typeof AuthenticatedSchoolIdCardsIndexRoute
   '/school/marks': typeof AuthenticatedSchoolMarksIndexRoute
+  '/school/notifications': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
   '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
   '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
@@ -2145,6 +2200,7 @@ export interface FileRoutesByFullPath {
   '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/school/fees/payment-approvals': typeof AuthenticatedSchoolFeesPaymentApprovalsIndexRoute
   '/school/fees/reports': typeof AuthenticatedSchoolFeesReportsIndexRoute
   '/school/fees/structures': typeof AuthenticatedSchoolFeesStructuresIndexRoute
   '/school/fees/transactions': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
@@ -2239,10 +2295,12 @@ export interface FileRoutesByTo {
   '/school/attendance': typeof AuthenticatedSchoolAttendanceIndexRoute
   '/school/class-overview': typeof AuthenticatedSchoolClassOverviewIndexRoute
   '/school/classes': typeof AuthenticatedSchoolClassesIndexRoute
+  '/school/diary': typeof AuthenticatedSchoolDiaryIndexRoute
   '/school/exams': typeof AuthenticatedSchoolExamsIndexRoute
   '/school/fees': typeof AuthenticatedSchoolFeesIndexRoute
   '/school/id-cards': typeof AuthenticatedSchoolIdCardsIndexRoute
   '/school/marks': typeof AuthenticatedSchoolMarksIndexRoute
+  '/school/notifications': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
   '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
   '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
@@ -2260,6 +2318,7 @@ export interface FileRoutesByTo {
   '/school/fees/categories': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/school/fees/dashboard': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/school/fees/expenses': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/school/fees/payment-approvals': typeof AuthenticatedSchoolFeesPaymentApprovalsIndexRoute
   '/school/fees/reports': typeof AuthenticatedSchoolFeesReportsIndexRoute
   '/school/fees/structures': typeof AuthenticatedSchoolFeesStructuresIndexRoute
   '/school/fees/transactions': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
@@ -2359,10 +2418,12 @@ export interface FileRoutesById {
   '/_authenticated/school/attendance/': typeof AuthenticatedSchoolAttendanceIndexRoute
   '/_authenticated/school/class-overview/': typeof AuthenticatedSchoolClassOverviewIndexRoute
   '/_authenticated/school/classes/': typeof AuthenticatedSchoolClassesIndexRoute
+  '/_authenticated/school/diary/': typeof AuthenticatedSchoolDiaryIndexRoute
   '/_authenticated/school/exams/': typeof AuthenticatedSchoolExamsIndexRoute
   '/_authenticated/school/fees/': typeof AuthenticatedSchoolFeesIndexRoute
   '/_authenticated/school/id-cards/': typeof AuthenticatedSchoolIdCardsIndexRoute
   '/_authenticated/school/marks/': typeof AuthenticatedSchoolMarksIndexRoute
+  '/_authenticated/school/notifications/': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/_authenticated/school/reports/': typeof AuthenticatedSchoolReportsIndexRoute
   '/_authenticated/school/sections/': typeof AuthenticatedSchoolSectionsIndexRoute
   '/_authenticated/school/students/': typeof AuthenticatedSchoolStudentsIndexRoute
@@ -2380,6 +2441,7 @@ export interface FileRoutesById {
   '/_authenticated/school/fees/categories/': typeof AuthenticatedSchoolFeesCategoriesIndexRoute
   '/_authenticated/school/fees/dashboard/': typeof AuthenticatedSchoolFeesDashboardIndexRoute
   '/_authenticated/school/fees/expenses/': typeof AuthenticatedSchoolFeesExpensesIndexRoute
+  '/_authenticated/school/fees/payment-approvals/': typeof AuthenticatedSchoolFeesPaymentApprovalsIndexRoute
   '/_authenticated/school/fees/reports/': typeof AuthenticatedSchoolFeesReportsIndexRoute
   '/_authenticated/school/fees/structures/': typeof AuthenticatedSchoolFeesStructuresIndexRoute
   '/_authenticated/school/fees/transactions/': typeof AuthenticatedSchoolFeesTransactionsIndexRoute
@@ -2480,10 +2542,12 @@ export interface FileRouteTypes {
     | '/school/attendance'
     | '/school/class-overview'
     | '/school/classes'
+    | '/school/diary'
     | '/school/exams'
     | '/school/fees'
     | '/school/id-cards'
     | '/school/marks'
+    | '/school/notifications'
     | '/school/reports'
     | '/school/sections'
     | '/school/students'
@@ -2501,6 +2565,7 @@ export interface FileRouteTypes {
     | '/school/fees/categories'
     | '/school/fees/dashboard'
     | '/school/fees/expenses'
+    | '/school/fees/payment-approvals'
     | '/school/fees/reports'
     | '/school/fees/structures'
     | '/school/fees/transactions'
@@ -2594,10 +2659,12 @@ export interface FileRouteTypes {
     | '/school/attendance'
     | '/school/class-overview'
     | '/school/classes'
+    | '/school/diary'
     | '/school/exams'
     | '/school/fees'
     | '/school/id-cards'
     | '/school/marks'
+    | '/school/notifications'
     | '/school/reports'
     | '/school/sections'
     | '/school/students'
@@ -2615,6 +2682,7 @@ export interface FileRouteTypes {
     | '/school/fees/categories'
     | '/school/fees/dashboard'
     | '/school/fees/expenses'
+    | '/school/fees/payment-approvals'
     | '/school/fees/reports'
     | '/school/fees/structures'
     | '/school/fees/transactions'
@@ -2712,10 +2780,12 @@ export interface FileRouteTypes {
     | '/_authenticated/school/attendance/'
     | '/_authenticated/school/class-overview/'
     | '/_authenticated/school/classes/'
+    | '/_authenticated/school/diary/'
     | '/_authenticated/school/exams/'
     | '/_authenticated/school/fees/'
     | '/_authenticated/school/id-cards/'
     | '/_authenticated/school/marks/'
+    | '/_authenticated/school/notifications/'
     | '/_authenticated/school/reports/'
     | '/_authenticated/school/sections/'
     | '/_authenticated/school/students/'
@@ -2733,6 +2803,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/fees/categories/'
     | '/_authenticated/school/fees/dashboard/'
     | '/_authenticated/school/fees/expenses/'
+    | '/_authenticated/school/fees/payment-approvals/'
     | '/_authenticated/school/fees/reports/'
     | '/_authenticated/school/fees/structures/'
     | '/_authenticated/school/fees/transactions/'
@@ -2935,10 +3006,12 @@ export const routeTree = rootRoute
         "/_authenticated/school/attendance/",
         "/_authenticated/school/class-overview/",
         "/_authenticated/school/classes/",
+        "/_authenticated/school/diary/",
         "/_authenticated/school/exams/",
         "/_authenticated/school/fees/",
         "/_authenticated/school/id-cards/",
         "/_authenticated/school/marks/",
+        "/_authenticated/school/notifications/",
         "/_authenticated/school/reports/",
         "/_authenticated/school/sections/",
         "/_authenticated/school/students/",
@@ -2955,6 +3028,7 @@ export const routeTree = rootRoute
         "/_authenticated/school/fees/categories/",
         "/_authenticated/school/fees/dashboard/",
         "/_authenticated/school/fees/expenses/",
+        "/_authenticated/school/fees/payment-approvals/",
         "/_authenticated/school/fees/reports/",
         "/_authenticated/school/fees/structures/",
         "/_authenticated/school/fees/transactions/",
@@ -3258,6 +3332,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/school/classes/index.tsx",
       "parent": "/_authenticated/school"
     },
+    "/_authenticated/school/diary/": {
+      "filePath": "_authenticated/school/diary/index.tsx",
+      "parent": "/_authenticated/school"
+    },
     "/_authenticated/school/exams/": {
       "filePath": "_authenticated/school/exams/index.tsx",
       "parent": "/_authenticated/school"
@@ -3272,6 +3350,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/school/marks/": {
       "filePath": "_authenticated/school/marks/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/notifications/": {
+      "filePath": "_authenticated/school/notifications/index.tsx",
       "parent": "/_authenticated/school"
     },
     "/_authenticated/school/reports/": {
@@ -3340,6 +3422,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/school/fees/expenses/": {
       "filePath": "_authenticated/school/fees/expenses/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/fees/payment-approvals/": {
+      "filePath": "_authenticated/school/fees/payment-approvals/index.tsx",
       "parent": "/_authenticated/school"
     },
     "/_authenticated/school/fees/reports/": {

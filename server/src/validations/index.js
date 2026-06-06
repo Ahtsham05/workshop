@@ -26,6 +26,8 @@ module.exports.schoolFeeValidation = require('./schoolFee.validation');
 module.exports.timetableValidation = require('./timetable.validation');
 module.exports.timeSlotValidation = require('./timeSlot.validation');
 module.exports.visitorValidation = require('./visitor.validation');
+module.exports.diaryValidation = require('./diary.validation');
+module.exports.notificationValidation = require('./notification.validation');
 
 // HR Validations
 module.exports.employeeValidation = require('./employee.validation');

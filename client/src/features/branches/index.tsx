@@ -1,14 +1,14 @@
 import { ChangeEvent, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation, Branch } from '@/stores/branch.api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Edit, Trash2, MapPin, Lock, ArrowUpRight } from 'lucide-react'
+import { Plus, Edit, Trash2, MapPin, Lock, ArrowUpRight, Landmark } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Dialog,
@@ -62,6 +62,17 @@ const branchDialogSchema = z.object({
     city: z.string().optional(),
     country: z.string().optional(),
   }),
+  bankAccounts: z
+    .array(
+      z.object({
+        bankName: z.string().optional(),
+        accountTitle: z.string().optional(),
+        accountNumber: z.string().optional(),
+        iban: z.string().optional(),
+        instructions: z.string().optional(),
+      }),
+    )
+    .optional(),
 })
 
 type BranchDialogValues = z.infer<typeof branchDialogSchema>
@@ -82,7 +93,13 @@ export default function BranchesPage() {
       phone: '',
       email: '',
       invoiceNote: '',
+      bankAccounts: [],
     },
+  })
+
+  const { fields: bankFields, append: appendBank, remove: removeBank } = useFieldArray({
+    control: branchForm.control,
+    name: 'bankAccounts',
   })
 
   const branchSessionKey = dialogOpen ? (selectedBranch?.id ?? 'new') : null
@@ -127,6 +144,13 @@ export default function BranchesPage() {
         phone: selectedBranch.phone || '',
         email: selectedBranch.email || '',
         invoiceNote: selectedBranch.invoiceNote || '',
+        bankAccounts: (selectedBranch.bankAccounts || []).map((b) => ({
+          bankName: b.bankName || '',
+          accountTitle: b.accountTitle || '',
+          accountNumber: b.accountNumber || '',
+          iban: b.iban || '',
+          instructions: b.instructions || '',
+        })),
       })
     } else {
       branchForm.reset({
@@ -136,6 +160,7 @@ export default function BranchesPage() {
         phone: '',
         email: '',
         invoiceNote: '',
+        bankAccounts: [],
       })
     }
 
@@ -595,6 +620,118 @@ export default function BranchesPage() {
                   </FormItem>
                 )}
               />
+
+              {/* Fee collection bank accounts */}
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Fee Collection Bank Accounts</p>
+                      <p className="text-xs text-muted-foreground">
+                        Shown to parents/students in the portal when they pay fees online.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      appendBank({ bankName: '', accountTitle: '', accountNumber: '', iban: '', instructions: '' })
+                    }
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add Account
+                  </Button>
+                </div>
+
+                {bankFields.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No bank accounts added yet. Add one so parents can transfer fees.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {bankFields.map((bankField, index) => (
+                      <div key={bankField.id} className="rounded-lg border p-3 space-y-3 relative bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-muted-foreground">Account #{index + 1}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            onClick={() => removeBank(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField
+                            control={branchForm.control}
+                            name={`bankAccounts.${index}.bankName`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Bank Name</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="e.g. Meezan Bank" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={branchForm.control}
+                            name={`bankAccounts.${index}.accountTitle`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Account Title</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Account holder name" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={branchForm.control}
+                            name={`bankAccounts.${index}.accountNumber`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Account Number</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Account number" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={branchForm.control}
+                            name={`bankAccounts.${index}.iban`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">IBAN</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="PK00XXXX..." {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <FormField
+                          control={branchForm.control}
+                          name={`bankAccounts.${index}.instructions`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Instructions (optional)</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g. Add roll number in transfer note" {...field} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </form>
           </Form>
           <DialogFooter>

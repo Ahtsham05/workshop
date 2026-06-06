@@ -81,6 +81,16 @@ function maxMonthYearInList(list: { month: string; year: number }[]): { month: s
   return list.reduce((best, x) => (compareMonthYear(x, best) > 0 ? x : best));
 }
 
+/** Label a fee line item with its billing month */
+function feeItemLabel(name: string, month?: string, year?: number | string): string {
+  const base = String(name || 'Fee').trim();
+  const period = month && year ? `${month} ${year}` : month || '';
+  if (!period) return base;
+  if (base.toLowerCase().includes(String(month || '').toLowerCase())) return base;
+  if (/monthly|tuition|transport|fee/i.test(base)) return `${base} — ${period}`;
+  return `${base} (${period})`;
+}
+
 /** Best guess monthly fee for projecting advance receipts */
 function estimateMonthlyFee(voucher: any, studentSummary: any, studentRow?: any): number {
   const fromStructure = studentRow?.feeStructure?.monthlyFee;
@@ -214,9 +224,13 @@ export default function FeeVouchers() {
   });
 
   const { data: classesData } = useGetSchoolClassesQuery({ limit: 100 });
-  const { data: structuresData } = useGetFeeStructuresQuery(genForm.classId ? { classId: genForm.classId } : {});
+  const genClassIsAll = genForm.classId === '__all__';
+  const { data: structuresData } = useGetFeeStructuresQuery(
+    genForm.classId && !genClassIsAll ? { classId: genForm.classId } : {},
+    { skip: genClassIsAll },
+  );
   const structures = (structuresData?.results || []).filter((s: any) =>
-    !genForm.classId || (s.classId?.id || s.classId) === genForm.classId
+    !genForm.classId || genClassIsAll || (s.classId?.id || s.classId) === genForm.classId
   );
 
   const voucherParams: any = {
@@ -439,16 +453,25 @@ export default function FeeVouchers() {
   };
 
   const handleGenerate = async () => {
+    const isAllClasses = genForm.classId === '__all__';
     if (!genForm.classId) return toast.error('Select a class');
-    if (genForm.feeSource !== 'admission_form' && !genForm.feeStructureId) return toast.error('Select a fee structure');
+    // For a single class with fee_structure/mixed a structure must be picked.
+    // For all-classes mode each class's own active structure is used automatically.
+    if (!isAllClasses && genForm.feeSource !== 'admission_form' && !genForm.feeStructureId) {
+      return toast.error('Select a fee structure');
+    }
     try {
       const payload: any = {
-        classId: genForm.classId,
         month: genForm.month,
         year: genForm.year,
         feeSource: genForm.feeSource,
       };
-      if (genForm.feeStructureId) payload.feeStructureId = genForm.feeStructureId;
+      if (isAllClasses) {
+        payload.allClasses = true;
+      } else {
+        payload.classId = genForm.classId;
+        if (genForm.feeStructureId) payload.feeStructureId = genForm.feeStructureId;
+      }
       const result = await bulkGenerate(payload).unwrap();
       const skipped = result.skipped ? ` · ${result.skipped} skipped (no fees)` : '';
       const dups = result.skippedDuplicates ? ` · ${result.skippedDuplicates} already had this month` : '';
@@ -1037,8 +1060,18 @@ export default function FeeVouchers() {
               <Label>Class <span className="text-destructive">*</span></Label>
               <Select value={genForm.classId} onValueChange={(v) => setGenForm({ ...genForm, classId: v, feeStructureId: '' })}>
                 <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                <SelectContent>{classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="__all__">
+                    <span className="font-medium">All Classes</span>
+                  </SelectItem>
+                  {classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
               </Select>
+              {genForm.classId === '__all__' && (
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-1.5">
+                  Vouchers will be generated for every active student across all classes in one go. Students who already have a voucher for this month are skipped automatically.
+                </p>
+              )}
             </div>
 
             {/* Fee source */}
@@ -1082,8 +1115,15 @@ export default function FeeVouchers() {
               )}
             </div>
 
-            {/* Fee structure — shown only for fee_structure or mixed */}
-            {genForm.feeSource !== 'admission_form' && (
+            {/* All-classes + fee structure: each class's own structure is used */}
+            {genForm.feeSource !== 'admission_form' && genForm.classId === '__all__' && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+                Each class's own active fee structure will be applied automatically. Classes without a fee structure are skipped.
+              </p>
+            )}
+
+            {/* Fee structure — shown only for a single class with fee_structure or mixed */}
+            {genForm.feeSource !== 'admission_form' && genForm.classId !== '__all__' && (
               <div className="space-y-1.5">
                 <Label>Fee Structure <span className="text-destructive">*</span></Label>
                 <Select
@@ -1122,7 +1162,7 @@ export default function FeeVouchers() {
             <Button variant="outline" onClick={() => setGenerateDialog(false)}>Cancel</Button>
             <Button
               onClick={handleGenerate}
-              disabled={generating || !genForm.classId || (genForm.feeSource !== 'admission_form' && !genForm.feeStructureId)}
+              disabled={generating || !genForm.classId || (genForm.classId !== '__all__' && genForm.feeSource !== 'admission_form' && !genForm.feeStructureId)}
             >
               {generating ? <><RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />Generating…</> : <><Zap className="mr-2 h-3.5 w-3.5" />Generate</>}
             </Button>
@@ -1974,13 +2014,13 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const displayLineItems: { name: string; amount: number }[] = v.printLineItems?.length
     ? v.printLineItems
     : [
-        ...feeItems.map((fi: any) => ({ name: fi.name, amount: fi.amount || 0 })),
+        ...feeItems.map((fi: any) => ({ name: feeItemLabel(fi.name, v.month, v.year), amount: fi.amount || 0 })),
         ...otherPendingMonths.map((p: any) => ({
           name: p.feeItems?.length === 1 && p.feeItems[0]?.name
-            ? p.feeItems[0].name
+            ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
             : p.voucherType === 'exam'
-              ? `Exam Fee (${p.month || 'Exam'})`
-              : `Pending Fee (${p.month} ${p.year})`,
+              ? feeItemLabel('Exam Fee', p.month, p.year)
+              : feeItemLabel('Pending Fee', p.month, p.year),
           amount: Number(p.remaining || 0),
         })),
       ];
@@ -2011,6 +2051,8 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       : '';
 
   const studentName = `${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''}`.trim();
+  const studentUserId = v.studentId?.studentUserId || '—';
+  const rollNumber = v.studentId?.rollNumber || '—';
   const lineItemsTotal = displayLineItems.reduce((s, fi) => s + (fi.amount || 0), 0);
   const totalAmount = Math.max(0, lineItemsTotal - discount + fine);
 
@@ -2030,15 +2072,21 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     </tr>
     <tr>
       <td class="lbl">Name</td>
-      <td class="val" colspan="4">${studentName || '—'}</td>
-    </tr>
-    ${fatherName !== '—' ? `<tr>
+      <td class="val">${studentName || '—'}</td>
+      <td class="sep"></td>
       <td class="lbl">Father Name</td>
-      <td class="val" colspan="4">${fatherName}</td>
-    </tr>` : ''}
+      <td class="val">${fatherName !== '—' ? fatherName : '—'}</td>
+    </tr>
     <tr>
       <td class="lbl">Adm #</td>
       <td class="val">${v.studentId?.admissionNumber || '—'}</td>
+      <td class="sep"></td>
+      <td class="lbl">Roll No</td>
+      <td class="val">${rollNumber}</td>
+    </tr>
+    <tr>
+      <td class="lbl">User ID</td>
+      <td class="val">${studentUserId}</td>
       <td class="sep"></td>
       <td class="lbl">Class</td>
       <td class="val">${v.classId?.name || '—'}${v.sectionId?.name ? ' / ' + v.sectionId.name : ''}</td>

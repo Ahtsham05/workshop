@@ -17,6 +17,9 @@ const getUsers = catchAsync(async (req, res) => {
   if (req.user.organizationId) {
     filter.organizationId = req.user.organizationId;
   }
+  // Portal-only logins (students & parents) are not "team members" — hide them
+  // from the Users Management list.
+  filter.schoolRole = { $nin: ['student', 'parent'] };
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await userService.queryUsers(filter, options);
   res.send(result);

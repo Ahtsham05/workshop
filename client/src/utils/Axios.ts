@@ -102,6 +102,19 @@ Axios.interceptors.request.use(
   (error: AxiosError) => Promise.reject(error)
 );
 
+// Auth endpoints that may legitimately return 401 — never trigger token refresh
+const AUTH_NO_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/logout',
+  '/auth/refresh-tokens',
+  '/auth/forgotpassword',
+  '/auth/reset-password',
+];
+
+const isAuthNoRefreshRequest = (url?: string): boolean =>
+  !!url && AUTH_NO_REFRESH_PATHS.some((path) => url.includes(path));
+
 // Axios response interceptor to handle 401 errors and refresh tokens
 Axios.interceptors.response.use(
   (response: AxiosResponse) => response,
@@ -110,8 +123,9 @@ Axios.interceptors.response.use(
 
     // Never retry the refresh endpoint itself — prevents infinite loop
     const isRefreshUrl = originRequest?.url?.includes('/auth/login-refresh');
+    const skipRefresh = isRefreshUrl || isAuthNoRefreshRequest(originRequest?.url);
 
-    if (originRequest && error.response?.status === 401 && !originRequest._retry && !isRefreshUrl) {
+    if (originRequest && error.response?.status === 401 && !originRequest._retry && !skipRefresh) {
       originRequest._retry = true;
 
       if (isRefreshing) {

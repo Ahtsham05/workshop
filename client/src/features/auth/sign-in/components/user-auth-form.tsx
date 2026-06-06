@@ -29,8 +29,11 @@ type UserAuthFormProps = HTMLAttributes<HTMLFormElement>
 const formSchema = z.object({
   email: z
     .string()
-    .min(1, { message: 'Please enter your email' })
-    .email({ message: 'Invalid email address' }),
+    .min(1, { message: 'Please enter your email or user ID' })
+    .refine(
+      (val) => z.string().email().safeParse(val).success || /^\d+$/.test(val),
+      { message: 'Enter a valid email or numeric user ID' },
+    ),
   password: z
     .string()
     .min(1, {
@@ -57,57 +60,57 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
   
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)
-    
+
     try {
-      const action = await dispatch(signinWithEmailPassword(data))
-      
-      if (action.payload?.user) {
-        toast.success('Login successful!')
-        
-        // Store authentication data
-        localStorage.setItem("accessToken", action.payload?.tokens?.access?.token)
-        localStorage.setItem("refreshToken", action.payload?.tokens?.refresh?.token)
-        localStorage.setItem("user", JSON.stringify(action.payload?.user))
-        // Always clear stale branch from previous session so the new user's
-        // requests never carry a branch ID that belongs to another account.
-        localStorage.removeItem("activeBranchId")
-        localStorage.removeItem("activeBranchName")
-        
-        // Redirect to onboarding if not completed
-        if (!action.payload?.user?.onboardingComplete) {
-          navigate({ to: '/onboarding', replace: true })
-          return
-        }
+      const result = await dispatch(signinWithEmailPassword(data)).unwrap()
 
-        // School teachers go directly to their portal — never to the admin area
-        const loggedInUser = action.payload?.user as AppUser
-        const isSchoolTeacher =
-          loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
-        if (isSchoolTeacher) {
-          navigate({ to: '/school/portals/teacher', replace: true })
-          return
-        }
+      toast.success('Login successful!')
 
-        if (loggedInUser?.schoolRole === 'parent') {
-          navigate({ to: '/school/portals/parent', replace: true })
-          return
-        }
+      // Store authentication data
+      localStorage.setItem('accessToken', result?.tokens?.access?.token)
+      localStorage.setItem('refreshToken', result?.tokens?.refresh?.token)
+      localStorage.setItem('user', JSON.stringify(result?.user))
+      // Always clear stale branch from previous session so the new user's
+      // requests never carry a branch ID that belongs to another account.
+      localStorage.removeItem('activeBranchId')
+      localStorage.removeItem('activeBranchName')
 
-        if (loggedInUser?.schoolRole === 'student') {
-          navigate({ to: '/school/portals/student', replace: true })
-          return
-        }
-
-        const defaultHome = getUserHome(loggedInUser)
-        const requested = search.redirect || defaultHome
-        const access = resolveRouteAccess(loggedInUser, requested)
-        navigate({ to: access.allowed ? requested : defaultHome, replace: true })
-      } else {
-        toast.error('Login failed. Please check your credentials.')
+      // Redirect to onboarding if not completed
+      if (!result?.user?.onboardingComplete) {
+        navigate({ to: '/onboarding', replace: true })
+        return
       }
-    } catch (error) {
-      console.error('Login error:', error)
-      toast.error('An error occurred during login. Please try again.')
+
+      // School teachers go directly to their portal — never to the admin area
+      const loggedInUser = result?.user as AppUser
+      const isSchoolTeacher =
+        loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
+      if (isSchoolTeacher) {
+        navigate({ to: '/school/portals/teacher', replace: true })
+        return
+      }
+
+      if (loggedInUser?.schoolRole === 'parent') {
+        navigate({ to: '/school/portals/parent', replace: true })
+        return
+      }
+
+      if (loggedInUser?.schoolRole === 'student') {
+        navigate({ to: '/school/portals/student', replace: true })
+        return
+      }
+
+      const defaultHome = getUserHome(loggedInUser)
+      const requested = search.redirect || defaultHome
+      const access = resolveRouteAccess(loggedInUser, requested)
+      navigate({ to: access.allowed ? requested : defaultHome, replace: true })
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string }
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Incorrect email/user ID or password. Please try again.'
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
@@ -125,9 +128,9 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Email or User ID</FormLabel>
               <FormControl>
-                <Input placeholder='name@example.com' {...field} />
+                <Input placeholder='name@example.com or 100001' {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -152,7 +155,7 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        <Button type='submit' className='mt-2' disabled={isLoading}>
           Login
         </Button>
 

@@ -37,6 +37,10 @@ const schoolAttendanceSchema = mongoose.Schema(
       type: Date,
       required: true,
     },
+    // Actual moment the student entered/was scanned in (entry time).
+    checkInTime: {
+      type: Date,
+    },
     status: {
       type: String,
       enum: ['present', 'absent', 'late', 'leave', 'half_day'],

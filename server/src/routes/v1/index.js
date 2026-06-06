@@ -65,6 +65,8 @@ const timetableRoute = require('./timetable.route');
 const timeSlotRoute = require('./timeSlot.route');
 const schoolDashboardRoute = require('./schoolDashboard.route');
 const visitorRoute = require('./visitor.route');
+const diaryRoute = require('./diary.route');
+const notificationRoute = require('./notification.route');
 const schoolReportRoute = require('./schoolReport.route');
 const teacherPortalRoute = require('./teacherPortal.route');
 const parentPortalRoute = require('./parentPortal.route');
@@ -78,6 +80,7 @@ const feeCategoryRoute = require('./feeCategory.route');
 const schoolTransactionRoute = require('./schoolTransaction.route');
 const feeStructureRoute = require('./feeStructure.route');
 const feeVoucherRoute = require('./feeVoucher.route');
+const feePaymentRequestRoute = require('./feePaymentRequest.route');
 const schoolAccountingRoute = require('./schoolAccounting.route');
 const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
 const accountsSystemRoute = require('./accountsSystem.route');
@@ -343,6 +346,14 @@ const defaultRoutes = [
     route: visitorRoute
   },
   {
+    path: '/diaries',
+    route: diaryRoute
+  },
+  {
+    path: '/notifications',
+    route: notificationRoute
+  },
+  {
     path: '/school-reports',
     route: schoolReportRoute
   },
@@ -387,6 +398,10 @@ const defaultRoutes = [
   {
     path: '/fee-vouchers',
     route: feeVoucherRoute,
+  },
+  {
+    path: '/fee-payment-requests',
+    route: feePaymentRequestRoute,
   },
   {
     path: '/school-accounting',
@@ -482,9 +497,12 @@ const protectedPaths = [
   '/exams',
   '/marks',
   '/school-fees',
+  '/fee-payment-requests',
   '/timetables',
   '/school-dashboard',
   '/visitors',
+  '/diaries',
+  '/notifications',
   '/teacher-attendance',
   '/teacher-leaves',
   '/teacher-payroll',

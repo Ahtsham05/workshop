@@ -30,7 +30,10 @@ const createVoucher = {
 
 const bulkGenerateVouchers = {
   body: Joi.object().keys({
-    classId: Joi.string().custom(objectId).required(),
+    allClasses: Joi.boolean().default(false),
+    classId: Joi.string()
+      .custom(objectId)
+      .when('allClasses', { is: true, then: Joi.optional().allow(null, ''), otherwise: Joi.required() }),
     feeStructureId: Joi.string().custom(objectId).allow(null, '').optional(),
     month: Joi.string().valid(...MONTHS).required(),
     year: Joi.number().integer().min(2000).max(2100).required(),

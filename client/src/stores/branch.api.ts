@@ -1,6 +1,16 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
 
+export interface BranchBankAccount {
+  _id?: string;
+  bankName?: string;
+  accountTitle?: string;
+  accountNumber?: string;
+  iban?: string;
+  instructions?: string;
+  isActive?: boolean;
+}
+
 export interface Branch {
   id: string;
   organizationId: string;
@@ -19,6 +29,8 @@ export interface Branch {
   isActive: boolean;
   /** Printed on receipts/invoices (thermal & HTML) for this branch */
   invoiceNote?: string;
+  /** Fee-collection bank accounts shown to parents/students in the portal */
+  bankAccounts?: BranchBankAccount[];
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +49,7 @@ export interface CreateBranchRequest {
   manager?: string;
   isActive?: boolean;
   invoiceNote?: string;
+  bankAccounts?: BranchBankAccount[];
 }
 
 export interface BranchesResponse {

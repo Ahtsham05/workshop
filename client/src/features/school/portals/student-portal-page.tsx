@@ -1,4 +1,9 @@
 /**
- * Student Portal — reuses parent portal views scoped to the logged-in student's linked profile.
+ * Student Portal — reuses the family portal view, scoped to the logged-in
+ * student's own profile (results, attendance, fees, full report).
  */
-export { default } from './parent-portal-page';
+import ParentPortalPage from './parent-portal-page';
+
+export default function StudentPortalPage() {
+  return <ParentPortalPage variant="student" />;
+}

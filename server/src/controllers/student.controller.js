@@ -2,10 +2,10 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
-const { studentService, userService } = require('../services');
+const { studentService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
-const { Organization, User } = require('../models');
+const { Organization } = require('../models');
 
 const getScope = (req) => ({
   organizationId: req.organizationId,
@@ -31,35 +31,7 @@ const createStudent = catchAsync(async (req, res) => {
 
   const doc = await studentService.createStudent(body);
 
-  // Auto-create a Parent portal User (email = parent email if provided, password = phone)
-  const parentEmail = body.parent?.email;
-  const parentPhone = body.parent?.phone;
-  const parentName = body.parent?.fatherName || body.parent?.motherName || body.parent?.guardianName || 'Parent';
-  if (parentEmail && parentPhone) {
-    try {
-      const rawPhone = parentPhone.replace(/\D/g, '') || '';
-      const password = rawPhone.length >= 8 ? rawPhone : `P${rawPhone}2024!`;
-      const emailTaken = await User.isEmailTaken(parentEmail);
-      if (!emailTaken) {
-        const parentUser = await userService.createUser({
-          name: parentName,
-          email: parentEmail,
-          password,
-          organizationId: body.organizationId,
-          systemRole: 'staff',
-          businessType: 'school',
-          linkedStudentIds: [doc._id],
-          schoolRole: 'parent',
-          isEmailVerified: true,
-        });
-        await studentService.updateStudentById(doc._id, { parentUserId: parentUser.id }, getScope(req));
-        doc.parentUserId = parentUser.id;
-      }
-    } catch (_err) {
-      // Non-fatal — student record already saved
-    }
-  }
-
+  // Parent portal user is auto-created in studentService (password = studentUserId + phone)
   res.status(httpStatus.CREATED).send(doc);
 });
 
@@ -230,34 +202,6 @@ const admitStudent = catchAsync(async (req, res) => {
   }
 
   const result = await studentService.admitStudent(body);
-
-  // Auto-create parent portal user (same as createStudent)
-  const parentEmail = body.parent?.email;
-  const parentPhone = body.parent?.phone;
-  const parentName = body.parent?.fatherName || body.parent?.motherName || body.parent?.guardianName || 'Parent';
-  if (parentEmail && parentPhone) {
-    try {
-      const rawPhone = parentPhone.replace(/\D/g, '') || '';
-      const password = rawPhone.length >= 8 ? rawPhone : `P${rawPhone}2024!`;
-      const emailTaken = await User.isEmailTaken(parentEmail);
-      if (!emailTaken) {
-        const parentUser = await userService.createUser({
-          name: parentName,
-          email: parentEmail,
-          password,
-          organizationId: body.organizationId,
-          systemRole: 'staff',
-          businessType: 'school',
-          linkedStudentIds: [result.student._id],
-          schoolRole: 'parent',
-          isEmailVerified: true,
-        });
-        await studentService.updateStudentById(result.student._id, { parentUserId: parentUser.id }, getScope(req));
-      }
-    } catch (_err) {
-      // Non-fatal
-    }
-  }
 
   res.status(httpStatus.CREATED).send(result);
 });

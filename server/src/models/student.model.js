@@ -28,6 +28,12 @@ const studentSchema = mongoose.Schema(
       type: String,
       trim: true,
     },
+    /** Numeric login ID shown on fee vouchers; unique per organization */
+    studentUserId: {
+      type: String,
+      trim: true,
+      match: [/^\d+$/, 'Student user ID must be numeric only'],
+    },
     firstName: {
       type: String,
       required: true,
@@ -120,6 +126,7 @@ studentSchema.virtual('fullName').get(function () {
 
 // Admission number is unique org-wide (across ALL branches)
 studentSchema.index({ organizationId: 1, admissionNumber: 1 }, { unique: true });
+studentSchema.index({ studentUserId: 1 }, { unique: true, sparse: true });
 studentSchema.index({ organizationId: 1, branchId: 1, classId: 1 });
 studentSchema.index({ organizationId: 1, branchId: 1, status: 1 });
 studentSchema.index({ organizationId: 1, branchId: 1, classId: 1, status: 1 });

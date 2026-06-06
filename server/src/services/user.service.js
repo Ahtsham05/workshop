@@ -33,6 +33,8 @@ const createUser = async (userBody) => {
         const currentCount = await User.countDocuments({
           organizationId: newUserBody.organizationId,
           isActive: true,
+          // Student/parent portal logins don't count toward the plan's user limit.
+          schoolRole: { $nin: ['student', 'parent'] },
         });
         if (currentCount >= maxUsers) {
           throw new ApiError(

@@ -30,6 +30,11 @@ const userSchema = mongoose.Schema(
       trim: true,
       minlength: 8,
       validate(value) {
+        if (value.length < 8) {
+          throw new Error('Password must be at least 8 characters');
+        }
+        // Allow numeric-only passwords (parent portal: studentUserId + phone)
+        if (/^\d+$/.test(value)) return;
         if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
           throw new Error('Password must contain at least one letter and one number');
         }
@@ -84,10 +89,10 @@ const userSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Student',
     }],
-    // school portal role: teacher | parent  (derived, stored for fast filtering)
+    // school portal role: teacher | parent | student (derived, stored for fast filtering)
     schoolRole: {
       type: String,
-      enum: ['schoolAdmin', 'teacher', 'parent', null],
+      enum: ['schoolAdmin', 'teacher', 'parent', 'student', null],
       default: null,
     },
   },

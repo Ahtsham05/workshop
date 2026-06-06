@@ -2,6 +2,7 @@ import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { Link } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SidebarProvider } from '@/components/ui/sidebar'
+import { PortalShell } from '@/components/layout/portal-shell'
 import { PermissionWrapper } from '@/context/permission-wrapper'
 import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -25,6 +26,31 @@ function AuthenticatedLayout() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
+
+  // Portal users (students & parents) get a clean, sidebar-free shell.
+  const schoolRole: string | undefined =
+    user?.schoolRole ||
+    (() => {
+      try {
+        const stored = localStorage.getItem('user')
+        return stored ? JSON.parse(stored)?.schoolRole : undefined
+      } catch {
+        return undefined
+      }
+    })()
+  const isPortalUser = schoolRole === 'student' || schoolRole === 'parent'
+
+  if (isPortalUser) {
+    return (
+      <TrialExpirationBoundary>
+        <PermissionWrapper>
+          <PortalShell>
+            <Outlet />
+          </PortalShell>
+        </PermissionWrapper>
+      </TrialExpirationBoundary>
+    )
+  }
 
   return (
     <TrialExpirationBoundary>

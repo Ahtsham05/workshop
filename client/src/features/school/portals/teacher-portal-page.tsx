@@ -3,7 +3,7 @@
  * Accessible only to users with schoolRole=teacher
  * Full-featured portal: Dashboard, Students, Attendance, Mark Entry, Exams, Timetable, Subjects
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch, useNavigate } from '@tanstack/react-router';
@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users, BookOpen, GraduationCap, CalendarCheck, ClipboardList,
   LayoutDashboard, Clock, CheckCircle2, AlertCircle,
-  Search, Save, ChevronRight, Calendar,
+  Search, Save, ChevronRight, Calendar, NotebookPen, UserCheck,
+  Plus, Trash2, Bell, Loader2,
 } from 'lucide-react';
 import {
   useGetTeacherPortalMeQuery,
@@ -29,7 +30,16 @@ import {
   useGetTeacherPortalExamStudentsQuery,
   useSaveTeacherPortalBulkMarksMutation,
   useMarkTeacherPortalBulkAttendanceMutation,
+  useGetTeacherPortalMyAttendanceQuery,
+  useGetTeacherPortalDiariesQuery,
+  useCreateTeacherPortalDiaryMutation,
+  useDeleteTeacherPortalDiaryMutation,
+  useGetNotificationUnreadCountQuery,
+  useMarkAllNotificationsReadMutation,
 } from '@/stores/school.api';
+import { NOTIFICATION_UNREAD_CACHE_OPTIONS } from '@/stores/notification-query-options';
+import { Textarea } from '@/components/ui/textarea';
+import { NotificationList } from '@/components/notification-list';
 import StudentAvatar from '../components/student-avatar';
 import type { RootState, AppDispatch } from '@/stores/store';
 import { setActiveBranch } from '@/stores/auth.slice';
@@ -62,6 +72,17 @@ type TeacherSubjectCol = {
   totalMarks: number;
   passingMarks: number;
 };
+
+const ATT_STATUS_LABELS: Record<AttStatus, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  leave: 'Leave',
+  half_day: 'Half day',
+};
+
+/** Stable fallback so query hooks don't create a new [] every render while loading. */
+const EMPTY_LIST: never[] = [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,21 +133,48 @@ export default function TeacherPortalPage() {
   const [attMap, setAttMap] = useState<Record<string, AttStatus>>({});
   const [selectedExamId, setSelectedExamId] = useState('');
   const [marksGrid, setMarksGrid] = useState<Record<string, { obtainedMarks: string; isAbsent: boolean }>>({});
+  const [subjectMarksConfig, setSubjectMarksConfig] = useState<Record<string, { totalMarks: string; passingMarks: string }>>({});
   const [attSearch, setAttSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+
+  // ── Daily Diary state ──
+  type DiaryItem = { subjectId: string; subjectName: string; classwork: string; homework: string };
+  const [diaryClassId, setDiaryClassId] = useState('');
+  const [diarySectionId, setDiarySectionId] = useState('');
+  const [diaryDate, setDiaryDate] = useState(today());
+  const [diaryTitle, setDiaryTitle] = useState('');
+  const [diaryNote, setDiaryNote] = useState('');
+  const [diaryItems, setDiaryItems] = useState<DiaryItem[]>([{ subjectId: '', subjectName: '', classwork: '', homework: '' }]);
+  const [diaryFilterClassId, setDiaryFilterClassId] = useState('all');
 
   // ── Queries ──
   const { data: teacher, isLoading: tLoading } = useGetTeacherPortalMeQuery(undefined);
   const { data: dashboard } = useGetTeacherPortalDashboardQuery(undefined);
-  const { data: students = [], isLoading: sLoading } = useGetTeacherPortalStudentsQuery(undefined);
-  const { data: exams = [], isLoading: eLoading } = useGetTeacherPortalExamsQuery(undefined);
-  const { data: subjects = [] } = useGetTeacherPortalSubjectsQuery(undefined);
-  const { data: timetable = [] } = useGetTeacherPortalTimetableQuery(undefined);
-  const { data: examStudentsData } = useGetTeacherPortalExamStudentsQuery(
+  const { data: studentsData, isLoading: sLoading } = useGetTeacherPortalStudentsQuery(undefined);
+  const { data: examsData, isLoading: eLoading } = useGetTeacherPortalExamsQuery(undefined);
+  const { data: subjectsData } = useGetTeacherPortalSubjectsQuery(undefined);
+  const { data: timetableData } = useGetTeacherPortalTimetableQuery(undefined);
+  const { data: examStudentsData, fulfilledTimeStamp: examStudentsLoadedAt, isLoading: examStudentsLoading, isFetching: examStudentsFetching, isError: examStudentsError, error: examStudentsErrorDetail } = useGetTeacherPortalExamStudentsQuery(
     { examId: selectedExamId },
     { skip: !selectedExamId }
   );
-  const { data: attRecords = [] } = useGetTeacherPortalAttendanceQuery({ date: attDate });
+  const { data: attRecordsData } = useGetTeacherPortalAttendanceQuery({ date: attDate });
+  const { data: myAttendance } = useGetTeacherPortalMyAttendanceQuery({});
+  const { data: diariesData } = useGetTeacherPortalDiariesQuery(
+    diaryFilterClassId && diaryFilterClassId !== 'all' ? { classId: diaryFilterClassId } : {}
+  );
+
+  const students = studentsData ?? EMPTY_LIST;
+  const exams = examsData ?? EMPTY_LIST;
+  const subjects = subjectsData ?? EMPTY_LIST;
+  const timetable = timetableData ?? EMPTY_LIST;
+  const attRecords = attRecordsData ?? EMPTY_LIST;
+  const diaries = diariesData ?? EMPTY_LIST;
+  const { data: notifUnreadData } = useGetNotificationUnreadCountQuery(undefined, NOTIFICATION_UNREAD_CACHE_OPTIONS);
+  const notifUnread = notifUnreadData?.count || 0;
+  const [markAllNotificationsRead] = useMarkAllNotificationsReadMutation();
+  const notifMarkedOnTabRef = useRef(false);
+  const markInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // ── Set teacher's branch in Redux so sidebar shows it ──────────────────────
   // The /me response includes the teacher record with branchId populated as
@@ -145,6 +193,8 @@ export default function TeacherPortalPage() {
   // ── Mutations ──
   const [saveBulkMarks, { isLoading: savingMarks }] = useSaveTeacherPortalBulkMarksMutation();
   const [markBulkAttendance, { isLoading: savingAtt }] = useMarkTeacherPortalBulkAttendanceMutation();
+  const [createDiary, { isLoading: savingDiary }] = useCreateTeacherPortalDiaryMutation();
+  const [deleteDiary] = useDeleteTeacherPortalDiaryMutation();
 
   // ── Derived ──
   const filteredStudents = useMemo(() => {
@@ -178,6 +228,21 @@ export default function TeacherPortalPage() {
     }
     return list;
   }, [students, attClassId, attSectionId, attSearch]);
+
+  const diarySections = useMemo(() => {
+    const map: Record<string, any> = {};
+    (students as any[]).forEach(s => {
+      if (s.classId?._id === diaryClassId && s.sectionId?._id) map[s.sectionId._id] = s.sectionId;
+    });
+    return Object.values(map);
+  }, [students, diaryClassId]);
+
+  const diarySubjects = useMemo(() => {
+    if (!diaryClassId) return subjects as any[];
+    return (subjects as any[]).filter(
+      (sub) => !sub.classId || String(sub.classId?._id || sub.classId) === diaryClassId
+    );
+  }, [subjects, diaryClassId]);
 
   const timetableByDay = useMemo(() => {
     const grouped: Record<string, any[]> = {};
@@ -223,7 +288,18 @@ export default function TeacherPortalPage() {
     if (selectedExamId && examStudentsData) prefillMarks();
     else setMarksGrid({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedExamId, examStudentsData]);
+  }, [selectedExamId, examStudentsLoadedAt]);
+
+  // Mark notifications read once when the Notifications tab is opened.
+  useEffect(() => {
+    if (activeTab !== 'notifications') {
+      notifMarkedOnTabRef.current = false;
+      return;
+    }
+    if (notifMarkedOnTabRef.current || notifUnread <= 0) return;
+    notifMarkedOnTabRef.current = true;
+    markAllNotificationsRead();
+  }, [activeTab, notifUnread, markAllNotificationsRead]);
 
   const teacherSubjectColumns = useMemo((): TeacherSubjectCol[] => {
     const exam = examStudentsData?.exam as any;
@@ -252,6 +328,20 @@ export default function TeacherPortalPage() {
       }));
   }, [examStudentsData, subjects]);
 
+  // Clear editable total/pass when switching exams (defaults come from column headers).
+  useEffect(() => {
+    setSubjectMarksConfig({});
+  }, [selectedExamId]);
+
+  const getSubjectMarks = (subjectId: string) => {
+    const cfg = subjectMarksConfig[subjectId];
+    const col = teacherSubjectColumns.find((c) => c.id === subjectId);
+    return {
+      totalMarks: Math.max(0, Number(cfg?.totalMarks) || col?.totalMarks || 100),
+      passingMarks: Math.max(0, Number(cfg?.passingMarks) || col?.passingMarks || 40),
+    };
+  };
+
   const getTeacherCell = (studentId: string, subjectId: string) => {
     const key = `${studentId}_${subjectId}`;
     if (marksGrid[key]) return marksGrid[key];
@@ -264,6 +354,53 @@ export default function TeacherPortalPage() {
       ...prev,
       [key]: { ...getTeacherCell(studentId, subjectId), ...value },
     }));
+  };
+
+  const markCellKey = (studentId: string, subjectId: string) => `${studentId}_${subjectId}`;
+
+  const focusNextMarkCell = (studentIdx: number, subjectIdx: number) => {
+    const studentList = (examStudentsData?.students as any[]) || [];
+    const cols = teacherSubjectColumns;
+    if (!studentList.length || !cols.length) return;
+
+    let s = studentIdx;
+    let c = subjectIdx + 1;
+    const maxSteps = studentList.length * cols.length;
+
+    for (let step = 0; step < maxSteps; step++) {
+      if (c >= cols.length) {
+        c = 0;
+        s += 1;
+      }
+      if (s >= studentList.length) {
+        handleSaveMarks();
+        return;
+      }
+      const sid = studentList[s]._id || studentList[s].id;
+      const subId = cols[c].id;
+      const cell = getTeacherCell(sid, subId);
+      if (!cell.isAbsent) {
+        const el = markInputRefs.current[markCellKey(sid, subId)];
+        if (el) {
+          el.focus();
+          el.select();
+          return;
+        }
+      }
+      c += 1;
+    }
+  };
+
+  const handleMarkKeyDown = (
+    e: KeyboardEvent<HTMLInputElement>,
+    studentIdx: number,
+    subjectIdx: number,
+  ) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    // Defer focus so the current input can finish its change event first.
+    requestAnimationFrame(() => focusNextMarkCell(studentIdx, subjectIdx));
   };
 
   const handleSaveAttendance = async () => {
@@ -284,30 +421,108 @@ export default function TeacherPortalPage() {
     if (!selectedExamId || !examStudentsData) { toast.error('Select an exam first'); return; }
     const exam = examStudentsData.exam as any;
     const classId = String(exam?.classId?._id || exam?.classId || '');
+
+    const invalidSubject = teacherSubjectColumns.find((sub) => {
+      const { totalMarks, passingMarks } = getSubjectMarks(sub.id);
+      return !totalMarks || totalMarks < 1 || passingMarks < 0 || passingMarks > totalMarks;
+    });
+    if (invalidSubject) {
+      toast.error(`Check total/pass marks for ${invalidSubject.name}`);
+      return;
+    }
+
     const marks: any[] = [];
-    (examStudentsData.students || []).forEach((s: any) => {
-      const sid = s._id || s.id;
-      teacherSubjectColumns.forEach((sub) => {
-        const cell = getTeacherCell(sid, sub.id);
-        if (cell.obtainedMarks === '' && !cell.isAbsent) return;
-        marks.push({
-          studentId: sid,
-          examId: selectedExamId,
-          subjectId: sub.id,
-          classId,
-          obtainedMarks: Number(cell.obtainedMarks) || 0,
-          totalMarks: sub.totalMarks,
-          isAbsent: cell.isAbsent,
+    try {
+      (examStudentsData.students || []).forEach((s: any) => {
+        const sid = s._id || s.id;
+        teacherSubjectColumns.forEach((sub) => {
+          const cell = getTeacherCell(sid, sub.id);
+          if (cell.obtainedMarks === '' && !cell.isAbsent) return;
+          const { totalMarks } = getSubjectMarks(sub.id);
+          const obtained = Number(cell.obtainedMarks) || 0;
+          if (!cell.isAbsent && obtained > totalMarks) {
+            throw new Error(`Mark for ${sub.name} cannot exceed ${totalMarks}`);
+          }
+          marks.push({
+            studentId: sid,
+            examId: selectedExamId,
+            subjectId: sub.id,
+            classId,
+            obtainedMarks: obtained,
+            totalMarks,
+            isAbsent: cell.isAbsent,
+          });
         });
       });
-    });
+    } catch (err: any) {
+      toast.error(err.message || 'Invalid marks');
+      return;
+    }
+
     if (!marks.length) { toast.error('Enter at least one mark before saving'); return; }
+
+    const subjectConfig = teacherSubjectColumns.map((sub) => {
+      const { totalMarks, passingMarks } = getSubjectMarks(sub.id);
+      return { subjectId: sub.id, totalMarks, passingMarks };
+    });
+
     try {
-      const result = await saveBulkMarks({ marks }).unwrap();
+      const result = await saveBulkMarks({ marks, subjectConfig }).unwrap();
       toast.success(`${result.saved ?? marks.length} marks saved`);
       prefillMarks();
     } catch (err: any) {
       toast.error(err?.data?.message || 'Failed to save marks');
+    }
+  };
+
+  const updateDiaryItem = (index: number, patch: Partial<DiaryItem>) => {
+    setDiaryItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  };
+  const addDiaryItem = () => setDiaryItems((prev) => [...prev, { subjectId: '', subjectName: '', classwork: '', homework: '' }]);
+  const removeDiaryItem = (index: number) => setDiaryItems((prev) => prev.filter((_, i) => i !== index));
+
+  const resetDiaryForm = () => {
+    setDiaryTitle('');
+    setDiaryNote('');
+    setDiaryItems([{ subjectId: '', subjectName: '', classwork: '', homework: '' }]);
+  };
+
+  const handleSaveDiary = async () => {
+    if (!diaryClassId) { toast.error('Select a class first'); return; }
+    const items = diaryItems
+      .filter((it) => it.subjectId || it.subjectName || it.classwork || it.homework)
+      .map((it) => {
+        const subj = (subjects as any[]).find((s) => String(s._id || s.id) === it.subjectId);
+        return {
+          subjectId: it.subjectId || undefined,
+          subjectName: it.subjectName || subj?.name || '',
+          classwork: it.classwork || '',
+          homework: it.homework || '',
+        };
+      });
+    if (!items.length && !diaryNote.trim()) { toast.error('Add at least one subject entry or a note'); return; }
+    try {
+      await createDiary({
+        classId: diaryClassId,
+        sectionId: diarySectionId && diarySectionId !== 'all' ? diarySectionId : null,
+        date: diaryDate,
+        title: diaryTitle,
+        note: diaryNote,
+        items,
+      }).unwrap();
+      toast.success('Diary entry saved');
+      resetDiaryForm();
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to save diary');
+    }
+  };
+
+  const handleDeleteDiary = async (id: string) => {
+    try {
+      await deleteDiary(id).unwrap();
+      toast.success('Diary entry deleted');
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to delete diary');
     }
   };
 
@@ -364,10 +579,21 @@ export default function TeacherPortalPage() {
           <TabsTrigger value="dashboard" className="gap-1.5"><LayoutDashboard className="h-4 w-4" />Dashboard</TabsTrigger>
           <TabsTrigger value="students" className="gap-1.5"><Users className="h-4 w-4" />My Students</TabsTrigger>
           <TabsTrigger value="attendance" className="gap-1.5"><CalendarCheck className="h-4 w-4" />Attendance</TabsTrigger>
+          <TabsTrigger value="diary" className="gap-1.5"><NotebookPen className="h-4 w-4" />Daily Diary</TabsTrigger>
           <TabsTrigger value="marks" className="gap-1.5"><ClipboardList className="h-4 w-4" />Mark Entry</TabsTrigger>
+          <TabsTrigger value="my-attendance" className="gap-1.5"><UserCheck className="h-4 w-4" />My Attendance</TabsTrigger>
           <TabsTrigger value="exams" className="gap-1.5"><BookOpen className="h-4 w-4" />Exams</TabsTrigger>
           <TabsTrigger value="timetable" className="gap-1.5"><Clock className="h-4 w-4" />Timetable</TabsTrigger>
           <TabsTrigger value="subjects" className="gap-1.5"><GraduationCap className="h-4 w-4" />Subjects</TabsTrigger>
+          <TabsTrigger value="notifications" className="gap-1.5">
+            <Bell className="h-4 w-4" />
+            Notifications
+            {notifUnread > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                {notifUnread > 99 ? '99+' : notifUnread}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* ════════════════ DASHBOARD ════════════════ */}
@@ -487,15 +713,15 @@ export default function TeacherPortalPage() {
         <TabsContent value="attendance" className="space-y-3">
           <Card>
             <CardContent className="p-3">
-              <div className="flex flex-wrap gap-3 items-end">
-                <div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap gap-3 lg:items-end">
+                <div className="col-span-1">
                   <p className="text-xs text-muted-foreground mb-1 font-medium">Date</p>
-                  <input type="date" className="text-sm border rounded px-2 py-1.5 bg-background" value={attDate} onChange={e => setAttDate(e.target.value)} />
+                  <input type="date" className="text-sm border rounded px-2 py-1.5 bg-background w-full" value={attDate} onChange={e => setAttDate(e.target.value)} />
                 </div>
-                <div>
+                <div className="col-span-1">
                   <p className="text-xs text-muted-foreground mb-1 font-medium">Class</p>
                   <Select value={attClassId} onValueChange={v => { setAttClassId(v); setAttSectionId(''); setAttMap({}); }}>
-                    <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="All classes" /></SelectTrigger>
+                    <SelectTrigger className="w-full h-9 text-sm"><SelectValue placeholder="All classes" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All classes</SelectItem>
                       {teacherClasses.map((c: any) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
@@ -503,10 +729,10 @@ export default function TeacherPortalPage() {
                   </Select>
                 </div>
                 {attClassId && attClassId !== 'all' && attSections.length > 0 && (
-                  <div>
+                  <div className="col-span-1">
                     <p className="text-xs text-muted-foreground mb-1 font-medium">Section</p>
                     <Select value={attSectionId} onValueChange={v => { setAttSectionId(v); setAttMap({}); }}>
-                      <SelectTrigger className="w-32 h-9 text-sm"><SelectValue placeholder="All sections" /></SelectTrigger>
+                      <SelectTrigger className="w-full h-9 text-sm"><SelectValue placeholder="All sections" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All sections</SelectItem>
                         {attSections.map((sec: any) => <SelectItem key={sec._id} value={sec._id}>{sec.name}</SelectItem>)}
@@ -514,16 +740,18 @@ export default function TeacherPortalPage() {
                     </Select>
                   </div>
                 )}
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <p className="text-xs text-muted-foreground mb-1 font-medium">Search</p>
-                  <Input placeholder="Search student…" value={attSearch} onChange={e => setAttSearch(e.target.value)} className="h-9 text-sm w-44" />
+                  <Input placeholder="Search student…" value={attSearch} onChange={e => setAttSearch(e.target.value)} className="h-9 text-sm w-full" />
                 </div>
-                <Button variant="outline" size="sm" className="h-9" onClick={prefillAtt} disabled={attStudents.length === 0}>
-                  <Calendar className="h-3.5 w-3.5 mr-1.5" /> Load Students
-                </Button>
-                <Button size="sm" className="h-9 ml-auto" onClick={handleSaveAttendance} disabled={savingAtt || Object.keys(attMap).length === 0}>
-                  <Save className="h-3.5 w-3.5 mr-1.5" /> {savingAtt ? 'Saving…' : 'Save Attendance'}
-                </Button>
+                <div className="col-span-1 sm:col-span-2 lg:col-span-1 flex gap-2">
+                  <Button variant="outline" size="sm" className="h-9 flex-1 lg:flex-none" onClick={prefillAtt} disabled={attStudents.length === 0}>
+                    <Calendar className="h-3.5 w-3.5 mr-1.5 shrink-0" /> Load
+                  </Button>
+                  <Button size="sm" className="h-9 flex-1 lg:flex-none lg:ml-auto" onClick={handleSaveAttendance} disabled={savingAtt || Object.keys(attMap).length === 0}>
+                    <Save className="h-3.5 w-3.5 mr-1.5 shrink-0" /> {savingAtt ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -564,6 +792,38 @@ export default function TeacherPortalPage() {
           ) : (
             <Card>
               <CardContent className="p-0">
+                {/* Mobile: card list with status dropdown */}
+                <div className="md:hidden divide-y">
+                  {attStudents.map((s: any, i: number) => {
+                    const sid = s._id || s.id;
+                    const current = attMap[sid] || 'present';
+                    return (
+                      <div key={sid} className="p-3 space-y-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xs text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                          <StudentAvatar photoUrl={s.photoUrl?.url} gender={s.gender} className="h-8 w-8 rounded-full shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate">{s.firstName} {s.lastName || ''}</p>
+                            <p className="text-xs text-muted-foreground">{s.rollNumber || '—'}</p>
+                          </div>
+                        </div>
+                        <Select value={current} onValueChange={(v) => setAttMap((prev) => ({ ...prev, [sid]: v as AttStatus }))}>
+                          <SelectTrigger className={`h-9 w-full text-sm capitalize ${ATT_COLORS[current as AttStatus]}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ATT_STATUS_OPTIONS.map((st) => (
+                              <SelectItem key={st} value={st} className="capitalize">{ATT_STATUS_LABELS[st]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop: full table */}
+                <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30 text-muted-foreground">
@@ -602,9 +862,148 @@ export default function TeacherPortalPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* ════════════════ DAILY DIARY ════════════════ */}
+        <TabsContent value="diary" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            {/* Compose */}
+            <Card className="lg:col-span-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <NotebookPen className="h-4 w-4 text-blue-500" /> Write Today's Diary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1 font-medium">Class *</p>
+                    <Select value={diaryClassId} onValueChange={(v) => { setDiaryClassId(v); setDiarySectionId(''); }}>
+                      <SelectTrigger className="w-40 h-9 text-sm"><SelectValue placeholder="Select class" /></SelectTrigger>
+                      <SelectContent>
+                        {teacherClasses.map((c: any) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {diaryClassId && diarySections.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1 font-medium">Section</p>
+                      <Select value={diarySectionId} onValueChange={setDiarySectionId}>
+                        <SelectTrigger className="w-32 h-9 text-sm"><SelectValue placeholder="Whole class" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Whole class</SelectItem>
+                          {diarySections.map((sec: any) => <SelectItem key={sec._id} value={sec._id}>{sec.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1 font-medium">Date</p>
+                    <input type="date" className="text-sm border rounded px-2 py-1.5 bg-background" value={diaryDate} onChange={e => setDiaryDate(e.target.value)} />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 font-medium">Title (optional)</p>
+                  <Input value={diaryTitle} onChange={e => setDiaryTitle(e.target.value)} placeholder="e.g. Homework for the weekend" className="h-9 text-sm" />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground font-medium">Subject Entries</p>
+                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={addDiaryItem}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add subject
+                    </Button>
+                  </div>
+                  {diaryItems.map((it, idx) => (
+                    <div key={idx} className="rounded-lg border p-2.5 space-y-2 bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <Select value={it.subjectId} onValueChange={(v) => updateDiaryItem(idx, { subjectId: v })}>
+                          <SelectTrigger className="h-8 text-sm flex-1"><SelectValue placeholder="Select subject" /></SelectTrigger>
+                          <SelectContent>
+                            {diarySubjects.map((sub: any) => (
+                              <SelectItem key={sub._id || sub.id} value={String(sub._id || sub.id)}>{sub.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {diaryItems.length > 1 && (
+                          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => removeDiaryItem(idx)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                      <Textarea value={it.classwork} onChange={e => updateDiaryItem(idx, { classwork: e.target.value })} placeholder="Classwork…" rows={2} className="text-sm resize-y" />
+                      <Textarea value={it.homework} onChange={e => updateDiaryItem(idx, { homework: e.target.value })} placeholder="Homework…" rows={2} className="text-sm resize-y" />
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 font-medium">General Note (optional)</p>
+                  <Textarea value={diaryNote} onChange={e => setDiaryNote(e.target.value)} placeholder="Announcement for the whole class…" rows={2} className="text-sm resize-y" />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleSaveDiary} disabled={savingDiary || !diaryClassId}>
+                    <Save className="h-3.5 w-3.5 mr-1.5" /> {savingDiary ? 'Saving…' : 'Save Diary'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recent entries */}
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <CardTitle className="text-base">Recent Diary</CardTitle>
+                  <Select value={diaryFilterClassId} onValueChange={setDiaryFilterClassId}>
+                    <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All classes</SelectItem>
+                      {teacherClasses.map((c: any) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-[560px] overflow-y-auto">
+                {(diaries as any[]).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">No diary entries yet</p>
+                ) : (
+                  (diaries as any[]).map((d: any) => (
+                    <div key={d._id || d.id} className="rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate">{d.title || 'Daily Diary'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {d.classId?.name || ''}{d.sectionId?.name ? ` · ${d.sectionId.name}` : ''} · {new Date(d.date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive flex-shrink-0" onClick={() => handleDeleteDiary(d._id || d.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      {(d.items || []).length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                          {(d.items as any[]).map((it: any, i: number) => (
+                            <div key={i} className="text-xs border-l-2 border-blue-200 pl-2">
+                              <span className="font-medium">{it.subjectId?.name || it.subjectName || 'Subject'}</span>
+                              {it.classwork && <p className="text-muted-foreground"><span className="font-medium">CW:</span> {it.classwork}</p>}
+                              {it.homework && <p className="text-muted-foreground"><span className="font-medium">HW:</span> {it.homework}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {d.note && <p className="text-xs text-muted-foreground mt-2 italic">{d.note}</p>}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ════════════════ MARK ENTRY ════════════════ */}
@@ -632,7 +1031,27 @@ export default function TeacherPortalPage() {
             </CardContent>
           </Card>
 
-          {selectedExamId && examStudentsData ? (
+          {!selectedExamId ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                <ClipboardList className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                Select an exam above to begin entering marks
+              </CardContent>
+            </Card>
+          ) : examStudentsLoading || (examStudentsFetching && !examStudentsData) ? (
+            <Card>
+              <CardContent className="py-16 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                Loading students and marks…
+              </CardContent>
+            </Card>
+          ) : examStudentsError ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-destructive">
+                Failed to load exam data. {(examStudentsErrorDetail as any)?.data?.message || 'Please try again.'}
+              </CardContent>
+            </Card>
+          ) : examStudentsData ? (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -647,6 +1066,105 @@ export default function TeacherPortalPage() {
                 {(examStudentsData.students || []).length === 0 || !teacherSubjectColumns.length ? (
                   <p className="px-4 py-8 text-center text-sm text-muted-foreground">No students or subjects found for this exam</p>
                 ) : (
+                  <>
+                  {/* Mobile: subject config + student cards */}
+                  <div className="md:hidden">
+                    <div className="p-3 bg-muted/20 border-b space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Total / Passing marks per subject</p>
+                      <div className="space-y-2">
+                        {teacherSubjectColumns.map((sub) => (
+                          <div key={sub.id} className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium min-w-[72px] truncate" title={sub.name}>{sub.name}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground">Tot</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                className="h-8 w-14 text-xs text-center"
+                                value={subjectMarksConfig[sub.id]?.totalMarks ?? String(sub.totalMarks)}
+                                onChange={(e) => setSubjectMarksConfig((prev) => ({
+                                  ...prev,
+                                  [sub.id]: {
+                                    totalMarks: e.target.value,
+                                    passingMarks: prev[sub.id]?.passingMarks ?? String(sub.passingMarks),
+                                  },
+                                }))}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground">Pass</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                className="h-8 w-14 text-xs text-center"
+                                value={subjectMarksConfig[sub.id]?.passingMarks ?? String(sub.passingMarks)}
+                                onChange={(e) => setSubjectMarksConfig((prev) => ({
+                                  ...prev,
+                                  [sub.id]: {
+                                    totalMarks: prev[sub.id]?.totalMarks ?? String(sub.totalMarks),
+                                    passingMarks: e.target.value,
+                                  },
+                                }))}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="divide-y">
+                      {(examStudentsData.students as any[]).map((s: any, i: number) => {
+                        const sid = s._id || s.id;
+                        return (
+                          <div key={sid} className="p-3 space-y-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-xs text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                              <StudentAvatar photoUrl={s.photoUrl?.url} gender={s.gender} className="h-8 w-8 rounded-full shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{s.firstName} {s.lastName || ''}</p>
+                                <p className="text-xs text-muted-foreground">{s.rollNumber || '—'}</p>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5 pl-7">
+                              {teacherSubjectColumns.map((sub, subIdx) => {
+                                const cell = getTeacherCell(sid, sub.id);
+                                const { totalMarks, passingMarks } = getSubjectMarks(sub.id);
+                                const obtained = Number(cell.obtainedMarks);
+                                const belowPass = !cell.isAbsent && cell.obtainedMarks !== '' && obtained < passingMarks;
+                                return (
+                                  <div key={sub.id} className={`flex items-center gap-2 rounded-md px-2 py-1 ${cell.isAbsent ? 'bg-gray-50' : belowPass ? 'bg-red-50/60' : 'bg-muted/30'}`}>
+                                    <span className="text-xs flex-1 truncate" title={sub.name}>{sub.name}</span>
+                                    <span className="text-[10px] text-muted-foreground shrink-0">/{totalMarks}</span>
+                                    {cell.isAbsent ? (
+                                      <button type="button" className="text-[10px] text-muted-foreground px-2" onClick={() => setTeacherCell(sid, sub.id, { isAbsent: false })}>ABS</button>
+                                    ) : (
+                                      <Input
+                                        ref={(el) => { markInputRefs.current[markCellKey(sid, sub.id)] = el; }}
+                                        type="number"
+                                        min={0}
+                                        max={totalMarks}
+                                        value={cell.obtainedMarks}
+                                        onChange={(e) => setTeacherCell(sid, sub.id, { obtainedMarks: e.target.value })}
+                                        onKeyDown={(e) => handleMarkKeyDown(e, i, subIdx)}
+                                        onDoubleClick={() => setTeacherCell(sid, sub.id, { isAbsent: true, obtainedMarks: '' })}
+                                        className="h-8 w-16 text-center text-xs shrink-0"
+                                        placeholder="—"
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="px-4 py-2 text-[10px] text-muted-foreground border-t">
+                      Press <kbd className="rounded border px-1">Enter</kbd> for next cell. Double-tap to mark absent.
+                    </p>
+                  </div>
+
+                  {/* Desktop: spreadsheet table */}
+                  <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm min-w-max">
                     <thead>
                       <tr className="border-b bg-muted/30 text-muted-foreground">
@@ -654,9 +1172,42 @@ export default function TeacherPortalPage() {
                         <th className="text-left px-3 py-2 font-medium min-w-[140px]">Student</th>
                         <th className="text-left px-2 py-2 font-medium w-16">Roll</th>
                         {teacherSubjectColumns.map((sub) => (
-                          <th key={sub.id} className="text-center px-2 py-2 font-medium min-w-[80px] border-l">
-                            <div className="truncate max-w-[90px]" title={sub.name}>{sub.name}</div>
-                            <div className="text-[10px] font-normal">/{sub.totalMarks}</div>
+                          <th key={sub.id} className="text-center px-1.5 py-2 font-medium min-w-[88px] border-l">
+                            <div className="truncate max-w-[96px] mx-auto text-xs" title={sub.name}>{sub.name}</div>
+                            <div className="mt-1 flex flex-col items-center gap-0.5">
+                              <div className="flex items-center gap-0.5">
+                                <span className="text-[9px] text-muted-foreground">Tot</span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  className="h-6 w-11 text-[10px] px-0.5 text-center"
+                                  value={subjectMarksConfig[sub.id]?.totalMarks ?? String(sub.totalMarks)}
+                                  onChange={(e) => setSubjectMarksConfig((prev) => ({
+                                    ...prev,
+                                    [sub.id]: {
+                                      totalMarks: e.target.value,
+                                      passingMarks: prev[sub.id]?.passingMarks ?? String(sub.passingMarks),
+                                    },
+                                  }))}
+                                />
+                              </div>
+                              <div className="flex items-center gap-0.5">
+                                <span className="text-[9px] text-muted-foreground">Pass</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-6 w-11 text-[10px] px-0.5 text-center"
+                                  value={subjectMarksConfig[sub.id]?.passingMarks ?? String(sub.passingMarks)}
+                                  onChange={(e) => setSubjectMarksConfig((prev) => ({
+                                    ...prev,
+                                    [sub.id]: {
+                                      totalMarks: prev[sub.id]?.totalMarks ?? String(sub.totalMarks),
+                                      passingMarks: e.target.value,
+                                    },
+                                  }))}
+                                />
+                              </div>
+                            </div>
                           </th>
                         ))}
                       </tr>
@@ -674,19 +1225,24 @@ export default function TeacherPortalPage() {
                               </div>
                             </td>
                             <td className="px-2 py-2 text-muted-foreground text-xs">{s.rollNumber || '—'}</td>
-                            {teacherSubjectColumns.map((sub) => {
+                            {teacherSubjectColumns.map((sub, subIdx) => {
                               const cell = getTeacherCell(sid, sub.id);
+                              const { totalMarks, passingMarks } = getSubjectMarks(sub.id);
+                              const obtained = Number(cell.obtainedMarks);
+                              const belowPass = !cell.isAbsent && cell.obtainedMarks !== '' && obtained < passingMarks;
                               return (
-                                <td key={sub.id} className={`px-1.5 py-1 border-l text-center ${cell.isAbsent ? 'bg-gray-50' : ''}`}>
+                                <td key={sub.id} className={`px-1.5 py-1 border-l text-center ${cell.isAbsent ? 'bg-gray-50' : belowPass ? 'bg-red-50/60' : ''}`}>
                                   {cell.isAbsent ? (
                                     <button type="button" className="text-[10px] text-muted-foreground" onClick={() => setTeacherCell(sid, sub.id, { isAbsent: false })}>ABS</button>
                                   ) : (
                                     <Input
+                                      ref={(el) => { markInputRefs.current[markCellKey(sid, sub.id)] = el; }}
                                       type="number"
                                       min={0}
-                                      max={sub.totalMarks}
+                                      max={totalMarks}
                                       value={cell.obtainedMarks}
                                       onChange={(e) => setTeacherCell(sid, sub.id, { obtainedMarks: e.target.value })}
+                                      onKeyDown={(e) => handleMarkKeyDown(e, i, subIdx)}
                                       onDoubleClick={() => setTeacherCell(sid, sub.id, { isAbsent: true, obtainedMarks: '' })}
                                       className="h-7 w-[68px] mx-auto text-center text-xs px-1"
                                       placeholder="—"
@@ -700,17 +1256,81 @@ export default function TeacherPortalPage() {
                       })}
                     </tbody>
                   </table>
+                  <p className="px-4 py-2 text-[10px] text-muted-foreground border-t">
+                    Press <kbd className="rounded border px-1">Enter</kbd> for next cell (skips absent). On the last cell, Enter saves all marks.
+                  </p>
+                  </div>
+                  </>
                 )}
               </CardContent>
             </Card>
-          ) : (
-            <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                <ClipboardList className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-                Select an exam above to begin entering marks
-              </CardContent>
-            </Card>
-          )}
+          ) : null}
+        </TabsContent>
+
+        {/* ════════════════ MY ATTENDANCE ════════════════ */}
+        <TabsContent value="my-attendance" className="space-y-3">
+          {(() => {
+            const summary = (myAttendance as any)?.summary || { total: 0 };
+            const records: any[] = (myAttendance as any)?.records || [];
+            const tiles: { key: string; label: string; color: string }[] = [
+              { key: 'total', label: 'Total Days', color: 'bg-slate-100 text-slate-700' },
+              { key: 'present', label: 'Present', color: 'bg-green-100 text-green-700' },
+              { key: 'absent', label: 'Absent', color: 'bg-red-100 text-red-700' },
+              { key: 'late', label: 'Late', color: 'bg-yellow-100 text-yellow-700' },
+              { key: 'on_leave', label: 'On Leave', color: 'bg-blue-100 text-blue-700' },
+            ];
+            return (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {tiles.map(t => (
+                    <Card key={t.key}>
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl font-bold">{summary[t.key] || 0}</p>
+                        <Badge className={`${t.color} text-[10px] mt-1`}>{t.label}</Badge>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2"><UserCheck className="h-4 w-4 text-blue-500" /> My Attendance History</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {records.length === 0 ? (
+                      <p className="py-10 text-center text-sm text-muted-foreground">No attendance records yet</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/30 text-muted-foreground">
+                              <th className="text-left px-4 py-2.5 font-medium">Date</th>
+                              <th className="text-left px-4 py-2.5 font-medium">Status</th>
+                              <th className="text-left px-4 py-2.5 font-medium">Check-in</th>
+                              <th className="text-left px-4 py-2.5 font-medium">Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {records.map((r: any) => (
+                              <tr key={r._id || r.id} className="border-b hover:bg-muted/20">
+                                <td className="px-4 py-2">{new Date(r.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                                <td className="px-4 py-2 capitalize">
+                                  <Badge className={`text-[10px] ${r.status === 'present' ? 'bg-green-100 text-green-700' : r.status === 'absent' ? 'bg-red-100 text-red-700' : r.status === 'late' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {String(r.status || '').replace('_', ' ')}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2 text-muted-foreground">{r.checkInTime || '—'}</td>
+                                <td className="px-4 py-2 text-muted-foreground">{r.remarks || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            );
+          })()}
         </TabsContent>
 
         {/* ════════════════ EXAMS ════════════════ */}
@@ -818,6 +1438,28 @@ export default function TeacherPortalPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ════════════════ NOTIFICATIONS ════════════════ */}
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bell className="h-4 w-4 text-blue-500" />
+                Notifications
+                {notifUnread > 0 && (
+                  <Badge className="bg-red-100 text-red-700 text-[10px]">{notifUnread} new</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <NotificationList
+                limit={50}
+                showHeader={notifUnread > 0}
+                unreadCount={notifUnread}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

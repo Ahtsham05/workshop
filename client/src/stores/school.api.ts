@@ -52,6 +52,10 @@ export const schoolApi = createApi({
     'TimeSlot',
     'SchoolDashboard',
     'Visitor',
+    'Diary',
+    'Notification',
+    'NotificationCount',
+    'FeePaymentRequest',
     'SchoolReport',
     // New accounting tags
     'FeeCategory',
@@ -555,16 +559,81 @@ export const schoolApi = createApi({
       providesTags: ['Mark'],
     }),
     getTeacherPortalExamStudents: builder.query({
-      query: (params: { examId: string }) => ({ url: '/teacher-portal/exam-students', params }),
+      query: (params: { examId: string }) => ({
+        url: '/teacher-portal/exam-students',
+        params,
+        cache: 'no-store',
+      }),
+      transformResponse: (response: unknown) => {
+        if (!response || Array.isArray(response)) {
+          return { exam: null, students: [], marksMap: {} };
+        }
+        const r = response as { exam?: unknown; students?: unknown[]; marksMap?: Record<string, unknown> };
+        return {
+          exam: r.exam ?? null,
+          students: Array.isArray(r.students) ? r.students : [],
+          marksMap: r.marksMap && typeof r.marksMap === 'object' ? r.marksMap : {},
+        };
+      },
       providesTags: ['Mark', 'Student'],
     }),
     saveTeacherPortalBulkMarks: builder.mutation({
-      query: (body: { marks: any[] }) => ({ url: '/teacher-portal/marks/bulk', method: 'POST', body }),
+      query: (body: { marks: any[]; subjectConfig?: { subjectId: string; totalMarks: number; passingMarks: number }[] }) => ({ url: '/teacher-portal/marks/bulk', method: 'POST', body }),
       invalidatesTags: ['Mark'],
     }),
     markTeacherPortalBulkAttendance: builder.mutation({
       query: (body: { records: any[] }) => ({ url: '/teacher-portal/attendance/bulk', method: 'POST', body }),
       invalidatesTags: ['SchoolAttendance'],
+    }),
+    getTeacherPortalMyAttendance: builder.query({
+      query: (params: { from?: string; to?: string }) => ({ url: '/teacher-portal/my-attendance', params }),
+      providesTags: ['TeacherAttendance'],
+    }),
+    getTeacherPortalDiaries: builder.query({
+      query: (params: { classId?: string; from?: string; to?: string }) => ({ url: '/teacher-portal/diaries', params }),
+      providesTags: ['Diary'],
+    }),
+    createTeacherPortalDiary: builder.mutation({
+      query: (body: any) => ({ url: '/teacher-portal/diaries', method: 'POST', body }),
+      invalidatesTags: ['Diary'],
+    }),
+    deleteTeacherPortalDiary: builder.mutation({
+      query: (id: string) => ({ url: `/teacher-portal/diaries/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Diary'],
+    }),
+
+    // Notifications
+    getMyNotifications: builder.query({
+      query: (params?: { limit?: number }) => ({ url: '/notifications', params }),
+      providesTags: ['Notification'],
+    }),
+    getNotificationUnreadCount: builder.query({
+      query: () => '/notifications/unread-count',
+      providesTags: ['NotificationCount'],
+    }),
+    markNotificationRead: builder.mutation({
+      query: (id: string) => ({ url: `/notifications/${id}/read`, method: 'POST' }),
+      invalidatesTags: ['Notification', 'NotificationCount'],
+    }),
+    markAllNotificationsRead: builder.mutation({
+      query: () => ({ url: '/notifications/read-all', method: 'POST' }),
+      invalidatesTags: ['Notification', 'NotificationCount'],
+    }),
+    sendNotification: builder.mutation({
+      query: (body: { title: string; message: string; audience: string[]; type?: string }) => ({
+        url: '/notifications',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Notification', 'NotificationCount'],
+    }),
+    getSentNotifications: builder.query({
+      query: (params?: { limit?: number; page?: number }) => ({ url: '/notifications/sent', params }),
+      providesTags: ['Notification'],
+    }),
+    deleteNotification: builder.mutation({
+      query: (id: string) => ({ url: `/notifications/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Notification', 'NotificationCount'],
     }),
 
     // Parent Portal
@@ -575,6 +644,25 @@ export const schoolApi = createApi({
     getParentPortalResults: builder.query({
       query: (params: { studentId?: string; examId?: string }) => ({ url: '/parent-portal/results', params }),
       providesTags: ['Mark'],
+    }),
+    getParentPortalExams: builder.query({
+      query: (params: { studentId?: string }) => ({ url: '/parent-portal/exams', params }),
+      providesTags: ['Exam'],
+    }),
+    getParentPortalDiary: builder.query({
+      query: (params: { studentId?: string; from?: string; to?: string }) => ({ url: '/parent-portal/diary', params }),
+      providesTags: ['Diary'],
+    }),
+    getParentPortalBankAccounts: builder.query({
+      query: () => '/parent-portal/bank-accounts',
+    }),
+    getParentPortalPaymentRequests: builder.query({
+      query: (params: { studentId?: string }) => ({ url: '/parent-portal/payment-requests', params }),
+      providesTags: ['FeePaymentRequest'],
+    }),
+    createParentPortalPaymentRequest: builder.mutation({
+      query: (formData: FormData) => ({ url: '/parent-portal/payment-requests', method: 'POST', body: formData }),
+      invalidatesTags: ['FeePaymentRequest', 'SchoolFee'],
     }),
     getParentPortalAttendance: builder.query({
       query: (params: { studentId?: string; from?: string; to?: string }) => ({ url: '/parent-portal/attendance', params }),
@@ -590,6 +678,52 @@ export const schoolApi = createApi({
         params: examId ? { examId } : {},
       }),
       providesTags: ['Mark', 'SchoolAttendance', 'SchoolFee'],
+    }),
+
+    // Fee Payment Requests (admin review)
+    getFeePaymentRequests: builder.query({
+      query: (params: { status?: string; studentId?: string; limit?: number; page?: number; sortBy?: string }) => ({
+        url: '/fee-payment-requests',
+        params,
+      }),
+      providesTags: ['FeePaymentRequest'],
+    }),
+    getFeePaymentRequestPendingCount: builder.query({
+      query: () => '/fee-payment-requests/pending-count',
+      providesTags: ['FeePaymentRequest'],
+    }),
+    approveFeePaymentRequest: builder.mutation({
+      query: ({ id, note }: { id: string; note?: string }) => ({ url: `/fee-payment-requests/${id}/approve`, method: 'POST', body: { note } }),
+      invalidatesTags: ['FeePaymentRequest', 'SchoolFee', 'FeeVoucher', 'FeeAccountingDashboard'],
+    }),
+    rejectFeePaymentRequest: builder.mutation({
+      query: ({ id, note }: { id: string; note?: string }) => ({ url: `/fee-payment-requests/${id}/reject`, method: 'POST', body: { note } }),
+      invalidatesTags: ['FeePaymentRequest'],
+    }),
+
+    // Daily Diary (admin / teacher management)
+    getDiaries: builder.query({
+      query: (params: { classId?: string; sectionId?: string; dateFrom?: string; dateTo?: string; limit?: number; page?: number }) => ({
+        url: '/diaries',
+        params,
+      }),
+      providesTags: ['Diary'],
+    }),
+    getDiary: builder.query({
+      query: (id: string) => `/diaries/${id}`,
+      providesTags: ['Diary'],
+    }),
+    createDiary: builder.mutation({
+      query: (body) => ({ url: '/diaries', method: 'POST', body }),
+      invalidatesTags: ['Diary'],
+    }),
+    updateDiary: builder.mutation({
+      query: ({ id, ...body }: { id: string; [k: string]: unknown }) => ({ url: `/diaries/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['Diary'],
+    }),
+    deleteDiary: builder.mutation({
+      query: (id: string) => ({ url: `/diaries/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Diary'],
     }),
 
     // Teacher Attendance
@@ -1253,12 +1387,40 @@ export const {
   useGetTeacherPortalExamStudentsQuery,
   useSaveTeacherPortalBulkMarksMutation,
   useMarkTeacherPortalBulkAttendanceMutation,
+  useGetTeacherPortalMyAttendanceQuery,
+  useGetTeacherPortalDiariesQuery,
+  useCreateTeacherPortalDiaryMutation,
+  useDeleteTeacherPortalDiaryMutation,
+  // Notifications
+  useGetMyNotificationsQuery,
+  useGetNotificationUnreadCountQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useSendNotificationMutation,
+  useGetSentNotificationsQuery,
+  useDeleteNotificationMutation,
   // Parent Portal
   useGetParentPortalChildrenQuery,
   useGetParentPortalResultsQuery,
+  useGetParentPortalExamsQuery,
+  useGetParentPortalDiaryQuery,
   useGetParentPortalAttendanceQuery,
   useGetParentPortalFeesQuery,
   useGetParentPortalReportQuery,
+  useGetParentPortalBankAccountsQuery,
+  useGetParentPortalPaymentRequestsQuery,
+  useCreateParentPortalPaymentRequestMutation,
+  // Fee Payment Requests (admin)
+  useGetFeePaymentRequestsQuery,
+  useGetFeePaymentRequestPendingCountQuery,
+  useApproveFeePaymentRequestMutation,
+  useRejectFeePaymentRequestMutation,
+  // Daily Diary (admin)
+  useGetDiariesQuery,
+  useGetDiaryQuery,
+  useCreateDiaryMutation,
+  useUpdateDiaryMutation,
+  useDeleteDiaryMutation,
   // Teacher Attendance
   useGetTeacherAttendancesQuery,
   useGetTeacherAttendanceQuery,

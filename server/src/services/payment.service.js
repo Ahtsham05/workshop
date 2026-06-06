@@ -163,7 +163,8 @@ const getSubscriptionUsage = async (organizationId) => {
   const [org, branchesUsed, usersUsed] = await Promise.all([
     Organization.findById(organizationId).select('subscription name'),
     Branch.countDocuments({ organizationId, isActive: true }),
-    User.countDocuments({ organizationId, isActive: true }),
+    // Student/parent portal logins are not billable team members.
+    User.countDocuments({ organizationId, isActive: true, schoolRole: { $nin: ['student', 'parent'] } }),
   ]);
 
   if (!org) {

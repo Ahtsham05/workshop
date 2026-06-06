@@ -355,9 +355,9 @@ export default function TeacherList() {
                     type="password"
                     value={form.portalPassword}
                     onChange={(e) => setForm(p => ({...p, portalPassword: e.target.value}))}
-                    placeholder="Leave blank to use phone number as password"
+                    placeholder="Leave blank to use full phone number as password"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Minimum 6 characters. Defaults to last 6 digits of phone if left blank.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Minimum 6 characters. Defaults to the teacher's full phone number (digits only) if left blank.</p>
                 </div>
               )}
               <div className="border-t pt-3 mt-1">

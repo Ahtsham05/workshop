@@ -136,6 +136,7 @@ const scanAttendance = async (admissionNumber, scope = {}) => {
     classId: student.classId?._id || student.classId,
     sectionId: student.sectionId?._id || student.sectionId,
     date: new Date(todayStart),
+    checkInTime: new Date(), // actual scan moment = entry time
     status: 'present',
   });
 

@@ -1,20 +1,36 @@
 const httpStatus = require('http-status');
 const tokenService = require('./token.service');
 const userService = require('./user.service');
+const { Student } = require('../models');
 const Token = require('../models/token.model');
 const ApiError = require('../utils/ApiError');
 const { tokenTypes } = require('../config/tokens');
 
 /**
- * Login with username and password
- * @param {string} email
+ * Login with email or numeric student user ID and password
+ * @param {string} emailOrUserId
  * @param {string} password
  * @returns {Promise<User>}
  */
-const loginUserWithEmailAndPassword = async (email, password) => {
-  const user = await userService.getUserByEmail(email);
+const loginUserWithEmailAndPassword = async (emailOrUserId, password) => {
+  const identifier = String(emailOrUserId || '').trim();
+  let user = null;
+  let effectivePassword = password;
 
-  if (!user || !(await user.isPasswordMatch(password))) {
+  // Numeric login → portal account (student/parent) looked up via studentUserId
+  if (/^\d+$/.test(identifier)) {
+    const student = await Student.findOne({ studentUserId: identifier }).lean();
+    if (student?.parentUserId) {
+      user = await userService.getUserById(student.parentUserId);
+    }
+    // Portal passwords are the phone number — normalize to digits so a typed
+    // space/dash (e.g. "0300 7909963") still matches the stored "03007909963".
+    effectivePassword = String(password || '').replace(/\D/g, '');
+  } else {
+    user = await userService.getUserByEmail(identifier);
+  }
+
+  if (!user || !(await user.isPasswordMatch(effectivePassword))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
   }
 

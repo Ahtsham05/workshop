@@ -5,7 +5,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { Teacher, Student, Mark, SchoolAttendance, Exam, Subject, TeacherAssignment, Timetable } = require('../models');
+const { Teacher, Student, Mark, SchoolAttendance, Exam, Subject, TeacherAssignment, Timetable, TeacherAttendance, Diary } = require('../models');
 
 /**
  * Extract the raw branch ObjectId string from a branchId field that may be
@@ -263,9 +263,27 @@ const saveBulkMarks = catchAsync(async (req, res) => {
   const scope = getScope(req, teacher);
   const { classIds } = await resolveAssignedScope(teacher, scope);
 
-  const { marks } = req.body; // [{ studentId, subjectId, examId, classId, obtainedMarks, totalMarks, isAbsent }]
+  const { marks, subjectConfig } = req.body; // marks: [{ studentId, subjectId, examId, classId, obtainedMarks, totalMarks, isAbsent }]
   if (!Array.isArray(marks) || !marks.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'marks array required');
+  }
+
+  // Optionally sync per-subject total/pass marks on the exam (teacher mark entry).
+  if (Array.isArray(subjectConfig) && subjectConfig.length && marks[0]?.examId) {
+    const exam = await Exam.findOne({ ...scope, _id: marks[0].examId });
+    if (exam && classIds.includes(String(exam.classId))) {
+      const cfgMap = Object.fromEntries(
+        subjectConfig.map((s) => [String(s.subjectId), s])
+      );
+      (exam.subjects || []).forEach((sub, idx) => {
+        const sid = String(sub.subjectId?._id || sub.subjectId);
+        const cfg = cfgMap[sid];
+        if (!cfg) return;
+        exam.subjects[idx].totalMarks = Number(cfg.totalMarks) || sub.totalMarks;
+        exam.subjects[idx].passingMarks = Number(cfg.passingMarks) ?? sub.passingMarks;
+      });
+      await exam.save();
+    }
   }
 
   const results = [];
@@ -341,7 +359,117 @@ const getExamStudents = catchAsync(async (req, res) => {
   res.send({ exam, students, marksMap });
 });
 
+/** GET /teacher-portal/my-attendance?from=&to= — the teacher's OWN attendance records */
+const getMyOwnAttendance = catchAsync(async (req, res) => {
+  const teacher = await resolveTeacher(req);
+  if (!teacher) throw new ApiError(httpStatus.FORBIDDEN, 'No teacher profile linked');
+
+  const scope = getScope(req);
+  const filter = { ...scope, teacherId: teacher._id };
+  if (req.query.from || req.query.to) {
+    filter.date = {};
+    if (req.query.from) filter.date.$gte = new Date(req.query.from);
+    if (req.query.to) filter.date.$lte = new Date(req.query.to);
+  }
+
+  const records = await TeacherAttendance.find(filter)
+    .sort({ date: -1 })
+    .limit(365)
+    .lean();
+
+  // Lightweight summary so the portal can show present/absent/late counts.
+  const summary = records.reduce(
+    (acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      acc.total += 1;
+      return acc;
+    },
+    { total: 0 }
+  );
+
+  res.send({ records, summary });
+});
+
+/** GET /teacher-portal/diaries?classId= — diary entries for the teacher's assigned classes */
+const getMyDiaries = catchAsync(async (req, res) => {
+  const teacher = await resolveTeacher(req);
+  if (!teacher) throw new ApiError(httpStatus.FORBIDDEN, 'No teacher profile linked');
+
+  const scope = getScope(req);
+  const { classIds } = await resolveAssignedScope(teacher, scope);
+  if (!classIds.length) return res.send([]);
+
+  const filter = { ...scope };
+  if (req.query.classId && classIds.includes(String(req.query.classId))) {
+    filter.classId = req.query.classId;
+  } else {
+    filter.classId = { $in: classIds };
+  }
+  if (req.query.from || req.query.to) {
+    filter.date = {};
+    if (req.query.from) filter.date.$gte = new Date(req.query.from);
+    if (req.query.to) filter.date.$lte = new Date(req.query.to);
+  }
+
+  const diaries = await Diary.find(filter)
+    .populate('classId', 'name')
+    .populate('sectionId', 'name')
+    .populate('items.subjectId', 'name')
+    .sort({ date: -1 })
+    .limit(100)
+    .lean();
+  res.send(diaries);
+});
+
+/** POST /teacher-portal/diaries — create a diary entry for an assigned class */
+const createMyDiary = catchAsync(async (req, res) => {
+  const teacher = await resolveTeacher(req);
+  if (!teacher) throw new ApiError(httpStatus.FORBIDDEN, 'No teacher profile linked');
+
+  const scope = getScope(req);
+  const { classIds } = await resolveAssignedScope(teacher, scope);
+
+  const { classId, sectionId, date, title, note, items } = req.body;
+  if (!classId || !classIds.includes(String(classId))) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You can only add diary for your assigned classes');
+  }
+  if (!scope.branchId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Branch could not be resolved for this teacher');
+  }
+
+  const diary = await Diary.create({
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+    classId,
+    sectionId: sectionId || null,
+    date: date ? new Date(date) : new Date(),
+    title: title || '',
+    note: note || '',
+    items: Array.isArray(items) ? items : [],
+    createdBy: req.user.id,
+  });
+  res.status(httpStatus.CREATED).send(diary);
+});
+
+/** DELETE /teacher-portal/diaries/:id — delete a diary entry from an assigned class */
+const deleteMyDiary = catchAsync(async (req, res) => {
+  const teacher = await resolveTeacher(req);
+  if (!teacher) throw new ApiError(httpStatus.FORBIDDEN, 'No teacher profile linked');
+
+  const scope = getScope(req);
+  const { classIds } = await resolveAssignedScope(teacher, scope);
+
+  const diary = await Diary.findOne({ _id: req.params.id, ...scope });
+  if (!diary) throw new ApiError(httpStatus.NOT_FOUND, 'Diary entry not found');
+  if (!classIds.includes(String(diary.classId))) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Diary entry is not in your assigned classes');
+  }
+  await diary.deleteOne();
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   getTeacherMe, getMyStudents, getMyExams, getMySubjects, getMyAttendance,
   getDashboard, getMyTimetable, getMyMarks, saveBulkMarks, markBulkAttendance, getExamStudents,
+  getMyOwnAttendance, getMyDiaries, createMyDiary, deleteMyDiary,
 };

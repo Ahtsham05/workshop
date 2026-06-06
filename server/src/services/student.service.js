@@ -82,6 +82,44 @@ const generateRollNumber = async (classId, scope = {}) => {
   return `${prefix}${String(nextNum).padStart(3, '0')}`;
 };
 
+/**
+ * Generate numeric student user ID — globally unique (100001, 100002…)
+ * Used for parent portal login and printed on fee vouchers.
+ */
+const generateStudentUserId = async () => {
+  const lastStudent = await Student.findOne({
+    studentUserId: { $regex: /^\d+$/ },
+  })
+    .sort({ studentUserId: -1 })
+    .collation({ locale: 'en_US', numericOrdering: true })
+    .lean();
+
+  let nextNum = 100001;
+  if (lastStudent?.studentUserId) {
+    const lastNum = parseInt(lastStudent.studentUserId, 10);
+    if (!isNaN(lastNum)) nextNum = lastNum + 1;
+  }
+  return String(nextNum);
+};
+
+/** Ensure a student has a studentUserId (backfill for existing records). */
+const ensureStudentUserId = async (studentId, scope = {}) => {
+  const student = await Student.findOne({ _id: studentId, ...getTenantFilter(scope) });
+  if (!student) return null;
+  if (student.studentUserId) return student.studentUserId;
+
+  const studentUserId = await generateStudentUserId();
+  student.studentUserId = studentUserId;
+  await student.save();
+  return studentUserId;
+};
+
+/**
+ * Build the student portal password — the guardian's phone number (digits only).
+ * Login ID is the numeric studentUserId; this phone is the password.
+ */
+const buildStudentPortalPassword = (phone) => String(phone || '').replace(/\D/g, '');
+
 const createStudent = async (body) => {
   const scope = getTenantFilter(body);
 
@@ -104,52 +142,72 @@ const createStudent = async (body) => {
     body.rollNumber = await generateRollNumber(body.classId, scope);
   }
 
+  // Auto-generate numeric student user ID
+  if (!body.studentUserId) {
+    body.studentUserId = await generateStudentUserId();
+  }
+
   const student = await Student.create(body);
-  // Fire-and-forget: create parent portal user if parent email provided
-  createParentPortalUser(student);
+  // Fire-and-forget: create the student's own portal login account
+  createStudentPortalUser(student);
   return student;
 };
 
 /**
- * Auto-create a parent portal User for the student (idempotent — skipped if email taken).
- * Requires parent.email to be present on the student.
- * Password: "parent" + '@' + year  e.g. "parent@2025" — always contains letter + digit.
+ * Auto-create a per-student portal login account.
+ *   Login ID : studentUserId (numeric, e.g. 100019)
+ *   Password : guardian phone number (digits only)
+ *   Role     : student — sees only their own records
+ *
+ * Idempotent: re-runs refresh the password and keep the account linked.
  */
-const createParentPortalUser = async (student) => {
+const createStudentPortalUser = async (student) => {
   try {
-    const parentEmail = student.parent?.email;
-    if (!parentEmail) return;
-    if (await User.isEmailTaken(parentEmail)) {
-      // If the user already exists, try to link this student to them
-      const existingUser = await User.findOne({ email: parentEmail });
-      if (existingUser && existingUser.schoolRole === 'parent') {
-        await User.findByIdAndUpdate(existingUser._id, {
-          $addToSet: { linkedStudentIds: student._id },
-        });
+    const phone = student.parent?.phone;
+    if (!phone) return null; // no phone → no password → cannot create a login
+
+    const studentUserId = student.studentUserId
+      || await ensureStudentUserId(student._id, { organizationId: student.organizationId, branchId: student.branchId });
+    if (!studentUserId) return null;
+
+    const rawPassword = buildStudentPortalPassword(phone);
+    if (rawPassword.length < 8) return null; // bcrypt minimum length
+
+    // Synthetic, unique-per-student email so siblings sharing a phone each get an account
+    const loginEmail = `${studentUserId}@student.portal`;
+    const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student';
+
+    if (await User.isEmailTaken(loginEmail)) {
+      const existingUser = await User.findOne({ email: loginEmail });
+      if (existingUser) {
+        existingUser.password = rawPassword;
+        existingUser.schoolRole = 'student';
+        existingUser.linkedStudentIds = [student._id];
+        await existingUser.save();
         await Student.findByIdAndUpdate(student._id, { parentUserId: existingUser._id });
+        return existingUser;
       }
-      return;
+      return null;
     }
 
-    const year = new Date().getFullYear();
-    const rawPassword = `parent@${year}`;
-    const parentName = student.parent?.fatherName || student.parent?.guardianName || 'Parent';
-
     const user = await User.create({
-      name: parentName,
-      email: parentEmail,
+      name: studentName,
+      email: loginEmail,
       password: rawPassword,
       organizationId: student.organizationId,
       businessType: 'school',
-      schoolRole: 'parent',
+      schoolRole: 'student',
       linkedStudentIds: [student._id],
       systemRole: 'staff',
       onboardingComplete: true,
+      isEmailVerified: true,
     });
 
     await Student.findByIdAndUpdate(student._id, { parentUserId: user._id });
+    return user;
   } catch (_err) {
     // Portal user creation is best-effort; never fail the main student creation
+    return null;
   }
 };
 
@@ -158,9 +216,13 @@ const queryStudents = async (filter, options) => {
 };
 
 const getStudentById = async (id, scope = {}) => {
-  return Student.findOne({ _id: id, ...getTenantFilter(scope) })
+  const doc = await Student.findOne({ _id: id, ...getTenantFilter(scope) })
     .populate('classId')
     .populate('sectionId');
+  if (doc && !doc.studentUserId) {
+    doc.studentUserId = await ensureStudentUserId(doc._id, scope);
+  }
+  return doc;
 };
 
 const updateStudentById = async (id, updateBody, scope = {}) => {
@@ -612,6 +674,10 @@ const getPromotionEligibility = async (classId, scope = {}) => {
 module.exports = {
   generateAdmissionNumber,
   generateRollNumber,
+  generateStudentUserId,
+  ensureStudentUserId,
+  buildStudentPortalPassword,
+  createStudentPortalUser,
   createStudent,
   admitStudent,
   queryStudents,

@@ -45,6 +45,7 @@ module.exports.feeCategoryService = require('./feeCategory.service.js');
 module.exports.schoolTransactionService = require('./schoolTransaction.service.js');
 module.exports.feeStructureService = require('./feeStructure.service.js');
 module.exports.feeVoucherService = require('./feeVoucher.service.js');
+module.exports.feePaymentRequestService = require('./feePaymentRequest.service.js');
 module.exports.schoolAccountingService = require('./schoolAccounting.service.js');
 module.exports.schoolReportsService = require('./schoolReports.service.js');
 module.exports.accountsSystemService = require('./accountsSystem.service.js');
@@ -71,6 +72,8 @@ module.exports.whatsappDispatchService = require('./whatsappDispatch.service.js'
 module.exports.whatsappIntegrationService = require('./whatsappIntegration.service.js');
 module.exports.schoolDashboardService = require('./schoolDashboard.service.js');
 module.exports.visitorService = require('./visitor.service.js');
+module.exports.diaryService = require('./diary.service.js');
+module.exports.notificationService = require('./notification.service.js');
 module.exports.schoolReportService = require('./schoolReport.service.js');
 
 // HR Services

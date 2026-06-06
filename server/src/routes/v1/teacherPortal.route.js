@@ -28,5 +28,9 @@ router.post('/attendance/bulk', teacherPortalController.markBulkAttendance);
 router.get('/marks', teacherPortalController.getMyMarks);
 router.post('/marks/bulk', teacherPortalController.saveBulkMarks);
 router.get('/timetable', teacherPortalController.getMyTimetable);
+router.get('/my-attendance', teacherPortalController.getMyOwnAttendance);
+router.get('/diaries', teacherPortalController.getMyDiaries);
+router.post('/diaries', teacherPortalController.createMyDiary);
+router.delete('/diaries/:id', teacherPortalController.deleteMyDiary);
 
 module.exports = router;

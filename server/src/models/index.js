@@ -48,6 +48,7 @@ module.exports.FeeCategory = require('./feeCategory.model');
 module.exports.SchoolTransaction = require('./schoolTransaction.model');
 module.exports.FeeStructure = require('./feeStructure.model');
 module.exports.FeeVoucher = require('./feeVoucher.model');
+module.exports.FeePaymentRequest = require('./feePaymentRequest.model');
 module.exports.StudentCreditLedger = require('./studentCreditLedger.model');
 
 // Accounting System Models
@@ -73,6 +74,9 @@ module.exports.SchoolFee = require('./schoolFee.model');
 module.exports.Timetable = require('./timetable.model');
 module.exports.TimeSlot = require('./timeSlot.model');
 module.exports.Visitor = require('./visitor.model');
+module.exports.Diary = require('./diary.model');
+module.exports.Notification = require('./notification.model');
+module.exports.NotificationRead = require('./notificationRead.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

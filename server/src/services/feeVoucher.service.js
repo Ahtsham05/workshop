@@ -313,6 +313,72 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
   };
 };
 
+/**
+ * Generate vouchers for ALL classes in a branch in one optimized pass.
+ *
+ * - admission_form: a single bulk pass over every active student (no per-class
+ *   fee structure needed — each student carries their own admission fees).
+ * - fee_structure / mixed: students are grouped by class and each group is
+ *   generated against that class's active fee structure. Classes with no
+ *   structure are skipped (in pure fee_structure mode).
+ */
+const bulkGenerateVouchersAllClasses = async (month, year, scope, feeSource = 'admission_form') => {
+  const { Student, FeeStructure } = require('../models');
+
+  const students = await Student.find({
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+    status: 'active',
+  })
+    .select('_id sectionId classId feeStructure creditBalance')
+    .lean();
+
+  if (!students.length) throw new ApiError(httpStatus.BAD_REQUEST, 'No active students found');
+
+  // admission_form: one bulk pass for everyone.
+  if (feeSource === 'admission_form') {
+    const result = await bulkGenerateVouchersV2(students, null, month, year, scope, 'admission_form');
+    return { ...result, total: students.length };
+  }
+
+  // fee_structure / mixed: build a classId -> active fee structure map.
+  const structures = await FeeStructure.find({ ...getTenantFilter(scope), isActive: true })
+    .populate('classId')
+    .populate('feeItems.categoryId')
+    .lean();
+  const structureByClass = new Map();
+  structures.forEach((s) => {
+    const cid = String(s.classId?._id || s.classId);
+    if (cid && !structureByClass.has(cid)) structureByClass.set(cid, s);
+  });
+
+  // Group students by class.
+  const groups = new Map();
+  students.forEach((st) => {
+    const cid = String(st.classId);
+    if (!groups.has(cid)) groups.set(cid, []);
+    groups.get(cid).push(st);
+  });
+
+  const agg = { insertedCount: 0, skipped: 0, skippedDuplicates: 0, errorCount: 0, autoAppliedCount: 0, autoAppliedAmount: 0, total: students.length };
+  for (const [cid, group] of groups) {
+    const fs = structureByClass.get(cid) || null;
+    // Pure fee_structure mode requires a structure; mixed can still use admission fees.
+    if (!fs && feeSource === 'fee_structure') {
+      agg.skipped += group.length;
+      continue;
+    }
+    const r = await bulkGenerateVouchersV2(group, fs, month, year, scope, feeSource);
+    agg.insertedCount += r.insertedCount ?? 0;
+    agg.skipped += r.skipped ?? 0;
+    agg.skippedDuplicates += r.skippedDuplicates ?? 0;
+    agg.errorCount += r.errorCount ?? 0;
+    agg.autoAppliedCount += r.autoAppliedCount ?? 0;
+    agg.autoAppliedAmount += r.autoAppliedAmount ?? 0;
+  }
+  return agg;
+};
+
 const queryVouchers = async (filter, options) => {
   return FeeVoucher.paginate(filter, {
     ...options,
@@ -503,24 +569,48 @@ const deleteVoucherById = async (id, scope = {}) => {
 /**
  * Get vouchers for printing (populated with student, class, org details).
  * Rolls all other unpaid/partial vouchers (including exam fees) into printLineItems
- * so the printed challan shows every pending fee with its proper name.
+ * so the printed challan shows every pending fee with its proper name and month.
  */
+const feeItemLabel = (name, month, year) => {
+  const base = String(name || 'Fee').trim();
+  const period = month && year ? `${month} ${year}` : month || '';
+  if (!period) return base;
+  if (base.toLowerCase().includes(String(month || '').toLowerCase())) return base;
+  if (/monthly|tuition|transport|fee/i.test(base)) return `${base} — ${period}`;
+  return `${base} (${period})`;
+};
+
 const pendingVoucherLabel = (p) => {
   const items = p.feeItems || [];
-  if (items.length === 1 && items[0]?.name) return items[0].name;
-  if (items.length > 1) {
-    return items.map((fi) => fi.name).filter(Boolean).join(' + ');
+  const period = p.month && p.year ? `${p.month} ${p.year}` : p.month || '';
+  if (items.length === 1 && items[0]?.name) {
+    return feeItemLabel(items[0].name, p.month, p.year);
   }
-  if (p.voucherType === 'exam') return `Exam Fee (${p.month || 'Exam'})`;
-  return `Pending Fee (${p.month || '—'} ${p.year || ''})`.trim();
+  if (items.length > 1) {
+    const names = items.map((fi) => feeItemLabel(fi.name, p.month, p.year)).filter(Boolean);
+    return names.join(' + ');
+  }
+  if (p.voucherType === 'exam') return period ? `Exam Fee — ${period}` : 'Exam Fee';
+  return period ? `Pending Fee — ${period}` : 'Pending Fee';
 };
 
 const getVouchersForPrint = async (ids, scope = {}) => {
+  const { ensureStudentUserId } = require('./student.service');
+
   const vouchers = await FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
-    .populate('studentId', 'firstName lastName admissionNumber rollNumber parent.phone parent.guardianName parent.fatherName')
+    .populate('studentId', 'firstName lastName admissionNumber rollNumber studentUserId parent.phone parent.guardianName parent.fatherName')
     .populate('classId', 'name')
     .populate('sectionId', 'name')
     .lean();
+
+  // Backfill studentUserId for existing students missing it
+  for (const v of vouchers) {
+    const sid = v.studentId?._id || v.studentId;
+    if (sid && !v.studentId?.studentUserId) {
+      const uid = await ensureStudentUserId(sid, scope);
+      if (uid && v.studentId) v.studentId.studentUserId = uid;
+    }
+  }
 
   const studentIds = [...new Set(vouchers.map((v) => String(v.studentId?._id || v.studentId)).filter(Boolean))];
   if (!studentIds.length) return vouchers;
@@ -561,7 +651,7 @@ const getVouchersForPrint = async (ids, scope = {}) => {
     const pendingTotal = pendingList.reduce((sum, p) => sum + p.remaining, 0);
 
     const currentLineItems = (v.feeItems || []).map((fi) => ({
-      name: fi.name,
+      name: feeItemLabel(fi.name, v.month, v.year),
       amount: fi.amount || 0,
     }));
     const pendingLineItems = pendingList.map((p) => ({
@@ -1410,6 +1500,7 @@ module.exports = {
   createVoucher,
   bulkGenerateVouchers,
   bulkGenerateVouchersV2,
+  bulkGenerateVouchersAllClasses,
   bulkGenerateExamVouchers,
   queryVouchers,
   getVoucherById,

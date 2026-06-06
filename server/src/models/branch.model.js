@@ -53,6 +53,24 @@ const branchSchema = mongoose.Schema(
       maxlength: 2000,
       default: '',
     },
+    /**
+     * Fee-collection bank accounts shown to parents/students in the portal when
+     * paying fees online. Each account is what a parent transfers fees to and
+     * then uploads the payment proof against.
+     */
+    bankAccounts: [
+      new mongoose.Schema(
+        {
+          bankName: { type: String, trim: true },
+          accountTitle: { type: String, trim: true },
+          accountNumber: { type: String, trim: true },
+          iban: { type: String, trim: true },
+          instructions: { type: String, trim: true },
+          isActive: { type: Boolean, default: true },
+        },
+        { _id: true }
+      ),
+    ],
   },
   {
     timestamps: true,

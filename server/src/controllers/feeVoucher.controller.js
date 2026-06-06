@@ -23,12 +23,26 @@ const createVoucher = catchAsync(async (req, res) => {
  *   'mixed'          — prefer student individual fees; fall back to fee structure
  */
 const bulkGenerateVouchers = catchAsync(async (req, res) => {
-  const { classId, feeStructureId, month, year, feeSource = 'fee_structure' } = req.body;
+  const { classId, feeStructureId, month, year, feeSource = 'fee_structure', allClasses = false } = req.body;
   const scope = {
     organizationId: req.user.organizationId,
     branchId: req.branchId,
     createdBy: req.user._id,
   };
+
+  // ── All-classes mode: generate for every active student in the branch ──
+  if (allClasses) {
+    const result = await feeVoucherService.bulkGenerateVouchersAllClasses(month, year, scope, feeSource);
+    return res.status(httpStatus.CREATED).send({
+      message: 'Vouchers generated for all classes',
+      generated: result.insertedCount ?? 0,
+      skipped: result.skipped ?? 0,
+      skippedDuplicates: result.skippedDuplicates ?? 0,
+      autoAppliedCount: result.autoAppliedCount ?? 0,
+      autoAppliedAmount: result.autoAppliedAmount ?? 0,
+      total: result.total ?? 0,
+    });
+  }
 
   // Load the fee structure (required for 'fee_structure' and 'mixed'; optional for 'admission_form')
   let feeStructure = null;

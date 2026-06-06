@@ -1,6 +1,16 @@
-const { Membership } = require('../models');
+const { Membership, Branch } = require('../models');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
+
+/**
+ * School portal users (teacher/parent/student) authenticate as portal logins
+ * and never get branch Membership records. They are still tied to a single
+ * organization, so we allow them to scope to any branch within their own org.
+ */
+const isSchoolPortalUser = (user) =>
+  !!user.linkedTeacherId ||
+  (Array.isArray(user.linkedStudentIds) && user.linkedStudentIds.length > 0) ||
+  ['teacher', 'parent', 'student'].includes(user.schoolRole);
 
 /**
  * Branch scope middleware
@@ -31,6 +41,17 @@ const branchScope = (required = false) => async (req, res, next) => {
 
     // SuperAdmins and system_admins bypass branch membership checks
     if (req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin') {
+      req.branchId = branchId;
+      return next();
+    }
+
+    // School portal users (teacher/parent/student) have no Membership records.
+    // Allow them to scope to any branch that belongs to their own organization.
+    if (isSchoolPortalUser(req.user)) {
+      const branch = await Branch.findOne({ _id: branchId, organizationId: req.user.organizationId }).select('_id');
+      if (!branch) {
+        return next(new ApiError(httpStatus.FORBIDDEN, 'You do not have access to this branch'));
+      }
       req.branchId = branchId;
       return next();
     }

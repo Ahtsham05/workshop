@@ -31,7 +31,7 @@ import {
   IconClock,
   IconFileImport,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -495,6 +495,22 @@ export const sidebarData: SidebarData = {
           allowedSchoolRoles: ['teacher'],
         },
         {
+          title: 'Notifications',
+          url: '/school/portals/teacher?tab=notifications' as any,
+          icon: Bell,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          allowedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Daily Diary',
+          url: '/school/diary',
+          icon: NotebookText,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          allowedSchoolRoles: ['teacher'],
+        },
+        {
           title: 'My Leave',
           url: '/school/teacher-leave',
           icon: IconCalendar,
@@ -577,6 +593,14 @@ export const sidebarData: SidebarData = {
           excludedSchoolRoles: ['teacher'],
         },
         {
+          title: 'Daily Diary',
+          url: '/school/diary',
+          icon: NotebookText,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
           title: 'Timetable',
           url: '/school/timetable',
           icon: IconClock,
@@ -629,6 +653,14 @@ export const sidebarData: SidebarData = {
           requiredFeature: 'school_management',
           excludedSchoolRoles: ['teacher'],
         },
+        {
+          title: 'Notifications',
+          url: '/school/notifications',
+          icon: Bell,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
       ],
     },
     {
@@ -646,6 +678,14 @@ export const sidebarData: SidebarData = {
           title: 'Fee Vouchers',
           url: '/school/fees/vouchers',
           icon: Receipt,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Online Payments',
+          url: '/school/fees/payment-approvals',
+          icon: WalletCards,
           businessTypes: ['school'],
           requiredFeature: 'school_management',
           excludedSchoolRoles: ['teacher'],
