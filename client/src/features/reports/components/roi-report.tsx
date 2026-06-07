@@ -314,6 +314,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                 { label: 'Service Profit', value: b?.profit.serviceProfit ?? 0, color: 'text-indigo-600', mobileOnly: true },
                 { label: 'Sim Sale Profit', value: b?.profit.simSaleProfit ?? 0, color: 'text-sky-600', mobileOnly: true },
                 { label: 'Bill Payment Profit', value: b?.profit.billPaymentProfit ?? 0, color: 'text-cyan-600', mobileOnly: true },
+                { label: 'Bill Late Payment Loss', value: -(b?.profit.billLatePaymentLoss ?? 0), color: 'text-red-600', mobileOnly: true },
+                { label: 'Net Bill Payment Profit', value: b?.profit.billPaymentNetProfit ?? 0, color: 'text-cyan-700', mobileOnly: true },
                 { label: 'Received Profit', value: b?.profit.withdrawalProfit ?? 0, color: 'text-orange-600', mobileOnly: true },
                 { label: 'Send Profit', value: b?.profit.depositProfit ?? 0, color: 'text-purple-600', mobileOnly: true },
                 { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500', mobileOnly: false },

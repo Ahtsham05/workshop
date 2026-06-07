@@ -56,6 +56,23 @@ const billPaymentSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    actualBillAmount: {
+      type: Number,
+      min: 0,
+    },
+    latePaymentLoss: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    netBillProfit: {
+      type: Number,
+      default: 0,
+    },
+    paidAfterDueDate: {
+      type: Boolean,
+      default: false,
+    },
     dueDate: {
       type: Date,
       required: true,

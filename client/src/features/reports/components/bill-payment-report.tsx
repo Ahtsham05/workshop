@@ -121,6 +121,10 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             { Metric: 'Total Bills Collected', Value: data.totalBills },
             { Metric: 'Total Bill Amount (Rs.)', Value: data.totalBillAmount },
             { Metric: 'Total Service Charges / Profit (Rs.)', Value: data.totalServiceCharges },
+            { Metric: 'Late Payment Loss (Rs.)', Value: data.totalLatePaymentLoss ?? 0 },
+            { Metric: 'Net Bill Profit (Rs.)', Value: data.totalNetBillProfit ?? data.totalServiceCharges },
+            { Metric: 'Total Paid to Utility (Rs.)', Value: data.totalActualBillAmount ?? data.totalBillAmount },
+            { Metric: 'Late Paid Bills', Value: data.latePaidCount ?? 0 },
             { Metric: 'Total Collection (Rs.)', Value: data.totalCollection },
             { Metric: 'Pending Bills', Value: data.totalPending ?? 0 },
             { Metric: 'Pending Amount (Rs.)', Value: data.totalPendingAmount ?? 0 },
@@ -275,8 +279,15 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-green-600'>{fmt(data?.totalServiceCharges ?? 0)}</div>
-              <p className='text-xs text-muted-foreground mt-1'>Margin: {profitMargin}% of collection</p>
+              <div className='text-2xl font-bold text-green-600'>
+                {fmt(data?.totalNetBillProfit ?? data?.totalServiceCharges ?? 0)}
+              </div>
+              <p className='text-xs text-muted-foreground mt-1'>
+                Service charges: {fmt(data?.totalServiceCharges ?? 0)}
+                {(data?.totalLatePaymentLoss ?? 0) > 0 && (
+                  <> · Late loss: <span className='text-red-600'>{fmt(data?.totalLatePaymentLoss ?? 0)}</span></>
+                )}
+              </p>
             </CardContent>
           </Card>
           {/* Pending */}

@@ -50,6 +50,7 @@ const updateBillPayment = {
       billAmount: Joi.number().min(0.01),
       serviceCharge: Joi.number().min(0),
       dueDate: Joi.date(),
+      actualBillAmount: Joi.number().min(0.01),
       paymentDate: Joi.date(),
       status: Joi.string().valid('pending', 'paid', 'overdue'),
       paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa'),

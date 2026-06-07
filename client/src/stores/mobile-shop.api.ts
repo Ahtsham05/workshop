@@ -254,6 +254,10 @@ export interface BillPaymentRecord {
   billAmount: number
   serviceCharge: number
   totalReceived: number
+  actualBillAmount?: number
+  latePaymentLoss?: number
+  netBillProfit?: number
+  paidAfterDueDate?: boolean
   dueDate: string
   paymentDate?: string
   status: 'pending' | 'paid' | 'overdue'
@@ -273,6 +277,7 @@ export interface CreateBillPaymentInput {
   dueDate: string
   paymentDate?: string
   status?: 'pending' | 'paid' | 'overdue'
+  actualBillAmount?: number
   paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
   notes?: string
 }
@@ -309,6 +314,10 @@ export interface BillPaymentReport {
   totalBillAmount: number
   totalServiceCharges: number
   totalCollection: number
+  totalLatePaymentLoss: number
+  totalNetBillProfit: number
+  totalActualBillAmount: number
+  latePaidCount: number
   totalDueToday: number
   totalOverdue: number
   totalPending: number

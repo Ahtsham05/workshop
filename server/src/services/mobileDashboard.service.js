@@ -158,7 +158,13 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   }, 0);
 
   const totalBillCollection = billPayments.reduce((sum, b) => sum + Number(b.totalReceived || 0), 0);
-  const billPaymentProfit = billPayments.reduce((sum, b) => sum + Number(b.serviceCharge || 0), 0);
+  const billLatePaymentLoss = billPayments.reduce((sum, b) => sum + Number(b.latePaymentLoss || 0), 0);
+  const billPaymentProfit = billPayments.reduce((sum, b) => {
+    if (b.status === 'paid') {
+      return sum + Number(b.netBillProfit ?? (Number(b.serviceCharge || 0) - Number(b.latePaymentLoss || 0)));
+    }
+    return sum + Number(b.serviceCharge || 0);
+  }, 0);
   const billPaymentCash = billPayments.reduce((sum, b) => {
     return b.paymentMethod === 'cash' ? sum + Number(b.totalReceived || 0) : sum;
   }, 0);
@@ -237,6 +243,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     totalRepairIncome,
     totalBillCollection,
     billPaymentProfit,
+    billLatePaymentLoss,
     totalProfit:
       salesProfit +
       loadProfit +

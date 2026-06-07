@@ -48,6 +48,46 @@ const refreshOverdueStatuses = async (organizationId, branchId) => {
   await BillPayment.updateMany(filter, { $set: { status: 'overdue' } });
 };
 
+const isPaidAfterDueDate = (dueDate, paymentDate) => {
+  if (!dueDate || !paymentDate) return false;
+  const dueEnd = endOfBusinessDay(toBusinessCalendarDate(dueDate));
+  const paidAt = parseBusinessDateTime(paymentDate) || new Date(paymentDate);
+  return paidAt > dueEnd;
+};
+
+const applyBillPaymentFinancials = (billPayment) => {
+  const billAmount = Number(billPayment.billAmount || 0);
+  const serviceCharge = Number(billPayment.serviceCharge || 0);
+  billPayment.totalReceived = billAmount + serviceCharge;
+
+  if (billPayment.status !== 'paid') {
+    billPayment.actualBillAmount = undefined;
+    billPayment.latePaymentLoss = 0;
+    billPayment.netBillProfit = serviceCharge;
+    billPayment.paidAfterDueDate = false;
+    return billPayment;
+  }
+
+  const paymentDate = billPayment.paymentDate || new Date();
+  const paidLate = isPaidAfterDueDate(billPayment.dueDate, paymentDate);
+  billPayment.paidAfterDueDate = paidLate;
+
+  if (paidLate) {
+    const actualBillAmount = Math.max(
+      Number(billPayment.actualBillAmount ?? billAmount),
+      billAmount,
+    );
+    billPayment.actualBillAmount = actualBillAmount;
+    billPayment.latePaymentLoss = Math.max(0, actualBillAmount - billAmount);
+  } else {
+    billPayment.actualBillAmount = billAmount;
+    billPayment.latePaymentLoss = 0;
+  }
+
+  billPayment.netBillProfit = serviceCharge - billPayment.latePaymentLoss;
+  return billPayment;
+};
+
 const syncBillCashEntry = async (billPayment) => {
   const commonFields = {
     organizationId: billPayment.organizationId,
@@ -72,12 +112,16 @@ const syncBillCashEntry = async (billPayment) => {
   // EXPENSE: bill amount paid to utility company — only when bill is actually paid
   let expenseEntry;
   if (billPayment.status === 'paid') {
+    const utilityAmount = Number(billPayment.actualBillAmount || billPayment.billAmount);
+    const lateSuffix = billPayment.paidAfterDueDate && billPayment.latePaymentLoss > 0
+      ? ' (includes late payment surcharge)'
+      : '';
     expenseEntry = cashBookService.upsertReferenceEntry({
       ...commonFields,
       type: 'expense',
-      amount: billPayment.billAmount,
+      amount: utilityAmount,
       date: billPayment.paymentDate || billPayment.createdAt,
-      description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+      description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})${lateSuffix}`,
     });
   } else {
     // Remove expense entry if bill reverted from paid
@@ -100,16 +144,16 @@ const syncBillCashEntry = async (billPayment) => {
 };
 
 const createBillPayment = async (body) => {
-  const totalReceived = Number(body.billAmount) + Number(body.serviceCharge || 0);
   const status = body.status || 'pending';
-  const billPayment = await BillPayment.create({
+  const billPayment = new BillPayment({
     ...body,
     dueDate: parseBusinessDateTime(body.dueDate) || body.dueDate,
-    totalReceived,
     status,
     paymentDate:
       status === 'paid' ? parseBusinessDateTime(body.paymentDate) || body.paymentDate || new Date() : null,
   });
+  applyBillPaymentFinancials(billPayment);
+  await billPayment.save();
   await syncBillCashEntry(billPayment);
   return billPayment;
 };
@@ -200,13 +244,18 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
   const billPayment = await getBillPaymentById(id);
   Object.assign(billPayment, updateBody, { updatedBy: userId });
 
+  if (updateBody.dueDate) {
+    billPayment.dueDate = parseBusinessDateTime(updateBody.dueDate) || updateBody.dueDate;
+  }
+  if (updateBody.paymentDate) {
+    billPayment.paymentDate = parseBusinessDateTime(updateBody.paymentDate) || updateBody.paymentDate;
+  }
+
   if (billPayment.status === 'paid' && !billPayment.paymentDate) {
     billPayment.paymentDate = new Date();
   }
 
-  // Recalculate total if amounts changed
-  billPayment.totalReceived = Number(billPayment.billAmount) + Number(billPayment.serviceCharge || 0);
-
+  applyBillPaymentFinancials(billPayment);
   await billPayment.save();
   await syncBillCashEntry(billPayment);
   return billPayment;
@@ -294,6 +343,12 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
           totalBillAmount: { $sum: '$billAmount' },
           totalServiceCharges: { $sum: '$serviceCharge' },
           totalCollection: { $sum: '$totalReceived' },
+          totalLatePaymentLoss: { $sum: { $ifNull: ['$latePaymentLoss', 0] } },
+          totalNetBillProfit: { $sum: { $ifNull: ['$netBillProfit', '$serviceCharge'] } },
+          totalActualBillAmount: { $sum: { $ifNull: ['$actualBillAmount', '$billAmount'] } },
+          latePaidCount: {
+            $sum: { $cond: [{ $gt: [{ $ifNull: ['$latePaymentLoss', 0] }, 0] }, 1, 0] },
+          },
         },
       },
     ]),
@@ -317,6 +372,8 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
           totalBillAmount: { $sum: '$billAmount' },
           totalServiceCharges: { $sum: '$serviceCharge' },
           totalCollection: { $sum: '$totalReceived' },
+          totalLatePaymentLoss: { $sum: { $ifNull: ['$latePaymentLoss', 0] } },
+          totalNetBillProfit: { $sum: { $ifNull: ['$netBillProfit', '$serviceCharge'] } },
         },
       },
       { $sort: { _id: 1 } },
@@ -331,6 +388,8 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
           totalBillAmount: { $sum: '$billAmount' },
           totalServiceCharges: { $sum: '$serviceCharge' },
           totalCollection: { $sum: '$totalReceived' },
+          totalLatePaymentLoss: { $sum: { $ifNull: ['$latePaymentLoss', 0] } },
+          totalNetBillProfit: { $sum: { $ifNull: ['$netBillProfit', '$serviceCharge'] } },
         },
       },
       { $sort: { totalCollection: -1 } },
@@ -345,6 +404,8 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
           totalBillAmount: { $sum: '$billAmount' },
           totalServiceCharges: { $sum: '$serviceCharge' },
           totalCollection: { $sum: '$totalReceived' },
+          totalLatePaymentLoss: { $sum: { $ifNull: ['$latePaymentLoss', 0] } },
+          totalNetBillProfit: { $sum: { $ifNull: ['$netBillProfit', '$serviceCharge'] } },
         },
       },
       { $sort: { totalCollection: -1 } },
@@ -369,6 +430,10 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
     totalBillAmount: 0,
     totalServiceCharges: 0,
     totalCollection: 0,
+    totalLatePaymentLoss: 0,
+    totalNetBillProfit: 0,
+    totalActualBillAmount: 0,
+    latePaidCount: 0,
   };
 
   const outstanding = pendingAgg[0] || {
@@ -383,6 +448,10 @@ const getBillPaymentReport = async ({ organizationId, branchId, startDate, endDa
     totalBillAmount: result.totalBillAmount,
     totalServiceCharges: result.totalServiceCharges,
     totalCollection: result.totalCollection,
+    totalLatePaymentLoss: result.totalLatePaymentLoss,
+    totalNetBillProfit: result.totalNetBillProfit,
+    totalActualBillAmount: result.totalActualBillAmount,
+    latePaidCount: result.latePaidCount,
     totalDueToday: dueTodayCount,
     totalOverdue: overdueCount,
     // Outstanding

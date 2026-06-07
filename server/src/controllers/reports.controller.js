@@ -918,6 +918,7 @@ const getRoiReport = catchAsync(async (req, res) => {
     serviceProfit,
     simSaleProfit,
     billPaymentProfit,
+    billLatePaymentLoss,
     withdrawalProfit,
     depositProfit,
     salesReturnsImpact,
@@ -950,6 +951,11 @@ const getRoiReport = catchAsync(async (req, res) => {
     })(),
     // Bill payment profit = service charge earned
     aggregateSum(BillPayment, { ...scope, createdAt: { $gte: from, $lte: to } }, { $ifNull: ['$serviceCharge', 0] }),
+    aggregateSum(
+      BillPayment,
+      { ...scope, createdAt: { $gte: from, $lte: to }, status: 'paid' },
+      { $ifNull: ['$latePaymentLoss', 0] }
+    ),
     // Cash withdrawal profit
     aggregateSum(CashWithdrawal, { ...scope, date: { $gte: from, $lte: to }, transactionType: 'withdrawal' }, { $ifNull: ['$profit', 0] }),
     // Cash deposit profit
@@ -970,7 +976,7 @@ const getRoiReport = catchAsync(async (req, res) => {
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + totalExpenses;
-  const grossProfit = salesProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billPaymentProfit + withdrawalProfit + depositProfit;
+  const grossProfit = salesProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billPaymentProfit - billLatePaymentLoss + withdrawalProfit + depositProfit;
   const profit = grossProfit - totalExpenses - salesReturnsImpact;
   const roi = investment > 0 ? parseFloat(((profit / investment) * 100).toFixed(2)) : 0;
 
@@ -994,6 +1000,8 @@ const getRoiReport = catchAsync(async (req, res) => {
         serviceProfit: parseFloat(serviceProfit.toFixed(2)),
         simSaleProfit: parseFloat(simSaleProfit.toFixed(2)),
         billPaymentProfit: parseFloat(billPaymentProfit.toFixed(2)),
+        billLatePaymentLoss: parseFloat(billLatePaymentLoss.toFixed(2)),
+        billPaymentNetProfit: parseFloat((billPaymentProfit - billLatePaymentLoss).toFixed(2)),
         withdrawalProfit: parseFloat(withdrawalProfit.toFixed(2)),
         depositProfit: parseFloat(depositProfit.toFixed(2)),
         expenseDeduction: parseFloat(totalExpenses.toFixed(2)),
@@ -1035,6 +1043,7 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     serviceProfitByMonth,
     simSaleProfitByMonth,
     billPaymentProfitByMonth,
+    billPaymentLateLossByMonth,
     withdrawalProfitByMonth,
     depositProfitByMonth,
     purchaseReturnsByMonth,
@@ -1082,6 +1091,18 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
       ]);
       return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
     })(),
+    (async () => {
+      const results = await BillPayment.aggregate([
+        { $match: { ...scope, createdAt: { $gte: from, $lte: to }, status: 'paid' } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+            total: { $sum: { $ifNull: ['$latePaymentLoss', 0] } },
+          },
+        },
+      ]);
+      return results.reduce((acc, r) => { acc[r._id] = r.total || 0; return acc; }, {});
+    })(),
     monthlySum(CashWithdrawal, 'date', { $ifNull: ['$profit', 0] }, { transactionType: 'withdrawal' }),
     monthlySum(CashWithdrawal, 'date', { $ifNull: ['$profit', 0] }, { transactionType: 'deposit' }),
     (async () => {
@@ -1110,6 +1131,7 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     ...Object.keys(serviceProfitByMonth),
     ...Object.keys(simSaleProfitByMonth),
     ...Object.keys(billPaymentProfitByMonth),
+    ...Object.keys(billPaymentLateLossByMonth),
     ...Object.keys(withdrawalProfitByMonth),
     ...Object.keys(depositProfitByMonth),
     ...Object.keys(purchaseReturnsByMonth),
@@ -1126,6 +1148,7 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
       + (serviceProfitByMonth[month] || 0)
       + (simSaleProfitByMonth[month] || 0)
       + (billPaymentProfitByMonth[month] || 0)
+      - (billPaymentLateLossByMonth[month] || 0)
       + (withdrawalProfitByMonth[month] || 0)
       + (depositProfitByMonth[month] || 0);
     const pft = gross - (expensesByMonth[month] || 0) - (salesReturnsByMonth[month] || 0);
@@ -1151,6 +1174,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     serviceAgg,
     simSaleAgg,
     billPaymentAgg,
+    billLatePaymentLossAgg,
     cashWithdrawalProfitAgg,
     cashDepositProfitAgg,
     expenseAgg,
@@ -1203,6 +1227,10 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       { $match: { ...scope, createdAt: { $gte: from, $lte: to } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$serviceCharge', 0] } } } },
     ]),
+    BillPayment.aggregate([
+      { $match: { ...scope, createdAt: { $gte: from, $lte: to }, status: 'paid' } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$latePaymentLoss', 0] } } } },
+    ]),
     // Cash withdrawal profit
     CashWithdrawal.aggregate([
       { $match: { ...scope, date: { $gte: from, $lte: to }, transactionType: 'withdrawal' } },
@@ -1244,6 +1272,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const svc     = serviceAgg[0]        || { total: 0, count: 0 };
   const sim     = simSaleAgg[0]        || { total: 0, count: 0 };
   const bill    = billPaymentAgg[0]    || { total: 0 };
+  const billLoss = billLatePaymentLossAgg[0] || { total: 0 };
   const cwW     = cashWithdrawalProfitAgg[0] || { total: 0 };
   const cwD     = cashDepositProfitAgg[0] || { total: 0 };
   const exp     = expenseAgg[0]        || { total: 0 };
@@ -1262,12 +1291,14 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const serviceProfit     = svc.total;
   const simSaleProfit     = sim.total;
   const billProfit        = bill.total;
+  const billLatePaymentLoss = billLoss.total;
+  const billNetProfit     = billProfit - billLatePaymentLoss;
   const withdrawalProfit  = cwW.total;
   const depositProfit     = cwD.total;
   const purchaseReturns   = pr.total;
   const expenses          = exp.total;
 
-  const netProfit = grossProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billProfit + withdrawalProfit + depositProfit - expenses;
+  const netProfit = grossProfit + loadProfit + repairProfit + serviceProfit + simSaleProfit + billNetProfit + withdrawalProfit + depositProfit - expenses;
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + expenses;
@@ -1292,12 +1323,14 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       serviceProfit:      parseFloat(serviceProfit.toFixed(2)),
       simSaleProfit:      parseFloat(simSaleProfit.toFixed(2)),
       billProfit:         parseFloat(billProfit.toFixed(2)),
+      billNetProfit:      parseFloat(billNetProfit.toFixed(2)),
       withdrawalProfit:   parseFloat(withdrawalProfit.toFixed(2)),
       depositProfit:      parseFloat(depositProfit.toFixed(2)),
     },
     adjustments: {
       purchaseReturns:       parseFloat(purchaseReturns.toFixed(2)),
       purchaseReturnsCount:  pr.count,
+      billLatePaymentLoss:   parseFloat(billLatePaymentLoss.toFixed(2)),
     },
     expenses:   parseFloat(expenses.toFixed(2)),
     netProfit:  parseFloat(netProfit.toFixed(2)),

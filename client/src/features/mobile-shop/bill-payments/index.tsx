@@ -370,31 +370,56 @@ function DueDateFilterPanel({
 
 // ─── Mark as Paid Dialog ──────────────────────────────────────────────────────
 
+const isBillPaymentLate = (dueDate: string, paymentDate: string) => {
+  const dueKey = dueDate.slice(0, 10)
+  const payKey = paymentDate.slice(0, 10)
+  return payKey > dueKey
+}
+
 interface MarkPaidDialogProps {
   bill: BillPaymentRecord | null
   onClose: () => void
 }
 
 function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'jazzcash' | 'easypaisa'>('cash')
   const [paymentDate, setPaymentDate] = useState(getBusinessToday())
+  const [actualBillAmount, setActualBillAmount] = useState('')
   const [updateBill, { isLoading }] = useUpdateBillPaymentMutation()
 
   useEffect(() => {
     if (bill) {
-      setPaymentMethod(bill.paymentMethod)
       setPaymentDate(getBusinessToday())
+      setActualBillAmount(String(bill.billAmount))
     }
   }, [bill])
 
+  const isLate = bill
+    ? bill.status === 'overdue' || isBillPaymentLate(bill.dueDate, paymentDate)
+    : false
+
+  const parsedActualBillAmount = Number(actualBillAmount || 0)
+  const lateLoss = bill && isLate
+    ? Math.max(0, parsedActualBillAmount - bill.billAmount)
+    : 0
+  const netProfit = bill ? bill.serviceCharge - lateLoss : 0
+
   const handleConfirm = async () => {
     if (!bill) return
+    if (isLate && parsedActualBillAmount < bill.billAmount) {
+      toast.error('Amount to pay utility cannot be less than the original bill amount')
+      return
+    }
     try {
       await updateBill({
         id: bill.id,
-        body: { status: 'paid', paymentMethod, paymentDate },
+        body: {
+          status: 'paid',
+          paymentMethod: bill.paymentMethod,
+          paymentDate,
+          ...(isLate ? { actualBillAmount: parsedActualBillAmount } : {}),
+        },
       }).unwrap()
-      toast.success('Bill marked as paid')
+      toast.success(isLate && lateLoss > 0 ? 'Bill paid — late payment loss recorded' : 'Bill marked as paid')
       onClose()
     } catch {
       toast.error('Failed to update bill')
@@ -413,23 +438,48 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
               <p><span className='text-muted-foreground'>Customer: </span><strong>{bill.customerName}</strong></p>
               <p><span className='text-muted-foreground'>Company: </span>{bill.companyName}</p>
               <p><span className='text-muted-foreground'>Ref #: </span><span className='font-mono'>{bill.referenceNumber}</span></p>
-              <p><span className='text-muted-foreground'>Bill Amount: </span><strong>Rs. {bill.billAmount.toLocaleString()}</strong></p>
+              <p><span className='text-muted-foreground'>Due Date: </span><strong>{formatBusinessDate(bill.dueDate)}</strong></p>
+              <p><span className='text-muted-foreground'>Original Bill Amount: </span><strong>Rs. {bill.billAmount.toLocaleString()}</strong></p>
               <p><span className='text-muted-foreground'>Service Charge: </span><strong className='text-green-600'>Rs. {bill.serviceCharge.toLocaleString()}</strong></p>
-              <p><span className='text-muted-foreground'>Total to Collect: </span><strong>Rs. {bill.totalReceived.toLocaleString()}</strong></p>
+              <p><span className='text-muted-foreground'>Collected from Customer: </span><strong>Rs. {bill.totalReceived.toLocaleString()}</strong></p>
             </div>
-            <div>
-              <Label>Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as typeof paymentMethod)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='cash'>Cash</SelectItem>
-                  <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                  <SelectItem value='easypaisa'>Easypaisa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
+            {isLate && (
+              <div className='rounded-md border border-red-200 bg-red-50 p-3 space-y-3'>
+                <p className='font-medium text-red-800 flex items-center gap-2'>
+                  <AlertCircle className='h-4 w-4' />
+                  Payment after due date — utility may charge a higher amount
+                </p>
+                <div>
+                  <Label>Amount to Pay Utility (After Due Date)</Label>
+                  <Input
+                    type='number'
+                    min={bill.billAmount}
+                    step='0.01'
+                    value={actualBillAmount}
+                    onChange={(e) => setActualBillAmount(e.target.value)}
+                  />
+                  <p className='text-xs text-muted-foreground mt-1'>
+                    Customer already paid Rs. {bill.totalReceived.toLocaleString()}. Enter the actual amount the utility company charges now.
+                  </p>
+                </div>
+                {lateLoss > 0 && (
+                  <div className='grid grid-cols-2 gap-2 text-sm'>
+                    <div className='rounded bg-white/80 p-2'>
+                      <p className='text-muted-foreground'>Late Payment Loss</p>
+                      <p className='font-semibold text-red-600'>Rs. {lateLoss.toLocaleString()}</p>
+                    </div>
+                    <div className='rounded bg-white/80 p-2'>
+                      <p className='text-muted-foreground'>Net Bill Profit</p>
+                      <p className={`font-semibold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        Rs. {netProfit.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label>Payment Date</Label>
               <Input type='date' value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
@@ -815,6 +865,8 @@ export default function BillPaymentsPage() {
                         <TableHead>Bill Amt</TableHead>
                         <TableHead>Svc Charge</TableHead>
                         <TableHead>Total</TableHead>
+                        <TableHead>Paid Amt</TableHead>
+                        <TableHead>Loss</TableHead>
                         <TableHead>Collection Date</TableHead>
                         <TableHead>Due Date</TableHead>
                         <TableHead>Status</TableHead>
@@ -831,6 +883,16 @@ export default function BillPaymentsPage() {
                           <TableCell className='text-green-600 font-medium'>Rs. {bill.serviceCharge.toLocaleString()}</TableCell>
                           <TableCell className='font-semibold'>
                             Rs. {bill.totalReceived.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {bill.status === 'paid'
+                              ? `Rs. ${(bill.actualBillAmount ?? bill.billAmount).toLocaleString()}`
+                              : bill.status === 'overdue'
+                                ? <span className='text-xs text-red-600'>Pay after due</span>
+                                : '—'}
+                          </TableCell>
+                          <TableCell className={bill.latePaymentLoss ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
+                            {bill.latePaymentLoss ? `Rs. ${bill.latePaymentLoss.toLocaleString()}` : '—'}
                           </TableCell>
                           <TableCell>
                             {bill.createdAt

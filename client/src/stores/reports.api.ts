@@ -440,12 +440,14 @@ export interface ProfitLossFullReport {
     serviceProfit: number
     simSaleProfit: number
     billProfit: number
+    billNetProfit: number
     withdrawalProfit: number
     depositProfit: number
   }
   adjustments: {
     purchaseReturns: number
     purchaseReturnsCount: number
+    billLatePaymentLoss: number
   }
   expenses: number
   netProfit: number
@@ -472,6 +474,8 @@ export interface RoiBreakdown {
     serviceProfit: number
     simSaleProfit: number
     billPaymentProfit: number
+    billLatePaymentLoss: number
+    billPaymentNetProfit: number
     withdrawalProfit: number
     depositProfit: number
     expenseDeduction: number
