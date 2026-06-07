@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { Link } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
+import { SchoolTeacherMobileHeader } from '@/components/layout/school-teacher-mobile-header'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { PortalShell } from '@/components/layout/portal-shell'
 import { PermissionWrapper } from '@/context/permission-wrapper'
@@ -30,10 +31,12 @@ function AuthenticatedLayout() {
   // Portal users (students & parents) get a clean, sidebar-free shell.
   const schoolRole: string | undefined =
     user?.schoolRole ||
+    (user?.linkedTeacherId ? 'teacher' : undefined) ||
     (() => {
       try {
         const stored = localStorage.getItem('user')
-        return stored ? JSON.parse(stored)?.schoolRole : undefined
+        const parsed = stored ? JSON.parse(stored) : null
+        return parsed?.schoolRole || (parsed?.linkedTeacherId ? 'teacher' : undefined)
       } catch {
         return undefined
       }
@@ -57,7 +60,8 @@ function AuthenticatedLayout() {
       <PermissionWrapper>
         <SidebarProvider>
           <AppSidebar />
-          <main className="min-w-0 flex-1 overflow-hidden">
+          <main className="min-w-0 flex-1 overflow-hidden flex flex-col">
+            {schoolRole === 'teacher' && <SchoolTeacherMobileHeader />}
             {showLogoReminder && (
               <div className="m-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between">
                 <span className="text-blue-900">
@@ -68,7 +72,9 @@ function AuthenticatedLayout() {
                 </Button>
               </div>
             )}
-            <Outlet />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <Outlet />
+            </div>
           </main>
         </SidebarProvider>
       </PermissionWrapper>

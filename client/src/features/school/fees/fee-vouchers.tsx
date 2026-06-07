@@ -2085,7 +2085,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       <td class="val">${rollNumber}</td>
     </tr>
     <tr>
-      <td class="lbl">User ID</td>
+      <td class="lbl">Student ID</td>
       <td class="val">${studentUserId}</td>
       <td class="sep"></td>
       <td class="lbl">Class</td>
