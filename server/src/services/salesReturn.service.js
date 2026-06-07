@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { SalesReturn, Invoice, Product, CustomerLedger, Customer, CashBookEntry, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const accountsSystemService = require('./accountsSystem.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -153,6 +154,13 @@ const createSalesReturn = async (returnBody) => {
     await _createCashBookEntryInSession(salesReturn, session);
 
     await session.commitTransaction();
+
+    accountsSystemService
+      .postSalesReturn(
+        { organizationId: salesReturn.organizationId, branchId: salesReturn.branchId, createdBy: salesReturn.createdBy },
+        salesReturn
+      )
+      .catch(() => {});
 
     return salesReturn;
   } catch (err) {
@@ -373,6 +381,13 @@ const deleteSalesReturn = async (id) => {
 
   // Remove cash book entry if any
   await cashBookService.deleteEntriesByReference(ret._id, 'SalesReturn');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: ret.organizationId, branchId: ret.branchId },
+      'SalesReturn',
+      ret._id
+    )
+    .catch(() => {});
 
   await SalesReturn.findByIdAndDelete(id);
 };

@@ -7,7 +7,19 @@ const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
+const accountsSystemService = require('./accountsSystem.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
+
+/** Post (or re-post) double-entry journal entries for a purchase. Fire-and-forget. */
+const postPurchaseToAccounts = (purchase) => {
+  if (!purchase) return;
+  const scope = {
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    createdBy: purchase.createdBy,
+  };
+  accountsSystemService.postPurchase(scope, purchase).catch(() => {});
+};
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const { resolvePurchaseInvoiceBalance } = require('../utils/purchaseBalance');
@@ -196,6 +208,7 @@ const createPurchase = async (purchaseBody) => {
   // Save the purchase with balance calculated
   await purchase.save();
   await syncPurchaseCashAndWalletEntries(purchase, null, null, 0);
+  postPurchaseToAccounts(purchase);
 
   // Create supplier ledger entry if supplier is provided
   if (purchase.supplier) {
@@ -390,6 +403,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   }
   await purchase.save();
   await syncPurchaseCashAndWalletEntries(purchase, originalPaymentType, originalWalletType, originalPaidAmount);
+  postPurchaseToAccounts(purchase);
 
   // Update supplier ledger entries if amounts or supplier changed
   const newSupplier = purchase.supplier?._id || purchase.supplier;
@@ -513,6 +527,13 @@ const deletePurchaseById = async (purchaseId) => {
 
   await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
   await walletEntryService.deleteEntriesByReference(purchase._id, 'Purchase');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: purchase.organizationId, branchId: purchase.branchId },
+      'Purchase',
+      purchase._id
+    )
+    .catch(() => {});
 
   if (purchase.paymentType === 'Wallet' && purchase.walletType && Number(purchase.paidAmount || 0) > 0) {
     await walletService.adjustWalletBalance({

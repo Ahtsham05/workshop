@@ -181,7 +181,7 @@ function DashboardTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
-          <Button onClick={() => seedCOA(undefined).unwrap().then(() => toast.success('Chart of Accounts seeded successfully!')).catch((e: any) => toast.error(e?.data?.message || 'Failed to seed'))} disabled={seeding}>
+          <Button onClick={() => seedCOA(undefined).unwrap().then((res: any) => toast.success(res?.message || 'Chart of Accounts seeded successfully!')).catch((e: any) => toast.error(e?.data?.message || e?.message || 'Failed to seed'))} disabled={seeding}>
             {seeding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Database className="h-4 w-4 mr-2" />}
             Seed Default Accounts
           </Button>
@@ -374,7 +374,7 @@ function ChartOfAccountsTab() {
         <Button variant="outline" size="sm" onClick={() => setExpanded(new Set())}>Collapse All</Button>
         <div className="flex-1" />
         {allAccounts.length === 0 && (
-          <Button onClick={() => seedCOA(undefined).unwrap().then(() => toast.success('Seeded!')).catch((e: any) => toast.error(e?.data?.message || 'Error'))} disabled={seeding} variant="outline">
+          <Button onClick={() => seedCOA(undefined).unwrap().then((res: any) => toast.success(res?.message || 'Seeded!')).catch((e: any) => toast.error(e?.data?.message || e?.message || 'Error'))} disabled={seeding} variant="outline">
             {seeding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Database className="h-4 w-4 mr-2" />}
             Seed Defaults
           </Button>

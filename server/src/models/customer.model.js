@@ -37,6 +37,11 @@ const CustomerSchema = new mongoose.Schema({
   whatsapp: { type: String },
   address: { type: String },
   balance: { type: Number, default: 0 },
+  // Auto-created subsidiary account under Accounts Receivable (double-entry).
+  accountHeadId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AccountHead',
+  },
 }, {
   timestamps: true,
 });

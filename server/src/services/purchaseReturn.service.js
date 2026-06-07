@@ -2,6 +2,8 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { PurchaseReturn, Purchase, Product, SupplierLedger, Supplier, SalesReturn, CashBookEntry, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
+const cashBookService = require('./cashBook.service');
+const accountsSystemService = require('./accountsSystem.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -200,6 +202,13 @@ const createPurchaseReturn = async (returnBody) => {
       });
     }
 
+    accountsSystemService
+      .postPurchaseReturn(
+        { organizationId: purchaseReturn.organizationId, branchId: purchaseReturn.branchId, createdBy: purchaseReturn.createdBy },
+        purchaseReturn
+      )
+      .catch(() => {});
+
     return purchaseReturn;
   } catch (err) {
     await session.abortTransaction();
@@ -332,6 +341,13 @@ const deletePurchaseReturn = async (id) => {
 
   // Remove cash book entry if any
   await cashBookService.deleteEntriesByReference(ret._id, 'PurchaseReturn');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: ret.organizationId, branchId: ret.branchId },
+      'PurchaseReturn',
+      ret._id
+    )
+    .catch(() => {});
 
   await PurchaseReturn.findByIdAndDelete(id);
 };

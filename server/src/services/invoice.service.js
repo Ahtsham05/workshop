@@ -8,8 +8,30 @@ const customerLedgerService = require('./customerLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
+const accountsSystemService = require('./accountsSystem.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+/**
+ * Post (or re-post) the double-entry journal entries for an invoice.
+ * Fire-and-forget: accounting must never block or break a sale.
+ * Skips quotations/drafts (no revenue recognised yet).
+ */
+const postInvoiceToAccounts = (invoice) => {
+  if (!invoice) return;
+  const scope = {
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    createdBy: invoice.createdBy,
+  };
+  const isPostable = invoice.type !== 'pending' && !['draft', 'cancelled'].includes(invoice.status);
+  if (!isPostable) {
+    accountsSystemService.removePostingsForReference(scope, 'Invoice', invoice._id).catch(() => {});
+    return;
+  }
+  accountsSystemService.postSaleInvoice(scope, invoice).catch(() => {});
+  accountsSystemService.postSaleCogs(scope, invoice).catch(() => {});
+};
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -279,6 +301,7 @@ const createInvoice = async (invoiceBody, userId) => {
   }
   console.log('Invoice saved with ID:', invoice._id);
   await syncWalkInInvoiceCashEntry(invoice);
+  postInvoiceToAccounts(invoice);
 
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
@@ -591,6 +614,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   await invoice.save();
   console.log('Invoice updated successfully');
   await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
+  postInvoiceToAccounts(invoice);
 
   const newCustomerId = invoice.customerId;
   const isConvertedPending =
@@ -740,6 +764,13 @@ const deleteInvoiceById = async (invoiceId) => {
 
   await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
   await walletEntryService.deleteEntriesByReference(invoice._id, 'Invoice');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: invoice.organizationId, branchId: invoice.branchId },
+      'Invoice',
+      invoice._id
+    )
+    .catch(() => {});
 
   // Reverse wallet balance if invoice was paid via wallet
   if (invoice.paymentMethod === 'wallet' && invoice.walletType && Number(invoice.paidAmount || 0) > 0) {
@@ -777,7 +808,8 @@ const finalizeInvoice = async (invoiceId, userId) => {
   invoice.finalize();
   invoice.updatedBy = userId;
   await invoice.save();
-  
+  postInvoiceToAccounts(invoice);
+
   return invoice;
 };
 
@@ -805,7 +837,8 @@ const processPayment = async (invoiceId, paymentData, userId) => {
   invoice.updatedBy = userId;
   await invoice.save();
   await syncWalkInInvoiceCashEntry(invoice);
-  
+  postInvoiceToAccounts(invoice);
+
   return invoice;
 };
 

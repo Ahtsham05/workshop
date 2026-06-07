@@ -37,6 +37,11 @@ const SupplierSchema = new mongoose.Schema({
   whatsapp: { type: String },
   address: { type: String },
   balance: { type: Number, default: 0 },
+  // Auto-created subsidiary account under Accounts Payable (double-entry).
+  accountHeadId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AccountHead',
+  },
 }, {
   timestamps: true,
 });

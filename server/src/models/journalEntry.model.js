@@ -65,7 +65,14 @@ const journalEntrySchema = mongoose.Schema(
     },
     entryType: {
       type: String,
-      enum: ['FEE_RECEIPT', 'EXPENSE', 'SALARY', 'ADVANCE', 'TRANSFER', 'ADJUSTMENT', 'OPENING', 'REFUND'],
+      enum: [
+        // School
+        'FEE_RECEIPT', 'SALARY', 'ADVANCE',
+        // Generic / retail
+        'EXPENSE', 'TRANSFER', 'ADJUSTMENT', 'OPENING', 'REFUND',
+        'SALE', 'PURCHASE', 'COGS', 'PAYMENT_IN', 'PAYMENT_OUT',
+        'SALES_RETURN', 'PURCHASE_RETURN',
+      ],
       required: true,
     },
     lines: {
@@ -95,7 +102,14 @@ const journalEntrySchema = mongoose.Schema(
     },
     referenceModel: {
       type: String,
-      enum: ['FeeVoucher', 'SchoolTransaction', 'TeacherPayroll', 'StudentCreditLedger', null],
+      enum: [
+        'FeeVoucher', 'SchoolTransaction', 'TeacherPayroll', 'StudentCreditLedger',
+        'Invoice', 'Purchase', 'Expense', 'CustomerLedger', 'SupplierLedger',
+        'SalesReturn', 'PurchaseReturn', 'Payroll', 'BillPayment',
+        'LoadTransaction', 'LoadPurchase', 'SimSale', 'RepairJob',
+        'InstallmentPayment', 'CashWithdrawal',
+        null,
+      ],
     },
     // Financial year tag
     financialYear: {

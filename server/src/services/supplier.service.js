@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
+const accountsSystemService = require('./accountsSystem.service');
 
 /**
  * Create a supplier
@@ -18,6 +19,16 @@ const createSupplier = async (supplierBody) => {
     branchId: supplier.branchId,
     transactionDate: supplier.createdAt,
   });
+
+  // Auto-create the supplier's subsidiary account under Accounts Payable.
+  try {
+    await accountsSystemService.ensureSupplierAccount(
+      { organizationId: supplier.organizationId, branchId: supplier.branchId, createdBy: supplier.createdBy },
+      supplier
+    );
+  } catch (err) {
+    // Accounting must never block supplier creation.
+  }
 
   return supplier;
 };

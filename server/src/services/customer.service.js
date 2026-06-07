@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
+const accountsSystemService = require('./accountsSystem.service');
 
 /**
  * Create a customer
@@ -18,6 +19,16 @@ const createCustomer = async (customerBody) => {
     branchId: customer.branchId,
     transactionDate: customer.createdAt,
   });
+
+  // Auto-create the customer's subsidiary account under Accounts Receivable.
+  try {
+    await accountsSystemService.ensureCustomerAccount(
+      { organizationId: customer.organizationId, branchId: customer.branchId, createdBy: customer.createdBy },
+      customer
+    );
+  } catch (err) {
+    // Accounting must never block customer creation.
+  }
 
   return customer;
 };

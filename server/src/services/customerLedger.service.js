@@ -7,6 +7,29 @@ const { consolidateCustomerCashEntries } = require('../utils/ledgerConsolidation
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
+const accountsSystemService = require('./accountsSystem.service');
+
+/**
+ * Post a manual customer payment to the double-entry system.
+ * Only standalone payments (no source document reference) are posted here —
+ * payments embedded in an invoice are already accounted for by the invoice.
+ */
+const postCustomerLedgerToAccounts = (entry) => {
+  if (!entry) return;
+  const scope = { organizationId: entry.organizationId, branchId: entry.branchId, createdBy: entry.createdBy };
+  const isManualPayment = entry.transactionType === 'payment_received' && !entry.referenceId;
+  if (!isManualPayment) return;
+  accountsSystemService
+    .postCustomerPayment(scope, {
+      amount: entry.credit,
+      paymentMethod: entry.paymentMethod,
+      ledgerId: entry._id,
+      customerId: entry.customer,
+      description: entry.description || 'Customer payment received',
+      date: entry.transactionDate,
+    })
+    .catch(() => {});
+};
 
 const isWalletLedgerMethod = (paymentMethod) => {
   const method = String(paymentMethod || '').trim().toLowerCase();
@@ -289,6 +312,7 @@ const createLedgerEntry = async (ledgerBody) => {
   const updatedEntry = await CustomerLedger.findById(entry._id);
   await syncWalletFromCustomerLedger(updatedEntry, null);
   await syncCashBookFromCustomerLedger(updatedEntry);
+  postCustomerLedgerToAccounts(updatedEntry);
   return updatedEntry;
 };
 
@@ -465,6 +489,7 @@ const updateLedgerEntry = async (id, updateBody) => {
   await entry.save();
   await syncWalletFromCustomerLedger(entry, previousSnapshot);
   await syncCashBookFromCustomerLedger(entry);
+  postCustomerLedgerToAccounts(entry);
   return entry;
 };
 
@@ -494,6 +519,13 @@ const deleteLedgerEntry = async (id) => {
   }
   await walletEntryService.deleteEntriesByReference(entry._id, 'CustomerLedger');
   await cashBookService.deleteEntriesByReference(entry._id, 'CustomerLedger');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: entry.organizationId, branchId: entry.branchId },
+      'CustomerLedger',
+      entry._id
+    )
+    .catch(() => {});
 
   await entry.deleteOne();
 

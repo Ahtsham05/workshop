@@ -3,6 +3,24 @@ const mongoose = require('mongoose');
 const { Expense } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const accountsSystemService = require('./accountsSystem.service');
+
+/** Post (or re-post) the double-entry journal entry for an expense. Fire-and-forget. */
+const postExpenseToAccounts = (expense) => {
+  if (!expense) return;
+  accountsSystemService
+    .postGeneralExpense(
+      { organizationId: expense.organizationId, branchId: expense.branchId, createdBy: expense.createdBy },
+      {
+        amount: expense.amount,
+        paymentMethod: expense.paymentMethod,
+        expenseId: expense._id,
+        description: expense.description || expense.category || 'Expense',
+        date: expense.date,
+      }
+    )
+    .catch(() => {});
+};
 
 /**
  * Create an expense
@@ -44,6 +62,7 @@ const createExpense = async (expenseBody, options = {}) => {
       createdBy: expense.createdBy,
     });
   }
+  postExpenseToAccounts(expense);
 
   return expense;
 };
@@ -126,6 +145,7 @@ const updateExpenseById = async (expenseId, updateBody) => {
     date: expense.date,
     createdBy: expense.createdBy,
   });
+  postExpenseToAccounts(expense);
 
   return expense;
 };
@@ -141,6 +161,13 @@ const deleteExpenseById = async (expenseId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
   }
   await cashBookService.deleteEntriesByReference(expense._id, 'Expense');
+  accountsSystemService
+    .removePostingsForReference(
+      { organizationId: expense.organizationId, branchId: expense.branchId },
+      'Expense',
+      expense._id
+    )
+    .catch(() => {});
   await expense.deleteOne();
   return expense;
 };

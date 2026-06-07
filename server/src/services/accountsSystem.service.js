@@ -7,7 +7,34 @@ const {
   BankAccount,
   Budget,
   FeeCategory,
+  Organization,
+  Customer,
+  Supplier,
 } = require('../models');
+const { normalizeBusinessType } = require('../config/businessTypes');
+
+// Stable account codes used by the auto-posting layer so journal entries
+// always land on the right account regardless of business type.
+const ACCOUNT_CODES = {
+  CASH: '1101',
+  BANK: '1102',
+  ACCOUNTS_RECEIVABLE: '1103',
+  WALLET_JAZZCASH: '1104',
+  WALLET_EASYPAISA: '1105',
+  INVENTORY: '1106',
+  ACCOUNTS_PAYABLE: '2101',
+  CUSTOMER_ADVANCE: '2102',
+  TAX_PAYABLE: '2105',
+  SALES_REVENUE: '4101',
+  SERVICE_INCOME: '4102',
+  REPAIR_INCOME: '4103',
+  COMMISSION_INCOME: '4104',
+  BILL_INCOME: '4105',
+  OTHER_INCOME: '4203',
+  COGS: '5101',
+  BILL_LOSS: '5207',
+  MISC_EXPENSE: '5303',
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -30,100 +57,333 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Seed a complete school Chart of Accounts for a new org/branch.
- * Idempotent — skips if accounts already exist.
+ * School Chart of Accounts (fees, tuition, teacher salary, student advances).
  */
-const seedChartOfAccounts = async (scope) => {
+const buildSchoolTree = (base) => [
+  // ── ASSETS ──
+  { code: '1000', name: 'Assets', rootType: 'ASSET', balanceType: 'DEBIT', level: 0, ...base, children: [
+    { code: '1100', name: 'Current Assets', level: 1, children: [
+      { code: '1101', name: 'Cash in Hand', isGroup: false, level: 2 },
+      { code: '1102', name: 'Bank Accounts', isGroup: false, level: 2 },
+      { code: '1103', name: 'Fee Receivable', isGroup: false, level: 2 },
+      { code: '1104', name: 'Advance to Staff', isGroup: false, level: 2 },
+      { code: '1105', name: 'Other Receivables', isGroup: false, level: 2 },
+    ]},
+    { code: '1200', name: 'Fixed Assets', level: 1, children: [
+      { code: '1201', name: 'Furniture & Fixtures', isGroup: false, level: 2 },
+      { code: '1202', name: 'Equipment', isGroup: false, level: 2 },
+      { code: '1203', name: 'Building', isGroup: false, level: 2 },
+      { code: '1204', name: 'Vehicles', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── LIABILITIES ──
+  { code: '2000', name: 'Liabilities', rootType: 'LIABILITY', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '2100', name: 'Current Liabilities', level: 1, children: [
+      { code: '2101', name: 'Accounts Payable', isGroup: false, level: 2 },
+      { code: '2102', name: 'Student Advance (Credit Wallet)', isGroup: false, level: 2 },
+      { code: '2103', name: 'Salary Payable', isGroup: false, level: 2 },
+      { code: '2104', name: 'Security Deposits', isGroup: false, level: 2 },
+      { code: '2105', name: 'Tax Payable', isGroup: false, level: 2 },
+    ]},
+    { code: '2200', name: 'Long Term Liabilities', level: 1, children: [
+      { code: '2201', name: 'Loans', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── EQUITY ──
+  { code: '3000', name: 'Equity', rootType: 'EQUITY', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '3001', name: "Owner's Capital", isGroup: false, level: 1 },
+    { code: '3002', name: 'Retained Earnings', isGroup: false, level: 1 },
+  ]},
+  // ── REVENUE ──
+  { code: '4000', name: 'Revenue', rootType: 'REVENUE', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '4100', name: 'Fee Income', level: 1, children: [
+      { code: '4101', name: 'Tuition Fee', isGroup: false, level: 2 },
+      { code: '4102', name: 'Admission Fee', isGroup: false, level: 2 },
+      { code: '4103', name: 'Exam Fee', isGroup: false, level: 2 },
+      { code: '4104', name: 'Transport Fee', isGroup: false, level: 2 },
+      { code: '4105', name: 'Lab Fee', isGroup: false, level: 2 },
+      { code: '4106', name: 'Other Fee Income', isGroup: false, level: 2 },
+    ]},
+    { code: '4200', name: 'Other Income', level: 1, children: [
+      { code: '4201', name: 'Donation', isGroup: false, level: 2 },
+      { code: '4202', name: 'Interest Income', isGroup: false, level: 2 },
+      { code: '4203', name: 'Miscellaneous Income', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── EXPENSES ──
+  { code: '5000', name: 'Expenses', rootType: 'EXPENSE', balanceType: 'DEBIT', level: 0, ...base, children: [
+    { code: '5100', name: 'Salary & Wages', level: 1, children: [
+      { code: '5101', name: 'Teacher Salary', isGroup: false, level: 2 },
+      { code: '5102', name: 'Staff Salary', isGroup: false, level: 2 },
+      { code: '5103', name: 'Bonus & Allowances', isGroup: false, level: 2 },
+    ]},
+    { code: '5200', name: 'Operating Expenses', level: 1, children: [
+      { code: '5201', name: 'Rent', isGroup: false, level: 2 },
+      { code: '5202', name: 'Utilities (Electricity/Gas/Water)', isGroup: false, level: 2 },
+      { code: '5203', name: 'Internet & Phone', isGroup: false, level: 2 },
+      { code: '5204', name: 'Stationery & Supplies', isGroup: false, level: 2 },
+      { code: '5205', name: 'Printing', isGroup: false, level: 2 },
+      { code: '5206', name: 'Maintenance & Repairs', isGroup: false, level: 2 },
+      { code: '5207', name: 'Transport Expense', isGroup: false, level: 2 },
+      { code: '5208', name: 'Cleaning', isGroup: false, level: 2 },
+    ]},
+    { code: '5300', name: 'Administrative Expenses', level: 1, children: [
+      { code: '5301', name: 'Marketing & Advertising', isGroup: false, level: 2 },
+      { code: '5302', name: 'Insurance', isGroup: false, level: 2 },
+      { code: '5303', name: 'Legal & Professional', isGroup: false, level: 2 },
+      { code: '5304', name: 'Bank Charges', isGroup: false, level: 2 },
+      { code: '5305', name: 'Miscellaneous Expense', isGroup: false, level: 2 },
+    ]},
+  ]},
+];
+
+/**
+ * Retail / general-business Chart of Accounts (sales, COGS, inventory,
+ * receivables/payables control accounts, mobile wallets, etc.).
+ * Account codes here are kept in sync with ACCOUNT_CODES so the auto-posting
+ * layer can always resolve the correct head.
+ */
+const buildRetailTree = (base) => [
+  // ── ASSETS ──
+  { code: '1000', name: 'Assets', rootType: 'ASSET', balanceType: 'DEBIT', level: 0, ...base, children: [
+    { code: '1100', name: 'Current Assets', level: 1, children: [
+      { code: '1101', name: 'Cash in Hand', isGroup: false, level: 2 },
+      { code: '1102', name: 'Bank Accounts', isGroup: false, level: 2 },
+      { code: '1103', name: 'Accounts Receivable', isGroup: false, level: 2 },
+      { code: '1104', name: 'Mobile Wallet - JazzCash', isGroup: false, level: 2, mobileOnly: true },
+      { code: '1105', name: 'Mobile Wallet - EasyPaisa', isGroup: false, level: 2, mobileOnly: true },
+      { code: '1106', name: 'Inventory', isGroup: false, level: 2 },
+      { code: '1107', name: 'Other Receivables', isGroup: false, level: 2 },
+    ]},
+    { code: '1200', name: 'Fixed Assets', level: 1, children: [
+      { code: '1201', name: 'Furniture & Fixtures', isGroup: false, level: 2 },
+      { code: '1202', name: 'Equipment', isGroup: false, level: 2 },
+      { code: '1203', name: 'Building', isGroup: false, level: 2 },
+      { code: '1204', name: 'Vehicles', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── LIABILITIES ──
+  { code: '2000', name: 'Liabilities', rootType: 'LIABILITY', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '2100', name: 'Current Liabilities', level: 1, children: [
+      { code: '2101', name: 'Accounts Payable', isGroup: false, level: 2 },
+      { code: '2102', name: 'Customer Advances', isGroup: false, level: 2 },
+      { code: '2103', name: 'Salary Payable', isGroup: false, level: 2 },
+      { code: '2104', name: 'Security Deposits', isGroup: false, level: 2 },
+      { code: '2105', name: 'Tax Payable', isGroup: false, level: 2 },
+    ]},
+    { code: '2200', name: 'Long Term Liabilities', level: 1, children: [
+      { code: '2201', name: 'Loans', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── EQUITY ──
+  { code: '3000', name: 'Equity', rootType: 'EQUITY', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '3001', name: "Owner's Capital", isGroup: false, level: 1 },
+    { code: '3002', name: 'Retained Earnings', isGroup: false, level: 1 },
+  ]},
+  // ── REVENUE ──
+  { code: '4000', name: 'Revenue', rootType: 'REVENUE', balanceType: 'CREDIT', level: 0, ...base, children: [
+    { code: '4100', name: 'Sales & Service Income', level: 1, children: [
+      { code: '4101', name: 'Sales Revenue', isGroup: false, level: 2 },
+      { code: '4102', name: 'Service Income', isGroup: false, level: 2 },
+      { code: '4103', name: 'Repair Income', isGroup: false, level: 2, mobileOnly: true },
+      { code: '4104', name: 'Load & Commission Income', isGroup: false, level: 2, mobileOnly: true },
+      { code: '4105', name: 'Bill Payment Income', isGroup: false, level: 2, mobileOnly: true },
+    ]},
+    { code: '4200', name: 'Other Income', level: 1, children: [
+      { code: '4201', name: 'Discount Received', isGroup: false, level: 2 },
+      { code: '4202', name: 'Interest Income', isGroup: false, level: 2 },
+      { code: '4203', name: 'Miscellaneous Income', isGroup: false, level: 2 },
+    ]},
+  ]},
+  // ── EXPENSES ──
+  { code: '5000', name: 'Expenses', rootType: 'EXPENSE', balanceType: 'DEBIT', level: 0, ...base, children: [
+    { code: '5100', name: 'Cost of Sales', level: 1, children: [
+      { code: '5101', name: 'Cost of Goods Sold', isGroup: false, level: 2 },
+      { code: '5102', name: 'Purchase Discount', isGroup: false, level: 2 },
+    ]},
+    { code: '5200', name: 'Operating Expenses', level: 1, children: [
+      { code: '5201', name: 'Rent', isGroup: false, level: 2 },
+      { code: '5202', name: 'Utilities (Electricity/Gas/Water)', isGroup: false, level: 2 },
+      { code: '5203', name: 'Internet & Phone', isGroup: false, level: 2 },
+      { code: '5204', name: 'Salaries & Wages', isGroup: false, level: 2 },
+      { code: '5205', name: 'Transport & Fuel', isGroup: false, level: 2 },
+      { code: '5206', name: 'Repairs & Maintenance', isGroup: false, level: 2 },
+      { code: '5207', name: 'Bill Payment Loss', isGroup: false, level: 2, mobileOnly: true },
+    ]},
+    { code: '5300', name: 'Administrative Expenses', level: 1, children: [
+      { code: '5301', name: 'Marketing & Advertising', isGroup: false, level: 2 },
+      { code: '5302', name: 'Bank Charges', isGroup: false, level: 2 },
+      { code: '5303', name: 'Miscellaneous Expense', isGroup: false, level: 2 },
+    ]},
+  ]},
+];
+
+/**
+ * Resolve organization business type onto the scope object.
+ */
+const enrichScope = async (scope) => {
+  if (scope.businessType) {
+    return { ...scope, businessType: normalizeBusinessType(scope.businessType) };
+  }
+  if (!scope.organizationId) {
+    return { ...scope, businessType: 'other' };
+  }
+  const org = await Organization.findById(scope.organizationId).select('businessType').lean();
+  return { ...scope, businessType: normalizeBusinessType(org?.businessType || 'other') };
+};
+
+/** Chart profile expected for a given business type. */
+const getExpectedChartProfile = (businessType) => {
+  const bt = normalizeBusinessType(businessType);
+  if (bt === 'school') return 'school';
+  if (bt === 'mobile_shop') return 'mobile_shop';
+  return 'retail';
+};
+
+/**
+ * Detect which chart template is currently seeded (school vs retail vs mobile_shop).
+ * Uses stable marker accounts so we can fix mismatched orgs automatically.
+ */
+const detectChartProfile = async (filter) => {
+  const revenue = await AccountHead.findOne({ ...filter, code: '4101' }).lean();
+  if (revenue?.name === 'Tuition Fee') return 'school';
+  if (revenue?.name === 'Sales Revenue') {
+    const jazz = await AccountHead.findOne({ ...filter, code: '1104' }).lean();
+    return jazz ? 'mobile_shop' : 'retail';
+  }
+  const expense5101 = await AccountHead.findOne({ ...filter, code: '5101' }).lean();
+  if (expense5101?.name === 'Teacher Salary') return 'school';
+  if (expense5101?.name === 'Cost of Goods Sold') {
+    const jazz = await AccountHead.findOne({ ...filter, code: '1104' }).lean();
+    return jazz ? 'mobile_shop' : 'retail';
+  }
+  return null;
+};
+
+/** Collect mobile-only nodes from the retail tree with their parent group code. */
+const collectMobileOnlyNodes = (nodes, parentCode = null, result = []) => {
+  for (const node of nodes) {
+    if (node.mobileOnly) {
+      result.push({ node, parentCode });
+    }
+    if (node.children) {
+      collectMobileOnlyNodes(node.children, node.code, result);
+    }
+  }
+  return result;
+};
+
+/**
+ * Add mobile-shop-only accounts to an existing retail chart (upgrade path).
+ */
+const syncMobileShopAccounts = async (scope) => {
+  const enriched = await enrichScope(scope);
+  if (normalizeBusinessType(enriched.businessType) !== 'mobile_shop') return;
+
+  const filter = getTenantFilter(enriched);
+  const base = { ...filter, isSystem: true, createdBy: enriched.createdBy };
+  const mobileNodes = collectMobileOnlyNodes(buildRetailTree(base));
+
+  for (const { node, parentCode } of mobileNodes) {
+    const exists = await AccountHead.findOne({ ...filter, code: node.code });
+    if (exists) continue;
+
+    const parent = parentCode
+      ? await AccountHead.findOne({ ...filter, code: parentCode })
+      : null;
+    if (!parent) continue;
+
+    const rt = parent.rootType;
+    const bt = parent.balanceType;
+    await AccountHead.create({
+      ...filter,
+      code: node.code,
+      name: node.name,
+      rootType: rt,
+      balanceType: bt,
+      parentId: parent._id,
+      level: (parent.level || 0) + 1,
+      isGroup: node.isGroup !== undefined ? node.isGroup : false,
+      isSystem: true,
+      createdBy: enriched.createdBy,
+    });
+  }
+};
+
+/**
+ * Wipe the system chart of accounts (safe only when no posted journal entries exist).
+ */
+const resetChartOfAccounts = async (scope) => {
   const filter = getTenantFilter(scope);
+  const partyFilter = scope.branchId
+    ? { organizationId: scope.organizationId, branchId: scope.branchId }
+    : { organizationId: scope.organizationId };
+
+  await Budget.deleteMany(filter);
+  await BankAccount.deleteMany(filter);
+  await AccountHead.deleteMany(filter);
+  await Customer.updateMany(partyFilter, { $unset: { accountHeadId: '' } });
+  await Supplier.updateMany(partyFilter, { $unset: { accountHeadId: '' } });
+};
+
+/**
+ * Seed a complete Chart of Accounts for a new org/branch, choosing the
+ * template based on the organization's business type.
+ * When the existing chart doesn't match the business type and there are no
+ * journal entries, it is replaced automatically.
+ */
+const seedChartOfAccounts = async (scope, options = {}) => {
+  const enriched = await enrichScope(scope);
+  const filter = getTenantFilter(enriched);
   const existing = await AccountHead.countDocuments(filter);
-  if (existing > 0) return { message: 'Chart of Accounts already seeded', count: existing };
 
-  const base = { ...filter, isSystem: true, isGroup: true, createdBy: scope.createdBy };
+  if (existing > 0 && !options.force) {
+    const expected = getExpectedChartProfile(enriched.businessType);
+    const actual = await detectChartProfile(filter);
 
-  const tree = [
-    // ── ASSETS ──
-    { code: '1000', name: 'Assets', rootType: 'ASSET', balanceType: 'DEBIT', level: 0, ...base, children: [
-      { code: '1100', name: 'Current Assets', level: 1, children: [
-        { code: '1101', name: 'Cash in Hand', isGroup: false, level: 2 },
-        { code: '1102', name: 'Bank Accounts', isGroup: false, level: 2 },
-        { code: '1103', name: 'Fee Receivable', isGroup: false, level: 2 },
-        { code: '1104', name: 'Advance to Staff', isGroup: false, level: 2 },
-        { code: '1105', name: 'Other Receivables', isGroup: false, level: 2 },
-      ]},
-      { code: '1200', name: 'Fixed Assets', level: 1, children: [
-        { code: '1201', name: 'Furniture & Fixtures', isGroup: false, level: 2 },
-        { code: '1202', name: 'Equipment', isGroup: false, level: 2 },
-        { code: '1203', name: 'Building', isGroup: false, level: 2 },
-        { code: '1204', name: 'Vehicles', isGroup: false, level: 2 },
-      ]},
-    ]},
-    // ── LIABILITIES ──
-    { code: '2000', name: 'Liabilities', rootType: 'LIABILITY', balanceType: 'CREDIT', level: 0, ...base, children: [
-      { code: '2100', name: 'Current Liabilities', level: 1, children: [
-        { code: '2101', name: 'Accounts Payable', isGroup: false, level: 2 },
-        { code: '2102', name: 'Student Advance (Credit Wallet)', isGroup: false, level: 2 },
-        { code: '2103', name: 'Salary Payable', isGroup: false, level: 2 },
-        { code: '2104', name: 'Security Deposits', isGroup: false, level: 2 },
-        { code: '2105', name: 'Tax Payable', isGroup: false, level: 2 },
-      ]},
-      { code: '2200', name: 'Long Term Liabilities', level: 1, children: [
-        { code: '2201', name: 'Loans', isGroup: false, level: 2 },
-      ]},
-    ]},
-    // ── EQUITY ──
-    { code: '3000', name: 'Equity', rootType: 'EQUITY', balanceType: 'CREDIT', level: 0, ...base, children: [
-      { code: '3001', name: "Owner's Capital", isGroup: false, level: 1 },
-      { code: '3002', name: 'Retained Earnings', isGroup: false, level: 1 },
-    ]},
-    // ── REVENUE ──
-    { code: '4000', name: 'Revenue', rootType: 'REVENUE', balanceType: 'CREDIT', level: 0, ...base, children: [
-      { code: '4100', name: 'Fee Income', level: 1, children: [
-        { code: '4101', name: 'Tuition Fee', isGroup: false, level: 2 },
-        { code: '4102', name: 'Admission Fee', isGroup: false, level: 2 },
-        { code: '4103', name: 'Exam Fee', isGroup: false, level: 2 },
-        { code: '4104', name: 'Transport Fee', isGroup: false, level: 2 },
-        { code: '4105', name: 'Lab Fee', isGroup: false, level: 2 },
-        { code: '4106', name: 'Other Fee Income', isGroup: false, level: 2 },
-      ]},
-      { code: '4200', name: 'Other Income', level: 1, children: [
-        { code: '4201', name: 'Donation', isGroup: false, level: 2 },
-        { code: '4202', name: 'Interest Income', isGroup: false, level: 2 },
-        { code: '4203', name: 'Miscellaneous Income', isGroup: false, level: 2 },
-      ]},
-    ]},
-    // ── EXPENSES ──
-    { code: '5000', name: 'Expenses', rootType: 'EXPENSE', balanceType: 'DEBIT', level: 0, ...base, children: [
-      { code: '5100', name: 'Salary & Wages', level: 1, children: [
-        { code: '5101', name: 'Teacher Salary', isGroup: false, level: 2 },
-        { code: '5102', name: 'Staff Salary', isGroup: false, level: 2 },
-        { code: '5103', name: 'Bonus & Allowances', isGroup: false, level: 2 },
-      ]},
-      { code: '5200', name: 'Operating Expenses', level: 1, children: [
-        { code: '5201', name: 'Rent', isGroup: false, level: 2 },
-        { code: '5202', name: 'Utilities (Electricity/Gas/Water)', isGroup: false, level: 2 },
-        { code: '5203', name: 'Internet & Phone', isGroup: false, level: 2 },
-        { code: '5204', name: 'Stationery & Supplies', isGroup: false, level: 2 },
-        { code: '5205', name: 'Printing', isGroup: false, level: 2 },
-        { code: '5206', name: 'Maintenance & Repairs', isGroup: false, level: 2 },
-        { code: '5207', name: 'Transport Expense', isGroup: false, level: 2 },
-        { code: '5208', name: 'Cleaning', isGroup: false, level: 2 },
-      ]},
-      { code: '5300', name: 'Administrative Expenses', level: 1, children: [
-        { code: '5301', name: 'Marketing & Advertising', isGroup: false, level: 2 },
-        { code: '5302', name: 'Insurance', isGroup: false, level: 2 },
-        { code: '5303', name: 'Legal & Professional', isGroup: false, level: 2 },
-        { code: '5304', name: 'Bank Charges', isGroup: false, level: 2 },
-        { code: '5305', name: 'Miscellaneous Expense', isGroup: false, level: 2 },
-      ]},
-    ]},
-  ];
+    if (actual === expected) {
+      if (expected === 'mobile_shop') await syncMobileShopAccounts(enriched);
+      return { message: 'Chart of Accounts already seeded', count: existing, profile: expected };
+    }
+
+    const jeCount = await JournalEntry.countDocuments({ ...filter, status: 'posted' });
+    if (jeCount > 0) {
+      return {
+        message: 'Chart of Accounts exists but does not match your business type. Clear journal entries to re-seed.',
+        count: existing,
+        expectedProfile: expected,
+        actualProfile: actual,
+      };
+    }
+
+    await resetChartOfAccounts(enriched);
+  } else if (existing > 0 && options.force) {
+    const jeCount = await JournalEntry.countDocuments({ ...filter, status: 'posted' });
+    if (jeCount > 0) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        'Cannot re-seed chart of accounts while posted journal entries exist'
+      );
+    }
+    await resetChartOfAccounts(enriched);
+  }
+
+  const businessType = enriched.businessType;
+  const base = { ...filter, isSystem: true, isGroup: true, createdBy: enriched.createdBy };
+  const isMobileShop = businessType === 'mobile_shop';
+  const pruneMobile = (nodes) =>
+    nodes
+      .filter((n) => isMobileShop || !n.mobileOnly)
+      .map((n) => ({ ...n, children: n.children ? pruneMobile(n.children) : undefined }));
+  const tree =
+    businessType === 'school' ? buildSchoolTree(base) : pruneMobile(buildRetailTree(base));
 
   const created = [];
 
   const insertNode = async (node, parentId, rootType, balanceType) => {
     const rt = node.rootType || rootType;
     const bt = node.balanceType || balanceType;
-    const { children, ...data } = node;
+    const { children, mobileOnly, ...data } = node;
     const doc = await AccountHead.create({
       ...filter,
       ...data,
@@ -132,7 +392,7 @@ const seedChartOfAccounts = async (scope) => {
       parentId: parentId || null,
       isGroup: data.isGroup !== undefined ? data.isGroup : true,
       isSystem: true,
-      createdBy: scope.createdBy,
+      createdBy: enriched.createdBy,
     });
     created.push(doc);
     if (children) {
@@ -146,7 +406,6 @@ const seedChartOfAccounts = async (scope) => {
     await insertNode(root, null, root.rootType, root.balanceType);
   }
 
-  // Also seed a default Cash bank account
   const cashHead = created.find((a) => a.code === '1101');
   if (cashHead) {
     await BankAccount.create({
@@ -155,11 +414,50 @@ const seedChartOfAccounts = async (scope) => {
       name: 'Cash in Hand',
       accountType: 'cash',
       isDefault: true,
-      createdBy: scope.createdBy,
+      createdBy: enriched.createdBy,
     });
   }
 
-  return { message: 'Chart of Accounts seeded successfully', count: created.length };
+  const profile = getExpectedChartProfile(businessType);
+  return { message: 'Chart of Accounts seeded successfully', count: created.length, profile };
+};
+
+/**
+ * Ensure the chart of accounts exists AND matches the organization's business type.
+ * Automatically replaces a wrong template (e.g. school chart on a mobile shop org)
+ * when no journal entries have been posted yet.
+ */
+const ensureSeeded = async (scope) => {
+  const enriched = await enrichScope(scope);
+  const filter = getTenantFilter(enriched);
+  const count = await AccountHead.countDocuments(filter);
+
+  if (count === 0) {
+    await seedChartOfAccounts(enriched);
+    return true;
+  }
+
+  const expected = getExpectedChartProfile(enriched.businessType);
+  const actual = await detectChartProfile(filter);
+
+  if (actual === expected) {
+    if (expected === 'mobile_shop') await syncMobileShopAccounts(enriched);
+    return false;
+  }
+
+  if (actual === 'retail' && expected === 'mobile_shop') {
+    await syncMobileShopAccounts(enriched);
+    return false;
+  }
+
+  const jeCount = await JournalEntry.countDocuments({ ...filter, status: 'posted' });
+  if (jeCount === 0) {
+    await resetChartOfAccounts(enriched);
+    await seedChartOfAccounts(enriched);
+    return true;
+  }
+
+  return false;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -167,6 +465,7 @@ const seedChartOfAccounts = async (scope) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const getChartOfAccounts = async (scope) => {
+  await ensureSeeded(scope);
   const accounts = await AccountHead.find(getTenantFilter(scope))
     .sort({ code: 1 })
     .lean();
@@ -174,6 +473,7 @@ const getChartOfAccounts = async (scope) => {
 };
 
 const getAccountTree = async (scope) => {
+  await ensureSeeded(scope);
   const accounts = await AccountHead.find(getTenantFilter(scope))
     .sort({ code: 1 })
     .lean();
@@ -235,6 +535,7 @@ const deleteAccountHead = async (id, scope) => {
 
 // Get all leaf (posting) accounts for dropdowns
 const getPostingAccounts = async (scope, rootType) => {
+  await ensureSeeded(scope);
   const filter = { ...getTenantFilter(scope), isGroup: false, isActive: true };
   if (rootType) filter.rootType = rootType;
   return AccountHead.find(filter).sort({ code: 1 }).lean();
@@ -418,6 +719,7 @@ const deleteBankAccount = async (id, scope) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const getBudgets = async (scope, financialYear) => {
+  await ensureSeeded(scope);
   return Budget.find({ ...getTenantFilter(scope), ...(financialYear ? { financialYear } : {}) })
     .populate('accountHeadId', 'code name rootType')
     .sort({ 'accountHeadId.code': 1 })
@@ -878,6 +1180,7 @@ const getBudgetVsActual = async (scope, financialYear) => {
  * Accounts Dashboard — summary for the accounting module home page.
  */
 const getAccountsDashboard = async (scope, year) => {
+  await ensureSeeded(scope);
   const y = year || new Date().getFullYear();
   const fy = getFinancialYear(new Date(y, 0, 1));
   const [fyStart, fyEnd] = getFinancialYearDates(fy);
@@ -1104,15 +1407,434 @@ const postAdvancePayment = async (scope, { amount, paymentMethod, creditLedgerId
 };
 
 /**
- * Resolve payment method to an account head (Cash/Bank).
+ * Find a posting account head by its stable code.
  */
-const resolvePaymentAccount = async (scope, paymentMethod) => {
-  if (paymentMethod === 'bank_transfer' || paymentMethod === 'cheque' || paymentMethod === 'online') {
+const findAccount = async (scope, code) =>
+  AccountHead.findOne({ ...getTenantFilter(scope), code, isGroup: false });
+
+/** Find an account head by code regardless of group/leaf status. */
+const findHead = async (scope, code) =>
+  AccountHead.findOne({ ...getTenantFilter(scope), code });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Per-Party Subsidiary Accounts (Customers / Suppliers) ────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Ensure a dedicated subsidiary account head exists for a customer or supplier,
+ * nested under the Accounts Receivable / Accounts Payable control account.
+ * Idempotent — returns the existing head if already linked. The control account
+ * becomes a group so balances live on the per-party sub-accounts (no double
+ * counting), exactly how professional accounting software keeps a subsidiary
+ * ledger under a control account.
+ */
+const ensurePartyAccount = async (scope, { kind, partyId, name }) => {
+  await ensureSeeded(scope);
+  const filter = getTenantFilter(scope);
+  const isCustomer = kind === 'customer';
+  const Model = isCustomer ? Customer : Supplier;
+  const parentCode = isCustomer ? ACCOUNT_CODES.ACCOUNTS_RECEIVABLE : ACCOUNT_CODES.ACCOUNTS_PAYABLE;
+
+  const party = partyId ? await Model.findById(partyId) : null;
+  if (party && party.accountHeadId) {
+    const existing = await AccountHead.findOne({ _id: party.accountHeadId, ...filter });
+    if (existing) return existing;
+  }
+
+  const parent = await findHead(scope, parentCode);
+  if (!parent) return null;
+
+  const childCount = await AccountHead.countDocuments({ ...filter, parentId: parent._id });
+  const code = `${parentCode}-${String(childCount + 1).padStart(4, '0')}`;
+  const head = await AccountHead.create({
+    ...filter,
+    code,
+    name: name || party?.name || (isCustomer ? 'Customer' : 'Supplier'),
+    rootType: parent.rootType,
+    balanceType: parent.balanceType,
+    parentId: parent._id,
+    level: (parent.level || 2) + 1,
+    isGroup: false,
+    isSystem: false,
+    createdBy: scope.createdBy,
+  });
+
+  // Promote the control account to a group so it stops being a posting target.
+  if (!parent.isGroup) {
+    parent.isGroup = true;
+    await parent.save();
+  }
+
+  if (party) {
+    party.accountHeadId = head._id;
+    await party.save();
+  }
+  return head;
+};
+
+const ensureCustomerAccount = (scope, customer = {}) =>
+  ensurePartyAccount(scope, { kind: 'customer', partyId: customer._id || customer.id, name: customer.name });
+
+const ensureSupplierAccount = (scope, supplier = {}) =>
+  ensurePartyAccount(scope, { kind: 'supplier', partyId: supplier._id || supplier.id, name: supplier.name });
+
+/** Resolve the A/R account to post to for a given customer (sub-account or control). */
+const getCustomerReceivableAccount = async (scope, customerId) => {
+  const valid = customerId && customerId !== 'walk-in' && mongoose.Types.ObjectId.isValid(String(customerId));
+  if (valid) {
+    const head = await ensurePartyAccount(scope, { kind: 'customer', partyId: customerId });
+    if (head) return head;
+  }
+  return findHead(scope, ACCOUNT_CODES.ACCOUNTS_RECEIVABLE);
+};
+
+/** Resolve the A/P account to post to for a given supplier (sub-account or control). */
+const getSupplierPayableAccount = async (scope, supplierId) => {
+  const valid = supplierId && mongoose.Types.ObjectId.isValid(String(supplierId));
+  if (valid) {
+    const head = await ensurePartyAccount(scope, { kind: 'supplier', partyId: supplierId });
+    if (head) return head;
+  }
+  return findHead(scope, ACCOUNT_CODES.ACCOUNTS_PAYABLE);
+};
+
+/**
+ * Resolve a payment method (+ optional wallet type) to a Cash/Bank/Wallet
+ * account head. Understands the many payment-method spellings used across the
+ * app (cash, bank, bank transfer, card, cheque, jazzcash, easypaisa, wallet…).
+ */
+const resolvePaymentAccount = async (scope, paymentMethod, walletType) => {
+  const pm = String(paymentMethod || 'cash').trim().toLowerCase();
+  const wt = String(walletType || '').trim().toLowerCase();
+  const combined = `${pm} ${wt}`;
+
+  // Mobile wallets
+  if (combined.includes('jazz')) return findAccount(scope, ACCOUNT_CODES.WALLET_JAZZCASH);
+  if (combined.includes('easy')) return findAccount(scope, ACCOUNT_CODES.WALLET_EASYPAISA);
+
+  // Bank-like methods
+  if (['bank', 'bank_transfer', 'bank transfer', 'card', 'cheque', 'check', 'online'].includes(pm)) {
+    const bankHead = await findAccount(scope, ACCOUNT_CODES.BANK);
+    if (bankHead) return bankHead;
     const bankAccount = await BankAccount.findOne({ ...getTenantFilter(scope), accountType: 'bank', isActive: true });
     if (bankAccount) return AccountHead.findById(bankAccount.accountHeadId);
   }
-  // Default to Cash in Hand
-  return AccountHead.findOne({ ...getTenantFilter(scope), code: '1101', isGroup: false });
+
+  // Generic wallet without a recognised provider → fall back to cash
+  // Default: Cash in Hand
+  return findAccount(scope, ACCOUNT_CODES.CASH);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Auto-Post Helpers (Retail / General Business) ────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Replace any existing posted journal entries for a source document, then post
+ * fresh ones. Keeps accounting in sync when a document is edited, and avoids
+ * double-counting. Reversing the old entries also unwinds account balances.
+ */
+const repostForReference = async (scope, referenceModel, referenceId, entryType, buildLines) => {
+  await ensureSeeded(scope);
+  // Remove previous entries of this type for this reference (reverse to unwind
+  // balances). Scoping by entryType lets a single source document hold several
+  // independent entries (e.g. an Invoice has both SALE and COGS entries).
+  const existing = await JournalEntry.find({
+    ...getTenantFilter(scope),
+    referenceModel,
+    referenceId,
+    entryType,
+    status: 'posted',
+    reversalOf: null, // never re-reverse a reversal entry
+  });
+  for (const entry of existing) {
+    // eslint-disable-next-line no-await-in-loop
+    await reverseJournalEntry(entry._id, scope).catch(() => {});
+  }
+
+  const built = await buildLines();
+  if (!built) return null;
+  const { lines, narration, date } = built;
+  const clean = lines.filter((l) => round2(l.debit) > 0 || round2(l.credit) > 0);
+  if (clean.length < 2) return null;
+
+  return createJournalEntry(
+    { date: date || new Date(), entryType, lines: clean, narration, referenceId, referenceModel },
+    scope
+  );
+};
+
+/**
+ * Sales invoice → revenue recognition + (optionally) cost of goods sold.
+ *   Dr Cash/Bank/Wallet (amount paid)
+ *   Dr Accounts Receivable (unpaid balance)
+ *       Cr Sales Revenue (net of tax)
+ *       Cr Tax Payable (sales tax)
+ * Plus, when cost is known:
+ *   Dr Cost of Goods Sold      Cr Inventory
+ */
+const postSaleInvoice = async (scope, invoice) => {
+  if (!invoice) return null;
+  return repostForReference(scope, 'Invoice', invoice._id, 'SALE', async () => {
+    const total = round2(invoice.total);
+    if (total <= 0) return null;
+    const tax = round2(invoice.tax);
+    const paid = round2(invoice.paidAmount);
+    const balance = round2(invoice.balance != null ? invoice.balance : total - paid);
+    const revenue = round2(total - tax);
+
+    const [payAcc, arAcc, salesAcc, taxAcc] = await Promise.all([
+      resolvePaymentAccount(scope, invoice.paymentMethod, invoice.walletType),
+      getCustomerReceivableAccount(scope, invoice.customerId),
+      findAccount(scope, ACCOUNT_CODES.SALES_REVENUE),
+      findAccount(scope, ACCOUNT_CODES.TAX_PAYABLE),
+    ]);
+    if (!payAcc || !salesAcc) return null;
+
+    const lines = [];
+    if (paid > 0) lines.push({ accountId: payAcc._id, debit: paid, credit: 0, description: 'Amount received' });
+    if (balance > 0 && arAcc) lines.push({ accountId: arAcc._id, debit: balance, credit: 0, description: 'On account (receivable)' });
+    lines.push({ accountId: salesAcc._id, debit: 0, credit: revenue, description: 'Sales revenue' });
+    if (tax > 0 && taxAcc) lines.push({ accountId: taxAcc._id, debit: 0, credit: tax, description: 'Sales tax' });
+
+    return {
+      date: invoice.createdAt || new Date(),
+      narration: `Sale ${invoice.invoiceNumber || ''}`.trim(),
+      lines,
+    };
+  });
+};
+
+/**
+ * Cost of goods sold for a sale (separate entry so revenue & cost are clear).
+ */
+const postSaleCogs = async (scope, invoice) => {
+  if (!invoice) return null;
+  const cost = round2(invoice.totalCost);
+  if (cost <= 0) return null;
+  return repostForReference(scope, 'Invoice', invoice._id, 'COGS', async () => {
+    const [cogsAcc, invAcc] = await Promise.all([
+      findAccount(scope, ACCOUNT_CODES.COGS),
+      findAccount(scope, ACCOUNT_CODES.INVENTORY),
+    ]);
+    if (!cogsAcc || !invAcc) return null;
+    return {
+      date: invoice.createdAt || new Date(),
+      narration: `Cost of sale ${invoice.invoiceNumber || ''}`.trim(),
+      lines: [
+        { accountId: cogsAcc._id, debit: cost, credit: 0, description: 'Cost of goods sold' },
+        { accountId: invAcc._id, debit: 0, credit: cost, description: 'Inventory reduction' },
+      ],
+    };
+  });
+};
+
+/**
+ * Purchase → inventory in, cash/payable out.
+ *   Dr Inventory (total)
+ *       Cr Cash/Bank/Wallet (amount paid)
+ *       Cr Accounts Payable (unpaid balance)
+ */
+const postPurchase = async (scope, purchase) => {
+  if (!purchase) return null;
+  return repostForReference(scope, 'Purchase', purchase._id, 'PURCHASE', async () => {
+    const total = round2(purchase.totalAmount);
+    if (total <= 0) return null;
+    const paid = round2(purchase.paidAmount);
+    const balance = round2(purchase.balance != null ? purchase.balance : total - paid);
+
+    const [invAcc, payAcc, apAcc] = await Promise.all([
+      findAccount(scope, ACCOUNT_CODES.INVENTORY),
+      resolvePaymentAccount(scope, purchase.paymentType || purchase.paymentMethod, purchase.walletType),
+      getSupplierPayableAccount(scope, purchase.supplier),
+    ]);
+    if (!invAcc) return null;
+
+    const lines = [{ accountId: invAcc._id, debit: total, credit: 0, description: 'Inventory purchased' }];
+    if (paid > 0 && payAcc) lines.push({ accountId: payAcc._id, debit: 0, credit: paid, description: 'Amount paid' });
+    if (balance > 0 && apAcc) lines.push({ accountId: apAcc._id, debit: 0, credit: balance, description: 'On account (payable)' });
+
+    return {
+      date: purchase.createdAt || new Date(),
+      narration: `Purchase ${purchase.invoiceNumber || purchase.referenceNumber || ''}`.trim(),
+      lines,
+    };
+  });
+};
+
+/**
+ * Customer payment received against their account (receivable settled).
+ *   Dr Cash/Bank/Wallet      Cr Accounts Receivable
+ */
+const postCustomerPayment = async (scope, { amount, paymentMethod, walletType, ledgerId, customerId, description, date }) => {
+  if (!ledgerId) return null;
+  return repostForReference(scope, 'CustomerLedger', ledgerId, 'PAYMENT_IN', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    const [payAcc, arAcc] = await Promise.all([
+      resolvePaymentAccount(scope, paymentMethod, walletType),
+      getCustomerReceivableAccount(scope, customerId),
+    ]);
+    if (!payAcc || !arAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Customer payment received',
+      lines: [
+        { accountId: payAcc._id, debit: amt, credit: 0, description: 'Payment received' },
+        { accountId: arAcc._id, debit: 0, credit: amt, description: 'Receivable settled' },
+      ],
+    };
+  });
+};
+
+/**
+ * Supplier payment made against their account (payable settled).
+ *   Dr Accounts Payable      Cr Cash/Bank/Wallet
+ */
+const postSupplierPayment = async (scope, { amount, paymentMethod, walletType, ledgerId, supplierId, description, date }) => {
+  if (!ledgerId) return null;
+  return repostForReference(scope, 'SupplierLedger', ledgerId, 'PAYMENT_OUT', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    const [payAcc, apAcc] = await Promise.all([
+      resolvePaymentAccount(scope, paymentMethod, walletType),
+      getSupplierPayableAccount(scope, supplierId),
+    ]);
+    if (!payAcc || !apAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Supplier payment made',
+      lines: [
+        { accountId: apAcc._id, debit: amt, credit: 0, description: 'Payable settled' },
+        { accountId: payAcc._id, debit: 0, credit: amt, description: 'Payment made' },
+      ],
+    };
+  });
+};
+
+/**
+ * General (non-school) expense.
+ *   Dr Expense account      Cr Cash/Bank/Wallet
+ */
+const postGeneralExpense = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, expenseId, description, date }) => {
+  if (!expenseId) return postExpenseAdHoc(scope, { amount, paymentMethod, walletType, expenseAccountCode, description, date });
+  return repostForReference(scope, 'Expense', expenseId, 'EXPENSE', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    const [expAcc, payAcc] = await Promise.all([
+      findAccount(scope, expenseAccountCode || ACCOUNT_CODES.MISC_EXPENSE),
+      resolvePaymentAccount(scope, paymentMethod, walletType),
+    ]);
+    if (!expAcc || !payAcc) return null;
+    return {
+      date: date || new Date(),
+      narration: description || 'Expense',
+      lines: [
+        { accountId: expAcc._id, debit: amt, credit: 0, description: 'Expense' },
+        { accountId: payAcc._id, debit: 0, credit: amt, description: 'Paid' },
+      ],
+    };
+  });
+};
+
+const postExpenseAdHoc = async (scope, { amount, paymentMethod, walletType, expenseAccountCode, description, date }) => {
+  await ensureSeeded(scope);
+  const amt = round2(amount);
+  if (amt <= 0) return null;
+  const [expAcc, payAcc] = await Promise.all([
+    findAccount(scope, expenseAccountCode || ACCOUNT_CODES.MISC_EXPENSE),
+    resolvePaymentAccount(scope, paymentMethod, walletType),
+  ]);
+  if (!expAcc || !payAcc) return null;
+  return createJournalEntry(
+    {
+      date: date || new Date(),
+      entryType: 'EXPENSE',
+      lines: [
+        { accountId: expAcc._id, debit: amt, credit: 0, description: 'Expense' },
+        { accountId: payAcc._id, debit: 0, credit: amt, description: 'Paid' },
+      ],
+      narration: description || 'Expense',
+    },
+    scope
+  );
+};
+
+/**
+ * Sales return / refund.
+ *   Dr Sales Revenue (contra)      Cr Cash/Bank (refund) or Accounts Receivable (adjustment)
+ */
+const postSalesReturn = async (scope, salesReturn) => {
+  if (!salesReturn) return null;
+  return repostForReference(scope, 'SalesReturn', salesReturn._id, 'SALES_RETURN', async () => {
+    const amt = round2(salesReturn.totalAmount);
+    if (amt <= 0) return null;
+    const isAdjustment = salesReturn.refundMethod === 'adjustment';
+    const [salesAcc, creditAcc] = await Promise.all([
+      findAccount(scope, ACCOUNT_CODES.SALES_REVENUE),
+      isAdjustment
+        ? getCustomerReceivableAccount(scope, salesReturn.customerId)
+        : resolvePaymentAccount(scope, salesReturn.refundMethod),
+    ]);
+    if (!salesAcc || !creditAcc) return null;
+    return {
+      date: salesReturn.createdAt || new Date(),
+      narration: `Sales return ${salesReturn.returnNumber || ''}`.trim(),
+      lines: [
+        { accountId: salesAcc._id, debit: amt, credit: 0, description: 'Sales return' },
+        { accountId: creditAcc._id, debit: 0, credit: amt, description: isAdjustment ? 'Receivable reduced' : 'Refund paid' },
+      ],
+    };
+  });
+};
+
+/**
+ * Purchase return.
+ *   Dr Cash/Bank (refund) or Accounts Payable (adjustment)      Cr Inventory
+ */
+const postPurchaseReturn = async (scope, purchaseReturn) => {
+  if (!purchaseReturn) return null;
+  return repostForReference(scope, 'PurchaseReturn', purchaseReturn._id, 'PURCHASE_RETURN', async () => {
+    const amt = round2(purchaseReturn.totalAmount);
+    if (amt <= 0) return null;
+    const isAdjustment = purchaseReturn.refundMethod === 'adjustment';
+    const [invAcc, debitAcc] = await Promise.all([
+      findAccount(scope, ACCOUNT_CODES.INVENTORY),
+      isAdjustment
+        ? getSupplierPayableAccount(scope, purchaseReturn.supplierId)
+        : resolvePaymentAccount(scope, purchaseReturn.refundMethod),
+    ]);
+    if (!invAcc || !debitAcc) return null;
+    return {
+      date: purchaseReturn.createdAt || new Date(),
+      narration: `Purchase return ${purchaseReturn.returnNumber || ''}`.trim(),
+      lines: [
+        { accountId: debitAcc._id, debit: amt, credit: 0, description: isAdjustment ? 'Payable reduced' : 'Refund received' },
+        { accountId: invAcc._id, debit: 0, credit: amt, description: 'Inventory returned' },
+      ],
+    };
+  });
+};
+
+/**
+ * Remove posted journal entries for a deleted source document (reverses them
+ * so account balances unwind).
+ */
+const removePostingsForReference = async (scope, referenceModel, referenceId) => {
+  const existing = await JournalEntry.find({
+    ...getTenantFilter(scope),
+    referenceModel,
+    referenceId,
+    status: 'posted',
+    reversalOf: null, // never re-reverse a reversal entry
+  });
+  for (const entry of existing) {
+    // eslint-disable-next-line no-await-in-loop
+    await reverseJournalEntry(entry._id, scope).catch(() => {});
+  }
+  return existing.length;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1136,6 +1858,7 @@ function getFinancialYearDates(fy) {
 module.exports = {
   // COA
   seedChartOfAccounts,
+  ensureSeeded,
   getChartOfAccounts,
   getAccountTree,
   getAccountHeadById,
@@ -1166,11 +1889,26 @@ module.exports = {
   getCashFlowStatement,
   getBudgetVsActual,
   getAccountsDashboard,
-  // Auto-post
+  // Auto-post (school)
   postFeePayment,
   postExpense,
   postSalaryPayment,
   postAdvancePayment,
+  // Per-party subsidiary accounts
+  ensureCustomerAccount,
+  ensureSupplierAccount,
+  getCustomerReceivableAccount,
+  getSupplierPayableAccount,
+  // Auto-post (retail / general)
+  postSaleInvoice,
+  postSaleCogs,
+  postPurchase,
+  postCustomerPayment,
+  postSupplierPayment,
+  postGeneralExpense,
+  postSalesReturn,
+  postPurchaseReturn,
+  removePostingsForReference,
   // Utility
   getFinancialYear,
 };
