@@ -154,14 +154,14 @@ export function buildPrintActionsLabels(
       sent: en ? 'Sent on WhatsApp' : 'واٹس ایپ پر بھیج دی گئی',
       failed: en ? 'Could not send invoice' : 'انوائس نہیں بھیجی جا سکی',
       notConnected: en
-        ? 'WhatsApp is not ready. Open Settings → WhatsApp and configure Meta Cloud API (recommended) or connect local QR.'
-        : 'واٹس ایپ تیار نہیں۔ Settings → WhatsApp میں Meta Cloud API سیٹ کریں یا مقامی QR منسلک کریں۔',
+        ? 'WhatsApp is not connected. Open Settings → WhatsApp and scan the QR code to connect.'
+        : 'واٹس ایپ منسلک نہیں۔ Settings → WhatsApp کھولیں اور QR کوڈ اسکین کریں۔',
       noBridge: en
         ? 'Could not reach the app. Close this window and send again from the invoice screen.'
         : 'ایپ سے رابطہ نہیں ہوا۔ یہ ونڈو بند کریں اور انوائس اسکرین سے دوبارہ بھیجیں۔',
       pdfHint: en
-        ? 'Sends invoice PDF via Meta WhatsApp Cloud API or local connection — configure in Settings → WhatsApp.'
-        : 'انوائس PDF Meta Cloud API یا مقامی کنکشن سے بھیجی جاتی ہے — Settings → WhatsApp میں ترتیب دیں۔',
+        ? 'Sends invoice PDF through your connected WhatsApp — connect in Settings → WhatsApp.'
+        : 'انوائس PDF آپ کے منسلک واٹس ایپ سے بھیجی جاتی ہے — Settings → WhatsApp میں منسلک کریں۔',
       savePdfFailed: en ? 'Could not save PDF' : 'PDF محفوظ نہیں ہو سکی',
     },
     settingsWhatsAppPath: '/settings/whatsapp',

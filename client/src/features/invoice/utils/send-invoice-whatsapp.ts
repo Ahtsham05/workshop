@@ -1,4 +1,4 @@
-import { businessWhatsappApi } from '@/stores/businessWhatsapp.api'
+import { whatsappApi } from '@/stores/whatsapp.api'
 import { store } from '@/stores/store'
 
 import { buildInvoicePdfInOpener } from './invoice-print-pdf-bridge'
@@ -31,7 +31,7 @@ function extractErrorMessage(err: unknown): string {
   return e.data?.message || e.message || 'Failed to send on WhatsApp'
 }
 
-/** Save flow helper: build receipt PDF from print data and send via business WhatsApp API. */
+/** Save flow helper: build receipt PDF from print data and send via connected WhatsApp. */
 export async function sendInvoiceReceiptWhatsApp(params: {
   printData: PrintInvoiceData
   phone: string
@@ -55,7 +55,7 @@ export async function sendInvoiceReceiptWhatsApp(params: {
   try {
     const result = await store
       .dispatch(
-        businessWhatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate({
+        whatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate({
           phone,
           pdfBase64,
           filename,
@@ -92,7 +92,7 @@ export async function sendDocumentPdfWhatsApp(params: {
   try {
     const result = await store
       .dispatch(
-        businessWhatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate({
+        whatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate({
           phone,
           pdfBase64,
           filename: params.filename,

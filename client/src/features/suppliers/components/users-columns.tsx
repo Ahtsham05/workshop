@@ -7,6 +7,7 @@ import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 
 export function useSupplierColumns() {
   const { t, language } = useLanguage()
@@ -69,18 +70,13 @@ export function useSupplierColumns() {
     header: ({ column }) => <DataTableColumnHeader column={column} title='whatsapp' />,
     cell: ({ row }) => {
       const whatsapp = row.getValue('whatsapp') as string
-      if (!whatsapp) return <div>-</div>
-      const number = whatsapp.replace(/\D/g, '')
+      const phone = row.original.phone
+      if (!whatsapp && !phone) return <div>-</div>
       return (
-        <a
-          href={`https://wa.me/${number}`}
-          target='_blank'
-          rel='noopener noreferrer'
-          className='text-green-600 hover:underline'
-          onClick={(e) => e.stopPropagation()}
-        >
-          {whatsapp}
-        </a>
+        <div className='flex items-center gap-1'>
+          <span className='text-sm'>{whatsapp || phone}</span>
+          <WhatsAppSendButton phone={phone} whatsapp={whatsapp} name={row.original.name} />
+        </div>
       )
     },
   }

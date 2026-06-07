@@ -261,6 +261,92 @@ const sendFeeAlerts = catchAsync(async (req, res) => {
   res.send({ total: recipients.length, sent, failed });
 });
 
+/**
+ * POST /whatsapp/send-document
+ * Send any PDF/document via connected WhatsApp session.
+ */
+const sendDocument = catchAsync(async (req, res) => {
+  if (rejectIfServerless(res)) return;
+  const { phone, pdfBase64, filename, caption, mimetype } = req.body;
+  if (!phone || !pdfBase64) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'phone and pdfBase64 are required');
+  }
+
+  const result = await whatsappService.sendDocument(phone, {
+    data: pdfBase64,
+    mimetype: mimetype || 'application/pdf',
+    filename: filename || 'document.pdf',
+    caption: caption || '',
+  });
+
+  if (!result.success) throw new ApiError(httpStatus.BAD_REQUEST, result.error);
+  res.send({ success: true, message: 'Document sent on WhatsApp' });
+});
+
+/**
+ * POST /whatsapp/send-invoice-pdf
+ * Send invoice receipt PDF via connected WhatsApp session.
+ */
+const sendInvoicePdf = catchAsync(async (req, res) => {
+  if (rejectIfServerless(res)) return;
+  const { phone, pdfBase64, filename, caption, invoiceNumber } = req.body;
+  if (!phone || !pdfBase64) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'phone and pdfBase64 are required');
+  }
+
+  const status = whatsappService.getStatus();
+  if (status.state !== 'READY') {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'WhatsApp is not connected. Open Settings → WhatsApp and scan the QR code first.',
+    );
+  }
+
+  const safeFilename =
+    filename || `Invoice-${String(invoiceNumber || 'invoice').replace(/[^\w.-]/g, '-')}.pdf`;
+  const defaultCaption = invoiceNumber ? `Invoice ${invoiceNumber}` : 'Invoice';
+
+  const result = await whatsappService.sendDocument(phone, {
+    data: pdfBase64,
+    mimetype: 'application/pdf',
+    filename: safeFilename,
+    caption: caption || defaultCaption,
+  });
+
+  if (!result.success) {
+    throw new ApiError(httpStatus.BAD_REQUEST, result.error || 'Failed to send invoice on WhatsApp');
+  }
+
+  res.send({ success: true, message: 'Invoice PDF sent on WhatsApp' });
+});
+
+/**
+ * POST /whatsapp/test
+ * Verify the connection by sending a test message to the admin's own number (optional body.phone).
+ */
+const sendTest = catchAsync(async (req, res) => {
+  if (rejectIfServerless(res)) return;
+  const status = whatsappService.getStatus();
+  if (status.state !== 'READY') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'WhatsApp is not connected yet');
+  }
+
+  const phone = req.body?.phone || req.user?.phone;
+  if (!phone) {
+    return res.send({
+      success: true,
+      message: 'WhatsApp is connected and ready to send messages.',
+    });
+  }
+
+  const result = await whatsappService.sendMessage(
+    phone,
+    '✅ Test message from your business app. WhatsApp is connected successfully.',
+  );
+  if (!result.success) throw new ApiError(httpStatus.BAD_REQUEST, result.error);
+  res.send({ success: true, message: 'Test message sent' });
+});
+
 module.exports = {
   getStatus,
   connect,
@@ -271,4 +357,7 @@ module.exports = {
   sendToClass,
   sendToAll,
   sendFeeAlerts,
+  sendDocument,
+  sendInvoicePdf,
+  sendTest,
 };

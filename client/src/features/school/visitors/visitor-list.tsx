@@ -9,7 +9,8 @@ import {
   useGetVisitorStatsQuery,
   useDeleteVisitorMutation,
 } from '@/stores/school.api';
-import { Plus, Search, Eye, Trash2, Phone, MessageCircle, UserCheck, CalendarClock, TrendingUp, Users, ArrowRightLeft, XCircle } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, Phone, UserCheck, CalendarClock, TrendingUp, Users, ArrowRightLeft, XCircle } from 'lucide-react';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
 import { useNavigate } from '@tanstack/react-router';
 import VisitorForm, { SOURCE_OPTIONS, STATUS_OPTIONS, statusBadge } from './visitor-form';
 import FollowUpDialog from './follow-up-dialog';
@@ -131,12 +132,8 @@ export default function VisitorList() {
     }
   };
 
-  const handleWhatsApp = (phone: string, name: string) => {
-    const cleaned = phone.replace(/[^0-9+]/g, '');
-    const international = cleaned.startsWith('0') ? `+92${cleaned.slice(1)}` : cleaned;
-    const msg = encodeURIComponent(`السلام علیکم ${name}! We wanted to follow up regarding your admission inquiry.`);
-    window.open(`https://wa.me/${international}?text=${msg}`, '_blank');
-  };
+  const followUpMessage = (name: string) =>
+    `السلام علیکم ${name}! We wanted to follow up regarding your admission inquiry.`
 
   const openEdit = (v: any) => {
     setEditVisitor(v);
@@ -267,15 +264,12 @@ export default function VisitorList() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            {/* WhatsApp */}
-                            <Button
-                              variant="ghost" size="icon"
-                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              title="WhatsApp"
-                              onClick={() => handleWhatsApp(v.phone, v.parentName)}
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </Button>
+                            <WhatsAppSendButton
+                              phone={v.phone}
+                              name={v.parentName}
+                              message={followUpMessage(v.parentName)}
+                              className='h-8 w-8'
+                            />
                             {/* Phone */}
                             <Button
                               variant="ghost" size="icon"

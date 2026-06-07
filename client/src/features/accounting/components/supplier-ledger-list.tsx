@@ -13,12 +13,14 @@ import summery from '@/utils/summery';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
 
 interface SupplierWithBalance {
   _id: string;
   name: string;
   nameUrdu?: string;
   phone?: string;
+  whatsapp?: string;
   email?: string;
   balance: number;
   lastTransactionDate?: string;
@@ -184,7 +186,18 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
                     <TableCell className={getBalanceColor(supplier.balance)}>
                       Rs{formatBalance(supplier.balance)}
                     </TableCell>
-                    <TableCell className="text-gray-600 text-sm">{supplier.phone || '-'}</TableCell>
+                    <TableCell className="text-gray-600 text-sm">
+                      <div className="flex items-center gap-1">
+                        <span>{supplier.phone || '-'}</span>
+                        {(supplier.phone || supplier.whatsapp) && (
+                          <WhatsAppSendButton
+                            phone={supplier.phone}
+                            whatsapp={supplier.whatsapp}
+                            name={supplier.name}
+                          />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {supplier.balance > 0 ? (
                         <Badge variant="destructive">{t('Payable')}</Badge>

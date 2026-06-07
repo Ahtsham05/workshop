@@ -3,6 +3,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
+import { WhatsAppHeaderButton } from '@/components/whatsapp/whatsapp-header-button'
 
 type AuthenticatedHeaderProps = {
   showSearch?: boolean
@@ -13,6 +14,7 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
     <Header fixed>
       <div className='ml-auto flex items-center space-x-4'>
         {showSearch ? <Search /> : null}
+        <WhatsAppHeaderButton />
         <LanguageSwitch />
         <ThemeSwitch />
         <ProfileDropdown />

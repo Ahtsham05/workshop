@@ -1,4 +1,4 @@
-import { businessWhatsappApi } from '@/stores/businessWhatsapp.api'
+import { whatsappApi } from '@/stores/whatsapp.api'
 import { store } from '@/stores/store'
 
 export type SendInvoicePdfPayload = {
@@ -33,7 +33,7 @@ export function ensureInvoiceWhatsAppSendBridge(): void {
   window.__sendInvoicePdfViaWhatsApp = async (payload) => {
     try {
       const result = await store
-        .dispatch(businessWhatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate(payload))
+        .dispatch(whatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate(payload))
         .unwrap()
       return { success: true, message: result.message }
     } catch (err) {

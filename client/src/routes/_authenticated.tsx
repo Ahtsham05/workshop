@@ -6,6 +6,7 @@ import { Main } from '@/components/layout/main'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { PortalShell } from '@/components/layout/portal-shell'
 import { PermissionWrapper } from '@/context/permission-wrapper'
+import { WhatsAppProvider } from '@/context/whatsapp-context'
 import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
@@ -47,9 +48,11 @@ function AuthenticatedLayout() {
     return (
       <TrialExpirationBoundary>
         <PermissionWrapper>
-          <PortalShell>
-            <Outlet />
-          </PortalShell>
+          <WhatsAppProvider>
+            <PortalShell>
+              <Outlet />
+            </PortalShell>
+          </WhatsAppProvider>
         </PermissionWrapper>
       </TrialExpirationBoundary>
     )
@@ -58,7 +61,8 @@ function AuthenticatedLayout() {
   return (
     <TrialExpirationBoundary>
       <PermissionWrapper>
-        <SidebarProvider>
+        <WhatsAppProvider>
+          <SidebarProvider>
           <AppSidebar />
           <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
             <AuthenticatedHeader showSearch={!isTeacher} />
@@ -77,6 +81,7 @@ function AuthenticatedLayout() {
             </Main>
           </div>
         </SidebarProvider>
+        </WhatsAppProvider>
       </PermissionWrapper>
     </TrialExpirationBoundary>
   )

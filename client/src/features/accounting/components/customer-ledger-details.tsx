@@ -45,6 +45,7 @@ import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-p
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LEDGER_STATEMENT_SORT } from '@/features/accounting/utils/ledger-display';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
 import {
   fetchAndStashPrintContact,
   resolveCustomerIdString,
@@ -1329,7 +1330,19 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
 
       <Card>
         <CardHeader>
-          <CardTitle>{customer.name}</CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            {customer.name}
+            {(customer.phone || customer.whatsapp) && (
+              <WhatsAppSendButton
+                phone={customer.phone}
+                whatsapp={customer.whatsapp}
+                name={customer.name}
+                showLabel
+                size="sm"
+                variant="outline"
+              />
+            )}
+          </CardTitle>
           <CardDescription>{t('Transaction History and Balance')}</CardDescription>
         </CardHeader>
         <CardContent>

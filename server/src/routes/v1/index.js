@@ -85,7 +85,6 @@ const schoolAccountingRoute = require('./schoolAccounting.route');
 const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
 const accountsSystemRoute = require('./accountsSystem.route');
 const whatsappRoute = require('./whatsapp.route');
-const businessWhatsappRoute = require('./businessWhatsapp.route');
 const restaurantRoute = require('./restaurant.route');
 const restaurantPublicRoute = require('./restaurantPublic.route');
 
@@ -141,10 +140,6 @@ const defaultRoutes = [
   {
     path: '/invoices',
     route: invoiceRoute
-  },
-  {
-    path: '/business-whatsapp',
-    route: businessWhatsappRoute,
   },
   {
     path: '/expenses',

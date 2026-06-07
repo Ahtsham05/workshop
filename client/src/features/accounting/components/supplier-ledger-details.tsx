@@ -35,6 +35,7 @@ import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop
 import { supplierBalanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LEDGER_STATEMENT_SORT } from '@/features/accounting/utils/ledger-display';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
 
 function isLoadPurchaseLedgerRow(entry: LedgerEntry): boolean {
   const ref = String(entry.reference || '').toUpperCase();
@@ -875,13 +876,25 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
 
       <Card>
         <CardHeader>
-          <CardTitle>{supplier.name}</CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            {supplier.name}
+            {(supplier.phone || (supplier as { whatsapp?: string }).whatsapp) && (
+              <WhatsAppSendButton
+                phone={supplier.phone}
+                whatsapp={(supplier as { whatsapp?: string }).whatsapp}
+                name={supplier.name}
+                showLabel
+                size="sm"
+                variant="outline"
+              />
+            )}
+          </CardTitle>
           <CardDescription>
             <span className='block'>{t('Transaction History and Balance')}</span>
             {(supplier.phone || supplier.email) && (
-              <span className='mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'>
+              <span className='mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground'>
                 {supplier.phone ? (
-                  <span>
+                  <span className="flex items-center gap-1">
                     {t('phone')}: {supplier.phone}
                   </span>
                 ) : null}
