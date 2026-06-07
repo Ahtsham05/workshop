@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 
 export default function Settings() {
   return (
@@ -24,7 +25,7 @@ export default function Settings() {
         <Separator className='my-4 lg:my-6' />
         <div className='flex flex-1 flex-col space-y-2 overflow-hidden md:space-y-2 lg:flex-row lg:space-y-0 lg:space-x-12'>
           <aside className='top-0 lg:sticky lg:w-1/5'>
-            <SidebarNav items={sidebarNavItems} />
+            <SidebarNav items={sidebarNavItems.filter((item) => WHATSAPP_UI_ENABLED || item.href !== '/settings/whatsapp')} />
           </aside>
           <div className='flex w-full overflow-y-hidden p-1'>
             <Outlet />

@@ -14,7 +14,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { apps } from './data/apps'
+
+const visibleApps = WHATSAPP_UI_ENABLED ? apps : apps.filter((app) => app.name !== 'WhatsApp')
 
 const appText = new Map<string, string>([
   ['all', 'All Apps'],
@@ -27,7 +30,7 @@ export default function Apps() {
   const [appType, setAppType] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
 
-  const filteredApps = apps
+  const filteredApps = visibleApps
     .sort((a, b) =>
       sort === 'ascending'
         ? a.name.localeCompare(b.name)

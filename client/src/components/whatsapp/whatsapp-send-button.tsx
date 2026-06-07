@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useWhatsAppOptional } from '@/context/whatsapp-context'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +31,8 @@ export function WhatsAppSendButton({
   showLabel = false,
   onClick,
 }: Props) {
+  if (!WHATSAPP_UI_ENABLED) return null
+
   const wa = useWhatsAppOptional()
   const number = resolvePhone(phone, whatsapp)
 

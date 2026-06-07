@@ -1,5 +1,6 @@
 import type { PrintInvoiceData } from './print-utils'
 import type { InvoiceLanguage } from './language'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { resolveCustomerIdString } from './invoice-print-contact-bridge'
 
 /** Balance / amount due shown on the printed invoice (for PDF filename). */
@@ -209,7 +210,7 @@ export function buildPrintWindowActionsBlock(
     settingsPath: labels.settingsWhatsAppPath,
   }
   const metaJson = escapeJsonForHtmlScript(meta)
-  const showWhatsApp = Boolean(customerIdStr) && data.customerId !== 'walk-in'
+  const showWhatsApp = WHATSAPP_UI_ENABLED && Boolean(customerIdStr) && data.customerId !== 'walk-in'
 
   return `
   <script type="application/json" id="invoice-print-meta">${metaJson}</script>

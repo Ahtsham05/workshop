@@ -21,6 +21,7 @@ import {
 import { WhatsAppConnectionDialog } from '@/components/whatsapp/whatsapp-connection-dialog'
 import { WhatsAppComposeDialog } from '@/components/whatsapp/whatsapp-compose-dialog'
 import { toast } from 'sonner'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 
 type ComposeTarget = {
   phone: string
@@ -73,6 +74,7 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
   )
 
   const { data: status } = useGetWhatsAppStatusQuery(undefined, {
+    skip: !WHATSAPP_UI_ENABLED,
     pollingInterval: pollInterval,
     refetchOnFocus: connectionOpen,
     refetchOnReconnect: connectionOpen,
@@ -199,29 +201,33 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
   return (
     <WhatsAppContext.Provider value={value}>
       {children}
-      <WhatsAppConnectionDialog
-        open={connectionOpen}
-        onOpenChange={handleConnectionOpenChange}
-        state={state}
-        qrImage={qrImage}
-        error={statusError}
-        deployHint={deployHint}
-        onConnect={handleConnect}
-        onDisconnect={handleDisconnect}
-        onClearSession={handleClearSession}
-        onRefresh={handleRefresh}
-        onTest={handleTest}
-      />
-      <WhatsAppComposeDialog
-        open={composeOpen}
-        onOpenChange={setComposeOpen}
-        phone={composeTarget?.phone ?? ''}
-        name={composeTarget?.name}
-        defaultMessage={composeTarget?.defaultMessage ?? ''}
-        onSend={sendMessage}
-        isReady={isReady}
-        onConnect={openConnectionDialog}
-      />
+      {WHATSAPP_UI_ENABLED && (
+        <>
+          <WhatsAppConnectionDialog
+            open={connectionOpen}
+            onOpenChange={handleConnectionOpenChange}
+            state={state}
+            qrImage={qrImage}
+            error={statusError}
+            deployHint={deployHint}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onClearSession={handleClearSession}
+            onRefresh={handleRefresh}
+            onTest={handleTest}
+          />
+          <WhatsAppComposeDialog
+            open={composeOpen}
+            onOpenChange={setComposeOpen}
+            phone={composeTarget?.phone ?? ''}
+            name={composeTarget?.name}
+            defaultMessage={composeTarget?.defaultMessage ?? ''}
+            onSend={sendMessage}
+            isReady={isReady}
+            onConnect={openConnectionDialog}
+          />
+        </>
+      )}
     </WhatsAppContext.Provider>
   )
 }

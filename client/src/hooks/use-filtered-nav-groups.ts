@@ -5,6 +5,7 @@ import type { NavGroup } from '@/components/layout/types'
 import { usePermissions } from '@/context/permission-context'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { normalizeBusinessType } from '@/lib/business-types'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { RootState } from '@/stores/store'
 
@@ -80,6 +81,10 @@ export function useFilteredNavGroups(): NavGroup[] {
     }
 
     const canAccessItem = (item: any) => {
+      if (!WHATSAPP_UI_ENABLED && item.url === '/school/whatsapp') {
+        return false
+      }
+
       if (schoolRole === 'teacher') {
         return !!(item.allowedSchoolRoles && item.allowedSchoolRoles.includes('teacher'))
       }

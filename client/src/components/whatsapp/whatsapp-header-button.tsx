@@ -1,10 +1,13 @@
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useWhatsAppOptional } from '@/context/whatsapp-context'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, MessageCircle } from 'lucide-react'
 
 export function WhatsAppHeaderButton() {
+  if (!WHATSAPP_UI_ENABLED) return null
+
   const wa = useWhatsAppOptional()
   if (!wa) return null
 
