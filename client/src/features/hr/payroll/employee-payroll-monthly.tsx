@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/context/language-context';
 import { useGetEmployeeMonthlyPayrollSummaryQuery } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,6 +53,7 @@ type Props = {
 
 export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }: Props) {
   const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState(String(new Date().getMonth() + 1));
   const { data, isLoading } = useGetEmployeeMonthlyPayrollSummaryQuery(
     { employeeId, year },
     { skip: !employeeId },
@@ -63,14 +64,27 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
     [],
   );
 
-  const defaultTab = useMemo(() => {
-    if (!data?.months?.length) return '1';
+  useEffect(() => {
+    if (!employeeId) return;
     const currentMonth = new Date().getMonth() + 1;
-    const activeMonth = [...data.months]
+    const currentYear = new Date().getFullYear();
+    if (year === currentYear) {
+      setActiveTab(String(currentMonth));
+      return;
+    }
+    const activeMonth = [...(data?.months || [])]
       .reverse()
-      .find((m) => m.hasActivity)?.month || currentMonth;
-    return String(activeMonth);
-  }, [data?.months]);
+      .find((m) => m.hasActivity)?.month || 1;
+    setActiveTab(String(activeMonth));
+  }, [employeeId, year, data?.months]);
+
+  const formatPayrollStatus = (monthRow: MonthlyPayrollRow) => {
+    if (monthRow.status === 'Paid') return t('Paid');
+    if (monthRow.status === 'No Record') return t('No Record');
+    if (monthRow.salaryPaid > 0 && monthRow.remainingPayable <= 0) return t('Paid');
+    if (monthRow.totalSalary > 0 || monthRow.salaryPaid > 0) return t('Unpaid');
+    return t('No Record');
+  };
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
@@ -110,7 +124,7 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
         ) : !data?.months?.length ? (
           <p className="text-center py-8 text-muted-foreground">{t('No payroll data found')}</p>
         ) : (
-          <Tabs defaultValue={defaultTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
               {data.months.map((monthRow: MonthlyPayrollRow) => (
                 <TabsTrigger
@@ -129,8 +143,8 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
                   <Badge variant="outline">
                     {t(MONTHS[monthRow.month - 1])} {monthRow.year}
                   </Badge>
-                  <Badge variant={monthRow.status === 'Paid' ? 'default' : 'secondary'}>
-                    {monthRow.status}
+                  <Badge variant={formatPayrollStatus(monthRow) === t('Paid') ? 'default' : 'secondary'}>
+                    {formatPayrollStatus(monthRow)}
                   </Badge>
                 </div>
 

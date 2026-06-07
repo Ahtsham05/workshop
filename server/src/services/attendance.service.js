@@ -429,6 +429,12 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
 
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+  const today = normalizeDateOnly(new Date());
+  let effectiveEnd = monthEnd;
+  if (normalizeDateOnly(monthEnd) > today) {
+    effectiveEnd = new Date(today);
+    effectiveEnd.setHours(23, 59, 59, 999);
+  }
 
   let effectiveStart = normalizeDateOnly(monthStart);
   if (employee.joiningDate) {
@@ -450,7 +456,7 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
 
   const stats = computeAttendanceStatsFromData({
     periodStart: monthStart,
-    periodEnd: monthEnd,
+    periodEnd: effectiveEnd,
     joiningDate: employee.joiningDate,
     attendances,
     leaves,
@@ -491,7 +497,7 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
       });
     });
 
-  const days = eachDateInRange(effectiveStart, monthEnd).map((date) => {
+  const days = eachDateInRange(effectiveStart, effectiveEnd).map((date) => {
     const record = attendanceMap.get(date.getTime());
     const leave = leaveOnDate.get(date.getTime());
     const status = resolveDayStatus(record, leave);

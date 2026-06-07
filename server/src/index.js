@@ -128,6 +128,9 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => 
     // This runs in the background and is safe to fail silently.
     const { whatsappService } = require('./services');
     whatsappService.tryAutoConnect();
+
+    const { startPayrollScheduler } = require('./jobs/payrollScheduler');
+    startPayrollScheduler();
   });
 }).catch((error) => {
   logger.error('MongoDB connection error:', error);

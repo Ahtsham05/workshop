@@ -49,6 +49,14 @@ const expenseSchema = new mongoose.Schema({
   reference: {
     type: String,
   },
+  referenceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true,
+  },
+  referenceModel: {
+    type: String,
+    trim: true,
+  },
   notes: {
     type: String,
   },
@@ -70,6 +78,7 @@ expenseSchema.plugin(toJSON);
 expenseSchema.plugin(paginate);
 
 expenseSchema.index({ organizationId: 1, branchId: 1 });
+expenseSchema.index({ referenceId: 1, referenceModel: 1 });
 
 // Generate expense number with retry for race conditions
 expenseSchema.pre('save', async function(next) {

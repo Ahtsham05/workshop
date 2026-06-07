@@ -14,7 +14,8 @@ router
 
 router
   .route('/:ledgerId')
-  .patch(validate(employeeLedgerValidation.updateLedgerEntry), employeeLedgerController.updateLedgerEntry);
+  .patch(validate(employeeLedgerValidation.updateLedgerEntry), employeeLedgerController.updateLedgerEntry)
+  .delete(validate(employeeLedgerValidation.deleteLedgerEntry), employeeLedgerController.deleteLedgerEntry);
 
 router
   .route('/employees-with-balances')

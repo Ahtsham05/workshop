@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const pick = require('../utils/pick');
 const { employeeLedgerService } = require('../services');
+const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createAdvancePayment = catchAsync(async (req, res) => {
@@ -32,6 +33,15 @@ const payEmployee = catchAsync(async (req, res) => {
 const getLedgerEntries = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'transactionType']);
   applyBranchFilter(filter, req);
+  const tenantFilter = {};
+  if (filter.organizationId) tenantFilter.organizationId = filter.organizationId;
+  if (filter.branchId) tenantFilter.branchId = filter.branchId;
+
+  if (!filter.employee) {
+    const employees = await Employee.find(tenantFilter).select('_id');
+    filter.employee = { $in: employees.map((emp) => emp._id) };
+  }
+
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate']);
   const result = await employeeLedgerService.queryLedgerEntries(filter, options);
   res.send(result);
@@ -47,6 +57,11 @@ const getEmployeesWithBalances = catchAsync(async (req, res) => {
   res.send(data);
 });
 
+const deleteLedgerEntry = catchAsync(async (req, res) => {
+  await employeeLedgerService.deleteLedgerEntryById(req.params.ledgerId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   createAdvancePayment,
   updateLedgerEntry,
@@ -54,4 +69,5 @@ module.exports = {
   getLedgerEntries,
   getEmployeeLedgerSummary,
   getEmployeesWithBalances,
+  deleteLedgerEntry,
 };

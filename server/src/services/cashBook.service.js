@@ -52,7 +52,44 @@ const upsertReferenceEntry = async (entryBody) => {
 };
 
 const deleteEntriesByReference = async (referenceId, referenceModel) => {
-  return CashBookEntry.deleteMany({ referenceId, referenceModel });
+  if (!referenceId || !referenceModel) {
+    return { deletedCount: 0 };
+  }
+  const id = mongoose.Types.ObjectId.isValid(String(referenceId))
+    ? new mongoose.Types.ObjectId(String(referenceId))
+    : referenceId;
+  return CashBookEntry.deleteMany({ referenceId: id, referenceModel });
+};
+
+const deleteEmployeeLedgerPaymentCashBook = async (entry, employeeName = '') => {
+  if (!entry) return 0;
+
+  let deleted = 0;
+  const primary = await deleteEntriesByReference(entry._id, 'EmployeeLedger');
+  deleted += primary.deletedCount || 0;
+
+  const name = String(employeeName || '').trim();
+  const reference = String(entry.reference || '').trim();
+  const amount = Number(entry.credit || 0);
+  if (name && amount > 0) {
+    const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
+    const descriptions = reference
+      ? [`${label} to ${name} (${reference})`, `${label} to ${name}`]
+      : [`${label} to ${name}`];
+
+    const fallbackFilter = {
+      organizationId: entry.organizationId,
+      type: 'expense',
+      amount,
+      description: { $in: descriptions },
+    };
+    if (entry.branchId) fallbackFilter.branchId = entry.branchId;
+
+    const fallback = await CashBookEntry.deleteMany(fallbackFilter);
+    deleted += fallback.deletedCount || 0;
+  }
+
+  return deleted;
 };
 
 const queryEntries = async (filter, options) => {
@@ -214,6 +251,7 @@ module.exports = {
   createEntry,
   upsertReferenceEntry,
   deleteEntriesByReference,
+  deleteEmployeeLedgerPaymentCashBook,
   queryEntries,
   getSummary,
   getCashInHandSummary,

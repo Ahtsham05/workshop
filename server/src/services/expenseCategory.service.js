@@ -177,10 +177,50 @@ const deleteCategory = async (id, organizationId) => {
   await cat.deleteOne();
 };
 
+const EMPLOYEE_CATEGORY_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6'];
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const findOrCreateEmployeeCategory = async (organizationId, branchId, userId, categoryName) => {
+  const name = String(categoryName || '').trim();
+  if (!name) return null;
+
+  const existing = await ExpenseCategory.findOne({
+    organizationId,
+    branchId,
+    transactionType: 'business_expense',
+    name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
+  });
+  if (existing) return existing;
+
+  try {
+    return await ExpenseCategory.create({
+      name,
+      color: EMPLOYEE_CATEGORY_COLORS[Math.floor(Math.random() * EMPLOYEE_CATEGORY_COLORS.length)],
+      transactionType: 'business_expense',
+      organizationId,
+      branchId,
+      createdBy: userId,
+      isDefault: false,
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return ExpenseCategory.findOne({
+        organizationId,
+        branchId,
+        transactionType: 'business_expense',
+        name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
+      });
+    }
+    throw err;
+  }
+};
+
 module.exports = {
   getCategories,
   createCategory,
   updateCategory,
   deleteCategory,
   seedDefaultsForType,
+  findOrCreateEmployeeCategory,
 };

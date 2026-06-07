@@ -62,7 +62,11 @@ const computeAttendanceStatsFromData = ({
   leaves = [],
 }) => {
   let effectiveStart = normalizeDateOnly(periodStart);
-  const effectiveEnd = normalizeDateOnly(periodEnd);
+  let effectiveEnd = normalizeDateOnly(periodEnd);
+  const today = normalizeDateOnly(new Date());
+  if (effectiveEnd > today) {
+    effectiveEnd = today;
+  }
 
   if (joiningDate) {
     const joining = normalizeDateOnly(joiningDate);

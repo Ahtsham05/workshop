@@ -83,6 +83,11 @@ export default function LeaveManagement() {
     status: statusFilter || undefined,
   });
 
+  const { data: allLeavesData } = useGetLeavesQuery({
+    page: 1,
+    limit: 1000,
+  });
+
   const { data: employeesData } = useGetEmployeesQuery({
     limit: 100,
     employmentStatus: 'Active',
@@ -292,6 +297,21 @@ export default function LeaveManagement() {
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
 
+  const leaveDayStats = useMemo(() => {
+    const leaves = allLeavesData?.results || [];
+    const sumDays = (status: string) =>
+      leaves
+        .filter((leave: any) => leave.status === status)
+        .reduce((sum: number, leave: any) => sum + Number(leave.totalDays || 0), 0);
+
+    return {
+      totalDays: leaves.reduce((sum: number, leave: any) => sum + Number(leave.totalDays || 0), 0),
+      approvedDays: sumDays('Approved'),
+      pendingDays: sumDays('Pending'),
+      rejectedDays: sumDays('Rejected'),
+    };
+  }, [allLeavesData?.results]);
+
   const getLeaveImpactDisplay = (leave: any) => {
     const impact = leave.salaryImpact;
     if (!impact || !impact.amount) return '-';
@@ -369,6 +389,65 @@ export default function LeaveManagement() {
               </div>
               <div className="p-3 rounded-full bg-blue-50">
                 <Calendar className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Leave Days Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{t('Total Leave Days')}</p>
+                <p className="text-3xl font-bold text-blue-600">{leaveDayStats.totalDays}</p>
+              </div>
+              <div className="p-3 rounded-full bg-blue-50">
+                <Calendar className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{t('Approved Days')}</p>
+                <p className="text-3xl font-bold text-green-600">{leaveDayStats.approvedDays}</p>
+              </div>
+              <div className="p-3 rounded-full bg-green-50">
+                <Calendar className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{t('Pending Days')}</p>
+                <p className="text-3xl font-bold text-yellow-600">{leaveDayStats.pendingDays}</p>
+              </div>
+              <div className="p-3 rounded-full bg-yellow-50">
+                <Calendar className="h-6 w-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{t('Rejected Days')}</p>
+                <p className="text-3xl font-bold text-red-600">{leaveDayStats.rejectedDays}</p>
+              </div>
+              <div className="p-3 rounded-full bg-red-50">
+                <Calendar className="h-6 w-6 text-red-600" />
               </div>
             </div>
           </CardContent>

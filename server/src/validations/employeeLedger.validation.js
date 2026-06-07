@@ -56,10 +56,17 @@ const updateLedgerEntry = {
     .min(1),
 };
 
+const deleteLedgerEntry = {
+  params: Joi.object().keys({
+    ledgerId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   createAdvancePayment,
   payEmployee,
   getLedgerEntries,
   getEmployeeSummary,
   updateLedgerEntry,
+  deleteLedgerEntry,
 };

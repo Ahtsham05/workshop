@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
-const { Employee } = require('../models');
+const { Employee, Payroll, EmployeeLedger, Attendance, Leave, PerformanceReview } = require('../models');
 const ApiError = require('../utils/ApiError');
+const expenseCategoryService = require('./expenseCategory.service');
+const cashBookService = require('./cashBook.service');
 
 const getTenantFilter = (data = {}) => {
   const filter = {};
@@ -73,7 +75,19 @@ const createEmployee = async (employeeBody) => {
   cleanedBody.employeeId = employeeId;
   delete cleanedBody.designation;
 
-  return Employee.create(cleanedBody);
+  const employee = await Employee.create(cleanedBody);
+
+  const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+  if (employeeName && employee.organizationId && employee.branchId) {
+    await expenseCategoryService.findOrCreateEmployeeCategory(
+      employee.organizationId,
+      employee.branchId,
+      employee.createdBy,
+      employeeName,
+    );
+  }
+
+  return employee;
 };
 
 /**
@@ -177,6 +191,22 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
 };
 
 /**
+ * Remove all HR records linked to an employee.
+ * Keeps expense history and expense categories intact.
+ */
+const deleteEmployeeRelatedData = async (employeeId) => {
+  const ledgerEntries = await EmployeeLedger.find({ employee: employeeId });
+  await Promise.all(
+    ledgerEntries.map((entry) => cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger')),
+  );
+  await EmployeeLedger.deleteMany({ employee: employeeId });
+  await Payroll.deleteMany({ employee: employeeId });
+  await Attendance.deleteMany({ employee: employeeId });
+  await Leave.deleteMany({ employee: employeeId });
+  await PerformanceReview.deleteMany({ employee: employeeId });
+};
+
+/**
  * Delete employee by id
  * @param {ObjectId} employeeId
  * @returns {Promise<Employee>}
@@ -186,6 +216,7 @@ const deleteEmployeeById = async (employeeId, scope = {}) => {
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
+  await deleteEmployeeRelatedData(employeeId);
   await employee.deleteOne();
   return employee;
 };

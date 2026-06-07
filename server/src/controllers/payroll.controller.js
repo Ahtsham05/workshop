@@ -14,11 +14,12 @@ const createPayroll = catchAsync(async (req, res) => {
 const getPayrolls = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['employee', 'month', 'year', 'status']);
   applyBranchFilter(filter, req);
+  const tenantFilter = {};
+  if (filter.organizationId) tenantFilter.organizationId = filter.organizationId;
+  if (filter.branchId) tenantFilter.branchId = filter.branchId;
+
   if (req.query.search) {
     const regex = new RegExp(req.query.search, 'i');
-    const tenantFilter = {};
-    if (filter.organizationId) tenantFilter.organizationId = filter.organizationId;
-    if (filter.branchId) tenantFilter.branchId = filter.branchId;
     const employees = await Employee.find({
       ...tenantFilter,
       $or: [{ firstName: regex }, { lastName: regex }, { employeeId: regex }, { email: regex }],
@@ -27,7 +28,11 @@ const getPayrolls = catchAsync(async (req, res) => {
     filter.employee = filter.employee
       ? { $in: employeeIds.filter((id) => String(id) === String(filter.employee)) }
       : { $in: employeeIds };
+  } else if (!filter.employee) {
+    const employees = await Employee.find(tenantFilter).select('_id');
+    filter.employee = { $in: employees.map((emp) => emp._id) };
   }
+
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   options.populate = 'employee,processedBy';
   const result = await payrollService.queryPayrolls(filter, options);

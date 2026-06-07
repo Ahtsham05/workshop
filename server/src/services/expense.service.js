@@ -7,9 +7,11 @@ const cashBookService = require('./cashBook.service');
 /**
  * Create an expense
  * @param {Object} expenseBody
+ * @param {Object} [options]
+ * @param {boolean} [options.skipCashBookSync=false]
  * @returns {Promise<Expense>}
  */
-const createExpense = async (expenseBody) => {
+const createExpense = async (expenseBody, options = {}) => {
   let expense;
   const maxRetries = 3;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -27,19 +29,21 @@ const createExpense = async (expenseBody) => {
   if (!expense) {
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create expense after retries');
   }
-  await cashBookService.upsertReferenceEntry({
-    organizationId: expense.organizationId,
-    branchId: expense.branchId,
-    type: 'expense',
-    source: 'expense',
-    amount: expense.amount,
-    paymentMethod: expense.paymentMethod,
-    referenceId: expense._id,
-    referenceModel: 'Expense',
-    description: expense.description,
-    date: expense.date,
-    createdBy: expense.createdBy,
-  });
+  if (!options.skipCashBookSync) {
+    await cashBookService.upsertReferenceEntry({
+      organizationId: expense.organizationId,
+      branchId: expense.branchId,
+      type: 'expense',
+      source: 'expense',
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      referenceId: expense._id,
+      referenceModel: 'Expense',
+      description: expense.description,
+      date: expense.date,
+      createdBy: expense.createdBy,
+    });
+  }
 
   return expense;
 };
@@ -141,6 +145,73 @@ const deleteExpenseById = async (expenseId) => {
   return expense;
 };
 
+const findExpenseByLedgerReference = async (ledgerId) => {
+  return Expense.findOne({ referenceId: ledgerId, referenceModel: 'EmployeeLedger' });
+};
+
+const deleteExpenseByLedgerReference = async (ledgerId, entry = null, employeeDoc = null) => {
+  let expense = await findExpenseByLedgerReference(ledgerId);
+  if (!expense && entry && employeeDoc && entry.reference) {
+    const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
+    expense = await Expense.findOne({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      category: employeeName,
+      reference: entry.reference,
+    }).sort({ createdAt: -1 });
+  }
+  if (!expense) return null;
+  return deleteExpenseById(expense._id);
+};
+
+const upsertExpenseFromEmployeeLedger = async (entry, employeeDoc) => {
+  if (!entry || !employeeDoc) return null;
+
+  const amount = Number(entry.credit || 0);
+  if (amount <= 0) {
+    await deleteExpenseByLedgerReference(entry._id);
+    return null;
+  }
+
+  const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
+  const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
+  const description = `${label} to ${employeeName}`;
+  const payload = {
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    category: employeeName,
+    description,
+    amount,
+    paymentMethod: entry.paymentMethod || 'Cash',
+    date: entry.transactionDate || new Date(),
+    reference: entry.reference || undefined,
+    notes: entry.notes || '',
+    referenceId: entry._id,
+    referenceModel: 'EmployeeLedger',
+    createdBy: entry.updatedBy || entry.createdBy,
+  };
+
+  let expense = await findExpenseByLedgerReference(entry._id);
+  if (!expense && entry.reference) {
+    expense = await Expense.findOne({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      category: employeeName,
+      reference: entry.reference,
+      referenceId: { $exists: false },
+    }).sort({ createdAt: -1 });
+  }
+
+  if (expense) {
+    await cashBookService.deleteEntriesByReference(expense._id, 'Expense');
+    Object.assign(expense, payload);
+    await expense.save();
+    return expense;
+  }
+
+  return createExpense(payload, { skipCashBookSync: true });
+};
+
 /**
  * Get expense summary by category
  * @param {Object} filter - Date range and organization/branch filter
@@ -232,6 +303,9 @@ module.exports = {
   getExpenseById,
   updateExpenseById,
   deleteExpenseById,
+  findExpenseByLedgerReference,
+  deleteExpenseByLedgerReference,
+  upsertExpenseFromEmployeeLedger,
   getExpenseSummary,
   getExpenseTrends,
 };

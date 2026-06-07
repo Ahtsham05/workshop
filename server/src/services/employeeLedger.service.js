@@ -2,6 +2,8 @@ const httpStatus = require('http-status');
 const { EmployeeLedger, Employee } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const expenseService = require('./expense.service');
+const expenseCategoryService = require('./expenseCategory.service');
 
 const PAYMENT_TRANSACTION_TYPES = new Set(['salary_payment', 'advance_payment']);
 
@@ -51,6 +53,33 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
   });
 };
 
+const syncExpenseFromEmployeePayment = async ({ ledgerEntry, employeeDoc }) => {
+  if (!ledgerEntry || !employeeDoc) return null;
+  if (!PAYMENT_TRANSACTION_TYPES.has(String(ledgerEntry.transactionType || '').toLowerCase())) {
+    return null;
+  }
+  const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
+  await expenseCategoryService.findOrCreateEmployeeCategory(
+    ledgerEntry.organizationId,
+    ledgerEntry.branchId,
+    ledgerEntry.updatedBy || ledgerEntry.createdBy,
+    employeeName,
+  );
+  return expenseService.upsertExpenseFromEmployeeLedger(ledgerEntry, employeeDoc);
+};
+
+const syncExpenseForLedgerEntry = async (entry) => {
+  if (!entry || !PAYMENT_TRANSACTION_TYPES.has(String(entry.transactionType || '').toLowerCase())) {
+    return null;
+  }
+  const employeeId = entry.employee?._id || entry.employee;
+  const employeeDoc = entry.employee?.firstName
+    ? entry.employee
+    : await Employee.findById(employeeId);
+  if (!employeeDoc) return null;
+  return syncExpenseFromEmployeePayment({ ledgerEntry: entry, employeeDoc });
+};
+
 const recalculateBalances = async (employeeId) => {
   const entries = await EmployeeLedger.find({ employee: employeeId }).sort({ transactionDate: 1, createdAt: 1 });
   let runningBalance = 0;
@@ -91,7 +120,26 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
   await recalculateBalances(employeeId);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
   await syncCashBookFromEmployeeLedger(updatedEntry);
+  await syncExpenseForLedgerEntry(updatedEntry);
   return updatedEntry;
+};
+
+const deleteLedgerEntryById = async (ledgerId) => {
+  const entry = await EmployeeLedger.findById(ledgerId).populate('employee', 'firstName lastName employeeId');
+  if (!entry) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
+  }
+
+  const employeeId = entry.employee?._id || entry.employee;
+  const employeeName = entry.employee?.firstName
+    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
+    : '';
+
+  await cashBookService.deleteEmployeeLedgerPaymentCashBook(entry, employeeName);
+  await expenseService.deleteExpenseByLedgerReference(entry._id, entry, entry.employee);
+  await entry.deleteOne();
+  await recalculateBalances(employeeId);
+  return entry;
 };
 
 const queryLedgerEntries = async (filter, options) => {
@@ -192,6 +240,11 @@ const payEmployee = async (paymentBody) => {
   const salaryPaymentAmount = Math.min(numericAmount, outstandingPayable);
   const extraAdvanceAmount = Math.max(0, numericAmount - salaryPaymentAmount);
 
+  const employeeDoc = await Employee.findById(employee);
+  if (!employeeDoc) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  }
+
   let salaryEntry = null;
   let advanceEntry = null;
 
@@ -232,6 +285,20 @@ const payEmployee = async (paymentBody) => {
       notes: normalizedNotes,
       createdBy,
       updatedBy,
+    });
+  }
+
+  if (salaryPaymentAmount > 0) {
+    await syncExpenseFromEmployeePayment({
+      ledgerEntry: salaryEntry,
+      employeeDoc,
+    });
+  }
+
+  if (extraAdvanceAmount > 0) {
+    await syncExpenseFromEmployeePayment({
+      ledgerEntry: advanceEntry,
+      employeeDoc,
     });
   }
 
@@ -363,6 +430,7 @@ const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMeth
 module.exports = {
   createLedgerEntry,
   updateLedgerEntryById,
+  deleteLedgerEntryById,
   queryLedgerEntries,
   getEmployeeLedgerSummary,
   getAllEmployeesWithBalances,

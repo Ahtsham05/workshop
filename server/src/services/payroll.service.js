@@ -327,7 +327,7 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
     absentDays: snapshot.absentDays,
     leaveDays: snapshot.leaveDays,
     overtimeHours: snapshot.overtimeHours,
-    status: 'Pending',
+    status: 'Processed',
     processedBy,
     notes: snapshot.notes,
   };
@@ -518,7 +518,7 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
       openingBalance,
       closingBalance,
       remainingPayable,
-      hasActivity: Boolean(payroll || ledgerEntries.length > 0 || presentDays > 0 || absentDays > 0),
+      hasActivity: Boolean(payroll || ledgerEntries.length > 0 || absentDays > 0 || leaveDays > 0),
     });
   }
 
@@ -533,6 +533,32 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
     months,
     currentBalance: runningBalance,
   };
+};
+
+const generateMonthlyPayrollForAll = async (month, year, processedBy = null) => {
+  const employees = await Employee.find({ employmentStatus: 'Active' });
+  const results = { created: 0, skipped: 0, errors: [] };
+
+  for (const employee of employees) {
+    try {
+      await generatePayroll(employee._id, month, year, processedBy, {
+        organizationId: employee.organizationId,
+        branchId: employee.branchId,
+      });
+      results.created += 1;
+    } catch (err) {
+      if (err.statusCode === httpStatus.BAD_REQUEST && String(err.message).includes('already exists')) {
+        results.skipped += 1;
+      } else {
+        results.errors.push({
+          employeeId: employee.employeeId,
+          message: err.message,
+        });
+      }
+    }
+  }
+
+  return results;
 };
 
 module.exports = {
@@ -550,4 +576,5 @@ module.exports = {
   syncPayrollForMonth,
   syncPayrollForLeave,
   getOverlappingLeaveDays,
+  generateMonthlyPayrollForAll,
 };

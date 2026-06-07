@@ -3,9 +3,9 @@ import { useLanguage } from '@/context/language-context';
 import {
   useGetPayrollsQuery,
   useGeneratePayrollMutation,
-  useProcessPayrollMutation,
   useUpdatePayrollMutation,
   useUpdateEmployeeLedgerEntryMutation,
+  useDeleteEmployeeLedgerEntryMutation,
   useGetEmployeesQuery,
   useGetEmployeeLedgerEntriesQuery,
   useGetEmployeeLedgerSummaryQuery,
@@ -44,8 +44,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Play,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmployeePayrollMonthlySummary } from './employee-payroll-monthly';
@@ -68,6 +68,7 @@ export default function PayrollManagement() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showLedgerPayDialog, setShowLedgerPayDialog] = useState(false);
   const [showLedgerEditDialog, setShowLedgerEditDialog] = useState(false);
+  const [showLedgerDeleteDialog, setShowLedgerDeleteDialog] = useState(false);
   const [selectedEmployeeLedger, setSelectedEmployeeLedger] = useState('');
   const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
   const [selectedLedgerEntry, setSelectedLedgerEntry] = useState<any>(null);
@@ -100,9 +101,9 @@ export default function PayrollManagement() {
   });
 
   const [generatePayroll, { isLoading: isGenerating }] = useGeneratePayrollMutation();
-  const [processPayroll, { isLoading: isProcessing }] = useProcessPayrollMutation();
   const [updatePayroll, { isLoading: isUpdatingPayroll }] = useUpdatePayrollMutation();
   const [updateEmployeeLedgerEntry, { isLoading: isUpdatingLedgerEntry }] = useUpdateEmployeeLedgerEntryMutation();
+  const [deleteEmployeeLedgerEntry, { isLoading: isDeletingLedgerEntry }] = useDeleteEmployeeLedgerEntryMutation();
   const [createEmployeePayment, { isLoading: isPayingEmployee }] = useCreateEmployeePaymentMutation();
 
   const [generateData, setGenerateData] = useState({
@@ -145,16 +146,6 @@ export default function PayrollManagement() {
       refetch();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to generate payroll'));
-    }
-  };
-
-  const handleProcess = async (payrollId: string) => {
-    try {
-      await processPayroll({ id: payrollId }).unwrap();
-      toast.success(t('Payroll processed'));
-      refetch();
-    } catch (error: any) {
-      toast.error(error?.data?.message || t('Failed to process payroll'));
     }
   };
 
@@ -248,7 +239,11 @@ export default function PayrollManagement() {
         debit: Number(ledgerEditData.debit || 0),
         credit: Number(ledgerEditData.credit || 0),
       }).unwrap();
-      toast.success(t('Ledger entry updated'));
+      toast.success(
+        ['salary_payment', 'advance_payment'].includes(selectedLedgerEntry.transactionType)
+          ? t('Payment updated across ledger, expenses, and cash book')
+          : t('Ledger entry updated'),
+      );
       setShowLedgerEditDialog(false);
       setSelectedLedgerEntry(null);
       refetchEmployeeLedger();
@@ -257,6 +252,30 @@ export default function PayrollManagement() {
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to update ledger entry'));
     }
+  };
+
+  const handleLedgerEntryDelete = async () => {
+    if (!selectedLedgerEntry) return;
+    try {
+      await deleteEmployeeLedgerEntry(selectedLedgerEntry.id).unwrap();
+      toast.success(
+        ['salary_payment', 'advance_payment'].includes(selectedLedgerEntry.transactionType)
+          ? t('Payment deleted from ledger, expenses, and cash book')
+          : t('Ledger entry deleted'),
+      );
+      setShowLedgerDeleteDialog(false);
+      setSelectedLedgerEntry(null);
+      refetchEmployeeLedger();
+      refetchEmployeeLedgerSummary();
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to delete ledger entry'));
+    }
+  };
+
+  const openLedgerDeleteDialog = (entry: any) => {
+    setSelectedLedgerEntry(entry);
+    setShowLedgerDeleteDialog(true);
   };
 
   const getPayrollMonthTotals = (payroll: any) => {
@@ -504,17 +523,6 @@ export default function PayrollManagement() {
                           <TableCell className="font-semibold text-orange-600">{formatCurrency(monthTotals.advance)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {payroll.status === 'Pending' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleProcess(payroll.id)}
-                                  disabled={isProcessing}
-                                >
-                                  <Play className="h-4 w-4 mr-1" />
-                                  {t('Process')}
-                                </Button>
-                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -657,10 +665,21 @@ export default function PayrollManagement() {
                             <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
                             <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
                             <TableCell className="text-right">
-                              <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
-                                <Pencil className="h-4 w-4 mr-1" />
-                                {t('Edit')}
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                  <Pencil className="h-4 w-4 mr-1" />
+                                  {t('Edit')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => openLedgerDeleteDialog(entry)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  {t('Delete')}
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -858,6 +877,33 @@ export default function PayrollManagement() {
             </Button>
             <Button onClick={handleLedgerEntryEdit} disabled={isUpdatingLedgerEntry}>
               {isUpdatingLedgerEntry ? t('Saving...') : t('Save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ledger Delete Dialog */}
+      <Dialog open={showLedgerDeleteDialog} onOpenChange={setShowLedgerDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Delete Ledger Entry')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {selectedLedgerEntry &&
+            ['salary_payment', 'advance_payment'].includes(selectedLedgerEntry.transactionType)
+              ? t('This will delete the payment from the ledger, expenses, and cash book.')
+              : t('This will permanently delete this ledger entry and recalculate balances.')}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLedgerDeleteDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleLedgerEntryDelete}
+              disabled={isDeletingLedgerEntry}
+            >
+              {isDeletingLedgerEntry ? t('Deleting...') : t('Delete')}
             </Button>
           </DialogFooter>
         </DialogContent>
