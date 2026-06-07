@@ -1,10 +1,5 @@
 import { useState } from 'react'
 
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 
 import PurchaseOrderList from './components/purchase-order-list'
 import PurchaseOrderForm from './components/purchase-order-form'
@@ -38,16 +33,7 @@ export default function PurchaseOrdersPage() {
 
   return (
     <>
-      <Header>
-        <Search />
-        <div className='ml-auto flex items-center space-x-4'>
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      <Main>
-        {view === 'list' ? (
+{view === 'list' ? (
           <PurchaseOrderList
             onCreate={handleCreate}
             onEdit={handleEdit}
@@ -61,7 +47,6 @@ export default function PurchaseOrdersPage() {
             editing={editing}
           />
         )}
-      </Main>
 
       <ReceiveItemsDialog
         open={!!receiving}

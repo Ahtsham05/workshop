@@ -18,14 +18,15 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { sidebarData } from './layout/data/sidebar-data'
 import { ScrollArea } from './ui/scroll-area'
+import { useFilteredNavGroups } from '@/hooks/use-filtered-nav-groups'
 
 export function CommandMenu() {
   const navigate = useNavigate()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
   const { t } = useLanguage()
+  const filteredNavGroups = useFilteredNavGroups()
 
   // Navigation translations mapping
   const getNavTranslation = (title: string) => {
@@ -55,14 +56,14 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-72 pr-1'>
           <CommandEmpty>{t('no_results_found')}</CommandEmpty>
-          {sidebarData.navGroups.map((group) => (
+          {filteredNavGroups.map((group) => (
             <CommandGroup key={group.title} heading={getNavTranslation(group.title)}>
               {group.items.map((navItem, i) => {
                 if (navItem.url)
                   return (
                     <CommandItem
                       key={`${navItem.url}-${i}`}
-                      value={navItem.title}
+                      value={`${navItem.title} ${navItem.url}`}
                       onSelect={() => {
                         runCommand(() => navigate({ to: navItem.url }))
                       }}
@@ -77,7 +78,7 @@ export function CommandMenu() {
                 return navItem.items?.map((subItem, i) => (
                   <CommandItem
                     key={`${subItem.url}-${i}`}
-                    value={subItem.title}
+                    value={`${subItem.title} ${subItem.url}`}
                     onSelect={() => {
                       runCommand(() => navigate({ to: subItem.url }))
                     }}

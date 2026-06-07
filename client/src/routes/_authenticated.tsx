@@ -1,7 +1,8 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { Link } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
-import { SchoolTeacherMobileHeader } from '@/components/layout/school-teacher-mobile-header'
+import { AuthenticatedHeader } from '@/components/layout/authenticated-header'
+import { Main } from '@/components/layout/main'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { PortalShell } from '@/components/layout/portal-shell'
 import { PermissionWrapper } from '@/context/permission-wrapper'
@@ -11,6 +12,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
 import { resolveRouteAccess } from '@/lib/route-permissions'
+import { deriveSchoolRole } from '@/lib/school-permissions'
 
 /**
  * Authenticated layout component.
@@ -28,20 +30,18 @@ function AuthenticatedLayout() {
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
 
-  // Portal users (students & parents) get a clean, sidebar-free shell.
-  const schoolRole: string | undefined =
-    user?.schoolRole ||
-    (user?.linkedTeacherId ? 'teacher' : undefined) ||
-    (() => {
-      try {
-        const stored = localStorage.getItem('user')
-        const parsed = stored ? JSON.parse(stored) : null
-        return parsed?.schoolRole || (parsed?.linkedTeacherId ? 'teacher' : undefined)
-      } catch {
-        return undefined
-      }
-    })()
+  const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem('user')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })()
+  const schoolRole =
+    deriveSchoolRole(user) ?? deriveSchoolRole(storedUser) ?? undefined
   const isPortalUser = schoolRole === 'student' || schoolRole === 'parent'
+  const isTeacher = schoolRole === 'teacher'
 
   if (isPortalUser) {
     return (
@@ -60,10 +60,10 @@ function AuthenticatedLayout() {
       <PermissionWrapper>
         <SidebarProvider>
           <AppSidebar />
-          <main className="min-w-0 flex-1 overflow-hidden flex flex-col">
-            {schoolRole === 'teacher' && <SchoolTeacherMobileHeader />}
+          <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
+            <AuthenticatedHeader showSearch={!isTeacher} />
             {showLogoReminder && (
-              <div className="m-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between">
+              <div className="mx-3 mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between shrink-0">
                 <span className="text-blue-900">
                   Add your company logo to show it on receipts for all branches.
                 </span>
@@ -72,10 +72,10 @@ function AuthenticatedLayout() {
                 </Button>
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto">
+            <Main className="min-h-0 flex-1 overflow-auto">
               <Outlet />
-            </div>
-          </main>
+            </Main>
+          </div>
         </SidebarProvider>
       </PermissionWrapper>
     </TrialExpirationBoundary>

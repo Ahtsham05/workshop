@@ -1,10 +1,4 @@
 import { useState, useMemo } from 'react'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { StatCard, type StatCardLink } from './components/stat-card'
@@ -90,37 +84,11 @@ export default function Dashboard() {
     if (schoolRole === 'teacher') {
       return <Navigate to='/school/portals/teacher' />
     }
-    return (
-      <>
-        <Header>
-          <div className='ml-auto flex items-center space-x-4'>
-            <Search />
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
-          </div>
-        </Header>
-        <Main>
-          <SchoolDashboard />
-        </Main>
-      </>
-    )
+    return <SchoolDashboard />
   }
   
   return (
     <>
-      {/* ===== Top Heading ===== */}
-      <Header>
-        <div className='ml-auto flex items-center space-x-4'>
-          <Search />
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      {/* ===== Main ===== */}
-      <Main>
         <Card className='mb-6 border bg-card/80 p-4 shadow-sm backdrop-blur-sm'>
           <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
             <div className='min-w-0'>
@@ -420,7 +388,6 @@ export default function Dashboard() {
         <div className='grid grid-cols-1 gap-6'>
           <RecentActivities dateRange={dateRange} />
         </div>
-      </Main>
     </>
   )
 }

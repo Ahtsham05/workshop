@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRouterState } from '@tanstack/react-router';
 import { Download, Share, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,14 +20,28 @@ export function PWAInstallBanner() {
     isInstallable,
     isIOS,
     install,
-    dismissBanner,
   } = usePWAInstall();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [iosHintOpen, setIosHintOpen] = useState(false);
-  const [visible, setVisible] = useState(showInstallBanner);
+  const [hiddenForNow, setHiddenForNow] = useState(false);
+
+  // Re-show on every page navigation and whenever the app is opened again.
+  useEffect(() => {
+    setHiddenForNow(false);
+  }, [pathname]);
 
   useEffect(() => {
-    setVisible(showInstallBanner);
-  }, [showInstallBanner]);
+    const reveal = () => setHiddenForNow(false);
+    window.addEventListener('focus', reveal);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reveal();
+    });
+    return () => {
+      window.removeEventListener('focus', reveal);
+    };
+  }, []);
+
+  const visible = showInstallBanner && !hiddenForNow;
 
   useEffect(() => {
     if (!visible) {
@@ -46,9 +61,8 @@ export function PWAInstallBanner() {
       const ok = await install();
       if (ok) {
         toast.success('App installed! Open it from your home screen.');
-        setVisible(false);
       } else {
-        toast.error('Installation cancelled. Try again from the banner below.');
+        toast.error('Installation cancelled. Tap Download App to try again.');
       }
       return;
     }
@@ -61,11 +75,6 @@ export function PWAInstallBanner() {
     toast('Open browser menu and choose "Install app" or "Add to home screen".', {
       duration: 5000,
     });
-  };
-
-  const handleDismiss = () => {
-    dismissBanner();
-    setVisible(false);
   };
 
   return (
@@ -90,9 +99,9 @@ export function PWAInstallBanner() {
           </Button>
           <button
             type="button"
-            onClick={handleDismiss}
+            onClick={() => setHiddenForNow(true)}
             className="shrink-0 rounded-md p-1.5 text-blue-100 hover:bg-white/15 hover:text-white"
-            aria-label="Dismiss install banner"
+            aria-label="Hide install banner for now"
           >
             <X className="h-4 w-4" />
           </button>

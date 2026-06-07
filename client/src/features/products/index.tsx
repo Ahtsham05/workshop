@@ -1,8 +1,3 @@
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { useProductColumns } from './components/users-columns' // Updated to use hook
 import ProductDialogs from './components/users-dialogs' // Adjusted for products
 import ProductPrimaryButtons from './components/users-primary-buttons' // Adjusted for products
@@ -17,7 +12,6 @@ import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
 import { fetchCategories } from '@/stores/category.slice'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
-import { LanguageSwitch } from '@/components/language-switch'
 import { Button } from '@/components/ui/button'
 import { Edit } from 'lucide-react'
 import { toast } from 'sonner'
@@ -200,22 +194,11 @@ export default function Products() {
     return (
       <ProductsProvider>
         <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
-          <Header fixed>
-            <Search />
-            <div className='ml-auto flex items-center space-x-4'>
-              <LanguageSwitch />
-              <ThemeSwitch />
-              <ProfileDropdown />
-            </div>
-          </Header>
-
-          <Main>
-            <LowStockDetails 
+<LowStockDetails 
               products={allProducts}
               onBack={() => setShowLowStockDetails(false)}
               threshold={lowStockThreshold}
             />
-          </Main>
         </div>
       </ProductsProvider>
     );
@@ -224,17 +207,7 @@ export default function Products() {
   return (
     <ProductsProvider>
       <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
-        <Header fixed>
-          <Search />
-          <div className='ml-auto flex items-center space-x-4'>
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
-          </div>
-        </Header>
-
-        <Main>
-          {/* Low Stock Alert Banner */}
+{/* Low Stock Alert Banner */}
           <div className='mb-4'>
             <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
               <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} loading={loadingAllProducts} />
@@ -310,7 +283,6 @@ export default function Products() {
               onEditValueChange={handleEditValueChange}
             />
           </div>
-        </Main>
 
         <ProductDialogs setFetch={setFetch} />
       </div>

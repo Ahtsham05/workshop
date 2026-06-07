@@ -1,9 +1,3 @@
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
@@ -1260,22 +1254,12 @@ export default function InvoicePage() {
   if (currentView === 'list') {
     return (
       <div className='flex-1 flex flex-col'>
-        <Header fixed>
-          <Search />
-          <div className='ml-auto flex items-center space-x-4'>
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
-          </div>
-        </Header>
-        <Main>
           <InvoiceList 
             onCreateNew={handleCreateNew}
             onEdit={handleEdit}
             onConvertPending={handleConvertPending}
             initialTypeFilter={search.type}
           />
-        </Main>
       </div>
     )
   }
@@ -1284,20 +1268,10 @@ export default function InvoicePage() {
   if (currentView === 'convert-pending') {
     return (
       <div className='flex-1 flex flex-col'>
-        <Header fixed>
-          <Search />
-          <div className='ml-auto flex items-center space-x-4'>
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
-          </div>
-        </Header>
-        <Main>
           <PendingInvoiceConverter 
             customers={customers}
             onBack={handleBackToList}
           />
-        </Main>
       </div>
     )
   }
@@ -1305,15 +1279,7 @@ export default function InvoicePage() {
   // Create/Edit view
   return (
     <div className='flex-1 flex flex-col'>
-      <Header fixed>
-        <Search />
-        <div className='ml-auto flex items-center space-x-4'>
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-      <Main
+      <div
         className={cn(
           'pb-6',
           showProductCatalog ? 'pt-3 md:pt-4' : 'pt-2 md:pt-2.5',
@@ -1497,7 +1463,7 @@ export default function InvoicePage() {
           )}
         </div>
         </div>
-      </Main>
+      </div>
     </div>
   )
 }

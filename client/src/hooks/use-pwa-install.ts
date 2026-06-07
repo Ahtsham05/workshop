@@ -5,8 +5,7 @@ export interface PWAInstallPrompt {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const DISMISS_KEY = 'pwa-install-banner-dismissed-at';
-const DISMISS_MS = 24 * 60 * 60 * 1000; // 24 hours
+const LEGACY_DISMISS_KEY = 'pwa-install-banner-dismissed-at';
 
 export function isAppInstalled(): boolean {
   if (typeof window === 'undefined') return false;
@@ -29,26 +28,6 @@ export function isMobileBrowser(): boolean {
   return mobileUa || window.innerWidth < 768;
 }
 
-export function isBannerDismissed(): boolean {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY);
-    if (!raw) return false;
-    const dismissedAt = Number(raw);
-    if (!Number.isFinite(dismissedAt)) return false;
-    return Date.now() - dismissedAt < DISMISS_MS;
-  } catch {
-    return false;
-  }
-}
-
-export function dismissInstallBanner(): void {
-  try {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()));
-  } catch {
-    // ignore
-  }
-}
-
 export function usePWAInstall() {
   const [installPrompt, setInstallPrompt] = useState<PWAInstallPrompt | null>(null);
   const [isInstalled, setIsInstalled] = useState(() => isAppInstalled());
@@ -57,10 +36,20 @@ export function usePWAInstall() {
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    const installed = isAppInstalled();
-    setIsInstalled(installed);
-    setIsMobileWeb(isMobileBrowser() && !installed);
-    setIsIOS(isIOSDevice());
+    try {
+      localStorage.removeItem(LEGACY_DISMISS_KEY);
+    } catch {
+      // ignore
+    }
+
+    const syncState = () => {
+      const installed = isAppInstalled();
+      setIsInstalled(installed);
+      setIsMobileWeb(isMobileBrowser() && !installed);
+      setIsIOS(isIOSDevice());
+    };
+
+    syncState();
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -75,12 +64,20 @@ export function usePWAInstall() {
       setInstallPrompt(null);
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') syncState();
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('focus', syncState);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('focus', syncState);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -105,8 +102,7 @@ export function usePWAInstall() {
     }
   }, [installPrompt]);
 
-  const showInstallBanner =
-    isMobileWeb && !isInstalled && !isBannerDismissed();
+  const showInstallBanner = isMobileWeb && !isInstalled;
 
   return {
     installPrompt,
@@ -116,6 +112,5 @@ export function usePWAInstall() {
     isIOS,
     showInstallBanner,
     install,
-    dismissBanner: dismissInstallBanner,
   };
 }

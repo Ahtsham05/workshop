@@ -1,8 +1,3 @@
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { useCustomerColumns } from './components/users-columns'
 import CustomerDialogs from './components/users-dialogs'
 import CustomerPrimaryButtons from './components/users-primary-buttons'
@@ -14,7 +9,6 @@ import { useEffect, useState } from 'react'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
-import { LanguageSwitch } from '@/components/language-switch'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 
@@ -57,53 +51,42 @@ export default function Customers() {
   return (
     <CustomersProvider>
       <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
-        <Header fixed>
-          <Search />
-          <div className='ml-auto flex items-center space-x-4'>
-            <LanguageSwitch />
-            <ThemeSwitch />
-            <ProfileDropdown />
+        <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
+          <div>
+            <h2 className='text-2xl font-bold mb-5 tracking-tight'>{t('customers_list')}</h2>
+            <p className='text-muted-foreground'>
+              {t('manage_customers')}
+            </p>
           </div>
-        </Header>
-
-        <Main>
-          <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
-            <div>
-              <h2 className='text-2xl font-bold mb-5 tracking-tight'>{t('customers_list')}</h2>
-              <p className='text-muted-foreground'>
-                {t('manage_customers')}
-              </p>
-            </div>
-            <CustomerPrimaryButtons />
-          </div>
-          <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-            <CustomerTable
-              data={customers}
-              columns={columns}
-              loading={loading}
-              toolbarLeading={
-                <Input
-                  autoFocus
-                  placeholder={t('search_customers')}
-                  className='h-9 w-full'
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  aria-label={t('search_customers')}
-                />
-              }
-              paggination={{
-                totalPage,
-                currentPage,
-                setCurrentPage,
-                limit,
-                setLimit: (n: number) => {
-                  setLimit(n)
-                  setCurrentPage(1)
-                },
-              }}
-            />
-          </div>
-        </Main>
+          <CustomerPrimaryButtons />
+        </div>
+        <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
+          <CustomerTable
+            data={customers}
+            columns={columns}
+            loading={loading}
+            toolbarLeading={
+              <Input
+                autoFocus
+                placeholder={t('search_customers')}
+                className='h-9 w-full'
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                aria-label={t('search_customers')}
+              />
+            }
+            paggination={{
+              totalPage,
+              currentPage,
+              setCurrentPage,
+              limit,
+              setLimit: (n: number) => {
+                setLimit(n)
+                setCurrentPage(1)
+              },
+            }}
+          />
+        </div>
 
         <CustomerDialogs setFetch={setFetch} />
       </div>

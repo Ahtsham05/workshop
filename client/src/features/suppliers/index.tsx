@@ -1,9 +1,3 @@
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { LanguageSwitch } from '@/components/language-switch'
 import { useLanguage } from '@/context/language-context'
 import { useSupplierColumns } from './components/users-columns'
 import SupplierDialogs from './components/users-dialogs'
@@ -64,16 +58,6 @@ export default function Suppliers() {
 
   return (
     <SupplierProvider>
-      <Header fixed>
-        <Search />
-        <div className='ml-auto flex items-center space-x-4'>
-          <LanguageSwitch />
-          <ThemeSwitch />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
-      <Main>
         <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
           <div>
             <h2 className='text-2xl font-bold tracking-tight mb-5'>{t('suppliers_list')}</h2>
@@ -110,7 +94,6 @@ export default function Suppliers() {
             }}
           />
         </div>
-      </Main>
 
       <SupplierDialogs setFetch={setFetch} />
     </SupplierProvider>

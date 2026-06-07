@@ -113,7 +113,19 @@ export function deriveSchoolRole(user: any): string | null {
   if (!user) return null
   if (user.schoolRole) return user.schoolRole as string
   if (user.linkedTeacherId) return 'teacher'
+  if (
+    typeof user.email === 'string' &&
+    user.email.endsWith('@student.portal')
+  ) {
+    return 'student'
+  }
   return null
+}
+
+/** Student & parent portals use a sidebar-free shell. */
+export function isSchoolPortalUser(user: any): boolean {
+  const role = deriveSchoolRole(user)
+  return role === 'student' || role === 'parent'
 }
 
 /**
