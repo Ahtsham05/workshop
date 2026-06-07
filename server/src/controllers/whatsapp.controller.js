@@ -58,6 +58,14 @@ const connect = catchAsync(async (req, res) => {
   // Tear down any stale client + session files so Chrome always generates a
   // fresh QR rather than silently re-using an expired saved session.
   await whatsappService.disconnect();
+  if (!whatsappService.probeChrome()) {
+    const failed = whatsappService.getStatus();
+    return res.status(503).send({
+      message: failed.error || 'WhatsApp could not start on this server',
+      state: 'INIT_FAILED',
+      deployHint: failed.deployHint,
+    });
+  }
   // Fire and forget — client emits events asynchronously
   whatsappService.initialize().catch(() => {});
   res.send({ message: 'Initialising WhatsApp. Poll /whatsapp/status for QR code.', state: 'LOADING' });

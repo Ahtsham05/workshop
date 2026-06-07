@@ -1,0 +1,40 @@
+# Render Blueprint — WhatsApp requires Docker + Chromium (see server/Dockerfile).
+# Import this file in Render Dashboard → New → Blueprint, or configure manually:
+#
+#   Runtime:        Docker
+#   Root Directory: server
+#   Dockerfile:     Dockerfile
+#   Start Command:  node src/index.js
+#
+# Required env vars (add your secrets in the Render dashboard):
+#   NODE_ENV=production
+#   CHROME_PATH=/usr/bin/chromium
+#   PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+#   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+#   MONGODB_URL=...
+#   JWT_SECRET=...
+#
+# WhatsApp will NOT work on Render Free tier (512 MB RAM, spin-down, no persistent disk).
+# Use Starter ($7/mo) or higher and attach a disk for .wwebjs_auth session persistence.
+
+services:
+  - type: web
+    name: workshop-api
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CHROME_PATH
+        value: /usr/bin/chromium
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: true
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium
+    disk:
+      name: whatsapp-session
+      mountPath: /usr/src/node-app/.wwebjs_auth
+      sizeGB: 1

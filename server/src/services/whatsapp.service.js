@@ -18,12 +18,13 @@ const logger = require('../config/logger');
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let _client = null;
-let _state = 'DISCONNECTED'; // DISCONNECTED | QR_READY | LOADING | READY | AUTH_FAILURE
+let _state = 'DISCONNECTED'; // DISCONNECTED | QR_READY | LOADING | READY | AUTH_FAILURE | INIT_FAILED
 let _qrRaw = null;       // raw QR string
 let _qrImage = null;     // base64 data-URL for the QR image
 let _initPromise = null; // ensure we only initialise once
 let _reconnectTimer = null; // track auto-reconnect timer so it can be cancelled
 let _loadingTimer = null;  // watchdog: reset to DISCONNECTED if stuck in LOADING too long
+let _lastError = null;   // human-readable reason when INIT_FAILED / Chrome missing
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,41 @@ function _findChrome() {
   } catch (_) { /* puppeteer not available */ }
 
   return null;
+}
+
+function _deployHint() {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return 'Deploy the API to Render/Railway/VPS using server/Dockerfile — not Vercel/serverless.';
+  }
+  if (process.env.RENDER) {
+    return (
+      'On Render: switch this service to Docker (server/Dockerfile), set Start Command to ' +
+      '"node src/index.js", add env CHROME_PATH=/usr/bin/chromium, and use Starter plan or higher ' +
+      '(Free tier lacks RAM for Chrome and spins down).'
+    );
+  }
+  return 'Deploy the backend with Docker (server/Dockerfile) on Render, Railway, or a VPS with Chromium installed.';
+}
+
+function _chromePreflight() {
+  const chromePath = _findChrome();
+  if (chromePath) return chromePath;
+  _lastError =
+    'Chrome/Chromium is not installed on this server. ' + _deployHint();
+  _state = 'INIT_FAILED';
+  logger.error(`WhatsApp: ${_lastError}`);
+  return null;
+}
+
+function _setInitError(err) {
+  const msg = err?.message || String(err || 'Unknown error');
+  _lastError = msg;
+  if (/failed to launch|ENOENT|libgbm|libnss|no usable sandbox|chrome/i.test(msg)) {
+    _lastError =
+      'Chrome could not start on this server (missing libraries or not enough RAM). ' + _deployHint();
+  }
+  _state = 'INIT_FAILED';
+  logger.error('WhatsApp initialize error:', msg);
 }
 
 function _createClient() {
@@ -238,7 +274,14 @@ async function initialize() {
 
   _initPromise = (async () => {
     try {
+      _lastError = null;
+      if (_state === 'INIT_FAILED') _state = 'DISCONNECTED';
       _state = 'LOADING';
+
+      if (!_chromePreflight()) {
+        _initPromise = null;
+        throw new Error(_lastError);
+      }
 
       // Remove any Chrome singleton locks left by a previous crash so Puppeteer
       // can start without "browser is already running" errors.
@@ -252,10 +295,12 @@ async function initialize() {
       _loadingTimer = setTimeout(() => {
         _loadingTimer = null;
         if (_state === 'LOADING') {
-          logger.warn('WhatsApp: stuck in LOADING for 65 s — forcing reset to DISCONNECTED');
+          logger.warn('WhatsApp: stuck in LOADING for 65 s — forcing reset to INIT_FAILED');
           if (_client) _client.destroy().catch(() => {});
           _client = null;
-          _state = 'DISCONNECTED';
+          _lastError =
+            'WhatsApp timed out while starting (Chrome may be missing or out of memory). ' + _deployHint();
+          _state = 'INIT_FAILED';
           _initPromise = null;
         }
       }, 65000);
@@ -264,10 +309,10 @@ async function initialize() {
       await _client.initialize();
     } catch (err) {
       if (_loadingTimer) { clearTimeout(_loadingTimer); _loadingTimer = null; }
-      _state = 'DISCONNECTED';
       _client = null;
       _initPromise = null;
-      logger.error('WhatsApp initialize error:', err);
+      if (!_lastError) _setInitError(err);
+      else _state = 'INIT_FAILED';
       throw err;
     }
   })();
@@ -309,6 +354,7 @@ async function disconnect() {
   _qrRaw = null;
   _qrImage = null;
   _initPromise = null;
+  _lastError = null;
 
   // Clear session files so next connect() always shows a fresh QR code.
   // This prevents Chrome from silently restoring an invalidated session (which
@@ -334,12 +380,22 @@ async function clearSession() {
   }
 }
 
+function probeChrome() {
+  _lastError = null;
+  if (_state === 'INIT_FAILED') _state = 'DISCONNECTED';
+  return Boolean(_chromePreflight());
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 function getStatus() {
+  const chromePath = _findChrome();
   return {
     state: _state,
     qrImage: _qrImage, // base64 PNG data-URL or null
+    error: _lastError,
+    chromeAvailable: Boolean(chromePath),
+    deployHint: _state === 'INIT_FAILED' || !chromePath ? _deployHint() : null,
   };
 }
 
@@ -452,6 +508,7 @@ module.exports = {
   disconnect,
   clearSession,
   getStatus,
+  probeChrome,
   sendMessage,
   sendBulkMessages,
   sendDocument,

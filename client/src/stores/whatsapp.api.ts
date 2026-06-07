@@ -28,10 +28,14 @@ export type WhatsAppConnectionState =
   | 'READY'
   | 'AUTH_FAILURE'
   | 'SERVERLESS_UNSUPPORTED'
+  | 'INIT_FAILED'
 
 export type WhatsAppStatus = {
   state: WhatsAppConnectionState
   qrImage: string | null
+  error?: string | null
+  chromeAvailable?: boolean
+  deployHint?: string | null
 }
 
 export const whatsappApi = createApi({

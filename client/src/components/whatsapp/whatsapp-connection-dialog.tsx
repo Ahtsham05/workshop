@@ -15,6 +15,8 @@ type Props = {
   onOpenChange: (open: boolean) => void
   state: WhatsAppConnectionState
   qrImage: string | null
+  error?: string | null
+  deployHint?: string | null
   onConnect: () => void
   onDisconnect: () => void
   onClearSession: () => void
@@ -33,6 +35,8 @@ export function WhatsAppConnectionDialog({
   onOpenChange,
   state,
   qrImage,
+  error,
+  deployHint,
   onConnect,
   onDisconnect,
   onClearSession,
@@ -72,6 +76,9 @@ export function WhatsAppConnectionDialog({
       connectRequestedRef.current = true
       onConnect()
     }
+    if (state === 'INIT_FAILED') {
+      connectRequestedRef.current = false
+    }
   }, [open, state, onConnect])
 
   return (
@@ -103,6 +110,16 @@ export function WhatsAppConnectionDialog({
           {state === 'SERVERLESS_UNSUPPORTED' && (
             <div className='rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800'>
               WhatsApp QR connection requires a persistent server (Docker/VPS). It is not available on serverless hosting.
+            </div>
+          )}
+
+          {(state === 'INIT_FAILED' || error) && (
+            <div className='rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 space-y-2'>
+              <p className='font-medium'>Could not start WhatsApp on this server</p>
+              <p>{error || 'Chrome failed to launch. Check server logs.'}</p>
+              {deployHint && (
+                <p className='text-xs border-t border-red-200 pt-2 mt-2 opacity-90'>{deployHint}</p>
+              )}
             </div>
           )}
 

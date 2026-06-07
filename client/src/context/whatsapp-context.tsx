@@ -2,11 +2,11 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
+import { useSelector } from 'react-redux'
 import {
   useGetWhatsAppStatusQuery,
   useConnectWhatsAppMutation,
@@ -15,6 +15,7 @@ import {
   useTestWhatsAppMutation,
   useSendWhatsAppMessageMutation,
   useSendInvoicePdfWhatsAppMutation,
+  whatsappApi,
   type WhatsAppConnectionState,
 } from '@/stores/whatsapp.api'
 import { WhatsAppConnectionDialog } from '@/components/whatsapp/whatsapp-connection-dialog'
@@ -45,13 +46,38 @@ type WhatsAppContextValue = {
 
 const WhatsAppContext = createContext<WhatsAppContextValue | null>(null)
 
+/** Poll only while the connection dialog is open and setup is still in progress. */
+function resolveStatusPollInterval(connectionOpen: boolean, state: WhatsAppConnectionState): number {
+  if (!connectionOpen) return 0
+  if (
+    state === 'READY' ||
+    state === 'AUTH_FAILURE' ||
+    state === 'SERVERLESS_UNSUPPORTED' ||
+    state === 'INIT_FAILED'
+  ) {
+    return 0
+  }
+  return 3000
+}
+
 export function WhatsAppProvider({ children }: { children: ReactNode }) {
-  const [pollInterval, setPollInterval] = useState(3000)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeTarget, setComposeTarget] = useState<ComposeTarget | null>(null)
 
-  const { data: status } = useGetWhatsAppStatusQuery(undefined, { pollingInterval: pollInterval })
+  const cachedStatus = useSelector(whatsappApi.endpoints.getWhatsAppStatus.select(undefined))
+  const cachedState = (cachedStatus.data?.state ?? 'DISCONNECTED') as WhatsAppConnectionState
+  const pollInterval = useMemo(
+    () => resolveStatusPollInterval(connectionOpen, cachedState),
+    [connectionOpen, cachedState],
+  )
+
+  const { data: status } = useGetWhatsAppStatusQuery(undefined, {
+    pollingInterval: pollInterval,
+    refetchOnFocus: connectionOpen,
+    refetchOnReconnect: connectionOpen,
+  })
+
   const [connect] = useConnectWhatsAppMutation()
   const [disconnect] = useDisconnectWhatsAppMutation()
   const [clearSession] = useClearWhatsAppSessionMutation()
@@ -62,14 +88,12 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
   const state = (status?.state ?? 'DISCONNECTED') as WhatsAppConnectionState
   const isReady = state === 'READY'
   const qrImage = status?.qrImage ?? null
+  const statusError = status?.error ?? null
+  const deployHint = status?.deployHint ?? null
 
-  useEffect(() => {
-    if (state === 'READY' || state === 'AUTH_FAILURE' || state === 'SERVERLESS_UNSUPPORTED') {
-      setPollInterval(0)
-    } else if (connectionOpen || state === 'QR_READY' || state === 'LOADING') {
-      setPollInterval(3000)
-    }
-  }, [state, connectionOpen])
+  const handleConnectionOpenChange = useCallback((open: boolean) => {
+    setConnectionOpen(open)
+  }, [])
 
   const openConnectionDialog = useCallback(() => setConnectionOpen(true), [])
   const openComposeDialog = useCallback((target: ComposeTarget) => {
@@ -177,9 +201,11 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
       {children}
       <WhatsAppConnectionDialog
         open={connectionOpen}
-        onOpenChange={setConnectionOpen}
+        onOpenChange={handleConnectionOpenChange}
         state={state}
         qrImage={qrImage}
+        error={statusError}
+        deployHint={deployHint}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         onClearSession={handleClearSession}

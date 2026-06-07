@@ -59,23 +59,30 @@ function StateIndicator({ state }: { state: string }) {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function WhatsAppMessaging() {
-  // ── Status polling ──────────────────────────────────────────────────────────
-  // Poll every 3s while not stable; stop entirely once READY or AUTH_FAILURE.
-  // Using a state-driven pollingInterval avoids the type error from function syntax
-  // while still stopping unnecessary requests.
-  const [pollInterval, setPollInterval] = useState(3000);
+  // Poll only while user is actively connecting on this page.
+  const [connectingActive, setConnectingActive] = useState(false);
+  const [pollInterval, setPollInterval] = useState(0);
   const { data: status } = useGetWhatsAppStatusQuery(undefined, {
     pollingInterval: pollInterval,
+    refetchOnFocus: connectingActive,
+    refetchOnReconnect: connectingActive,
   });
 
   useEffect(() => {
-    const s = status?.state;
-    if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'SERVERLESS_UNSUPPORTED') {
-      setPollInterval(0); // stable — stop polling
-    } else {
-      setPollInterval(3000); // still transitioning — keep polling
+    if (!connectingActive) {
+      setPollInterval(0);
+      return;
     }
-  }, [status?.state]);
+    const s = status?.state;
+    if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'SERVERLESS_UNSUPPORTED' || s === 'INIT_FAILED') {
+      setPollInterval(0);
+      if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'INIT_FAILED') {
+        setConnectingActive(false);
+      }
+    } else {
+      setPollInterval(3000);
+    }
+  }, [status?.state, connectingActive]);
 
   const [connect, { isLoading: connecting }] = useConnectWhatsAppMutation();
   const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation();
@@ -277,10 +284,12 @@ export default function WhatsAppMessaging() {
   async function handleConnect() {
     try {
       setPendingConnect(true);
+      setConnectingActive(true);
       await connect().unwrap();
       toast.info('WhatsApp is starting — QR code will appear shortly');
     } catch {
       setPendingConnect(false);
+      setConnectingActive(false);
       toast.error('Failed to start WhatsApp');
     }
   }
@@ -288,6 +297,7 @@ export default function WhatsAppMessaging() {
   async function handleDisconnect() {
     try {
       await disconnect().unwrap();
+      setConnectingActive(false);
       toast.success('WhatsApp disconnected');
     } catch {
       toast.error('Failed to disconnect');
