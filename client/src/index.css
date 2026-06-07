@@ -49,6 +49,10 @@ body {
   font-family: var(--font-ui);
 }
 
+body {
+  padding-bottom: var(--pwa-banner-height, 0px);
+}
+
 /* Optional: when the user explicitly opts in via the "Urdu-only" invoice toggle,
  * use the decorative Nastaliq style only on those marked elements. */
 .font-urdu,

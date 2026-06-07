@@ -193,9 +193,9 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
 
     // ── Render ───────────────────────────────────────────────────────────────
 
-    const profitMargin = data?.totalCollection
-      ? ((data.totalServiceCharges / data.totalCollection) * 100).toFixed(1)
-      : '0'
+    // const profitMargin = data?.totalCollection
+    //   ? ((data.totalServiceCharges / data.totalCollection) * 100).toFixed(1)
+    //   : '0'
 
     const trendChartData = (data?.trend ?? []).map((r) => ({
       date: r._id.slice(5), // show MM-DD

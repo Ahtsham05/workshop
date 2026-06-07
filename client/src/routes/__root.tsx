@@ -5,6 +5,7 @@ import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { TokenRefreshInitializer } from '@/components/token-refresh-initializer'
+import { PWAInstallBanner } from '@/components/pwa-install-banner'
 import { SearchProvider } from '@/context/search-context'
 import GeneralError from '@/features/errors/general-error'
 import NotFoundError from '@/features/errors/not-found-error'
@@ -28,6 +29,7 @@ function RootComponent() {
       <NavigationProgress />
       <TokenRefreshInitializer />
       <Outlet />
+      <PWAInstallBanner />
       <Toaster position='top-right' duration={3500} />
       {import.meta.env.MODE === 'development' && (
         <>
