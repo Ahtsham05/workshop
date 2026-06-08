@@ -145,14 +145,23 @@ journalEntrySchema.index({ organizationId: 1, branchId: 1, financialYear: 1 });
 // Auto-generate entryNumber
 journalEntrySchema.pre('save', async function (next) {
   if (this.isNew && !this.entryNumber) {
-    const seq = await mongoose.connection.db
-      .collection('_sequences')
-      .findOneAndUpdate(
-        { _id: `journalEntry_${this.organizationId}_${this.branchId}` },
-        { $inc: { seq: 1 } },
-        { upsert: true, returnDocument: 'after' }
-      );
-    this.entryNumber = `JV-${String(seq.seq).padStart(6, '0')}`;
+    try {
+      const result = await mongoose.connection.db
+        .collection('_sequences')
+        .findOneAndUpdate(
+          { _id: `journalEntry_${this.organizationId}_${this.branchId || 'default'}` },
+          { $inc: { seq: 1 } },
+          { upsert: true, returnDocument: 'after' }
+        );
+      const seq = Number(result?.seq ?? result?.value?.seq);
+      if (!Number.isFinite(seq) || seq <= 0) {
+        this.entryNumber = `JV-${Date.now().toString().slice(-6)}`;
+      } else {
+        this.entryNumber = `JV-${String(seq).padStart(6, '0')}`;
+      }
+    } catch (err) {
+      this.entryNumber = `JV-${Date.now().toString().slice(-6)}`;
+    }
   }
   next();
 });

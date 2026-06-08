@@ -921,8 +921,24 @@ export const schoolApi = createApi({
       query: (id) => ({ url: `/fee-vouchers/${id}`, method: 'DELETE' }),
       invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard'],
     }),
+    bulkDeleteFeeVouchers: builder.mutation({
+      query: (body) => ({ url: '/fee-vouchers/bulk-delete', method: 'POST', body }),
+      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
+    }),
+    clearOrphanCreditWallets: builder.mutation({
+      query: (params?: { classId?: string }) => ({
+        url: '/fee-vouchers/clear-credit-wallets',
+        method: 'POST',
+        params: params?.classId ? { classId: params.classId } : undefined,
+      }),
+      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
+    }),
     getFeeVouchersForPrint: builder.mutation({
-      query: (ids: string[]) => ({ url: '/fee-vouchers/print', method: 'POST', body: { ids } }),
+      query: (body: { ids: string[]; includeArrears?: boolean }) => ({
+        url: '/fee-vouchers/print',
+        method: 'POST',
+        body,
+      }),
     }),
     reconcileFeeVouchers: builder.mutation({
       query: () => ({ url: '/fee-vouchers/reconcile', method: 'POST' }),
@@ -1129,6 +1145,10 @@ export const schoolApi = createApi({
     seedChartOfAccounts: builder.mutation({
       query: () => ({ url: '/accounts-system/chart-of-accounts/seed', method: 'POST' }),
       invalidatesTags: ['AccountHead', 'BankAccount', 'AccountsDashboard'],
+    }),
+    clearAllAccountingData: builder.mutation({
+      query: () => ({ url: '/accounts-system/clear-all', method: 'POST' }),
+      invalidatesTags: ['AccountHead', 'BankAccount', 'AccountsDashboard', 'JournalEntry'],
     }),
     createAccountHead: builder.mutation({
       query: (data) => ({ url: '/accounts-system/chart-of-accounts', method: 'POST', body: data }),
@@ -1479,6 +1499,8 @@ export const {
   usePayFeeVoucherMutation,
   useUpdateFeeVoucherMutation,
   useDeleteFeeVoucherMutation,
+  useBulkDeleteFeeVouchersMutation,
+  useClearOrphanCreditWalletsMutation,
   useGetFeeVouchersForPrintMutation,
   useReconcileFeeVouchersMutation,
   useBulkPayStudentFeeVouchersMutation,
@@ -1521,6 +1543,7 @@ export const {
   useGetPostingAccountsQuery,
   useGetAccountHeadByIdQuery,
   useSeedChartOfAccountsMutation,
+  useClearAllAccountingDataMutation,
   useCreateAccountHeadMutation,
   useUpdateAccountHeadMutation,
   useDeleteAccountHeadMutation,

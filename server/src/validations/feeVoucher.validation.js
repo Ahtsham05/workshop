@@ -105,6 +105,7 @@ const deleteVoucher = {
 const getVouchersForPrint = {
   body: Joi.object().keys({
     ids: Joi.array().items(Joi.string().custom(objectId)).min(1).required(),
+    includeArrears: Joi.boolean().default(true),
   }),
 };
 
@@ -140,6 +141,25 @@ const bulkGenerateExamVouchers = {
   }),
 };
 
+const bulkDeleteVouchers = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string().custom(objectId)).min(1),
+    deleteAllMatching: Joi.boolean(),
+    month: Joi.string().valid(...MONTHS),
+    year: Joi.number().integer().min(2000).max(2100),
+    classId: Joi.string().custom(objectId),
+    status: Joi.string().valid('unpaid', 'partial', 'paid', 'overdue', 'cancelled'),
+    voucherType: Joi.string().valid('monthly', 'exam', 'admission', 'misc'),
+    search: Joi.string().allow(''),
+  }).or('ids', 'deleteAllMatching'),
+};
+
+const clearCreditWallets = {
+  query: Joi.object().keys({
+    classId: Joi.string().custom(objectId),
+  }),
+};
+
 module.exports = {
   createVoucher,
   bulkGenerateVouchers,
@@ -152,5 +172,7 @@ module.exports = {
   recordAdvancePayment,
   updateVoucher,
   deleteVoucher,
+  bulkDeleteVouchers,
+  clearCreditWallets,
   getVouchersForPrint,
 };

@@ -554,14 +554,21 @@ const createJournalEntry = async (data, scope) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Journal entry must have at least 2 lines');
   }
 
-  const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
-  const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+  const normalizedLines = lines.map((line) => ({
+    accountId: line.accountId,
+    debit: line.debit || 0,
+    credit: line.credit || 0,
+    description: line.description || line.narration || '',
+  }));
+
+  const totalDebit = normalizedLines.reduce((s, l) => s + (l.debit || 0), 0);
+  const totalCredit = normalizedLines.reduce((s, l) => s + (l.credit || 0), 0);
   if (Math.abs(totalDebit - totalCredit) > 0.01) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Debit (${totalDebit}) must equal Credit (${totalCredit})`);
   }
 
   // Validate all account IDs exist and are posting accounts
-  const accountIds = lines.map((l) => l.accountId);
+  const accountIds = normalizedLines.map((l) => l.accountId);
   const accounts = await AccountHead.find({
     _id: { $in: accountIds },
     ...getTenantFilter(scope),
@@ -576,13 +583,15 @@ const createJournalEntry = async (data, scope) => {
   const entry = await JournalEntry.create({
     ...getTenantFilter(scope),
     ...data,
+    lines: normalizedLines,
+    narration: data.narration || data.description || '',
     totalAmount: totalDebit,
     financialYear: fy,
     createdBy: scope.createdBy,
   });
 
   // Update account balances
-  for (const line of lines) {
+  for (const line of normalizedLines) {
     const acct = accounts.find((a) => String(a._id) === String(line.accountId));
     if (!acct) continue;
     // For DEBIT-natural accounts (Asset, Expense): debit increases, credit decreases
@@ -603,6 +612,9 @@ const createJournalEntry = async (data, scope) => {
  * Reverse a journal entry (creates a mirror entry).
  */
 const reverseJournalEntry = async (id, scope) => {
+  if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid journal entry id');
+  }
   const original = await JournalEntry.findOne({ _id: id, ...getTenantFilter(scope) });
   if (!original) throw new ApiError(httpStatus.NOT_FOUND, 'Journal entry not found');
   if (original.status === 'reversed') throw new ApiError(httpStatus.BAD_REQUEST, 'Entry already reversed');
@@ -655,6 +667,9 @@ const queryJournalEntries = async (scope, filter = {}, options = {}) => {
 };
 
 const getJournalEntryById = async (id, scope) => {
+  if (!id || id === 'undefined' || !mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid journal entry id');
+  }
   const entry = await JournalEntry.findOne({ _id: id, ...getTenantFilter(scope) })
     .populate('lines.accountId', 'code name rootType balanceType');
   if (!entry) throw new ApiError(httpStatus.NOT_FOUND, 'Journal entry not found');
@@ -1177,10 +1192,69 @@ const getBudgetVsActual = async (scope, financialYear) => {
 };
 
 /**
+ * Clear all accounting activity for the branch: journal entries and balances.
+ * Keeps the chart of accounts structure intact.
+ */
+const clearAllAccountingData = async (scope = {}) => {
+  const tf = getTenantFilter(scope);
+
+  const [jeResult, accountResult, bankResult] = await Promise.all([
+    JournalEntry.deleteMany(tf),
+    AccountHead.updateMany(tf, { $set: { currentBalance: 0, openingBalance: 0 } }),
+    BankAccount.updateMany(tf, { $set: { currentBalance: 0, openingBalance: 0 } }),
+  ]);
+
+  if (scope.organizationId) {
+    await mongoose.connection.db.collection('_sequences').deleteOne({
+      _id: `journalEntry_${scope.organizationId}_${scope.branchId || 'default'}`,
+    });
+  }
+
+  return {
+    deletedJournalEntries: jeResult.deletedCount || 0,
+    resetAccounts: accountResult.modifiedCount || 0,
+    resetBankAccounts: bankResult.modifiedCount || 0,
+  };
+};
+
+/**
+ * Fix journal entries saved with broken entry numbers (JV-undefined).
+ */
+const repairJournalEntryNumbers = async (scope = {}) => {
+  const tf = getTenantFilter(scope);
+  const broken = await JournalEntry.find({
+    ...tf,
+    $or: [
+      { entryNumber: { $regex: /undefined/i } },
+      { entryNumber: { $in: [null, ''] } },
+      { entryNumber: { $exists: false } },
+    ],
+  }).sort({ createdAt: 1 });
+
+  let fixed = 0;
+  for (const entry of broken) {
+    const result = await mongoose.connection.db.collection('_sequences').findOneAndUpdate(
+      { _id: `journalEntry_${entry.organizationId}_${entry.branchId || 'default'}` },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: 'after' }
+    );
+    const seq = Number(result?.seq ?? result?.value?.seq);
+    const entryNumber = Number.isFinite(seq) && seq > 0
+      ? `JV-${String(seq).padStart(6, '0')}`
+      : `JV-${Date.now().toString().slice(-6)}`;
+    await JournalEntry.updateOne({ _id: entry._id }, { $set: { entryNumber } });
+    fixed += 1;
+  }
+
+  return { fixed, total: broken.length };
+};
+
+/**
  * Accounts Dashboard — summary for the accounting module home page.
  */
 const getAccountsDashboard = async (scope, year) => {
   await ensureSeeded(scope);
+  await repairJournalEntryNumbers(scope);
   const y = year || new Date().getFullYear();
   const fy = getFinancialYear(new Date(y, 0, 1));
   const [fyStart, fyEnd] = getFinancialYearDates(fy);
@@ -1271,7 +1345,8 @@ const getAccountsDashboard = async (scope, year) => {
       date: e.date,
       entryType: e.entryType,
       totalAmount: e.totalAmount,
-      description: e.description,
+      description: e.narration || e.description || '',
+      narration: e.narration || e.description || '',
       lines: e.lines?.map((l) => ({
         accountName: l.accountId?.name || 'Unknown',
         code: l.accountId?.code || '',
@@ -1889,6 +1964,8 @@ module.exports = {
   getCashFlowStatement,
   getBudgetVsActual,
   getAccountsDashboard,
+  clearAllAccountingData,
+  repairJournalEntryNumbers,
   // Auto-post (school)
   postFeePayment,
   postExpense,

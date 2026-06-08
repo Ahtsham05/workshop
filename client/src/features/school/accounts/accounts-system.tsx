@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -25,6 +26,7 @@ import {
   useGetAccountTreeQuery,
   useGetPostingAccountsQuery,
   useSeedChartOfAccountsMutation,
+  useClearAllAccountingDataMutation,
   useCreateAccountHeadMutation,
   useUpdateAccountHeadMutation,
   useDeleteAccountHeadMutation,
@@ -80,6 +82,10 @@ function fmt(n: number | undefined | null) {
 function fmtDate(d: string | undefined) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function resolveId(item: { id?: string; _id?: string } | null | undefined) {
+  return item?.id || item?._id || '';
 }
 
 function getCurrentFinancialYear(): string {
@@ -165,8 +171,26 @@ function DashboardTab() {
   const [year, setYear] = useState(now.getFullYear());
   const { data, isLoading } = useGetAccountsDashboardQuery({ year });
   const [seedCOA, { isLoading: seeding }] = useSeedChartOfAccountsMutation();
+  const [clearAll, { isLoading: clearing }] = useClearAllAccountingDataMutation();
 
   const dashboard = data?.data;
+  const hasActivity = Boolean(
+    dashboard && (
+      (dashboard.summary?.totalAssets || 0) !== 0
+      || (dashboard.summary?.totalRevenue || 0) !== 0
+      || (dashboard.summary?.totalExpenses || 0) !== 0
+      || (dashboard.recentEntries?.length || 0) > 0
+    ),
+  );
+
+  const handleClearAll = async () => {
+    try {
+      const res = await clearAll(undefined).unwrap();
+      toast.success(res.message || 'All accounts cleared');
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Could not clear accounts');
+    }
+  };
 
   if (isLoading) return <LoadingState />;
 
@@ -200,7 +224,37 @@ function DashboardTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2 flex-wrap">
+        {hasActivity && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={clearing}>
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Clear All Accounts
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all accounts?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all journal entries and reset every account and bank/cash balance to zero.
+                  Your chart of accounts structure will be kept, but all recorded income, expenses, and cash movements will be removed.
+                  This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                >
+                  {clearing ? 'Clearing…' : 'Clear All'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
           <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -300,11 +354,11 @@ function DashboardTab() {
               </TableHeader>
               <TableBody>
                 {dashboard.recentEntries.map((e: any) => (
-                  <TableRow key={e._id}>
+                  <TableRow key={resolveId(e)}>
                     <TableCell className="font-mono text-xs">{e.entryNumber}</TableCell>
                     <TableCell className="text-xs">{fmtDate(e.date)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-xs">{e.entryType?.replace(/_/g, ' ')}</Badge></TableCell>
-                    <TableCell className="text-xs max-w-[200px] truncate">{e.description}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{e.narration || e.description}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{fmt(e.totalAmount)}</TableCell>
                   </TableRow>
                 ))}
@@ -571,10 +625,21 @@ function JournalEntriesTab() {
 
   const { data, isLoading } = useGetJournalEntriesQuery({ page, limit: 20, ...(typeFilter ? { entryType: typeFilter } : {}), ...(statusFilter ? { status: statusFilter } : {}) });
   const [reverseEntry] = useReverseJournalEntryMutation();
+  const [clearAll, { isLoading: clearing }] = useClearAllAccountingDataMutation();
 
   const entries = data?.data?.results || [];
   const total = data?.data?.totalResults || 0;
   const totalPages = data?.data?.totalPages || 1;
+
+  const handleClearAll = async () => {
+    try {
+      const res = await clearAll(undefined).unwrap();
+      toast.success(res.message || `Deleted ${res.deletedJournalEntries} journal entr${res.deletedJournalEntries === 1 ? 'y' : 'ies'}`);
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Could not clear journal entries');
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -598,6 +663,36 @@ function JournalEntriesTab() {
           </SelectContent>
         </Select>
         <div className="flex-1" />
+        {total > 0 && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={clearing}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                Clear All ({total})
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete all journal entries?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes all {total} journal entr{total === 1 ? 'y' : 'ies'} from the database
+                  (including posted and reversed entries) and resets all account balances to zero.
+                  This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                >
+                  {clearing ? 'Deleting…' : 'Delete All'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4 mr-1" />New Journal Entry
         </Button>
@@ -622,11 +717,11 @@ function JournalEntriesTab() {
               </TableHeader>
               <TableBody>
                 {entries.map((e: any) => (
-                  <TableRow key={e._id}>
+                  <TableRow key={resolveId(e)}>
                     <TableCell className="font-mono text-xs">{e.entryNumber}</TableCell>
                     <TableCell className="text-xs">{fmtDate(e.date)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{e.entryType?.replace(/_/g, ' ')}</Badge></TableCell>
-                    <TableCell className="text-xs max-w-[200px] truncate">{e.description}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{e.narration || e.description}</TableCell>
                     <TableCell>
                       <Badge variant={e.status === 'posted' ? 'default' : e.status === 'reversed' ? 'destructive' : 'outline'} className="text-[10px]">
                         {e.status}
@@ -635,11 +730,13 @@ function JournalEntriesTab() {
                     <TableCell className="text-right text-xs font-medium">{fmt(e.totalAmount)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <button onClick={() => setViewId(e._id)} className="p-1 hover:bg-muted rounded"><Eye className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setViewId(resolveId(e))} className="p-1 hover:bg-muted rounded"><Eye className="h-3.5 w-3.5" /></button>
                         {e.status === 'posted' && (
                           <button onClick={() => {
+                            const entryId = resolveId(e);
+                            if (!entryId) return toast.error('Missing journal entry id');
                             if (confirm('Reverse this journal entry?')) {
-                              reverseEntry(e._id).unwrap().then(() => toast.success('Reversed')).catch((er: any) => toast.error(er?.data?.message || 'Error'));
+                              reverseEntry(entryId).unwrap().then(() => toast.success('Reversed')).catch((er: any) => toast.error(er?.data?.message || 'Error'));
                             }
                           }} className="p-1 hover:bg-orange-50 rounded text-orange-500">
                             <RotateCcw className="h-3.5 w-3.5" />
@@ -726,8 +823,15 @@ function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = () => {
     const payload = {
-      date, entryType, description, reference,
-      lines: lines.filter((l) => l.accountId && (l.debit > 0 || l.credit > 0)),
+      date, entryType, narration: description, description, reference,
+      lines: lines
+        .filter((l) => l.accountId && (l.debit > 0 || l.credit > 0))
+        .map((l) => ({
+          accountId: l.accountId,
+          debit: l.debit,
+          credit: l.credit,
+          description: l.narration,
+        })),
     };
     createEntry(payload).unwrap().then(() => { toast.success('Journal entry created'); onClose(); }).catch((e: any) => toast.error(e?.data?.message || 'Error'));
   };
@@ -908,7 +1012,7 @@ function JournalEntryViewDialog({ id, onClose }: { id: string; onClose: () => vo
               <div><span className="text-muted-foreground">Status:</span> <Badge variant={entry.status === 'posted' ? 'default' : 'destructive'}>{entry.status}</Badge></div>
               <div><span className="text-muted-foreground">FY:</span> <strong>{entry.financialYear}</strong></div>
             </div>
-            <p className="text-sm">{entry.description}</p>
+            <p className="text-sm">{entry.narration || entry.description}</p>
             {entry.reference && <p className="text-xs text-muted-foreground">Ref: {entry.reference}</p>}
 
             <Table>
@@ -926,7 +1030,7 @@ function JournalEntryViewDialog({ id, onClose }: { id: string; onClose: () => vo
                     <TableCell className="text-sm">{l.accountId?.name || l.accountId?.code || '-'}</TableCell>
                     <TableCell className="text-right text-sm">{l.debit > 0 ? fmt(l.debit) : '-'}</TableCell>
                     <TableCell className="text-right text-sm">{l.credit > 0 ? fmt(l.credit) : '-'}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{l.narration}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{l.description || l.narration}</TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="font-medium bg-muted/50">
@@ -1590,7 +1694,7 @@ function GeneralLedgerStatement() {
         <div className="flex-1" />
         {gl && (
           <Button variant="outline" size="sm" onClick={() =>
-            exportToExcel(gl.entries?.map((e: any) => ({ Date: fmtDate(e.date), EntryNo: e.entryNumber, Description: e.description, Debit: e.debit, Credit: e.credit, Balance: e.runningBalance })),
+            exportToExcel(gl.entries?.map((e: any) => ({ Date: fmtDate(e.date), EntryNo: e.entryNumber, Description: e.narration || e.description, Debit: e.debit, Credit: e.credit, Balance: e.runningBalance })),
             'GL', `general-ledger-${gl.account?.code}`)
           }><Download className="h-4 w-4 mr-1" />Excel</Button>
         )}
@@ -1627,7 +1731,7 @@ function GeneralLedgerStatement() {
                   <TableRow key={i}>
                     <TableCell className="text-xs">{fmtDate(e.date)}</TableCell>
                     <TableCell className="font-mono text-xs">{e.entryNumber}</TableCell>
-                    <TableCell className="text-xs max-w-[200px] truncate">{e.description}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{e.narration || e.description}</TableCell>
                     <TableCell className="text-right text-xs">{e.debit > 0 ? fmt(e.debit) : '-'}</TableCell>
                     <TableCell className="text-right text-xs">{e.credit > 0 ? fmt(e.credit) : '-'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{fmt(e.runningBalance)}</TableCell>

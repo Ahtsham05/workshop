@@ -16,6 +16,7 @@ router.use(auth(), branchScope(false));
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 router.route('/dashboard').get(canView, accountsSystemController.getAccountsDashboard);
+router.route('/clear-all').post(canManage, accountsSystemController.clearAllAccountingData);
 
 // ── Chart of Accounts ─────────────────────────────────────────────────────
 router.route('/chart-of-accounts').get(canView, accountsSystemController.getChartOfAccounts);

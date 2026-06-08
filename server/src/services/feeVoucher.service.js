@@ -43,6 +43,82 @@ const getAggregateFilter = (scope = {}) => {
   return filter;
 };
 
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resetCreditWalletsForStudentIds = async (studentIdsToReset, scope = {}) => {
+  const tf = getTenantFilter(scope);
+  if (!studentIdsToReset.length) {
+    return { resetStudents: 0, clearedCreditAmount: 0, deletedLedgerRows: 0, deletedAdvanceTransactions: 0 };
+  }
+
+  const students = await Student.find({ ...tf, _id: { $in: studentIdsToReset } })
+    .select('_id firstName lastName creditBalance')
+    .lean();
+  if (!students.length) {
+    await StudentCreditLedger.deleteMany({ ...tf, studentId: { $in: studentIdsToReset } });
+    return { resetStudents: 0, clearedCreditAmount: 0, deletedLedgerRows: 0, deletedAdvanceTransactions: 0 };
+  }
+
+  const clearedCreditAmount = students.reduce((sum, s) => sum + Math.max(0, s.creditBalance || 0), 0);
+  const advanceDescClauses = students.map((s) => ({
+    description: new RegExp(
+      `Advance payment — ${escapeRegex(s.firstName)}\\s+${escapeRegex(s.lastName)}`,
+      'i',
+    ),
+  }));
+
+  const [ledgerResult, , advanceTxnResult] = await Promise.all([
+    StudentCreditLedger.deleteMany({ ...tf, studentId: { $in: studentIdsToReset } }),
+    Student.updateMany({ ...tf, _id: { $in: studentIdsToReset } }, { $set: { creditBalance: 0 } }),
+    advanceDescClauses.length
+      ? SchoolTransaction.deleteMany({
+          ...tf,
+          type: 'INCOME',
+          $or: advanceDescClauses,
+        })
+      : Promise.resolve({ deletedCount: 0 }),
+  ]);
+
+  return {
+    resetStudents: students.filter((s) => (s.creditBalance || 0) > 0).length,
+    clearedCreditAmount,
+    deletedLedgerRows: ledgerResult.deletedCount || 0,
+    deletedAdvanceTransactions: advanceTxnResult.deletedCount || 0,
+  };
+};
+
+/** Reset credit wallets for students who no longer have any fee vouchers. */
+const resetCreditWalletsForStudentsWithoutVouchers = async (studentIds, scope = {}) => {
+  const uniqueIds = [...new Set((studentIds || []).map((id) => String(id)))].filter(Boolean);
+  if (!uniqueIds.length) {
+    return { resetStudents: 0, clearedCreditAmount: 0, deletedLedgerRows: 0, deletedAdvanceTransactions: 0 };
+  }
+
+  const objectIds = uniqueIds.map((id) => new mongoose.Types.ObjectId(id));
+  const remainingCounts = await FeeVoucher.aggregate([
+    { $match: { ...getAggregateFilter(scope), studentId: { $in: objectIds } } },
+    { $group: { _id: '$studentId', count: { $sum: 1 } } },
+  ]);
+  const studentsWithVouchers = new Set(remainingCounts.map((r) => String(r._id)));
+  const studentIdsToReset = objectIds.filter((id) => !studentsWithVouchers.has(String(id)));
+  return resetCreditWalletsForStudentIds(studentIdsToReset, scope);
+};
+
+/** Clear credit wallets for students with balance but no vouchers (optionally scoped to a class). */
+const clearOrphanCreditWallets = async (scope = {}, classId) => {
+  const tf = getTenantFilter(scope);
+  const studentFilter = { ...tf, creditBalance: { $gt: 0 } };
+  if (classId) studentFilter.classId = classId;
+  const studentsWithCredit = await Student.find(studentFilter).select('_id').lean();
+  if (!studentsWithCredit.length) {
+    return { resetStudents: 0, clearedCreditAmount: 0, deletedLedgerRows: 0, deletedAdvanceTransactions: 0 };
+  }
+  return resetCreditWalletsForStudentsWithoutVouchers(
+    studentsWithCredit.map((s) => s._id),
+    scope,
+  );
+};
+
 // ─── Credit wallet helpers ───────────────────────────────────────────────────
 
 /**
@@ -559,10 +635,142 @@ const updateVoucherById = async (id, updateBody, scope = {}) => {
   return doc;
 };
 
+const deleteVouchersWithLinkedData = async (voucherIds, scope = {}, options = {}) => {
+  const tf = getTenantFilter(scope);
+  const ids = (voucherIds || []).filter(Boolean);
+  if (!ids.length) {
+    return {
+      deletedVouchers: 0,
+      deletedTransactions: 0,
+      deletedLedgerRows: 0,
+      resetCreditWallets: 0,
+      clearedCreditAmount: 0,
+    };
+  }
+
+  const voucherRows = await FeeVoucher.find({ ...tf, _id: { $in: ids } })
+    .select('_id transactionId studentId')
+    .lean();
+  if (!voucherRows.length) {
+    return {
+      deletedVouchers: 0,
+      deletedTransactions: 0,
+      deletedLedgerRows: 0,
+      resetCreditWallets: 0,
+      clearedCreditAmount: 0,
+    };
+  }
+
+  const matchedIds = voucherRows.map((v) => v._id);
+  const transactionIds = voucherRows.map((v) => v.transactionId).filter(Boolean);
+  const affectedStudentIds = [...new Set(voucherRows.map((v) => String(v.studentId)).filter(Boolean))];
+
+  const [txnByRefResult, txnByIdResult, ledgerResult, voucherResult] = await Promise.all([
+    SchoolTransaction.deleteMany({
+      ...tf,
+      referenceModel: 'FeeVoucher',
+      referenceId: { $in: matchedIds },
+    }),
+    transactionIds.length
+      ? SchoolTransaction.deleteMany({ ...tf, _id: { $in: transactionIds } })
+      : Promise.resolve({ deletedCount: 0 }),
+    StudentCreditLedger.deleteMany({ ...tf, voucherId: { $in: matchedIds } }),
+    FeeVoucher.deleteMany({ ...tf, _id: { $in: matchedIds } }),
+  ]);
+
+  const walletReset = await resetCreditWalletsForStudentsWithoutVouchers(affectedStudentIds, scope);
+  let orphanWalletReset = {
+    resetStudents: 0,
+    clearedCreditAmount: 0,
+    deletedLedgerRows: 0,
+    deletedAdvanceTransactions: 0,
+  };
+  if (options.sweepOrphanWallets) {
+    orphanWalletReset = await clearOrphanCreditWallets(scope, options.classId);
+  }
+
+  return {
+    deletedVouchers: voucherResult.deletedCount || 0,
+    deletedTransactions: (txnByRefResult.deletedCount || 0) + (txnByIdResult.deletedCount || 0),
+    deletedLedgerRows:
+      (ledgerResult.deletedCount || 0)
+      + walletReset.deletedLedgerRows
+      + orphanWalletReset.deletedLedgerRows,
+    resetCreditWallets: walletReset.resetStudents + orphanWalletReset.resetStudents,
+    clearedCreditAmount: walletReset.clearedCreditAmount + orphanWalletReset.clearedCreditAmount,
+    deletedAdvanceTransactions:
+      walletReset.deletedAdvanceTransactions + orphanWalletReset.deletedAdvanceTransactions,
+  };
+};
+
+const buildVoucherListFilter = async (criteria = {}, scope = {}) => {
+  const filter = getTenantFilter(scope);
+
+  if (criteria.classId) filter.classId = criteria.classId;
+  if (criteria.studentId) filter.studentId = criteria.studentId;
+  if (criteria.examId) filter.examId = criteria.examId;
+  if (criteria.voucherType) filter.voucherType = criteria.voucherType;
+  if (criteria.month) filter.month = criteria.month;
+  if (criteria.year != null) filter.year = parseInt(criteria.year, 10);
+  if (criteria.status) filter.status = criteria.status;
+
+  if (criteria.search && String(criteria.search).trim()) {
+    const term = String(criteria.search).trim();
+    const regex = new RegExp(term, 'i');
+    const termParts = term.split(/\s+/).filter(Boolean);
+    const fullNameClauses = [];
+    if (termParts.length >= 2) {
+      const first = new RegExp(termParts[0], 'i');
+      const last = new RegExp(termParts.slice(1).join(' '), 'i');
+      fullNameClauses.push({ $and: [{ firstName: first }, { lastName: last }] });
+      fullNameClauses.push({ $and: [{ firstName: last }, { lastName: first }] });
+    }
+    const matchingStudents = await Student.find({
+      organizationId: scope.organizationId,
+      branchId: scope.branchId,
+      $or: [
+        { firstName: regex },
+        { lastName: regex },
+        { admissionNumber: regex },
+        { rollNumber: regex },
+        { 'parent.phone': regex },
+        { 'parent.guardianName': regex },
+        { 'parent.fatherName': regex },
+        ...fullNameClauses,
+      ],
+    }).select('_id').lean();
+    filter.studentId = { $in: matchingStudents.map((s) => s._id) };
+  }
+
+  return filter;
+};
+
+const bulkDeleteVouchers = async (criteria = {}, scope = {}) => {
+  const deleteOptions = {
+    sweepOrphanWallets: Boolean(criteria.sweepOrphanWallets),
+    classId: criteria.classId,
+  };
+
+  if (criteria.ids?.length) {
+    const objectIds = criteria.ids.map((id) => new mongoose.Types.ObjectId(id));
+    return deleteVouchersWithLinkedData(objectIds, scope, deleteOptions);
+  }
+
+  if (criteria.filter) {
+    const voucherRows = await FeeVoucher.find(criteria.filter).select('_id').lean();
+    return deleteVouchersWithLinkedData(voucherRows.map((v) => v._id), scope, {
+      sweepOrphanWallets: true,
+      classId: criteria.filter.classId,
+    });
+  }
+
+  throw new ApiError(httpStatus.BAD_REQUEST, 'Provide voucher ids or a filter');
+};
+
 const deleteVoucherById = async (id, scope = {}) => {
   const doc = await getVoucherById(id, scope);
   if (!doc) throw new ApiError(httpStatus.NOT_FOUND, 'Voucher not found');
-  await doc.deleteOne();
+  await deleteVouchersWithLinkedData([doc._id], scope);
   return doc;
 };
 
@@ -594,7 +802,8 @@ const pendingVoucherLabel = (p) => {
   return period ? `Pending Fee — ${period}` : 'Pending Fee';
 };
 
-const getVouchersForPrint = async (ids, scope = {}) => {
+const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
+  const { includeArrears = true } = options;
   const { ensureStudentUserId } = require('./student.service');
 
   const vouchers = await FeeVoucher.find({ _id: { $in: ids }, ...getTenantFilter(scope) })
@@ -614,6 +823,20 @@ const getVouchersForPrint = async (ids, scope = {}) => {
 
   const studentIds = [...new Set(vouchers.map((v) => String(v.studentId?._id || v.studentId)).filter(Boolean))];
   if (!studentIds.length) return vouchers;
+
+  if (!includeArrears) {
+    return vouchers.map((v) => {
+      const currentLineItems = (v.feeItems || []).map((fi) => ({
+        name: feeItemLabel(fi.name, v.month, v.year),
+        amount: fi.amount || 0,
+      }));
+      return {
+        ...v,
+        printLineItems: currentLineItems,
+        pendingDetails: { months: [], totalPending: 0, pendingCount: 0 },
+      };
+    });
+  }
 
   const studentObjectIds = studentIds.map((id) => new mongoose.Types.ObjectId(id));
 
@@ -654,21 +877,29 @@ const getVouchersForPrint = async (ids, scope = {}) => {
       name: feeItemLabel(fi.name, v.month, v.year),
       amount: fi.amount || 0,
     }));
-    const pendingLineItems = pendingList.map((p) => ({
-      name: pendingVoucherLabel(p),
-      amount: p.remaining,
-      isPending: true,
-      voucherType: p.voucherType,
-    }));
+    const pendingLineItems = includeArrears
+      ? pendingList.map((p) => ({
+          name: pendingVoucherLabel(p),
+          amount: p.remaining,
+          isPending: true,
+          voucherType: p.voucherType,
+        }))
+      : [];
 
     return {
       ...v,
       printLineItems: [...currentLineItems, ...pendingLineItems],
-      pendingDetails: {
-        months: pendingList,
-        totalPending: pendingTotal,
-        pendingCount: pendingList.length,
-      },
+      pendingDetails: includeArrears
+        ? {
+            months: pendingList,
+            totalPending: pendingTotal,
+            pendingCount: pendingList.length,
+          }
+        : {
+            months: [],
+            totalPending: 0,
+            pendingCount: 0,
+          },
     };
   });
 };
@@ -1517,6 +1748,9 @@ module.exports = {
   getYearlyFeeReport,
   updateVoucherById,
   deleteVoucherById,
+  bulkDeleteVouchers,
+  clearOrphanCreditWallets,
+  buildVoucherListFilter,
   getVouchersForPrint,
   reconcileVouchers,
   getDashboardStats,

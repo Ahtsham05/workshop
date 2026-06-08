@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Printer, Zap, DollarSign, Search, CheckCircle2, Clock, AlertTriangle, RefreshCcw, X, TrendingDown, History, CalendarCheck, Wrench, Wallet, ArrowUpCircle, ChevronsUp, PlusCircle, Trash2, Plus, Calculator } from 'lucide-react';
 import {
@@ -23,6 +24,8 @@ import {
   useGetReceivableSummaryQuery,
   useCreateFeeVoucherMutation,
   useGetStudentsQuery,
+  useBulkDeleteFeeVouchersMutation,
+  useClearOrphanCreditWalletsMutation,
 } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
@@ -209,6 +212,7 @@ export default function FeeVouchers() {
   const [searchInput, setSearchInput] = useState('');
   const [generateDialog, setGenerateDialog] = useState(false);
   const [printLayout, setPrintLayout] = useState<'auto' | 'large' | 'medium' | 'compact'>('auto');
+  const [printArrearsMode, setPrintArrearsMode] = useState<'with_arrears' | 'month_only'>('with_arrears');
   const [rowsPerPage, setRowsPerPage] = useState<'auto' | '2' | '3' | '4' | '5' | '6'>('auto');
   const [payDialog, setPayDialog] = useState(false);
   const [advanceDialog, setAdvanceDialog] = useState(false);
@@ -249,6 +253,8 @@ export default function FeeVouchers() {
   const [recordAdvance, { isLoading: recordingAdvance }] = useRecordStudentAdvancePaymentMutation();
   const [getForPrint, { isLoading: loadingPrint }] = useGetFeeVouchersForPrintMutation();
   const [reconcile, { isLoading: reconciling }] = useReconcileFeeVouchersMutation();
+  const [bulkDeleteVouchers, { isLoading: deletingVouchers }] = useBulkDeleteFeeVouchersMutation();
+  const [clearCreditWallets, { isLoading: clearingWallets }] = useClearOrphanCreditWalletsMutation();
   const [createVoucher, { isLoading: creatingVoucher }] = useCreateFeeVoucherMutation();
 
   // ── New voucher dialog state ──────────────────────────────────────────────
@@ -523,7 +529,7 @@ export default function FeeVouchers() {
         let printRows: any[] = [];
         if (ids.length) {
           try {
-            printRows = await getForPrint(ids).unwrap();
+            printRows = await getForPrint({ ids, includeArrears: true }).unwrap();
           } catch {
             toast.error('Payment saved but print preview failed to load');
           }
@@ -616,19 +622,22 @@ export default function FeeVouchers() {
     else setSelectedIds(vouchers.map((v: any) => v.id));
   };
 
-  const handlePrint = async (overrideVouchers?: any[]) => {
+  const handlePrint = async (overrideVouchers?: any[], voucherId?: string) => {
     if (overrideVouchers) {
       openPrintWindow(overrideVouchers);
       return;
     }
-    const printableVouchers = selectedIds.length
-      ? vouchers.filter((v: any) => selectedIds.includes(v.id))
-      : vouchers.filter((v: any) => v.status !== 'paid');
+    const includeArrears = printArrearsMode === 'with_arrears';
+    const printableVouchers = voucherId
+      ? vouchers.filter((v: any) => v.id === voucherId)
+      : selectedIds.length
+        ? vouchers.filter((v: any) => selectedIds.includes(v.id))
+        : vouchers.filter((v: any) => v.status !== 'paid');
     const ids = printableVouchers.map((v: any) => v.id);
     if (!ids.length) return toast.error('No vouchers to print');
     try {
-      const data = await getForPrint(ids).unwrap();
-      if (!selectedIds.length) {
+      const data = await getForPrint({ ids, includeArrears }).unwrap();
+      if (!selectedIds.length && !voucherId) {
         const skippedPaid = vouchers.length - printableVouchers.length;
         if (skippedPaid > 0) {
           toast.info(`Skipped ${skippedPaid} paid voucher${skippedPaid > 1 ? 's' : ''} in Print All`);
@@ -643,6 +652,60 @@ export default function FeeVouchers() {
       const res = await reconcile(undefined).unwrap();
       toast.success(`Fixed ${res.fixed} voucher(s)${res.failed ? ` · ${res.failed} failed` : ''}`);
     } catch { toast.error('Reconcile failed'); }
+  };
+
+  const deleteTargetCount = selectedIds.length || vouchersData?.totalResults || 0;
+  const deleteTargetLabel = selectedIds.length
+    ? `${selectedIds.length} selected voucher${selectedIds.length !== 1 ? 's' : ''}`
+    : `${vouchersData?.totalResults || 0} voucher${(vouchersData?.totalResults || 0) !== 1 ? 's' : ''}`;
+
+  const activeFilterParts = [
+    `${filters.month} ${filters.year}`,
+    filters.classId !== 'all' ? classes.find((c: any) => c.id === filters.classId)?.name || 'Selected class' : null,
+    filters.status !== 'all' ? filters.status : null,
+    filters.voucherType !== 'all' ? filters.voucherType : null,
+    filters.search ? `search "${filters.search}"` : null,
+  ].filter(Boolean);
+
+  const handleBulkDelete = async () => {
+    if (!deleteTargetCount) return toast.error('No vouchers to delete');
+    try {
+      const payload = selectedIds.length
+        ? { ids: selectedIds }
+        : {
+            deleteAllMatching: true,
+            month: filters.month,
+            year: filters.year,
+            ...(filters.classId !== 'all' ? { classId: filters.classId } : {}),
+            ...(filters.status !== 'all' ? { status: filters.status } : {}),
+            ...(filters.voucherType !== 'all' ? { voucherType: filters.voucherType } : {}),
+            ...(filters.search ? { search: filters.search } : {}),
+          };
+      const res = await bulkDeleteVouchers(payload).unwrap();
+      let msg = `Deleted ${res.deletedVouchers} voucher${res.deletedVouchers !== 1 ? 's' : ''}`;
+      if (res.clearedCreditAmount) {
+        msg += ` · Cleared PKR ${res.clearedCreditAmount.toLocaleString()} from wallet(s)`;
+      }
+      toast.success(msg);
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Could not delete vouchers');
+    }
+  };
+
+  const handleClearWallets = async () => {
+    try {
+      const res = await clearCreditWallets(
+        filters.classId !== 'all' ? { classId: filters.classId } : undefined,
+      ).unwrap();
+      if (res.clearedCreditAmount) {
+        toast.success(`Cleared PKR ${res.clearedCreditAmount.toLocaleString()} from ${res.resetStudents} wallet(s)`);
+      } else {
+        toast.info('No orphan credit wallets to clear');
+      }
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Could not clear wallets');
+    }
   };
 
   const openPrintWindow = (data: any[]) => {    const win = window.open('', '_blank');
@@ -674,6 +737,13 @@ export default function FeeVouchers() {
           <p className="text-sm text-muted-foreground">Generate, collect and print monthly fee vouchers</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Select value={printArrearsMode} onValueChange={(v: 'with_arrears' | 'month_only') => setPrintArrearsMode(v)}>
+            <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="Print content" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="with_arrears">With Arrears</SelectItem>
+              <SelectItem value="month_only">This Month Only</SelectItem>
+            </SelectContent>
+          </Select>
           {(selectedIds.length > 0 || vouchers.length > 0) && (
             <Button variant="outline" size="sm" onClick={() => handlePrint()} disabled={loadingPrint}>
               <Printer className="mr-1.5 h-3.5 w-3.5" />
@@ -704,6 +774,64 @@ export default function FeeVouchers() {
             {reconciling ? <RefreshCcw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wrench className="mr-1.5 h-3.5 w-3.5" />}
             Fix Amounts
           </Button>
+          {deleteTargetCount > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={deletingVouchers}>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  {selectedIds.length > 0 ? `Delete (${selectedIds.length})` : `Delete All (${vouchersData?.totalResults || 0})`}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {deleteTargetLabel}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {selectedIds.length > 0
+                      ? 'This will permanently delete the selected vouchers, linked payment records, and credit wallet balances for students with no remaining vouchers.'
+                      : `This will permanently delete all vouchers matching your current filters${activeFilterParts.length ? ` (${activeFilterParts.join(' · ')})` : ''}, including paid vouchers, payment records, and credit wallet balances for affected students.`}
+                    {' '}This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleBulkDelete}
+                    disabled={deletingVouchers}
+                  >
+                    {deletingVouchers ? 'Deleting…' : 'Delete'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {(receivable?.totalCreditBalance || 0) > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-amber-700 hover:text-amber-800" disabled={clearingWallets}>
+                  <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                  Clear Wallets (PKR {(receivable?.totalCreditBalance || 0).toLocaleString()})
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear credit wallets?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will reset PKR {(receivable?.totalCreditBalance || 0).toLocaleString()} held in student credit wallets
+                    for students who have no fee vouchers left
+                    {filters.classId !== 'all' ? ` in the selected class` : ''}.
+                    Advance payment records will also be removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClearWallets} disabled={clearingWallets}>
+                    {clearingWallets ? 'Clearing…' : 'Clear Wallets'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <Button variant="outline" size="sm" onClick={openNewVoucherDialog}>
             <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> New Voucher
           </Button>
@@ -1004,7 +1132,7 @@ export default function FeeVouchers() {
                     >
                       <ArrowUpCircle className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => handlePrint([v])}>
+                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => handlePrint(undefined, v.id)}>
                       <Printer className="h-3 w-3" />
                     </Button>
                   </div>

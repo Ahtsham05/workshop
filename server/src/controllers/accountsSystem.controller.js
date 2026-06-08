@@ -162,6 +162,14 @@ const getAccountsDashboard = catchAsync(async (req, res) => {
   res.send({ data: dashboard });
 });
 
+const clearAllAccountingData = catchAsync(async (req, res) => {
+  const result = await accountsSystemService.clearAllAccountingData(getScope(req));
+  res.send({
+    message: `Cleared ${result.deletedJournalEntries} journal entr${result.deletedJournalEntries === 1 ? 'y' : 'ies'} and reset all account balances`,
+    ...result,
+  });
+});
+
 module.exports = {
   seedChartOfAccounts,
   getChartOfAccounts,
@@ -190,4 +198,5 @@ module.exports = {
   getCashFlowStatement,
   getBudgetVsActual,
   getAccountsDashboard,
+  clearAllAccountingData,
 };

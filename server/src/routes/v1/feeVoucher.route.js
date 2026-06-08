@@ -16,6 +16,8 @@ router
   .get(validate(feeVoucherValidation.getVouchers), feeVoucherController.getVouchers);
 
 router.route('/bulk').post(validate(feeVoucherValidation.bulkGenerateVouchers), feeVoucherController.bulkGenerateVouchers);
+router.route('/bulk-delete').post(validate(feeVoucherValidation.bulkDeleteVouchers), feeVoucherController.bulkDeleteVouchers);
+router.route('/clear-credit-wallets').post(validate(feeVoucherValidation.clearCreditWallets), feeVoucherController.clearCreditWallets);
 router.route('/bulk-exam').post(validate(feeVoucherValidation.bulkGenerateExamVouchers), feeVoucherController.bulkGenerateExamVouchers);
 router.route('/print').post(validate(feeVoucherValidation.getVouchersForPrint), feeVoucherController.getVouchersForPrint);
 router.route('/stats').get(feeVoucherController.getDashboardStats);

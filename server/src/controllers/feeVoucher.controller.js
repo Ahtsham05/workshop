@@ -183,13 +183,46 @@ const deleteVoucher = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const bulkDeleteVouchers = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  let result;
+
+  if (req.body.ids?.length) {
+    result = await feeVoucherService.bulkDeleteVouchers({ ids: req.body.ids }, scope);
+  } else if (req.body.deleteAllMatching) {
+    const filter = await feeVoucherService.buildVoucherListFilter(req.body, scope);
+    result = await feeVoucherService.bulkDeleteVouchers({ filter }, scope);
+  } else {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Provide ids or deleteAllMatching');
+  }
+
+  const walletMsg = result.clearedCreditAmount
+    ? ` · Cleared PKR ${result.clearedCreditAmount.toLocaleString()} from credit wallet(s)`
+    : '';
+  res.send({
+    message: `Deleted ${result.deletedVouchers} voucher(s)${walletMsg}`,
+    ...result,
+  });
+});
+
+const clearCreditWallets = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const result = await feeVoucherService.clearOrphanCreditWallets(scope, req.query.classId);
+  res.send({
+    message: result.clearedCreditAmount
+      ? `Cleared PKR ${result.clearedCreditAmount.toLocaleString()} from ${result.resetStudents} credit wallet(s)`
+      : 'No orphan credit wallets to clear',
+    ...result,
+  });
+});
+
 /**
  * Get vouchers formatted for print (populated, ready for PDF/print UI)
  */
 const getVouchersForPrint = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
-  const { ids } = req.body;
-  const vouchers = await feeVoucherService.getVouchersForPrint(ids, scope);
+  const { ids, includeArrears = true } = req.body;
+  const vouchers = await feeVoucherService.getVouchersForPrint(ids, scope, { includeArrears });
   res.send(vouchers);
 });
 
@@ -320,6 +353,8 @@ module.exports = {
   getYearlyFeeReport,
   updateVoucher,
   deleteVoucher,
+  bulkDeleteVouchers,
+  clearCreditWallets,
   getVouchersForPrint,
   getDashboardStats,
   reconcileVouchers,
