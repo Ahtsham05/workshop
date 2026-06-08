@@ -1,16 +1,34 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import StudentAvatar from '../components/student-avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useScanBarcodeMutation, useGetStudentsQuery, useGetSchoolAttendancesQuery } from '@/stores/school.api';
+import {
+  useGetStudentsQuery,
+  useGetSchoolAttendancesQuery,
+  useMarkBulkAttendanceMutation,
+  useGetSchoolClassesQuery,
+} from '@/stores/school.api';
 import { toast } from 'sonner';
-import { CheckCircle2, XCircle, AlertCircle, Barcode, Users, RefreshCw, Volume2, VolumeX } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Barcode,
+  Users,
+  RefreshCw,
+  Volume2,
+  VolumeX,
+  Save,
+  AlertTriangle,
+  Circle,
+} from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ScanStatus = 'present' | 'already_marked' | 'invalid';
+type StudentRowStatus = 'pending' | 'scanned' | 'saved';
 
 interface ScanEntry {
   id: string;
@@ -22,7 +40,53 @@ interface ScanEntry {
   photoUrl?: string;
   gender?: string;
   timestamp: Date;
-  attendanceStatus?: string;
+}
+
+interface LocalMark {
+  barcode: string;
+  studentId: string;
+  classId: string;
+  sectionId?: string;
+  studentName: string;
+  className: string;
+  rollNumber?: string;
+  photoUrl?: string;
+  gender?: string;
+  timestamp: string;
+}
+
+interface ClassGroup {
+  classId: string;
+  className: string;
+  order: number;
+  students: Array<{
+    student: any;
+    status: StudentRowStatus;
+  }>;
+}
+
+const localDateStr = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const storageKey = (date: string) => `barcode-attendance-pending-${date}`;
+
+function loadPendingMarks(date: string): Map<string, LocalMark> {
+  try {
+    const raw = localStorage.getItem(storageKey(date));
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as LocalMark[];
+    return new Map(parsed.map((m) => [m.barcode, m]));
+  } catch {
+    return new Map();
+  }
+}
+
+function savePendingMarks(date: string, marks: Map<string, LocalMark>) {
+  localStorage.setItem(storageKey(date), JSON.stringify([...marks.values()]));
 }
 
 // ─── Sound feedback using Web Audio API ──────────────────────────────────────
@@ -67,6 +131,17 @@ function statusConfig(status: ScanStatus) {
   }
 }
 
+function rowStatusConfig(status: StudentRowStatus) {
+  switch (status) {
+    case 'saved':
+      return { label: 'Saved', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50/60 border-green-100', badge: 'bg-green-100 text-green-700' };
+    case 'scanned':
+      return { label: 'Scanned', icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-50/60 border-blue-100', badge: 'bg-blue-100 text-blue-700' };
+    case 'pending':
+      return { label: 'Pending', icon: Circle, color: 'text-slate-400', bg: 'bg-white border-slate-100', badge: 'bg-slate-100 text-slate-500' };
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AttendanceScanner() {
@@ -75,39 +150,30 @@ export default function AttendanceScanner() {
   const [lastScan, setLastScan] = useState<ScanEntry | null>(null);
   const [history, setHistory] = useState<ScanEntry[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [todayCount, setTodayCount] = useState(0);
+  const [scannedCount, setScannedCount] = useState(0);
   const [alreadyCount, setAlreadyCount] = useState(0);
 
-  // In-memory student map: admissionNumber → student
+  const todayStr = localDateStr();
   const [studentMap, setStudentMap] = useState<Map<string, any>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
-
-  // Session-local set of barcodes already marked present (avoids duplicate UI counts)
-  const markedSet = useRef<Set<string>>(new Set());
-
-  // Debounce: ignore same barcode within 1.5 s (scanner double-fire protection)
+  const [pendingMarks, setPendingMarks] = useState<Map<string, LocalMark>>(() => loadPendingMarks(todayStr));
+  const dbMarkedSet = useRef<Set<string>>(new Set());
   const lastBarcodeRef = useRef<{ barcode: string; time: number } | null>(null);
 
   const { data: studentsData } = useGetStudentsQuery({ limit: 1000, status: 'active' });
-  const [scanBarcode] = useScanBarcodeMutation();
-
-  // Load today's already-present count from DB so counter is accurate even after page reload
-  const todayStr = new Date().toISOString().split('T')[0];
+  const { data: classesData } = useGetSchoolClassesQuery({ limit: 100, sortBy: 'order:asc' });
   const { data: todayAttendanceData } = useGetSchoolAttendancesQuery({ date: todayStr, status: 'present', limit: 1000 });
+  const [markBulk, { isLoading: isSaving }] = useMarkBulkAttendanceMutation();
+
   useEffect(() => {
     if (todayAttendanceData?.results) {
-      setTodayCount(todayAttendanceData.results.length);
-      // Also seed markedSet so re-scans are detected correctly
       for (const a of todayAttendanceData.results) {
         const admNo = a.studentId?.admissionNumber;
-        if (admNo) markedSet.current.add(admNo.trim());
+        if (admNo) dbMarkedSet.current.add(admNo.trim());
       }
     }
-  // Only run once on mount when data arrives
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayAttendanceData]);
 
-  // Build in-memory map when students load
   useEffect(() => {
     if (studentsData?.results) {
       const map = new Map<string, any>();
@@ -119,7 +185,10 @@ export default function AttendanceScanner() {
     }
   }, [studentsData]);
 
-  // Keep input focused
+  useEffect(() => {
+    setScannedCount(pendingMarks.size);
+  }, [pendingMarks]);
+
   const refocus = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
@@ -128,12 +197,76 @@ export default function AttendanceScanner() {
     inputRef.current?.focus();
   }, []);
 
+  const getStudentRowStatus = useCallback(
+    (student: any): StudentRowStatus => {
+      const barcode = student.admissionNumber?.trim();
+      if (!barcode) return 'pending';
+      if (dbMarkedSet.current.has(barcode)) return 'saved';
+      if (pendingMarks.has(barcode)) return 'scanned';
+      return 'pending';
+    },
+    [pendingMarks]
+  );
+
+  const classGroups = useMemo((): ClassGroup[] => {
+    if (!studentsData?.results?.length) return [];
+
+    const classOrderMap = new Map<string, number>();
+    classesData?.results?.forEach((c: any, idx: number) => {
+      classOrderMap.set(c.id || c._id, c.order ?? idx);
+    });
+
+    const groups = new Map<string, ClassGroup>();
+
+    for (const student of studentsData.results) {
+      const classId = student.classId?.id || student.classId?._id || student.classId || 'unknown';
+      const className = student.classId?.name || 'Unassigned';
+      const order = classOrderMap.get(classId) ?? 999;
+
+      if (!groups.has(classId)) {
+        groups.set(classId, { classId, className, order, students: [] });
+      }
+
+      groups.get(classId)!.students.push({
+        student,
+        status: getStudentRowStatus(student),
+      });
+    }
+
+    return [...groups.values()]
+      .sort((a, b) => a.order - b.order || a.className.localeCompare(b.className))
+      .map((g) => ({
+        ...g,
+        students: g.students.sort((a, b) => {
+          const rollA = Number(a.student.rollNumber) || 0;
+          const rollB = Number(b.student.rollNumber) || 0;
+          if (rollA !== rollB) return rollA - rollB;
+          return `${a.student.firstName} ${a.student.lastName || ''}`.localeCompare(
+            `${b.student.firstName} ${b.student.lastName || ''}`
+          );
+        }),
+      }));
+  }, [studentsData, classesData, getStudentRowStatus]);
+
+  const summary = useMemo(() => {
+    let saved = 0;
+    let scanned = 0;
+    let pending = 0;
+    for (const group of classGroups) {
+      for (const row of group.students) {
+        if (row.status === 'saved') saved++;
+        else if (row.status === 'scanned') scanned++;
+        else pending++;
+      }
+    }
+    return { saved, scanned, pending, total: saved + scanned + pending };
+  }, [classGroups]);
+
   const processBarcode = useCallback(
-    async (raw: string) => {
+    (raw: string) => {
       const barcode = raw.trim();
       if (!barcode) return;
 
-      // ── Debounce: ignore same barcode within 1.5 s ─────────────────
       const now = Date.now();
       if (
         lastBarcodeRef.current &&
@@ -146,52 +279,51 @@ export default function AttendanceScanner() {
       }
       lastBarcodeRef.current = { barcode, time: now };
 
-      // ── 1. Resolve locally (< 1 ms) for display fallback ───────────
       const student = studentMap.get(barcode);
-
       let status: ScanStatus = 'invalid';
-      let serverStudent: any = null;
-      let attendanceStatus: string | undefined;
 
-      // ── 2. Persist first, then reflect final status in UI ───────────
-      try {
-        const result = await scanBarcode({ barcode }).unwrap();
-        status = result?.status || 'invalid';
-        serverStudent = result?.student;
-        attendanceStatus = result?.attendanceStatus;
-      } catch {
-        setBarcodeInput('');
-        refocus();
-        toast.error('Failed to save attendance. Please check network and try again.');
-        if (soundEnabled) playTone('error');
-        return;
+      if (!student) {
+        status = 'invalid';
+      } else if (pendingMarks.has(barcode) || dbMarkedSet.current.has(barcode)) {
+        status = 'already_marked';
+      } else {
+        status = 'present';
+        const mark: LocalMark = {
+          barcode,
+          studentId: student.id || student._id,
+          classId: student.classId?.id || student.classId?._id || student.classId,
+          sectionId: student.sectionId?.id || student.sectionId?._id || student.sectionId,
+          studentName: `${student.firstName} ${student.lastName || ''}`.trim(),
+          className: student.classId?.name || '',
+          rollNumber: student.rollNumber,
+          photoUrl: student.photoUrl?.url,
+          gender: student.gender,
+          timestamp: new Date().toISOString(),
+        };
+        setPendingMarks((prev) => {
+          const next = new Map(prev);
+          next.set(barcode, mark);
+          savePendingMarks(todayStr, next);
+          return next;
+        });
       }
-
-      if (status === 'present') {
-        markedSet.current.add(barcode);
-      }
-
-      const fullName = student
-        ? `${student.firstName} ${student.lastName || ''}`.trim()
-        : undefined;
 
       const entry: ScanEntry = {
         id: `${barcode}-${now}`,
         barcode,
         status,
-        studentName: fullName || `${serverStudent?.firstName || ''} ${serverStudent?.lastName || ''}`.trim() || undefined,
-        className: student?.classId?.name || serverStudent?.classId?.name,
-        rollNumber: student?.rollNumber || serverStudent?.rollNumber,
-        photoUrl: student?.photoUrl?.url || serverStudent?.photoUrl?.url,
-        gender: student?.gender || serverStudent?.gender,
+        studentName: student
+          ? `${student.firstName} ${student.lastName || ''}`.trim()
+          : undefined,
+        className: student?.classId?.name,
+        rollNumber: student?.rollNumber,
+        photoUrl: student?.photoUrl?.url,
+        gender: student?.gender,
         timestamp: new Date(),
-        attendanceStatus,
       };
 
-      // ── 2. Update UI immediately (synchronous) ─────────────────────
       setLastScan(entry);
       setHistory((prev) => [entry, ...prev].slice(0, 10));
-      if (status === 'present') setTodayCount((n) => n + 1);
       if (status === 'already_marked') setAlreadyCount((n) => n + 1);
       if (soundEnabled) {
         if (status === 'present') playTone('success');
@@ -199,13 +331,10 @@ export default function AttendanceScanner() {
         else playTone('error');
       }
 
-      // ── 3. Clear input and refocus instantly ───────────────────────
       setBarcodeInput('');
       refocus();
-
-      // Server already persisted above; no fire-and-forget call here.
     },
-    [studentMap, scanBarcode, soundEnabled, refocus]
+    [studentMap, pendingMarks, soundEnabled, refocus, todayStr]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -215,36 +344,55 @@ export default function AttendanceScanner() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setBarcodeInput(val);
+  const handleSave = async () => {
+    if (!pendingMarks.size) {
+      toast.info('No scanned attendance to save.');
+      return;
+    }
+    try {
+      const records = [...pendingMarks.values()].map((m) => ({
+        studentId: m.studentId,
+        classId: m.classId,
+        sectionId: m.sectionId,
+        date: todayStr,
+        status: 'present',
+      }));
+      await markBulk({ records }).unwrap();
 
-    // Most USB barcode scanners append \n — detect if the value ends with it
-    // Alternatively: if length > 4 and no keystrokes, it's a scanner (handled by Enter)
+      for (const m of pendingMarks.values()) {
+        dbMarkedSet.current.add(m.barcode);
+      }
+      setPendingMarks(new Map());
+      localStorage.removeItem(storageKey(todayStr));
+      toast.success(`Attendance saved — ${records.length} student${records.length !== 1 ? 's' : ''} marked present`);
+      refocus();
+    } catch {
+      toast.error('Failed to save attendance. Please check network and try again.');
+    }
   };
 
-  const clearHistory = () => {
+  const clearSession = () => {
     setHistory([]);
     setLastScan(null);
-    setTodayCount(0);
     setAlreadyCount(0);
-    markedSet.current.clear();
+    setPendingMarks(new Map());
+    localStorage.removeItem(storageKey(todayStr));
     lastBarcodeRef.current = null;
     refocus();
   };
 
   const cfg = lastScan ? statusConfig(lastScan.status) : null;
+  const hasPendingSave = pendingMarks.size > 0;
 
   return (
-    <div className="h-full w-full p-4 space-y-4 max-w-4xl mx-auto">
-      {/* Header */}
+    <div className="h-full w-full p-4 space-y-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Barcode className="h-6 w-6 text-blue-600" /> Barcode Attendance
           </h1>
           <p className="text-sm text-muted-foreground">
-            Scan student ID barcode to mark attendance
+            Scan student ID barcode — stored locally until you save
             {mapLoaded && (
               <span className="ml-2 text-green-600 font-medium">
                 · {studentMap.size} students loaded
@@ -261,40 +409,62 @@ export default function AttendanceScanner() {
           >
             {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="sm" onClick={clearHistory} className="gap-1">
-            <RefreshCw className="h-3.5 w-3.5" /> Reset
+          <Button variant="outline" size="sm" onClick={clearSession} className="gap-1">
+            <RefreshCw className="h-3.5 w-3.5" /> Reset Session
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving || !hasPendingSave}
+            className={`gap-1 ${hasPendingSave ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? 'Saving…' : `Save (${pendingMarks.size})`}
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      {hasPendingSave && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-yellow-50 border border-yellow-300 text-yellow-800 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>{pendingMarks.size} scan{pendingMarks.size !== 1 ? 's' : ''} pending</strong> — stored in browser only.
+            Click <strong>Save</strong> to record attendance.
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="shadow-none border">
           <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-green-600">{todayCount}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Marked Present</div>
+            <div className="text-3xl font-bold text-blue-600">{scannedCount}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Scanned (Unsaved)</div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-none border">
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-green-600">{summary.saved}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Saved Today</div>
           </CardContent>
         </Card>
         <Card className="shadow-none border">
           <CardContent className="p-4 text-center">
             <div className="text-3xl font-bold text-yellow-600">{alreadyCount}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Already Marked</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Duplicate Scans</div>
           </CardContent>
         </Card>
         <Card className="shadow-none border">
           <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-blue-600 flex items-center justify-center gap-1">
-              <Users className="h-6 w-6" />{studentMap.size}
+            <div className="text-3xl font-bold text-slate-600 flex items-center justify-center gap-1">
+              <Users className="h-6 w-6" />{summary.total}
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">In-Memory</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Total Students</div>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Scanner Input + Last result */}
         <div className="space-y-3">
-          {/* Scanner input */}
           <Card className="shadow-none border-2 border-blue-100 focus-within:border-blue-400 transition-colors duration-200">
             <CardContent className="p-4 space-y-3">
               <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
@@ -303,7 +473,7 @@ export default function AttendanceScanner() {
               <Input
                 ref={inputRef}
                 value={barcodeInput}
-                onChange={handleChange}
+                onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Scan or type barcode, press Enter…"
                 className="text-base font-mono tracking-wider h-12"
@@ -313,12 +483,11 @@ export default function AttendanceScanner() {
                 onBlur={() => setTimeout(() => inputRef.current?.focus(), 100)}
               />
               <p className="text-xs text-muted-foreground">
-                Input auto-refocuses. USB scanner sends Enter automatically.
+                Scans are stored locally. No network request per scan.
               </p>
             </CardContent>
           </Card>
 
-          {/* Last scan result */}
           {lastScan && cfg && (
             <Card className={`shadow-none border-2 ${cfg.bg} transition-all duration-300`}>
               <CardContent className="p-4">
@@ -357,7 +526,6 @@ export default function AttendanceScanner() {
           )}
         </div>
 
-        {/* Scan history */}
         <div>
           <Card className="shadow-none border h-full">
             <CardContent className="p-0">
@@ -392,6 +560,76 @@ export default function AttendanceScanner() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Students by Class</h2>
+          <div className="flex gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> Saved</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Scanned</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Pending</span>
+          </div>
+        </div>
+
+        {!mapLoaded ? (
+          <div className="text-center py-12 text-muted-foreground text-sm">Loading students…</div>
+        ) : (
+          <div className="space-y-4">
+            {classGroups.map((group) => {
+              const groupSaved = group.students.filter((s) => s.status === 'saved').length;
+              const groupScanned = group.students.filter((s) => s.status === 'scanned').length;
+              const groupPending = group.students.filter((s) => s.status === 'pending').length;
+
+              return (
+                <Card key={group.classId} className="shadow-none border">
+                  <CardContent className="p-0">
+                    <div className="px-4 py-3 border-b bg-slate-50/80 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="font-semibold text-sm">{group.className}</p>
+                        <p className="text-xs text-muted-foreground">{group.students.length} students</p>
+                      </div>
+                      <div className="flex gap-2 text-xs">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{groupSaved} saved</Badge>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{groupScanned} scanned</Badge>
+                        <Badge variant="outline" className="bg-slate-50 text-slate-600">{groupPending} pending</Badge>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 divide-y sm:divide-y-0">
+                      {group.students.map(({ student, status }) => {
+                        const rowCfg = rowStatusConfig(status);
+                        const name = `${student.firstName} ${student.lastName || ''}`.trim();
+                        return (
+                          <div
+                            key={student.id || student._id}
+                            className={`flex items-center gap-3 px-4 py-2.5 border-b sm:border-r ${rowCfg.bg}`}
+                          >
+                            <StudentAvatar
+                              photoUrl={student.photoUrl?.url}
+                              gender={student.gender}
+                              className="h-9 w-9 rounded-md flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Roll {student.rollNumber || '—'}
+                                {student.admissionNumber && ` · ${student.admissionNumber}`}
+                              </p>
+                            </div>
+                            <Badge className={`${rowCfg.badge} text-[10px] shrink-0`}>
+                              <rowCfg.icon className="h-3 w-3 mr-0.5" />
+                              {rowCfg.label}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
