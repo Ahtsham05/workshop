@@ -33,15 +33,26 @@ const createNotification = async (body) => {
   });
 };
 
+const visibilityFilter = (user, scope) => {
+  const role = roleOf(user);
+  const userId = user._id || user.id;
+  return {
+    ...getTenantFilter(scope),
+    audience: { $in: [role] },
+    $or: [
+      { recipientUserId: { $exists: false } },
+      { recipientUserId: null },
+      { recipientUserId: userId },
+    ],
+  };
+};
+
 /** Notifications visible to a recipient user, newest first, with a read flag. */
 const listForUser = async (user, scope, { limit = 50 } = {}) => {
   const role = roleOf(user);
   if (!role) return [];
 
-  const notifications = await Notification.find({
-    ...getTenantFilter(scope),
-    audience: { $in: [role] },
-  })
+  const notifications = await Notification.find(visibilityFilter(user, scope))
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -62,10 +73,7 @@ const unreadCountForUser = async (user, scope) => {
   const role = roleOf(user);
   if (!role) return 0;
 
-  const notifications = await Notification.find({
-    ...getTenantFilter(scope),
-    audience: { $in: [role] },
-  })
+  const notifications = await Notification.find(visibilityFilter(user, scope))
     .select('_id')
     .lean();
   if (!notifications.length) return 0;
@@ -93,10 +101,7 @@ const markAllRead = async (user, scope) => {
   const role = roleOf(user);
   if (!role) return { ok: true, marked: 0 };
 
-  const notifications = await Notification.find({
-    ...getTenantFilter(scope),
-    audience: { $in: [role] },
-  })
+  const notifications = await Notification.find(visibilityFilter(user, scope))
     .select('_id')
     .lean();
   if (!notifications.length) return { ok: true, marked: 0 };

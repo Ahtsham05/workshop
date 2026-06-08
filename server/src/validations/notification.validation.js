@@ -6,7 +6,7 @@ const createNotification = {
     title: Joi.string().trim().max(200).required(),
     message: Joi.string().trim().max(4000).required(),
     audience: Joi.array().items(Joi.string().valid('teacher', 'student', 'parent')).min(1).required(),
-    type: Joi.string().valid('general', 'fee', 'exam', 'event', 'urgent').default('general'),
+    type: Joi.string().valid('general', 'fee', 'exam', 'event', 'urgent', 'attendance').default('general'),
   }),
 };
 

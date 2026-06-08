@@ -105,7 +105,7 @@ export default function StudentList() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, phone, or admission no..."
+                placeholder="Search by name, phone, admission no, or user ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -141,6 +141,7 @@ export default function StudentList() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Admission No.</TableHead>
+                    <TableHead>Student ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead>Section</TableHead>
@@ -153,6 +154,9 @@ export default function StudentList() {
                   {data?.results?.map((student: any) => (
                     <TableRow key={student.id || student._id}>
                       <TableCell className="font-medium">{student.admissionNumber}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {student.studentUserId || '—'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <StudentAvatar
@@ -198,7 +202,7 @@ export default function StudentList() {
                   ))}
                   {(!data?.results || data.results.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No students found</TableCell>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No students found</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

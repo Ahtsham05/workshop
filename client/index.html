@@ -79,13 +79,15 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- PWA Service Worker Registration (production only — dev uses Vite HMR, SW cache breaks hot reload) -->
+    <!-- PWA Service Worker Registration -->
     <script type="module">
-      if ('serviceWorker' in navigator && import.meta.env.PROD) {
+      if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {
-            // Service worker registration failed, app will still work
-          });
+          // Register in prod for offline caching; also on localhost for push notifications in dev
+          const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+          if (import.meta.env.PROD || isLocalhost) {
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+          }
         });
       }
     </script>

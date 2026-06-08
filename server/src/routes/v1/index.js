@@ -67,6 +67,7 @@ const schoolDashboardRoute = require('./schoolDashboard.route');
 const visitorRoute = require('./visitor.route');
 const diaryRoute = require('./diary.route');
 const notificationRoute = require('./notification.route');
+const pushSubscriptionRoute = require('./pushSubscription.route');
 const schoolReportRoute = require('./schoolReport.route');
 const teacherPortalRoute = require('./teacherPortal.route');
 const parentPortalRoute = require('./parentPortal.route');
@@ -347,6 +348,10 @@ const defaultRoutes = [
   {
     path: '/notifications',
     route: notificationRoute
+  },
+  {
+    path: '/push',
+    route: pushSubscriptionRoute
   },
   {
     path: '/school-reports',

@@ -35,6 +35,9 @@ const envVarsSchema = Joi.object()
     WHATSAPP_CLOUD_PHONE_NUMBER_ID: Joi.string().allow('').description('WhatsApp Cloud API phone number ID'),
     WHATSAPP_CLOUD_API_VERSION: Joi.string().allow('').default('v21.0'),
     WHATSAPP_CLOUD_BUSINESS_ACCOUNT_ID: Joi.string().allow('').description('Optional WABA ID'),
+    VAPID_PUBLIC_KEY: Joi.string().allow('').description('Web Push VAPID public key'),
+    VAPID_PRIVATE_KEY: Joi.string().allow('').description('Web Push VAPID private key'),
+    VAPID_SUBJECT: Joi.string().allow('').description('Web Push VAPID subject (mailto: or https:)'),
   })
   .unknown();
 
@@ -100,5 +103,10 @@ module.exports = {
       apiVersion: (envVars.WHATSAPP_CLOUD_API_VERSION || 'v21.0').trim(),
       businessAccountId: (envVars.WHATSAPP_CLOUD_BUSINESS_ACCOUNT_ID || '').trim(),
     },
+  },
+  vapid: {
+    publicKey: (envVars.VAPID_PUBLIC_KEY || '').trim(),
+    privateKey: (envVars.VAPID_PRIVATE_KEY || '').trim(),
+    subject: (envVars.VAPID_SUBJECT || 'mailto:support@logixplus.com').trim(),
   },
 };

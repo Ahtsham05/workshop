@@ -90,9 +90,14 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
   const { data: results = [] } = useGetParentPortalResultsQuery({ studentId: childId }, { skip });
   const { data: exams = [] } = useGetParentPortalExamsQuery({ studentId: childId }, { skip });
   const attDateRange = useMemo(() => computeRange(attRange), [attRange]);
+  const todayRange = useMemo(() => computeRange('today'), []);
   const { data: attendance = [], isFetching: attFetching } = useGetParentPortalAttendanceQuery(
     { studentId: childId, from: attDateRange.from, to: attDateRange.to },
     { skip },
+  );
+  const { data: todayAttendance = [] } = useGetParentPortalAttendanceQuery(
+    { studentId: childId, from: todayRange.from, to: todayRange.to },
+    { skip, refetchOnFocus: true, pollingInterval: 60_000 },
   );
   const { data: fees = [] } = useGetParentPortalFeesQuery({ studentId: childId }, { skip });
   const { data: diary = [] } = useGetParentPortalDiaryQuery({ studentId: childId }, { skip });
@@ -123,6 +128,11 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
     list.forEach((a) => { if (acc[a.status as keyof typeof acc] !== undefined) acc[a.status as keyof typeof acc] += 1; });
     return { total: list.length, ...acc };
   }, [attendance]);
+
+  const todayRecord = (todayAttendance as any[])[0] || null;
+  const todayEntryTime = todayRecord
+    ? todayRecord.checkInTime || ((todayRecord.status === 'present' || todayRecord.status === 'late') ? todayRecord.createdAt : null)
+    : null;
 
   if (cLoading) {
     return <div className="p-8 text-center text-muted-foreground animate-pulse">Loading {isStudent ? 'student' : 'parent'} portal…</div>;
@@ -228,6 +238,49 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                 {activeChild.status || 'active'}
               </Badge>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Today's Attendance */}
+      {todayRecord ? (
+        <Card className={`border-2 ${
+          todayRecord.status === 'present' ? 'border-green-200 bg-green-50/50' :
+          todayRecord.status === 'absent' ? 'border-red-200 bg-red-50/50' :
+          todayRecord.status === 'late' ? 'border-yellow-200 bg-yellow-50/50' :
+          'border-blue-200 bg-blue-50/50'
+        }`}>
+          <CardContent className="flex items-center justify-between gap-4 py-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center ${
+                todayRecord.status === 'present' ? 'bg-green-100 text-green-700' :
+                todayRecord.status === 'absent' ? 'bg-red-100 text-red-700' :
+                todayRecord.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                <CalendarCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Today's Attendance</p>
+                <p className="text-lg font-bold capitalize">{todayRecord.status?.replace('_', ' ')}</p>
+                {todayEntryTime && (todayRecord.status === 'present' || todayRecord.status === 'late') && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Arrived at {new Date(todayEntryTime).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Badge className={`${ATT_BADGE[todayRecord.status] || 'bg-gray-100'} text-sm px-3 py-1`}>
+              {new Date().toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </Badge>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-dashed border-slate-200">
+          <CardContent className="flex items-center gap-3 py-4 text-muted-foreground">
+            <CalendarCheck className="h-5 w-5" />
+            <p className="text-sm">No attendance recorded for today yet.</p>
           </CardContent>
         </Card>
       )}

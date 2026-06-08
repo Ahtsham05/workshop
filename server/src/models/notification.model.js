@@ -43,8 +43,14 @@ const notificationSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['general', 'fee', 'exam', 'event', 'urgent'],
+      enum: ['general', 'fee', 'exam', 'event', 'urgent', 'attendance'],
       default: 'general',
+    },
+    /** When set, only this portal user sees the notification (e.g. per-student attendance alerts). */
+    recipientUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

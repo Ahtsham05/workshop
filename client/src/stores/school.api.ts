@@ -636,6 +636,25 @@ export const schoolApi = createApi({
       invalidatesTags: ['Notification', 'NotificationCount'],
     }),
 
+    // Web Push (PWA)
+    getVapidPublicKey: builder.query<{ publicKey: string }, void>({
+      query: () => '/push/vapid-public-key',
+    }),
+    subscribePush: builder.mutation({
+      query: (body: { subscription: PushSubscriptionJSON }) => ({
+        url: '/push/subscribe',
+        method: 'POST',
+        body,
+      }),
+    }),
+    unsubscribePush: builder.mutation({
+      query: (body: { endpoint: string }) => ({
+        url: '/push/unsubscribe',
+        method: 'POST',
+        body,
+      }),
+    }),
+
     // Parent Portal
     getParentPortalChildren: builder.query({
       query: () => '/parent-portal/children',
@@ -1419,6 +1438,11 @@ export const {
   useSendNotificationMutation,
   useGetSentNotificationsQuery,
   useDeleteNotificationMutation,
+  // Web Push
+  useGetVapidPublicKeyQuery,
+  useLazyGetVapidPublicKeyQuery,
+  useSubscribePushMutation,
+  useUnsubscribePushMutation,
   // Parent Portal
   useGetParentPortalChildrenQuery,
   useGetParentPortalResultsQuery,

@@ -33,6 +33,7 @@ module.exports.schoolDashboardController = require('./schoolDashboard.controller
 module.exports.visitorController = require('./visitor.controller');
 module.exports.diaryController = require('./diary.controller');
 module.exports.notificationController = require('./notification.controller');
+module.exports.pushSubscriptionController = require('./pushSubscription.controller');
 module.exports.schoolReportController = require('./schoolReport.controller');
 module.exports.teacherPortalController = require('./teacherPortal.controller');
 module.exports.parentPortalController = require('./parentPortal.controller');

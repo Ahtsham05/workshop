@@ -20,6 +20,7 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLogout } from '@/hooks/use-logout'
 import { NotificationBell } from '@/components/notification-bell'
+import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 
 function initials(name?: string): string {
   if (!name) return 'U'
@@ -95,6 +96,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+
+      <PushNotificationPrompt />
 
       {/* Content */}
       <main className="mx-auto max-w-5xl px-2 sm:px-4 py-4">{children}</main>

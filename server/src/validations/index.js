@@ -28,6 +28,7 @@ module.exports.timeSlotValidation = require('./timeSlot.validation');
 module.exports.visitorValidation = require('./visitor.validation');
 module.exports.diaryValidation = require('./diary.validation');
 module.exports.notificationValidation = require('./notification.validation');
+module.exports.pushSubscriptionValidation = require('./pushSubscription.validation');
 
 // HR Validations
 module.exports.employeeValidation = require('./employee.validation');

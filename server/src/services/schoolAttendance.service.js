@@ -37,6 +37,18 @@ const createAttendance = async (body) => {
 const markBulkAttendance = async (records, context) => {
   const ops = records.map((r) => {
     const { start, end } = getDayRange(r.date);
+    const setFields = {
+      studentId: r.studentId,
+      classId: r.classId,
+      sectionId: r.sectionId,
+      status: r.status,
+      remarks: r.remarks,
+      date: start,
+      organizationId: context.organizationId,
+      branchId: context.branchId,
+      createdBy: context.createdBy,
+    };
+    if (r.checkInTime) setFields.checkInTime = new Date(r.checkInTime);
     return {
       updateOne: {
         filter: {
@@ -45,20 +57,18 @@ const markBulkAttendance = async (records, context) => {
           studentId: r.studentId,
           date: { $gte: start, $lt: end },
         },
-        update: {
-          $set: {
-            ...r,
-            date: start,
-            organizationId: context.organizationId,
-            branchId: context.branchId,
-            createdBy: context.createdBy,
-          },
-        },
+        update: { $set: setFields },
         upsert: true,
       },
     };
   });
-  return SchoolAttendance.bulkWrite(ops);
+  const result = await SchoolAttendance.bulkWrite(ops);
+
+  // Notify student/parent portal users (in-app + web push) — fire-and-forget
+  const attendanceNotificationService = require('./attendanceNotification.service');
+  attendanceNotificationService.notifyAttendanceRecords(records, context).catch(() => {});
+
+  return result;
 };
 
 const queryAttendance = async (filter, options) => {

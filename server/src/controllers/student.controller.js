@@ -49,6 +49,7 @@ const getStudents = catchAsync(async (req, res) => {
       { 'parent.fatherName': { $regex: escaped, $options: 'i' } },
       { 'parent.phone': { $regex: escaped, $options: 'i' } },
       { admissionNumber: { $regex: escaped, $options: 'i' } },
+      { studentUserId: { $regex: escaped, $options: 'i' } },
     ];
   }
 

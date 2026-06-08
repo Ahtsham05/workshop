@@ -77,6 +77,7 @@ module.exports.Visitor = require('./visitor.model');
 module.exports.Diary = require('./diary.model');
 module.exports.Notification = require('./notification.model');
 module.exports.NotificationRead = require('./notificationRead.model');
+module.exports.PushSubscription = require('./pushSubscription.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

@@ -91,16 +91,21 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Handle push notifications (optional)
+// Handle push notifications
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  
-  const data = event.data.json();
+  let data = { title: 'Logix Plus Solutions', body: 'New notification', url: '/school/portals/student' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    if (event.data) data.body = event.data.text();
+  }
+
   const options = {
     body: data.body || 'Logix Plus Solutions notification',
-    icon: '/images/favicon-192.png',
+    icon: data.icon || '/images/favicon-192.png',
     badge: '/images/favicon-192.png',
     tag: data.tag || 'logix-notification',
+    data: { url: data.url || '/school/portals/student' },
     requireInteraction: false,
   };
 
@@ -109,19 +114,23 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Handle notification clicks (optional)
+// Handle notification clicks — open student portal
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || '/school/portals/student';
+  const fullUrl = new URL(targetUrl, self.location.origin).href;
+
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client) {
+            return client.navigate(fullUrl).then(() => client.focus());
+          }
           return client.focus();
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow('/');
-      }
+      if (clients.openWindow) return clients.openWindow(fullUrl);
     })
   );
 });

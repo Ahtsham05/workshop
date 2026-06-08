@@ -8,6 +8,7 @@ const createAttendance = {
     sectionId: Joi.string().custom(objectId),
     date: Joi.date().required(),
     status: Joi.string().required().valid('present', 'absent', 'late', 'leave', 'half_day'),
+    checkInTime: Joi.date(),
     remarks: Joi.string().allow(''),
   }),
 };
@@ -22,6 +23,7 @@ const markBulkAttendance = {
           sectionId: Joi.string().custom(objectId),
           date: Joi.date().required(),
           status: Joi.string().required().valid('present', 'absent', 'late', 'leave', 'half_day'),
+          checkInTime: Joi.date(),
           remarks: Joi.string().allow(''),
         })
       )

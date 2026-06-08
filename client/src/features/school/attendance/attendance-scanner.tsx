@@ -356,6 +356,7 @@ export default function AttendanceScanner() {
         sectionId: m.sectionId,
         date: todayStr,
         status: 'present',
+        checkInTime: m.timestamp,
       }));
       await markBulk({ records }).unwrap();
 
