@@ -1,7 +1,13 @@
 const webpush = require('web-push');
-const { PushSubscription } = require('../models');
+const { PushSubscription, User } = require('../models');
 const config = require('../config/config');
 const logger = require('../config/logger');
+
+const PORTAL_URL = {
+  student: '/school/portals/student',
+  parent: '/school/portals/parent',
+  teacher: '/school/portals/teacher',
+};
 
 let configured = false;
 
@@ -72,10 +78,38 @@ const sendToUser = async (userId, payload) => {
   return { sent };
 };
 
+/** Send push to every portal user whose schoolRole matches one of the audience roles. */
+const sendToAudience = async (organizationId, audience, payload) => {
+  if (!ensureConfigured()) return { sent: 0, skipped: true };
+
+  const roles = (audience || []).filter((r) => ['teacher', 'student', 'parent'].includes(r));
+  if (!roles.length) return { sent: 0 };
+
+  const users = await User.find({
+    organizationId,
+    schoolRole: { $in: roles },
+  })
+    .select('_id schoolRole')
+    .lean();
+
+  let sent = 0;
+  await Promise.all(
+    users.map(async (user) => {
+      const result = await sendToUser(user._id, {
+        ...payload,
+        url: PORTAL_URL[user.schoolRole] || payload.url || '/',
+      });
+      sent += result.sent || 0;
+    })
+  );
+  return { sent, users: users.length };
+};
+
 module.exports = {
   getVapidPublicKey,
   subscribe,
   unsubscribe,
   sendToUser,
+  sendToAudience,
   ensureConfigured,
 };

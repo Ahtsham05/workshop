@@ -22,7 +22,7 @@ const createNotification = async (body) => {
   if (!audience.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Select at least one audience (teachers/students/parents)');
   }
-  return Notification.create({
+  const doc = await Notification.create({
     organizationId: body.organizationId,
     branchId: body.branchId,
     title: body.title,
@@ -31,6 +31,21 @@ const createNotification = async (body) => {
     type: body.type || 'general',
     createdBy: body.createdBy,
   });
+
+  // Web push to subscribed portal users (fire-and-forget)
+  const pushNotificationService = require('./pushNotification.service');
+  pushNotificationService
+    .sendToAudience(body.organizationId, audience, {
+      title: body.title,
+      body: body.message,
+      tag: `broadcast-${doc._id}`,
+    })
+    .catch((err) => {
+      const logger = require('../config/logger');
+      logger.warn(`Broadcast push failed: ${err.message}`);
+    });
+
+  return doc;
 };
 
 const visibilityFilter = (user, scope) => {

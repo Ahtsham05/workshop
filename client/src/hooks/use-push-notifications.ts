@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLazyGetVapidPublicKeyQuery, useSubscribePushMutation } from '@/stores/school.api';
 
 const PUSH_DISMISSED_KEY = 'push-notifications-dismissed';
@@ -28,6 +28,7 @@ export function usePushNotifications() {
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(PUSH_DISMISSED_KEY) === '1');
+  const autoTried = useRef(false);
 
   const [fetchVapidKey] = useLazyGetVapidPublicKeyQuery();
   const [subscribePush] = useSubscribePushMutation();
@@ -40,12 +41,16 @@ export function usePushNotifications() {
     );
   }, []);
 
-  const subscribe = useCallback(async () => {
+  const subscribe = useCallback(async (requestPermission = true) => {
     if (!supported) return false;
     setLoading(true);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return false;
+      if (requestPermission && Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return false;
+      } else if (Notification.permission === 'denied') {
+        return false;
+      }
 
       const { data: vapidData, error: vapidError } = await fetchVapidKey();
       if (vapidError || !vapidData?.publicKey) return false;
@@ -84,6 +89,28 @@ export function usePushNotifications() {
       setLoading(false);
     }
   }, [supported, fetchVapidKey, subscribePush]);
+
+  // Detect existing subscription or auto-subscribe when permission already granted
+  useEffect(() => {
+    if (!supported || autoTried.current) return;
+    autoTried.current = true;
+
+    (async () => {
+      try {
+        const registration = await ensureServiceWorker();
+        const existing = await registration?.pushManager?.getSubscription();
+        if (existing) {
+          setSubscribed(true);
+          return;
+        }
+        if (Notification.permission === 'granted') {
+          await subscribe(false);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [supported, subscribe]);
 
   const dismiss = useCallback(() => {
     localStorage.setItem(PUSH_DISMISSED_KEY, '1');

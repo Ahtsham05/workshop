@@ -89,7 +89,9 @@ export default function NotificationsManagement() {
         </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-          <p className="text-muted-foreground text-sm">Send announcements to teachers, students and parents</p>
+          <p className="text-muted-foreground text-sm">
+            Send announcements to teachers, students and parents. Recipients must enable notifications on their portal.
+          </p>
         </div>
       </div>
 

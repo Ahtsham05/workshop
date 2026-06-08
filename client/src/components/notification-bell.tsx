@@ -2,21 +2,32 @@
  * NotificationBell — bell icon with unseen-count badge (WhatsApp-style).
  */
 import { useGetNotificationUnreadCountQuery, useMarkAllNotificationsReadMutation } from '@/stores/school.api'
-import { NOTIFICATION_UNREAD_POLL_OPTIONS } from '@/stores/notification-query-options'
+import { NOTIFICATION_UNREAD_POLL_OPTIONS, PORTAL_NOTIFICATION_POLL_OPTIONS } from '@/stores/notification-query-options'
 import { Bell, BellRing } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationList } from '@/components/notification-list'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
-export function NotificationBell({ className }: { className?: string }) {
+type PollOptions = typeof NOTIFICATION_UNREAD_POLL_OPTIONS | typeof PORTAL_NOTIFICATION_POLL_OPTIONS;
+
+export function NotificationBell({ className, pollOptions }: { className?: string; pollOptions?: PollOptions }) {
   const [open, setOpen] = useState(false)
-  const { data: unread } = useGetNotificationUnreadCountQuery(undefined, NOTIFICATION_UNREAD_POLL_OPTIONS)
+  const { data: unread, refetch } = useGetNotificationUnreadCountQuery(undefined, pollOptions || NOTIFICATION_UNREAD_POLL_OPTIONS)
   const [markAllRead] = useMarkAllNotificationsReadMutation()
 
   const count = unread?.count || 0
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_RECEIVED') refetch();
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, [refetch]);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)

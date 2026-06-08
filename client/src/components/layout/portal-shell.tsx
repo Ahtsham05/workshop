@@ -3,7 +3,8 @@
  * (students and parents). Renders a sticky top bar with the school identity
  * and a user menu (logout), then the portal page content below.
  */
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
+import { toast } from 'sonner'
 import { LogOut, GraduationCap } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -20,6 +21,7 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLogout } from '@/hooks/use-logout'
 import { NotificationBell } from '@/components/notification-bell'
+import { PORTAL_NOTIFICATION_POLL_OPTIONS } from '@/stores/notification-query-options'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 
 function initials(name?: string): string {
@@ -39,6 +41,17 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
   const schoolName = org?.name || 'School Portal'
   const portalLabel = user?.schoolRole === 'parent' ? 'Parent Portal' : 'Student Portal'
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'PUSH_RECEIVED') return
+      const { title, body } = event.data.payload || {}
+      if (title) toast(title, { description: body })
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    return () => navigator.serviceWorker.removeEventListener('message', handler)
+  }, [])
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
@@ -64,7 +77,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-1">
-          <NotificationBell />
+          <NotificationBell pollOptions={PORTAL_NOTIFICATION_POLL_OPTIONS} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2">

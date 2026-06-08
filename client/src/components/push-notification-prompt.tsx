@@ -11,7 +11,7 @@ export function PushNotificationPrompt() {
   const handleEnable = async () => {
     const ok = await subscribe();
     if (ok) {
-      toast.success('Push notifications enabled — you will be notified when attendance is marked.');
+      toast.success('Notifications enabled — you will receive alerts on this device.');
     } else {
       toast.error('Could not enable push notifications. Check browser permissions.');
     }
@@ -23,7 +23,7 @@ export function PushNotificationPrompt() {
         <div className="flex items-center gap-2 min-w-0 text-sm text-blue-900 dark:text-blue-100">
           <Bell className="h-4 w-4 shrink-0" />
           <span className="truncate">
-            Enable notifications to get alerts when your attendance is marked (present or absent).
+            Enable notifications to receive school announcements and attendance alerts on your device.
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">

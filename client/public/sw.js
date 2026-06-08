@@ -110,7 +110,12 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Logix Plus Solutions', options)
+    Promise.all([
+      self.registration.showNotification(data.title || 'Logix Plus Solutions', options),
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) =>
+        clientList.forEach((client) => client.postMessage({ type: 'PUSH_RECEIVED', payload: data }))
+      ),
+    ])
   );
 });
 
