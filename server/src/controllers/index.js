@@ -38,7 +38,6 @@ module.exports.schoolReportController = require('./schoolReport.controller');
 module.exports.teacherPortalController = require('./teacherPortal.controller');
 module.exports.parentPortalController = require('./parentPortal.controller');
 module.exports.whatsappController = require('./whatsapp.controller');
-module.exports.businessWhatsappController = require('./businessWhatsapp.controller');
 
 // HR Controllers
 module.exports.employeeController = require('./employee.controller');

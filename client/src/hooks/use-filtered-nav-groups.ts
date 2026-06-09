@@ -81,7 +81,7 @@ export function useFilteredNavGroups(): NavGroup[] {
     }
 
     const canAccessItem = (item: any) => {
-      if (!WHATSAPP_UI_ENABLED && item.url === '/school/whatsapp') {
+      if (!WHATSAPP_UI_ENABLED && (item.url === '/school/whatsapp' || item.url?.startsWith('/whatsapp'))) {
         return false
       }
 

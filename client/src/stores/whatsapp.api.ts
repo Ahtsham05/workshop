@@ -21,21 +21,25 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   return baseQuery(args, api, extraOptions)
 }
 
-export type WhatsAppConnectionState =
-  | 'DISCONNECTED'
-  | 'QR_READY'
-  | 'LOADING'
-  | 'READY'
-  | 'AUTH_FAILURE'
-  | 'SERVERLESS_UNSUPPORTED'
-  | 'INIT_FAILED'
+export type WhatsAppCloudConnection = {
+  id?: string
+  status?: string
+  connected?: boolean
+  wabaId?: string
+  phoneNumberId?: string
+  displayPhoneNumber?: string
+  verifiedName?: string
+  webhookSubscribed?: boolean
+}
 
 export type WhatsAppStatus = {
-  state: WhatsAppConnectionState
-  qrImage: string | null
-  error?: string | null
-  chromeAvailable?: boolean
-  deployHint?: string | null
+  state: 'READY' | 'DISCONNECTED'
+  connected?: boolean
+  displayPhoneNumber?: string
+  verifiedName?: string
+  webhookSubscribed?: boolean
+  status?: string
+  branchConnection?: WhatsAppCloudConnection | null
 }
 
 export const whatsappApi = createApi({
@@ -47,16 +51,18 @@ export const whatsappApi = createApi({
       query: () => ({ url: '/status', headers: { 'Cache-Control': 'no-cache' } }),
       providesTags: ['WhatsApp'],
     }),
-    connectWhatsApp: builder.mutation<{ message: string; state: string }, void>({
+    connectWhatsApp: builder.mutation<
+      { appId: string; configId: string; redirectUri: string; state: string },
+      void
+    >({
       query: () => ({ url: '/connect', method: 'POST' }),
-      invalidatesTags: ['WhatsApp'],
     }),
-    disconnectWhatsApp: builder.mutation<{ message: string; state: string }, void>({
+    disconnectWhatsApp: builder.mutation<{ message: string }, void>({
       query: () => ({ url: '/disconnect', method: 'POST' }),
       invalidatesTags: ['WhatsApp'],
     }),
-    clearWhatsAppSession: builder.mutation<{ message: string; state: string }, void>({
-      query: () => ({ url: '/clear-session', method: 'POST' }),
+    clearWhatsAppSession: builder.mutation<{ message: string }, void>({
+      query: () => ({ url: '/disconnect', method: 'POST' }),
       invalidatesTags: ['WhatsApp'],
     }),
     testWhatsApp: builder.mutation<{ success: boolean; message: string }, { phone?: string } | void>({

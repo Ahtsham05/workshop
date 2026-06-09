@@ -1,73 +1,68 @@
 /**
- * Routes WhatsApp sends to Meta Cloud API and/or local whatsapp-web.js session.
+ * WhatsApp dispatch — official Meta Cloud API only (per-branch connection).
  */
 
-const whatsappService = require('./whatsapp.service');
-const whatsappCloud = require('./whatsappCloud.service');
-const whatsappIntegration = require('./whatsappIntegration.service');
+const { connectionService, messagingService } = require('./whatsapp');
 
-async function getStatus() {
-  const cloudConfig = await whatsappIntegration.getCloudConfig();
-  const publicConfig = await whatsappIntegration.getPublicConfig();
-  const webStatus = whatsappService.getStatus();
-
-  const cloudReady = whatsappCloud.isConfigured(cloudConfig);
-  const webReady = webStatus.state === 'READY';
-
-  let activeProvider = 'none';
-  if (cloudConfig.provider === 'cloud' && cloudReady) {
-    activeProvider = 'cloud';
-  } else if (cloudConfig.provider === 'web' && webReady) {
-    activeProvider = 'web';
-  } else if (cloudConfig.provider === 'auto') {
-    if (cloudReady) activeProvider = 'cloud';
-    else if (webReady) activeProvider = 'web';
+async function getStatus(reqContext = {}) {
+  const { organizationId, branchId } = reqContext;
+  if (!organizationId || !branchId) {
+    return {
+      provider: 'cloud',
+      activeProvider: 'none',
+      cloud: { ready: false, branchConnection: null },
+      state: 'DISCONNECTED',
+    };
   }
 
+  const connection = await connectionService.getActiveConnection(organizationId, branchId);
+  const branchConnection = connectionService.toPublicConnection(connection);
+  const ready = Boolean(branchConnection.connected);
+
   return {
-    provider: cloudConfig.provider,
-    activeProvider,
+    provider: 'cloud',
+    activeProvider: ready ? 'cloud' : 'none',
     cloud: {
-      ...publicConfig.cloud,
-      ready: cloudReady,
+      ready,
+      branchConnection,
+      displayPhoneNumber: branchConnection.displayPhoneNumber,
+      verifiedName: branchConnection.verifiedName,
     },
-    web: {
-      state: webStatus.state,
-      qrImage: webStatus.qrImage,
-      ready: webReady,
-    },
-    // Back-compat for existing UI polling web state
-    state: cloudReady && cloudConfig.provider !== 'web' ? 'READY' : webStatus.state,
-    qrImage: webStatus.qrImage,
+    state: ready ? 'READY' : 'DISCONNECTED',
+    connected: ready,
   };
 }
 
-async function sendDocument(phone, payload) {
-  const cloudConfig = await whatsappIntegration.getCloudConfig();
-  const provider = cloudConfig.provider || 'auto';
-  const cloudReady = whatsappCloud.isConfigured(cloudConfig);
-
-  if ((provider === 'cloud' || provider === 'auto') && cloudReady) {
-    const cloudResult = await whatsappCloud.sendDocument(phone, payload, cloudConfig);
-    if (cloudResult.success) {
-      return { ...cloudResult, provider: 'cloud' };
-    }
-    if (provider === 'cloud') {
-      return { ...cloudResult, provider: 'cloud' };
-    }
+async function sendDocument(phone, payload, reqContext = {}) {
+  const { organizationId, branchId, sentBy } = reqContext;
+  if (!organizationId || !branchId) {
+    return {
+      success: false,
+      provider: 'none',
+      error: 'Branch context required. Connect WhatsApp in Settings → WhatsApp.',
+    };
   }
 
-  if (provider === 'web' || provider === 'auto') {
-    const webResult = await whatsappService.sendDocument(phone, payload);
-    return { ...webResult, provider: 'web' };
+  const connected = await messagingService.isConnected(organizationId, branchId);
+  if (!connected) {
+    return {
+      success: false,
+      provider: 'none',
+      error: 'WhatsApp Cloud API is not connected for this branch. Connect via Settings → WhatsApp.',
+    };
   }
 
-  return {
-    success: false,
-    provider: 'none',
-    error:
-      'WhatsApp is not configured. Set up WhatsApp Cloud API in Settings, or connect local WhatsApp (QR scan).',
-  };
+  const result = await messagingService.sendDocument({
+    organizationId,
+    branchId,
+    phone,
+    data: payload.data,
+    filename: payload.filename,
+    caption: payload.caption,
+    source: payload.source || 'invoice',
+    sentBy,
+  });
+  return { ...result, provider: 'cloud' };
 }
 
 module.exports = {

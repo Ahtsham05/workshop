@@ -27,6 +27,7 @@ import { expenseCategoryApi } from './expenseCategory.api';
 import { customerAccountTypeApi } from './customerAccountType.api';
 import { restaurantApi } from './restaurant.api';
 import { whatsappApi } from './whatsapp.api';
+import { whatsappCloudApi } from './whatsappCloud.api';
 import { cashRegisterApi } from './cashRegister.api';
 
 export const store = configureStore({
@@ -59,6 +60,7 @@ export const store = configureStore({
     [customerAccountTypeApi.reducerPath]: customerAccountTypeApi.reducer,
     [restaurantApi.reducerPath]: restaurantApi.reducer,
     [whatsappApi.reducerPath]: whatsappApi.reducer,
+    [whatsappCloudApi.reducerPath]: whatsappCloudApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -85,6 +87,7 @@ export const store = configureStore({
       customerAccountTypeApi.middleware,
       restaurantApi.middleware,
       whatsappApi.middleware,
+      whatsappCloudApi.middleware,
       cashRegisterApi.middleware,
     ),
 });

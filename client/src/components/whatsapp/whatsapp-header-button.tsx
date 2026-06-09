@@ -11,8 +11,7 @@ export function WhatsAppHeaderButton() {
   const wa = useWhatsAppOptional()
   if (!wa) return null
 
-  const { isReady, state, openConnectionDialog } = wa
-  const connecting = state === 'LOADING' || state === 'QR_READY'
+  const { isReady, openConnectionDialog } = wa
 
   return (
     <Tooltip>
@@ -32,20 +31,15 @@ export function WhatsAppHeaderButton() {
           {isReady && (
             <span className='absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#25D366] ring-2 ring-background' />
           )}
-          {connecting && !isReady && (
-            <span className='absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-background animate-pulse' />
-          )}
         </Button>
       </TooltipTrigger>
       <TooltipContent>
         {isReady ? (
           <span className='flex items-center gap-1'>
-            <CheckCircle2 className='h-3.5 w-3.5' /> WhatsApp connected
+            <CheckCircle2 className='h-3.5 w-3.5' /> WhatsApp Cloud API connected
           </span>
-        ) : connecting ? (
-          'WhatsApp — scan QR to connect'
         ) : (
-          'Connect WhatsApp'
+          'Connect WhatsApp Business (Meta Cloud API)'
         )}
       </TooltipContent>
     </Tooltip>

@@ -124,11 +124,6 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(async () => 
   server = app.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
 
-    // Try to auto-reconnect WhatsApp using any saved session.
-    // This runs in the background and is safe to fail silently.
-    const { whatsappService } = require('./services');
-    whatsappService.tryAutoConnect();
-
     const { startPayrollScheduler } = require('./jobs/payrollScheduler');
     startPayrollScheduler();
   });

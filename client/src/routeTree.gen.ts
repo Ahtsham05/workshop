@@ -31,6 +31,7 @@ import { Route as authOtpImport } from './routes/(auth)/otp'
 import { Route as authOnboardingImport } from './routes/(auth)/onboarding'
 import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
+import { Route as AuthenticatedWhatsappIndexImport } from './routes/_authenticated/whatsapp/index'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
@@ -56,6 +57,7 @@ import { Route as AuthenticatedBranchesIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
+import { Route as AuthenticatedWhatsappAnalyticsImport } from './routes/_authenticated/whatsapp/analytics'
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
@@ -254,6 +256,14 @@ const AuthenticatedSettingsRouteRoute = AuthenticatedSettingsRouteImport.update(
   } as any,
 )
 
+const AuthenticatedWhatsappIndexRoute = AuthenticatedWhatsappIndexImport.update(
+  {
+    id: '/whatsapp/',
+    path: '/whatsapp/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
+
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   id: '/users/',
   path: '/users/',
@@ -419,6 +429,13 @@ const AuthenticatedAccountingIndexRoute =
   AuthenticatedAccountingIndexImport.update({
     id: '/accounting/',
     path: '/accounting/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedWhatsappAnalyticsRoute =
+  AuthenticatedWhatsappAnalyticsImport.update({
+    id: '/whatsapp/analytics',
+    path: '/whatsapp/analytics',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1247,6 +1264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSubscriptionPricingImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/whatsapp/analytics': {
+      id: '/_authenticated/whatsapp/analytics'
+      path: '/whatsapp/analytics'
+      fullPath: '/whatsapp/analytics'
+      preLoaderRoute: typeof AuthenticatedWhatsappAnalyticsImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/accounting/': {
       id: '/_authenticated/accounting/'
       path: '/accounting'
@@ -1420,6 +1444,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/whatsapp/': {
+      id: '/_authenticated/whatsapp/'
+      path: '/whatsapp'
+      fullPath: '/whatsapp'
+      preLoaderRoute: typeof AuthenticatedWhatsappIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/hr/employees/$id': {
@@ -1980,6 +2011,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRestaurantTablesRoute: typeof AuthenticatedRestaurantTablesRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
+  AuthenticatedWhatsappAnalyticsRoute: typeof AuthenticatedWhatsappAnalyticsRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -2003,6 +2035,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedWhatsappIndexRoute: typeof AuthenticatedWhatsappIndexRoute
   AuthenticatedHrEmployeesIdRoute: typeof AuthenticatedHrEmployeesIdRouteWithChildren
   AuthenticatedHrEmployeesCreateRoute: typeof AuthenticatedHrEmployeesCreateRoute
   AuthenticatedHrAttendanceIndexRoute: typeof AuthenticatedHrAttendanceIndexRoute
@@ -2044,6 +2077,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedRestaurantTablesRoute: AuthenticatedRestaurantTablesRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
+  AuthenticatedWhatsappAnalyticsRoute: AuthenticatedWhatsappAnalyticsRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
@@ -2070,6 +2104,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedUsersManagementIndexRoute:
     AuthenticatedUsersManagementIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedWhatsappIndexRoute: AuthenticatedWhatsappIndexRoute,
   AuthenticatedHrEmployeesIdRoute: AuthenticatedHrEmployeesIdRouteWithChildren,
   AuthenticatedHrEmployeesCreateRoute: AuthenticatedHrEmployeesCreateRoute,
   AuthenticatedHrAttendanceIndexRoute: AuthenticatedHrAttendanceIndexRoute,
@@ -2130,6 +2165,7 @@ export interface FileRoutesByFullPath {
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
@@ -2155,6 +2191,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -2249,6 +2286,7 @@ export interface FileRoutesByTo {
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
@@ -2274,6 +2312,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -2371,6 +2410,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
+  '/_authenticated/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
@@ -2396,6 +2436,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/whatsapp/': typeof AuthenticatedWhatsappIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -2495,6 +2536,7 @@ export interface FileRouteTypes {
     | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
+    | '/whatsapp/analytics'
     | '/accounting'
     | '/admin'
     | '/apps'
@@ -2520,6 +2562,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/school/portals/parent'
@@ -2613,6 +2656,7 @@ export interface FileRouteTypes {
     | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
+    | '/whatsapp/analytics'
     | '/accounting'
     | '/admin'
     | '/apps'
@@ -2638,6 +2682,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/school/portals/parent'
@@ -2733,6 +2778,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
+    | '/_authenticated/whatsapp/analytics'
     | '/_authenticated/accounting/'
     | '/_authenticated/admin/'
     | '/_authenticated/apps/'
@@ -2758,6 +2804,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
     | '/_authenticated/users/'
+    | '/_authenticated/whatsapp/'
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
     | '/_authenticated/school/portals/parent'
@@ -2897,6 +2944,7 @@ export const routeTree = rootRoute
         "/_authenticated/restaurant/tables",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
+        "/_authenticated/whatsapp/analytics",
         "/_authenticated/accounting/",
         "/_authenticated/admin/",
         "/_authenticated/apps/",
@@ -2920,6 +2968,7 @@ export const routeTree = rootRoute
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
         "/_authenticated/users/",
+        "/_authenticated/whatsapp/",
         "/_authenticated/hr/employees/$id",
         "/_authenticated/hr/employees/create",
         "/_authenticated/hr/attendance/",
@@ -3138,6 +3187,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/subscription/pricing.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/whatsapp/analytics": {
+      "filePath": "_authenticated/whatsapp/analytics.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/accounting/": {
       "filePath": "_authenticated/accounting/index.tsx",
       "parent": "/_authenticated"
@@ -3236,6 +3289,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/users/": {
       "filePath": "_authenticated/users/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/whatsapp/": {
+      "filePath": "_authenticated/whatsapp/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/hr/employees/$id": {

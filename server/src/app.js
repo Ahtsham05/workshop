@@ -25,6 +25,28 @@ if (config.env !== 'test') {
 // set security HTTP headers
 app.use(helmet());
 
+// Meta WhatsApp webhook — raw body required for signature verification
+app.use(
+  '/v1/webhooks/whatsapp',
+  express.raw({
+    type: 'application/json',
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+  (req, res, next) => {
+    if (req.body && Buffer.isBuffer(req.body)) {
+      try {
+        req.body = JSON.parse(req.body.toString('utf8'));
+      } catch {
+        req.body = {};
+      }
+    }
+    next();
+  },
+  require('./routes/v1/whatsappWebhook.route'),
+);
+
 // parse json request body
 app.use(express.json({ limit: '15mb' }));
 

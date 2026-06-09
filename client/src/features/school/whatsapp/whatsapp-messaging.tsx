@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import {
   useGetWhatsAppStatusQuery,
-  useConnectWhatsAppMutation,
   useDisconnectWhatsAppMutation,
-  useClearWhatsAppSessionMutation,
   useSendWhatsAppMessageMutation,
   useSendWhatsAppBulkMutation,
   useSendWhatsAppToClassMutation,
@@ -21,37 +19,38 @@ import {
   useGetSchoolClassesQuery,
   useGetStudentsQuery,
 } from '@/stores/school.api';
+import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup';
+import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import {
   MessageCircle,
   Wifi,
   WifiOff,
-  QrCode,
   Send,
   Users,
-  AlertTriangle,
   Phone,
   CheckCircle2,
   XCircle,
   Loader2,
+  Settings,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function StateIndicator({ state }: { state: string }) {
-  const map: Record<string, { label: string; color: string; Icon: any }> = {
-    READY:                  { label: 'Connected', color: 'bg-green-100 text-green-700 border-green-300', Icon: CheckCircle2 },
-    QR_READY:               { label: 'Scan QR', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', Icon: QrCode },
-    LOADING:                { label: 'Connecting…', color: 'bg-blue-100 text-blue-700 border-blue-300', Icon: Loader2 },
-    AUTH_FAILURE:           { label: 'Auth Failed', color: 'bg-red-100 text-red-700 border-red-300', Icon: XCircle },
-    DISCONNECTED:           { label: 'Disconnected', color: 'bg-gray-100 text-gray-600 border-gray-300', Icon: WifiOff },
-    SERVERLESS_UNSUPPORTED: { label: 'Not Available', color: 'bg-orange-100 text-orange-700 border-orange-300', Icon: AlertTriangle },
-  };
-  const cfg = map[state] ?? map.DISCONNECTED;
+function StateIndicator({ connected }: { connected: boolean }) {
+  if (connected) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-green-100 text-green-700 border-green-300">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        Cloud API Connected
+      </span>
+    );
+  }
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${cfg.color}`}>
-      <cfg.Icon className={`w-3.5 h-3.5 ${state === 'LOADING' ? 'animate-spin' : ''}`} />
-      {cfg.label}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-gray-100 text-gray-600 border-gray-300">
+      <WifiOff className="w-3.5 h-3.5" />
+      Not Connected
     </span>
   );
 }
@@ -59,82 +58,11 @@ function StateIndicator({ state }: { state: string }) {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function WhatsAppMessaging() {
-  // Poll only while user is actively connecting on this page.
-  const [connectingActive, setConnectingActive] = useState(false);
-  const [pollInterval, setPollInterval] = useState(0);
-  const { data: status } = useGetWhatsAppStatusQuery(undefined, {
-    pollingInterval: pollInterval,
-    refetchOnFocus: connectingActive,
-    refetchOnReconnect: connectingActive,
-  });
+  const { data: status, refetch } = useGetWhatsAppStatusQuery(undefined, { refetchOnFocus: true });
+  const isReady = Boolean(status?.connected ?? status?.state === 'READY');
 
-  useEffect(() => {
-    if (!connectingActive) {
-      setPollInterval(0);
-      return;
-    }
-    const s = status?.state;
-    if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'SERVERLESS_UNSUPPORTED' || s === 'INIT_FAILED') {
-      setPollInterval(0);
-      if (s === 'READY' || s === 'AUTH_FAILURE' || s === 'INIT_FAILED') {
-        setConnectingActive(false);
-      }
-    } else {
-      setPollInterval(3000);
-    }
-  }, [status?.state, connectingActive]);
-
-  const [connect, { isLoading: connecting }] = useConnectWhatsAppMutation();
   const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation();
-  const [clearSession, { isLoading: clearingSession }] = useClearWhatsAppSessionMutation();
-
-  // ── Pending-connect guard ──────────────────────────────────────────────────
-  // After clicking Connect, the server takes 1-3 s to transition from DISCONNECTED
-  // → LOADING. Without this, the next status poll returns DISCONNECTED and the UI
-  // flips back to the Connect button before the real state arrives.
-  const [pendingConnect, setPendingConnect] = useState(false);
-  useEffect(() => {
-    // Once server acknowledges the connection attempt, clear our local flag
-    if (status?.state && status.state !== 'DISCONNECTED') {
-      setPendingConnect(false);
-    }
-  }, [status?.state]);
-
-  // Derive effective state: while we're waiting for server confirmation after
-  // clicking Connect, treat it as LOADING so UI stays in "connecting" view.
-  const state =
-    pendingConnect && (!status?.state || status.state === 'DISCONNECTED')
-      ? 'LOADING'
-      : (status?.state ?? 'DISCONNECTED');
-  const isReady = state === 'READY';
-
-  // ── Loading elapsed-time tracker ───────────────────────────────────────────
-  // Tracks how many seconds we have been in LOADING so we can show a helpful
-  // "taking too long?" retry button after 20 s.
-  const [loadingElapsed, setLoadingElapsed] = useState(0);
-  const loadingElapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (state === 'LOADING') {
-      setLoadingElapsed(0);
-      if (!loadingElapsedRef.current) {
-        loadingElapsedRef.current = setInterval(() => {
-          setLoadingElapsed((n) => n + 1);
-        }, 1000);
-      }
-    } else {
-      setLoadingElapsed(0);
-      if (loadingElapsedRef.current) {
-        clearInterval(loadingElapsedRef.current);
-        loadingElapsedRef.current = null;
-      }
-    }
-    return () => {};
-  }, [state]);
-  useEffect(() => {
-    return () => {
-      if (loadingElapsedRef.current) clearInterval(loadingElapsedRef.current);
-    };
-  }, []);
+  const { connect: startEmbeddedSignup, isLoading: connecting } = useEmbeddedWhatsAppSignup();
 
   // ── Single message ─────────────────────────────────────────────────────────
   const [singlePhone, setSinglePhone] = useState('');
@@ -281,35 +209,13 @@ export default function WhatsAppMessaging() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  async function handleConnect() {
-    try {
-      setPendingConnect(true);
-      setConnectingActive(true);
-      await connect().unwrap();
-      toast.info('WhatsApp is starting — QR code will appear shortly');
-    } catch {
-      setPendingConnect(false);
-      setConnectingActive(false);
-      toast.error('Failed to start WhatsApp');
-    }
-  }
-
   async function handleDisconnect() {
     try {
       await disconnect().unwrap();
-      setConnectingActive(false);
+      refetch();
       toast.success('WhatsApp disconnected');
     } catch {
       toast.error('Failed to disconnect');
-    }
-  }
-
-  async function handleClearSession() {
-    try {
-      await clearSession().unwrap();
-      toast.success('Session cleared — click Connect to scan a fresh QR code');
-    } catch {
-      toast.error('Failed to clear session');
     }
   }
 
@@ -462,129 +368,54 @@ export default function WhatsAppMessaging() {
             <p className="text-sm text-gray-500">Send fee alerts &amp; announcements to parents</p>
           </div>
         </div>
-        <StateIndicator state={state} />
+        <StateIndicator connected={isReady} />
       </div>
 
-      {/* Connection Card */}
+      {/* Connection Card — Meta Cloud API only */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Wifi className="w-4 h-4 text-green-600" />
-            WhatsApp Connection
+            WhatsApp Business (Meta Cloud API)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {state === 'SERVERLESS_UNSUPPORTED' ? (
-            <div className="flex items-start gap-3 rounded-md border border-orange-200 bg-orange-50 p-4">
-              <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-              <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-orange-800">WhatsApp Not Available on This Server</p>
-                <p className="text-xs text-orange-700">
-                  WhatsApp messaging requires a <strong>persistent server</strong> with Chrome installed.
-                  This backend is currently deployed as a <strong>serverless function (Vercel)</strong> which
-                  cannot run Chrome or maintain a live WebSocket connection.
-                </p>
-                <p className="text-xs text-orange-600 mt-1">
-                  To enable WhatsApp: deploy the backend to <strong>Railway</strong>, <strong>Render</strong>,
-                  <strong> Fly.io</strong>, or a <strong>VPS</strong> using the provided Dockerfile.
-                  Then update <code className="bg-orange-100 px-1 rounded">VITE_BACKEND_URL</code> to point to the new server.
-                </p>
-              </div>
-            </div>
-          ) : state === 'DISCONNECTED' ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-sm text-gray-600">
-                Connect WhatsApp by scanning a QR code with your phone.
-              </p>
-              <Button onClick={handleConnect} disabled={connecting} className="bg-green-600 hover:bg-green-700 text-white">
-                {connecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <QrCode className="w-4 h-4 mr-2" />}
-                Connect WhatsApp
-              </Button>
-            </div>
-          ) : state === 'AUTH_FAILURE' ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-red-600">
-                <XCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">Authentication failed — the saved session is invalid.</span>
-              </div>
-              <p className="text-sm text-gray-500">
-                Click <strong>Clear &amp; Retry</strong> to delete the old session and scan a fresh QR code.
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                <Button onClick={handleClearSession} disabled={clearingSession} className="bg-red-600 hover:bg-red-700 text-white">
-                  {clearingSession ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
-                  Clear &amp; Retry
-                </Button>
-              </div>
-            </div>
-          ) : state === 'QR_READY' ? (
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-yellow-700">
-                Scan this QR code with your WhatsApp mobile app → WhatsApp &gt; Linked Devices &gt; Link a Device
-              </p>
-              {status?.qrImage ? (
-                <img
-                  src={status.qrImage}
-                  alt="WhatsApp QR Code"
-                  className="w-52 h-52 border-2 border-yellow-300 rounded-lg"
-                />
-              ) : (
-                <div className="w-52 h-52 border-2 border-yellow-300 rounded-lg flex items-center justify-center bg-yellow-50">
-                  <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
-                </div>
-              )}
-              <p className="text-xs text-gray-500">QR refreshes automatically. Do not close this page.</p>
-            </div>
-          ) : state === 'LOADING' ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-blue-600">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm font-medium">
-                  Connecting to WhatsApp… {loadingElapsed > 0 && <span className="text-blue-400 font-normal">({loadingElapsed}s)</span>}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                WhatsApp is starting up. The QR code will appear here automatically — please wait.
-              </p>
-              {loadingElapsed >= 20 && (
-                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-amber-700 font-medium">
-                      Taking longer than expected. An old session may be interfering.
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-amber-400 text-amber-700 hover:bg-amber-100 h-7 text-xs"
-                      disabled={connecting || clearingSession}
-                      onClick={async () => {
-                        try {
-                          await clearSession().unwrap();
-                          await connect().unwrap();
-                          toast.info('Retrying — QR code will appear shortly');
-                        } catch {
-                          toast.error('Retry failed');
-                        }
-                      }}
-                    >
-                      {(connecting || clearingSession) ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <QrCode className="w-3 h-3 mr-1" />}
-                      Force New QR Code
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
+          {isReady ? (
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2 text-green-700">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm font-medium">WhatsApp is connected and ready</span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-sm font-medium">Connected via official Meta Cloud API</span>
+                </div>
+                {status?.displayPhoneNumber && (
+                  <p className="text-sm text-gray-600">Number: {status.displayPhoneNumber}</p>
+                )}
+                {status?.verifiedName && (
+                  <p className="text-sm text-gray-600">Business: {status.verifiedName}</p>
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
                 {disconnecting ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <WifiOff className="w-3.5 h-3.5 mr-1" />}
                 Disconnect
               </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Connect your WhatsApp Business Account using Meta Embedded Signup. Each school branch uses its own official WABA — no QR scan, no WhatsApp Web automation.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={startEmbeddedSignup} disabled={connecting} className="bg-green-600 hover:bg-green-700 text-white">
+                  {connecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageCircle className="w-4 h-4 mr-2" />}
+                  Connect WhatsApp Business
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/settings/whatsapp">
+                    <Settings className="w-3.5 h-3.5 mr-1" />
+                    Settings
+                  </Link>
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

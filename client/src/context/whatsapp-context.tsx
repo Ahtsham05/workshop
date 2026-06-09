@@ -6,17 +6,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useSelector } from 'react-redux'
 import {
   useGetWhatsAppStatusQuery,
-  useConnectWhatsAppMutation,
   useDisconnectWhatsAppMutation,
-  useClearWhatsAppSessionMutation,
-  useTestWhatsAppMutation,
   useSendWhatsAppMessageMutation,
   useSendInvoicePdfWhatsAppMutation,
-  whatsappApi,
-  type WhatsAppConnectionState,
 } from '@/stores/whatsapp.api'
 import { WhatsAppConnectionDialog } from '@/components/whatsapp/whatsapp-connection-dialog'
 import { WhatsAppComposeDialog } from '@/components/whatsapp/whatsapp-compose-dialog'
@@ -30,9 +24,13 @@ type ComposeTarget = {
 }
 
 type WhatsAppContextValue = {
-  state: WhatsAppConnectionState
   isReady: boolean
-  qrImage: string | null
+  connection: {
+    displayPhoneNumber?: string
+    verifiedName?: string
+    webhookSubscribed?: boolean
+    status?: string
+  } | null
   openConnectionDialog: () => void
   openComposeDialog: (target: ComposeTarget) => void
   sendMessage: (phone: string, message: string) => Promise<boolean>
@@ -47,55 +45,22 @@ type WhatsAppContextValue = {
 
 const WhatsAppContext = createContext<WhatsAppContextValue | null>(null)
 
-/** Poll only while the connection dialog is open and setup is still in progress. */
-function resolveStatusPollInterval(connectionOpen: boolean, state: WhatsAppConnectionState): number {
-  if (!connectionOpen) return 0
-  if (
-    state === 'READY' ||
-    state === 'AUTH_FAILURE' ||
-    state === 'SERVERLESS_UNSUPPORTED' ||
-    state === 'INIT_FAILED'
-  ) {
-    return 0
-  }
-  return 3000
-}
-
 export function WhatsAppProvider({ children }: { children: ReactNode }) {
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeTarget, setComposeTarget] = useState<ComposeTarget | null>(null)
 
-  const cachedStatus = useSelector(whatsappApi.endpoints.getWhatsAppStatus.select(undefined))
-  const cachedState = (cachedStatus.data?.state ?? 'DISCONNECTED') as WhatsAppConnectionState
-  const pollInterval = useMemo(
-    () => resolveStatusPollInterval(connectionOpen, cachedState),
-    [connectionOpen, cachedState],
-  )
-
-  const { data: status } = useGetWhatsAppStatusQuery(undefined, {
+  const { data: status, refetch } = useGetWhatsAppStatusQuery(undefined, {
     skip: !WHATSAPP_UI_ENABLED,
-    pollingInterval: pollInterval,
-    refetchOnFocus: connectionOpen,
-    refetchOnReconnect: connectionOpen,
+    refetchOnFocus: true,
   })
 
-  const [connect] = useConnectWhatsAppMutation()
-  const [disconnect] = useDisconnectWhatsAppMutation()
-  const [clearSession] = useClearWhatsAppSessionMutation()
-  const [testWhatsApp] = useTestWhatsAppMutation()
+  const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation()
   const [sendWhatsAppMessage] = useSendWhatsAppMessageMutation()
   const [sendInvoicePdfMutation] = useSendInvoicePdfWhatsAppMutation()
 
-  const state = (status?.state ?? 'DISCONNECTED') as WhatsAppConnectionState
-  const isReady = state === 'READY'
-  const qrImage = status?.qrImage ?? null
-  const statusError = status?.error ?? null
-  const deployHint = status?.deployHint ?? null
-
-  const handleConnectionOpenChange = useCallback((open: boolean) => {
-    setConnectionOpen(open)
-  }, [])
+  const isReady = Boolean(status?.connected ?? status?.state === 'READY')
+  const connection = status?.branchConnection ?? null
 
   const openConnectionDialog = useCallback(() => setConnectionOpen(true), [])
   const openComposeDialog = useCallback((target: ComposeTarget) => {
@@ -114,8 +79,9 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
         await sendWhatsAppMessage({ phone, message }).unwrap()
         toast.success('Message sent on WhatsApp')
         return true
-      } catch (err: any) {
-        toast.error(err?.data?.message || 'Failed to send WhatsApp message')
+      } catch (err: unknown) {
+        const e = err as { data?: { message?: string } }
+        toast.error(e.data?.message || 'Failed to send WhatsApp message')
         return false
       }
     },
@@ -139,63 +105,35 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
         await sendInvoicePdfMutation(payload).unwrap()
         toast.success('Invoice sent on WhatsApp')
         return true
-      } catch (err: any) {
-        toast.error(err?.data?.message || 'Failed to send invoice on WhatsApp')
+      } catch (err: unknown) {
+        const e = err as { data?: { message?: string } }
+        toast.error(e.data?.message || 'Failed to send invoice on WhatsApp')
         return false
       }
     },
     [isReady, sendInvoicePdfMutation, openConnectionDialog],
   )
 
-  const handleConnect = useCallback(() => {
-    connect()
-      .unwrap()
-      .catch((e: any) => toast.error(e?.data?.message || 'Connect failed'))
-  }, [connect])
-
   const handleDisconnect = useCallback(() => {
     disconnect()
       .unwrap()
-      .then(() => toast.success('Disconnected'))
-      .catch(() => {})
-  }, [disconnect])
-
-  const handleClearSession = useCallback(() => {
-    clearSession()
-      .unwrap()
-      .then(() => toast.success('Session cleared'))
-      .catch(() => {})
-  }, [clearSession])
-
-  const handleRefresh = useCallback(() => {
-    disconnect()
-      .unwrap()
-      .catch(() => {})
-      .finally(() => {
-        connect()
-          .unwrap()
-          .catch(() => {})
+      .then(() => {
+        toast.success('WhatsApp disconnected')
+        refetch()
       })
-  }, [disconnect, connect])
-
-  const handleTest = useCallback(() => {
-    testWhatsApp({})
-      .unwrap()
-      .then((r) => toast.success(r.message))
-      .catch((e: any) => toast.error(e?.data?.message || 'Test failed'))
-  }, [testWhatsApp])
+      .catch(() => toast.error('Disconnect failed'))
+  }, [disconnect, refetch])
 
   const value = useMemo(
     () => ({
-      state,
       isReady,
-      qrImage,
+      connection,
       openConnectionDialog,
       openComposeDialog,
       sendMessage,
       sendInvoicePdf,
     }),
-    [state, isReady, qrImage, openConnectionDialog, openComposeDialog, sendMessage, sendInvoicePdf],
+    [isReady, connection, openConnectionDialog, openComposeDialog, sendMessage, sendInvoicePdf],
   )
 
   return (
@@ -205,16 +143,11 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
         <>
           <WhatsAppConnectionDialog
             open={connectionOpen}
-            onOpenChange={handleConnectionOpenChange}
-            state={state}
-            qrImage={qrImage}
-            error={statusError}
-            deployHint={deployHint}
-            onConnect={handleConnect}
+            onOpenChange={setConnectionOpen}
+            isReady={isReady}
+            connection={connection}
             onDisconnect={handleDisconnect}
-            onClearSession={handleClearSession}
-            onRefresh={handleRefresh}
-            onTest={handleTest}
+            disconnecting={disconnecting}
           />
           <WhatsAppComposeDialog
             open={composeOpen}

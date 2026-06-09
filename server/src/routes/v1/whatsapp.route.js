@@ -4,36 +4,36 @@ const branchScope = require('../../middlewares/branchScope');
 const validate = require('../../middlewares/validate');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
 const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
+const { whatsappSendLimiter } = require('../../middlewares/whatsappRateLimit');
 const whatsappValidation = require('../../validations/whatsapp.validation');
 const { whatsappController } = require('../../controllers');
 
 const router = express.Router();
 
-router.use(auth(), branchScope(false));
+router.use(auth(), branchScope(true));
 
 const manageConnection = auth('editSettings', 'manageSchool', 'manageInvoices', 'viewRoles');
 
-// ── Connection (QR scan — whatsapp-web.js, no official API) ─────────────────
 router.get('/status', whatsappController.getStatus);
 router.post('/connect', manageConnection, whatsappController.connect);
 router.post('/disconnect', manageConnection, whatsappController.disconnectWhatsApp);
 router.post('/clear-session', manageConnection, whatsappController.clearSession);
 router.post('/test', manageConnection, whatsappController.sendTest);
 
-// ── Messaging (available to all authenticated users when connected) ───────
-router.post('/send', whatsappController.sendMessage);
+router.post('/send', whatsappSendLimiter, whatsappController.sendMessage);
 router.post(
   '/send-document',
+  whatsappSendLimiter,
   validate(whatsappValidation.sendDocument),
   whatsappController.sendDocument,
 );
 router.post(
   '/send-invoice-pdf',
+  whatsappSendLimiter,
   validate(whatsappValidation.sendInvoicePdf),
   whatsappController.sendInvoicePdf,
 );
 
-// ── School bulk messaging (school orgs only) ────────────────────────────────
 const schoolOnly = [
   checkFeatureAccess('school_management'),
   requireSchoolAdmin(),

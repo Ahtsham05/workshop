@@ -1,73 +1,138 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
+import { Loader2, MessageCircle, RefreshCw, Unplug, CheckCircle2 } from 'lucide-react'
 import ContentSection from '../components/content-section'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useWhatsApp } from '@/context/whatsapp-context'
-import { MessageCircle, QrCode, CheckCircle2, WifiOff, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  useDisconnectCloudMutation,
+  useGetCloudConnectionQuery,
+  useReconnectCloudMutation,
+} from '@/stores/whatsappCloud.api'
+import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
 
-export default function WhatsAppSettingsPage() {
-  const { state, isReady, openConnectionDialog } = useWhatsApp()
-  const [opening, setOpening] = useState(false)
+export default function BusinessWhatsAppSettings() {
+  const { data: connection, isLoading, refetch } = useGetCloudConnectionQuery()
+  const { connect: handleEmbeddedSignup, isLoading: starting } = useEmbeddedWhatsAppSignup()
+  const [reconnect, { isLoading: reconnecting }] = useReconnectCloudMutation()
+  const [disconnect, { isLoading: disconnecting }] = useDisconnectCloudMutation()
 
-  const handleOpen = () => {
-    setOpening(true)
-    openConnectionDialog()
-    setTimeout(() => setOpening(false), 500)
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === '1') {
+      toast.success('WhatsApp Business connected successfully')
+      refetch()
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('error')) {
+      toast.error('WhatsApp connection failed')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [refetch])
+
+  const connected = connection?.connected
 
   return (
     <ContentSection
-      title='WhatsApp'
-      desc='Connect your WhatsApp by scanning a QR code — no official API required. Once connected, send messages and invoices from anywhere in the app.'
+      title='WhatsApp Business (Cloud API)'
+      desc='Connect your own WhatsApp Business Account via Meta Embedded Signup. Official Cloud API — no QR scan required.'
     >
       <Card>
         <CardHeader>
           <CardTitle className='flex items-center gap-2'>
             <MessageCircle className='h-5 w-5 text-[#25D366]' />
-            WhatsApp Connection
+            Connection Status
           </CardTitle>
           <CardDescription>
-            Uses WhatsApp Web (QR scan). Messages are sent from your linked phone number, just like the POS system.
+            Each branch connects its own WABA and phone number. Messages are sent via Meta WhatsApp Cloud API.
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
-          <div className='flex items-center gap-3'>
-            <span className='text-sm text-muted-foreground'>Status:</span>
-            {isReady ? (
-              <Badge className='bg-green-100 text-green-800 border-green-300 gap-1'>
-                <CheckCircle2 className='h-3.5 w-3.5' />
-                Connected
-              </Badge>
-            ) : state === 'LOADING' || state === 'QR_READY' ? (
-              <Badge variant='outline' className='gap-1'>
-                <Loader2 className='h-3.5 w-3.5 animate-spin' />
-                {state === 'QR_READY' ? 'Scan QR code' : 'Connecting…'}
-              </Badge>
-            ) : (
-              <Badge variant='outline' className='gap-1 text-muted-foreground'>
-                <WifiOff className='h-3.5 w-3.5' />
-                Not connected
-              </Badge>
-            )}
-          </div>
+          {isLoading ? (
+            <div className='flex items-center gap-2 text-muted-foreground'>
+              <Loader2 className='h-4 w-4 animate-spin' /> Loading…
+            </div>
+          ) : (
+            <>
+              <div className='flex flex-wrap items-center gap-3'>
+                <span className='text-sm text-muted-foreground'>Status:</span>
+                {connected ? (
+                  <Badge className='bg-green-100 text-green-800 border-green-300 gap-1'>
+                    <CheckCircle2 className='h-3.5 w-3.5' />
+                    Connected
+                  </Badge>
+                ) : connection?.status === 'webhook_pending' ? (
+                  <Badge variant='outline' className='gap-1'>
+                    Webhook pending
+                  </Badge>
+                ) : (
+                  <Badge variant='outline' className='gap-1 text-muted-foreground'>
+                    Not connected
+                  </Badge>
+                )}
+              </div>
 
-          <ul className='text-sm text-muted-foreground list-disc pl-5 space-y-1'>
-            <li>Scan once — session stays connected across restarts</li>
-            <li>Send messages to customers, suppliers, and parents from the app</li>
-            <li>Send invoice PDFs directly from print view</li>
-            <li>School orgs: bulk messaging and fee alerts on the School WhatsApp page</li>
-          </ul>
+              {connection?.displayPhoneNumber && (
+                <div className='text-sm space-y-1'>
+                  <p>
+                    <span className='text-muted-foreground'>Number:</span> {connection.displayPhoneNumber}
+                  </p>
+                  {connection.verifiedName && (
+                    <p>
+                      <span className='text-muted-foreground'>Business:</span> {connection.verifiedName}
+                    </p>
+                  )}
+                  {connection.webhookSubscribed != null && (
+                    <p>
+                      <span className='text-muted-foreground'>Webhook:</span>{' '}
+                      {connection.webhookSubscribed ? 'Subscribed' : 'Not subscribed'}
+                    </p>
+                  )}
+                </div>
+              )}
 
-          <Button
-            type='button'
-            className='bg-[#25D366] hover:bg-[#20bd5a] text-white gap-2'
-            onClick={handleOpen}
-            disabled={opening}
-          >
-            <QrCode className='h-4 w-4' />
-            {isReady ? 'Manage Connection' : 'Connect WhatsApp'}
-          </Button>
+              {connection?.lastError && (
+                <p className='text-sm text-destructive'>{connection.lastError}</p>
+              )}
+
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  className='bg-[#25D366] hover:bg-[#20bd5a] text-white gap-2'
+                  onClick={handleEmbeddedSignup}
+                  disabled={starting}
+                >
+                  {starting ? <Loader2 className='h-4 w-4 animate-spin' /> : <MessageCircle className='h-4 w-4' />}
+                  {connected ? 'Reconnect via Meta' : 'Connect WhatsApp Business'}
+                </Button>
+                {connected && (
+                  <>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className='gap-2'
+                      onClick={() => reconnect().unwrap().then(() => toast.success('Reconnected')).catch(() => toast.error('Reconnect failed'))}
+                      disabled={reconnecting}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} />
+                      Reconnect Webhook
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      className='gap-2 text-destructive'
+                      onClick={() => disconnect().unwrap().then(() => toast.success('Disconnected')).catch(() => toast.error('Disconnect failed'))}
+                      disabled={disconnecting}
+                    >
+                      <Unplug className='h-4 w-4' />
+                      Disconnect
+                    </Button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </ContentSection>

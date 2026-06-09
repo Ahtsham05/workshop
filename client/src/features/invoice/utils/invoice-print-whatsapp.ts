@@ -155,8 +155,8 @@ export function buildPrintActionsLabels(
       sent: en ? 'Sent on WhatsApp' : 'واٹس ایپ پر بھیج دی گئی',
       failed: en ? 'Could not send invoice' : 'انوائس نہیں بھیجی جا سکی',
       notConnected: en
-        ? 'WhatsApp is not connected. Open Settings → WhatsApp and scan the QR code to connect.'
-        : 'واٹس ایپ منسلک نہیں۔ Settings → WhatsApp کھولیں اور QR کوڈ اسکین کریں۔',
+        ? 'WhatsApp is not connected. Open Settings → WhatsApp and connect via Meta Embedded Signup.'
+        : 'واٹس ایپ منسلک نہیں۔ Settings → WhatsApp کھولیں اور Meta Embedded Signup سے منسلک کریں۔',
       noBridge: en
         ? 'Could not reach the app. Close this window and send again from the invoice screen.'
         : 'ایپ سے رابطہ نہیں ہوا۔ یہ ونڈو بند کریں اور انوائس اسکرین سے دوبارہ بھیجیں۔',

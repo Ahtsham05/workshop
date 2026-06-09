@@ -1263,21 +1263,32 @@ export const schoolApi = createApi({
     }),
 
     // WhatsApp Messaging
-    getWhatsAppStatus: builder.query<{ state: string; qrImage: string | null }, void>({
+    getWhatsAppStatus: builder.query<
+      {
+        state: string
+        connected?: boolean
+        displayPhoneNumber?: string
+        verifiedName?: string
+      },
+      void
+    >({
       query: () => ({ url: '/whatsapp/status', headers: { 'Cache-Control': 'no-cache' } }),
       providesTags: ['WhatsApp'],
       keepUnusedDataFor: 0,
     }),
-    connectWhatsApp: builder.mutation<{ message: string; state: string }, void>({
+    connectWhatsApp: builder.mutation<
+      { appId: string; configId: string; redirectUri: string; state: string },
+      void
+    >({
       query: () => ({ url: '/whatsapp/connect', method: 'POST' }),
       invalidatesTags: ['WhatsApp'],
     }),
-    disconnectWhatsApp: builder.mutation<{ message: string; state: string }, void>({
+    disconnectWhatsApp: builder.mutation<{ message: string }, void>({
       query: () => ({ url: '/whatsapp/disconnect', method: 'POST' }),
       invalidatesTags: ['WhatsApp'],
     }),
-    clearWhatsAppSession: builder.mutation<{ message: string; state: string }, void>({
-      query: () => ({ url: '/whatsapp/clear-session', method: 'POST' }),
+    clearWhatsAppSession: builder.mutation<{ message: string }, void>({
+      query: () => ({ url: '/whatsapp/disconnect', method: 'POST' }),
       invalidatesTags: ['WhatsApp'],
     }),
     sendWhatsAppMessage: builder.mutation<{ success: boolean }, { phone: string; message: string }>({

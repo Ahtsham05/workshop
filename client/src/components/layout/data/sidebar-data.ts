@@ -113,6 +113,18 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
+          title: 'WhatsApp Inbox',
+          url: '/whatsapp',
+          icon: MessageCircle,
+          permission: 'editSettings',
+        },
+        {
+          title: 'WhatsApp Analytics',
+          url: '/whatsapp/analytics',
+          icon: IconChartBar,
+          permission: 'editSettings',
+        },
+        {
           title: 'Sales Returns',
           url: '/sales-returns',
           icon: IconRefresh,
