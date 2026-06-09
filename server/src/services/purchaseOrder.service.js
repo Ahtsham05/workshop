@@ -25,25 +25,86 @@ const populateOrder = async (order) => {
   return order;
 };
 
+let indexesEnsured = false;
+
 /**
- * Generate a sequential order number per organization.
+ * Migrate from the legacy global orderNumber unique index to a per-org compound index.
+ */
+const ensurePurchaseOrderIndexes = async () => {
+  if (indexesEnsured) return;
+
+  const collection = mongoose.connection.collection('purchaseorders');
+  try {
+    const indexes = await collection.indexes();
+    const hasLegacyUnique = indexes.some(
+      (idx) => idx.key?.orderNumber === 1 && idx.unique && !idx.key?.organizationId
+    );
+    if (hasLegacyUnique) {
+      await collection.dropIndex('orderNumber_1');
+    }
+  } catch (err) {
+    if (err.codeName !== 'IndexNotFound') {
+      // Non-fatal — syncIndexes below will still create the compound index.
+    }
+  }
+
+  await PurchaseOrder.syncIndexes();
+  indexesEnsured = true;
+};
+
+const parseOrderSequence = (orderNumber) => {
+  const match = String(orderNumber || '').match(/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
+/**
+ * Generate a sequential order number per organization using an atomic counter.
  * Format: PO-{seq} starting at 1001.
  */
 const generateOrderNumber = async (organizationId) => {
-  const filter = organizationId ? { organizationId } : {};
-  const last = await PurchaseOrder.findOne(filter)
-    .sort({ createdAt: -1 })
-    .select('orderNumber')
-    .lean();
+  if (!organizationId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Organization is required to create a purchase order');
+  }
 
-  let nextSeq = 1001;
-  if (last?.orderNumber) {
-    const match = String(last.orderNumber).match(/(\d+)$/);
-    if (match) {
-      nextSeq = parseInt(match[1], 10) + 1;
+  await ensurePurchaseOrderIndexes();
+
+  const db = mongoose.connection.db;
+  const seqKey = `purchaseOrder_${organizationId}`;
+
+  const existingCounter = await db.collection('_sequences').findOne({ _id: seqKey });
+  if (!existingCounter) {
+    const orders = await PurchaseOrder.find({ organizationId }).select('orderNumber').lean();
+    let maxSeq = 1000;
+    for (const order of orders) {
+      maxSeq = Math.max(maxSeq, parseOrderSequence(order.orderNumber));
+    }
+    await db.collection('_sequences').updateOne(
+      { _id: seqKey },
+      { $setOnInsert: { seq: maxSeq } },
+      { upsert: true }
+    );
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const result = await db.collection('_sequences').findOneAndUpdate(
+      { _id: seqKey },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after' }
+    );
+
+    const seq = Number(result?.seq ?? result?.value?.seq);
+    if (!Number.isFinite(seq) || seq <= 0) {
+      continue;
+    }
+
+    const candidate = `PO-${seq}`;
+    const exists = await PurchaseOrder.exists({ organizationId, orderNumber: candidate });
+    if (!exists) {
+      return candidate;
     }
   }
-  return `PO-${nextSeq}`;
+
+  return `PO-${Date.now()}`;
 };
 
 const calculateTotals = (body) => {
@@ -63,7 +124,8 @@ const calculateTotals = (body) => {
  * Create a new purchase order.
  */
 const createPurchaseOrder = async (body) => {
-  const orderNumber = body.orderNumber || (await generateOrderNumber(body.organizationId));
+  await ensurePurchaseOrderIndexes();
+
   const totals = calculateTotals(body);
 
   const items = (body.items || []).map((item) => ({
@@ -72,16 +134,35 @@ const createPurchaseOrder = async (body) => {
     total: Number(item.total ?? Number(item.quantity || 0) * Number(item.expectedPrice || 0)),
   }));
 
-  const order = await PurchaseOrder.create({
-    ...body,
-    items,
-    orderNumber,
-    subtotal: totals.subtotal,
-    totalAmount: totals.totalAmount,
-    status: body.status || 'draft',
-  });
+  const { orderNumber: _ignoredOrderNumber, ...orderBody } = body;
 
-  return populateOrder(order);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const orderNumber = await generateOrderNumber(body.organizationId);
+    try {
+      const order = await PurchaseOrder.create({
+        ...orderBody,
+        items,
+        orderNumber,
+        subtotal: totals.subtotal,
+        totalAmount: totals.totalAmount,
+        status: body.status || 'draft',
+      });
+      return populateOrder(order);
+    } catch (err) {
+      if (err.code === 11000 && attempt < 4) {
+        continue;
+      }
+      if (err.code === 11000) {
+        throw new ApiError(
+          httpStatus.CONFLICT,
+          'Could not assign a unique order number. Please try again.'
+        );
+      }
+      throw err;
+    }
+  }
+
+  throw new ApiError(httpStatus.CONFLICT, 'Could not assign a unique order number. Please try again.');
 };
 
 /**

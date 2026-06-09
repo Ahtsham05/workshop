@@ -69,7 +69,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
     },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-    orderNumber: { type: String, required: true, unique: true, index: true },
+    orderNumber: { type: String, required: true },
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true, index: true },
 
     items: [PurchaseOrderItemSchema],
@@ -104,6 +104,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
   }
 );
 
+PurchaseOrderSchema.index({ organizationId: 1, orderNumber: 1 }, { unique: true });
 PurchaseOrderSchema.index({ organizationId: 1, branchId: 1, status: 1 });
 PurchaseOrderSchema.index({ supplier: 1, status: 1 });
 
