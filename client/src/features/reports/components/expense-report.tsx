@@ -150,7 +150,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
     }, [expandedRows.size, detailData])
 
     if (isLoading) {
-      return <Skeleton className={categoriesOnly ? 'h-[280px] w-full' : 'h-[500px] w-full'} />
+      return <Skeleton className={categoriesOnly ? 'h-[480px] w-full' : 'h-[500px] w-full'} />
     }
 
     const categories = data?.categoryBreakdown || []
@@ -170,44 +170,75 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
 
     const detailTotal = detailData.reduce((s, e) => s + (e.amount || 0), 0)
 
+    const totalEntryCount = data?.summary?.expenseCount || 0
+    const avgExpense = data?.summary?.avgExpense || 0
+
+    const categoryTotalBar = categoriesOnly && categories.length > 0 && (
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50/60 px-5 py-4 dark:border-rose-900 dark:bg-rose-950/30">
+        <div className="flex items-center gap-3">
+          <div className={cn('rounded-xl p-3', toneIconWrapClass('rose'))}>
+            <TrendingDown className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{t('total_expenses')}</p>
+            <p className="text-3xl font-bold text-rose-600 tabular-nums">{fmt(totalExpenses)}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-6 sm:gap-10">
+          <div>
+            <p className="text-sm text-muted-foreground">{t('expense_count')}</p>
+            <p className="text-xl font-bold tabular-nums">{totalEntryCount}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{t('avg_expense')}</p>
+            <p className="text-xl font-bold tabular-nums">{fmt(avgExpense)}</p>
+          </div>
+        </div>
+      </div>
+    )
+
     const categoryCards = (
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {categories.map((cat, idx) => {
-          const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
-          const color = COLORS[idx % COLORS.length]
-          return (
-            <button
-              key={cat._id}
-              onClick={() => openCategoryDetail(cat._id)}
-              className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
-                  style={{ backgroundColor: color }}
-                >
-                  {cat._id.charAt(0).toUpperCase()}
-                </span>
-                <Badge variant="secondary" className="text-xs">{share}%</Badge>
-              </div>
-              <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
-              <p className="text-xl font-bold" style={{ color }}>{fmt(cat.totalAmount)}</p>
-              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{cat.expenseCount} {t('entries')}</span>
-                <span>{t('avg')} {fmt(cat.avgAmount || 0)}</span>
-              </div>
-              <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${share}%`, backgroundColor: color }}
-                />
-              </div>
-              <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                {t('Click to view details →')}
-              </p>
-            </button>
-          )
-        })}
+      <div className="space-y-4">
+        {categoryTotalBar}
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {categories.map((cat, idx) => {
+            const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
+            const color = COLORS[idx % COLORS.length]
+            return (
+              <button
+                key={cat._id}
+                onClick={() => openCategoryDetail(cat._id)}
+                className="text-left rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white text-xs font-bold"
+                    style={{ backgroundColor: color }}
+                  >
+                    {cat._id.charAt(0).toUpperCase()}
+                  </span>
+                  <Badge variant="secondary" className="text-xs">{share}%</Badge>
+                </div>
+                <p className="font-semibold text-sm leading-tight mb-0.5">{cat._id}</p>
+                <p className="text-xl font-bold" style={{ color }}>{fmt(cat.totalAmount)}</p>
+                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{cat.expenseCount} {t('entries')}</span>
+                  <span>{t('avg')} {fmt(cat.avgAmount || 0)}</span>
+                </div>
+                <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${share}%`, backgroundColor: color }}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  {t('Click to view details →')}
+                </p>
+              </button>
+            )
+          })}
+
+        </div>
       </div>
     )
 

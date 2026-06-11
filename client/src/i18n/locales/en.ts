@@ -199,6 +199,7 @@ const en: Record<string, string> = {
     "income_by_category": "Income by Category",
     "money_in_by_category": "Money in by category",
     "money_out_by_category": "Money out by category",
+    "total_money_out_expense": "Total Money Out / Expense",
     "income_category_details": "Income Details",
     "no_income_for_category": "No income entries for this category",
     "revenue_section": "Revenue Section",

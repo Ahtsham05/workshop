@@ -39,6 +39,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   X,
+  CalendarIcon,
 } from 'lucide-react';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -809,7 +810,7 @@ export function PersonalLedger() {
         { Metric: 'Period End', Value: endDate || '-' },
         { Metric: 'Opening Balance', Value: reportAnalytics.openingBalance.toFixed(2) },
         { Metric: 'Total Money In', Value: summary.totalCredit.toFixed(2) },
-        { Metric: 'Total Money Out', Value: summary.totalDebit.toFixed(2) },
+        { Metric: 'Total Money Out / Expense', Value: summary.totalDebit.toFixed(2) },
         { Metric: 'Net Change', Value: reportAnalytics.netChange.toFixed(2) },
         { Metric: 'Closing Balance', Value: reportAnalytics.closingBalance.toFixed(2) },
         { Metric: 'Transactions', Value: summary.transactionCount },
@@ -893,6 +894,56 @@ export function PersonalLedger() {
 
   return (
     <div className="space-y-4">
+      {/* Date Range Filter */}
+      <Card>
+        <CardContent className="pt-5 pb-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="wallet-start-date" className="text-sm font-medium">
+                {t('start_date')}
+              </Label>
+              <div className="relative">
+                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  id="wallet-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                  className="w-[180px] pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="wallet-end-date" className="text-sm font-medium">
+                {t('end_date')}
+              </Label>
+              <div className="relative">
+                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  id="wallet-end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                  className="w-[180px] pl-9"
+                />
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStartDate(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
+                setEndDate(format(new Date(), 'yyyy-MM-dd'));
+                setCurrentPage(1);
+              }}
+            >
+              {t('last_30_days')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
         <Card>
@@ -913,7 +964,7 @@ export function PersonalLedger() {
           <CardContent className="pt-5 pb-5 min-h-[110px]">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">{t('Total Money Out')}</p>
+                <p className="text-sm text-muted-foreground">{t('total_money_out_expense')}</p>
                 <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalDebit)}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
@@ -1034,19 +1085,6 @@ export function PersonalLedger() {
             </div>
             <Button type="submit" variant="outline" size="sm">{t('Search')}</Button>
           </form>
-
-          <Input
-            type="date"
-            value={startDate}
-            onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-            className="w-[150px]"
-          />
-          <Input
-            type="date"
-            value={endDate}
-            onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-            className="w-[150px]"
-          />
 
           <Select value={filterType} onValueChange={(v) => { setFilterType(v); setCurrentPage(1); }}>
             <SelectTrigger className="w-36">

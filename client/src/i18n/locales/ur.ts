@@ -161,6 +161,7 @@ const ur: Record<string, string> = {
     "income_by_category": "زمرہ کے لحاظ سے آمدنی",
     "money_in_by_category": "زمرہ کے لحاظ سے رقم آمد",
     "money_out_by_category": "زمرہ کے لحاظ سے رقم اخراج",
+    "total_money_out_expense": "کل رقم اخراج / اخراجات",
     "income_category_details": "آمدنی کی تفصیل",
     "no_income_for_category": "اس زمرے کے لیے کوئی آمدنی نہیں",
     "revenue_section": "آمدنی سیکشن",

@@ -28,6 +28,16 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { ReportBreakdownRow } from './report-breakdown-row'
+import {
+  reportBreakdownGridClass,
+  reportChartHeight,
+  reportKpiGridClass,
+  reportKpiLabelClass,
+  reportKpiSubClass,
+  reportKpiValueClass,
+  reportSectionTitleClass,
+} from '../utils/report-styles'
 
 interface RoiReportProps {
   startDate: string
@@ -163,7 +173,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         {/* Preset Filter Buttons */}
         <Card>
           <CardHeader className='pb-3'>
-            <CardTitle className='text-sm font-medium'>Time Period</CardTitle>
+            <CardTitle className={reportKpiLabelClass}>Time Period</CardTitle>
             <CardDescription>Select the period for ROI calculation</CardDescription>
           </CardHeader>
           <CardContent>
@@ -183,23 +193,23 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         </Card>
 
         {/* KPI Cards */}
-        <div className='grid gap-4 md:grid-cols-4'>
+        <div className={reportKpiGridClass}>
           {/* ROI % */}
           <Card className={kpiCardClass(isPositiveRoi ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Return on Investment</CardTitle>
+              <CardTitle className={reportKpiLabelClass}>Return on Investment</CardTitle>
               <div className={cn('shrink-0', toneIconWrapClass(isPositiveRoi ? 'emerald' : 'rose'))}>
                 {isPositiveRoi ? <TrendingUp className='h-4 w-4' /> : <TrendingDown className='h-4 w-4' />}
               </div>
             </CardHeader>
             <CardContent>
               <div
-                className={`text-3xl font-bold ${isPositiveRoi ? 'text-green-600' : 'text-red-600'}`}
+                className={`${reportKpiValueClass} ${isPositiveRoi ? 'text-green-600' : 'text-red-600'}`}
               >
                 {roiData?.roi ?? 0}%
               </div>
-              <div className='flex items-center mt-1 gap-1'>
-                <Badge variant={isPositiveRoi ? 'default' : 'destructive'} className='text-xs'>
+              <div className='flex items-center mt-2 gap-1'>
+                <Badge variant={isPositiveRoi ? 'default' : 'destructive'} className='text-sm'>
                   {isPositiveRoi ? (
                     <ArrowUpRight className='h-3 w-3 mr-1' />
                   ) : (
@@ -214,19 +224,19 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
           {/* Total Investment */}
           <Card className={kpiCardClass('indigo')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Total Investment</CardTitle>
+              <CardTitle className={reportKpiLabelClass}>Total Investment</CardTitle>
               <div className={cn('shrink-0', toneIconWrapClass('indigo'))}>
                 <PiggyBank className='h-4 w-4' />
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-blue-600'>{fmt(roiData?.investment ?? 0)}</div>
-              <p className='text-xs text-muted-foreground mt-1'>
+              <div className={`${reportKpiValueClass} text-blue-600`}>{fmt(roiData?.investment ?? 0)}</div>
+              <p className={reportKpiSubClass}>
                 {isMobileShop ? 'Inventory + Wallets + Expenses' : 'Inventory + Expenses'}
               </p>
-              <div className='mt-1 space-y-0.5'>
-                <p className='text-xs text-purple-600'>📦 Stock: {fmt(roiData?.inventoryValue ?? 0)}</p>
-                {isMobileShop && <p className='text-xs text-blue-500'>💳 Wallets: {fmt(roiData?.walletBalance ?? 0)}</p>}
+              <div className='mt-2 space-y-1'>
+                <p className='text-sm text-purple-600'>📦 Stock: {fmt(roiData?.inventoryValue ?? 0)}</p>
+                {isMobileShop && <p className='text-sm text-blue-500'>💳 Wallets: {fmt(roiData?.walletBalance ?? 0)}</p>}
               </div>
             </CardContent>
           </Card>
@@ -234,18 +244,18 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
           {/* Total Profit */}
           <Card className={kpiCardClass(isPositiveProfit ? 'emerald' : 'rose')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Total Profit</CardTitle>
+              <CardTitle className={reportKpiLabelClass}>Total Profit</CardTitle>
               <div className={cn('shrink-0', toneIconWrapClass(isPositiveProfit ? 'emerald' : 'rose'))}>
                 <DollarSign className='h-4 w-4' />
               </div>
             </CardHeader>
             <CardContent>
               <div
-                className={`text-2xl font-bold ${isPositiveProfit ? 'text-green-600' : 'text-red-600'}`}
+                className={`${reportKpiValueClass} ${isPositiveProfit ? 'text-green-600' : 'text-red-600'}`}
               >
                 {fmt(roiData?.profit ?? 0)}
               </div>
-              <p className='text-xs text-muted-foreground mt-1'>
+              <p className={reportKpiSubClass}>
                 Net profit after expenses &amp; returns
               </p>
             </CardContent>
@@ -254,16 +264,16 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
           {/* Total Expenses */}
           <Card className={kpiCardClass('slate')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Total Expenses</CardTitle>
+              <CardTitle className={reportKpiLabelClass}>Total Expenses</CardTitle>
               <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
                 <TrendingDown className='h-4 w-4' />
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-rose-600'>
+              <div className={`${reportKpiValueClass} text-rose-600`}>
                 {fmt(roiData?.breakdown?.investment?.expenses ?? 0)}
               </div>
-              <p className='text-xs text-muted-foreground mt-1'>
+              <p className={reportKpiSubClass}>
                 Total expenses for selected period
               </p>
             </CardContent>
@@ -271,42 +281,42 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         </div>
 
         {/* Breakdown Cards */}
-        <div className='grid gap-4 md:grid-cols-2'>
+        <div className={reportBreakdownGridClass}>
           {/* Investment Breakdown */}
           <Card>
             <CardHeader>
-              <CardTitle className='text-base'>Investment Breakdown</CardTitle>
-              <p className='text-xs text-muted-foreground'>
+              <CardTitle className={reportSectionTitleClass}>Investment Breakdown</CardTitle>
+              <p className='text-sm text-muted-foreground sm:text-base'>
                 Investment = Current Inventory Value{isMobileShop ? ' + Wallet Balance' : ''} + Period Expenses.
                 Inventory value is real-time (stock × cost) so it already reflects all purchases, sales, and returns.
                 Purchase returns recovery is shown for reference only.
               </p>
             </CardHeader>
-            <CardContent className='space-y-3'>
+            <CardContent className='space-y-4'>
               {[
                 { label: 'Current Inventory Value', value: b?.investment.inventoryValue ?? 0, color: 'text-purple-600', mobileOnly: false },
                 { label: 'Wallet Balance (JazzCash + EasyPaisa)', value: b?.investment.walletBalance ?? 0, color: 'text-blue-500', mobileOnly: true },
                 { label: 'Expenses', value: b?.investment.expenses ?? 0, color: 'text-orange-600', mobileOnly: false },
                 { label: 'Purchase Returns Recovery ℹ️', value: b?.investment.purchaseReturnsRecovery ?? 0, color: 'text-green-600', mobileOnly: false },
               ].filter(({ mobileOnly }) => !mobileOnly || isMobileShop).map(({ label, value, color }) => (
-                <div key={label} className='flex justify-between items-center border-b pb-2 last:border-0'>
-                  <span className='text-sm text-muted-foreground'>{label}</span>
-                  <span className={`font-semibold text-sm ${color}`}>{fmt(value)}</span>
-                </div>
+                <ReportBreakdownRow key={label} label={label} value={fmt(value)} valueClass={color} />
               ))}
-              <div className='flex justify-between items-center pt-1'>
-                <span className='font-semibold'>Total Investment</span>
-                <span className='font-bold text-blue-700'>{fmt(roiData?.investment ?? 0)}</span>
-              </div>
+              <ReportBreakdownRow
+                label='Total Investment'
+                value={fmt(roiData?.investment ?? 0)}
+                valueClass='text-blue-700'
+                bold
+                border
+              />
             </CardContent>
           </Card>
 
           {/* Profit Breakdown */}
           <Card>
             <CardHeader>
-              <CardTitle className='text-base'>Profit Breakdown</CardTitle>
+              <CardTitle className={reportSectionTitleClass}>Profit Breakdown</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-3'>
+            <CardContent className='space-y-4'>
               {[
                 { label: 'Sales Profit', value: b?.profit.salesProfit ?? 0, color: 'text-green-600', mobileOnly: false },
                 { label: 'Load Profit', value: b?.profit.loadProfit ?? 0, color: 'text-emerald-600', mobileOnly: true },
@@ -321,19 +331,15 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                 { label: 'Expenses (deducted)', value: -(b?.profit.expenseDeduction ?? 0), color: 'text-red-500', mobileOnly: false },
                 { label: 'Sales Returns Impact', value: -(b?.profit.salesReturnsImpact ?? 0), color: 'text-rose-500', mobileOnly: false },
               ].filter(({ mobileOnly }) => !mobileOnly || isMobileShop).map(({ label, value, color }) => (
-                <div key={label} className='flex justify-between items-center border-b pb-2 last:border-0'>
-                  <span className='text-sm text-muted-foreground'>{label}</span>
-                  <span className={`font-semibold text-sm ${color}`}>{fmt(value)}</span>
-                </div>
+                <ReportBreakdownRow key={label} label={label} value={fmt(value)} valueClass={color} />
               ))}
-              <div className='flex justify-between items-center pt-1'>
-                <span className='font-semibold'>Net Profit</span>
-                <span
-                  className={`font-bold ${isPositiveProfit ? 'text-green-700' : 'text-red-700'}`}
-                >
-                  {fmt(roiData?.profit ?? 0)}
-                </span>
-              </div>
+              <ReportBreakdownRow
+                label='Net Profit'
+                value={fmt(roiData?.profit ?? 0)}
+                valueClass={isPositiveProfit ? 'text-green-700' : 'text-red-700'}
+                bold
+                border
+              />
             </CardContent>
           </Card>
         </div>
@@ -342,14 +348,14 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         {monthly.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Monthly Profit vs Investment</CardTitle>
-              <CardDescription>Compare invested capital against net profit each month</CardDescription>
+              <CardTitle className={reportSectionTitleClass}>Monthly Profit vs Investment</CardTitle>
+              <CardDescription className='text-sm sm:text-base'>Compare invested capital against net profit each month</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width='100%' height={320}>
+              <ResponsiveContainer width='100%' height={reportChartHeight + 40}>
                 <BarChart data={monthly} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray='3 3' />
-                  <XAxis dataKey='month' tick={{ fontSize: 12 }} />
+                  <XAxis dataKey='month' tick={{ fontSize: 13 }} />
                   <YAxis
                     tickFormatter={(v) =>
                       new Intl.NumberFormat('en-PK', {
@@ -357,7 +363,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                         maximumFractionDigits: 1,
                       }).format(v)
                     }
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 13 }}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [fmt(value), name]}
@@ -375,15 +381,15 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
         {monthly.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Monthly ROI Trend (%)</CardTitle>
-              <CardDescription>Return on investment percentage over time</CardDescription>
+              <CardTitle className={reportSectionTitleClass}>Monthly ROI Trend (%)</CardTitle>
+              <CardDescription className='text-sm sm:text-base'>Return on investment percentage over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width='100%' height={280}>
+              <ResponsiveContainer width='100%' height={reportChartHeight}>
                 <LineChart data={monthly} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray='3 3' />
-                  <XAxis dataKey='month' tick={{ fontSize: 12 }} />
-                  <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+                  <XAxis dataKey='month' tick={{ fontSize: 13 }} />
+                  <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 13 }} />
                   <Tooltip formatter={(value: number) => [`${value}%`, 'ROI']} />
                   <ReferenceLine y={0} stroke='#ef4444' strokeDasharray='4 4' />
                   <Line
