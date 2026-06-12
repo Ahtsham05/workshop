@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { ExpenseList } from './expense-list';
 import { ExpenseForm } from './expense-form';
 import { ExpenseCategorySection } from './expense-category-section';
@@ -18,8 +18,13 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const handleCreateNew = () => {
+  const [defaultCategory, setDefaultCategory] = useState<string | undefined>();
+  const [returnToCategory, setReturnToCategory] = useState<{ name: string; id: number } | null>(null);
+
+  const handleCreateNew = (category?: string) => {
     setSelectedExpense(null);
+    setDefaultCategory(category);
+    setReturnToCategory(null);
     setViewMode('create');
   };
 
@@ -29,28 +34,37 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
   };
 
   const handleSaveSuccess = () => {
+    const categoryToReopen = defaultCategory;
     setViewMode('list');
     setSelectedExpense(null);
+    setDefaultCategory(undefined);
     setRefreshTrigger(prev => prev + 1);
-    // Notify parent component about expense change to refresh dashboard
+    if (categoryToReopen) {
+      setReturnToCategory({ name: categoryToReopen, id: Date.now() });
+    }
     onExpenseChange?.();
   };
 
   const handleCancel = () => {
     setViewMode('list');
     setSelectedExpense(null);
+    setDefaultCategory(undefined);
   };
 
   const handleDelete = () => {
     setRefreshTrigger(prev => prev + 1);
-    // Notify parent component about expense change to refresh dashboard
     onExpenseChange?.();
   };
+
+  const handleOpenCategoryHandled = useCallback(() => {
+    setReturnToCategory(null);
+  }, []);
 
   if (viewMode === 'create' || viewMode === 'edit') {
     return (
       <ExpenseForm
         expense={selectedExpense}
+        defaultCategory={defaultCategory}
         onSave={handleSaveSuccess}
         onCancel={handleCancel}
         isEdit={viewMode === 'edit'}
@@ -65,7 +79,7 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
           <h2 className="text-2xl font-bold tracking-tight">{t('Expense Management')}</h2>
           <p className="text-muted-foreground">{t('Track and manage business expenses')}</p>
         </div>
-        <Button onClick={handleCreateNew}>
+        <Button onClick={() => handleCreateNew()}>
           <Plus className="h-4 w-4 mr-2" />
           {t('Add Expense')}
         </Button>
@@ -77,7 +91,12 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
         refreshTrigger={refreshTrigger}
       />
 
-      <ExpenseCategorySection refreshTrigger={refreshTrigger} />
+      <ExpenseCategorySection
+        refreshTrigger={refreshTrigger}
+        onAddExpense={handleCreateNew}
+        openCategoryRequest={returnToCategory}
+        onOpenCategoryHandled={handleOpenCategoryHandled}
+      />
     </div>
   );
 }

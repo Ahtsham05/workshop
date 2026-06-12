@@ -196,6 +196,26 @@ const getBalanceBeforePage = async (filter, page, limit) => {
   return lastBeforePage[0]?.balance ?? 0;
 };
 
+const getOpeningBalanceBeforeDate = async (baseFilter, startDate) => {
+  if (!startDate || !baseFilter.supplier) {
+    return 0;
+  }
+
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+
+  const filter = { ...baseFilter };
+  delete filter.transactionDate;
+  filter.transactionDate = { $lt: start };
+
+  const lastBefore = await SupplierLedger.find(filter)
+    .sort({ transactionDate: -1, createdAt: -1 })
+    .limit(1)
+    .select('balance');
+
+  return lastBefore[0]?.balance ?? 0;
+};
+
 /**
  * Create a supplier ledger entry
  * @param {Object} ledgerBody
@@ -236,14 +256,19 @@ const queryLedgerEntries = async (filter, options) => {
   }
 
   // Handle date range filter
+  const rangeStartDate = options.startDate || null;
   if (options.startDate || options.endDate) {
     filter.transactionDate = {};
     if (options.startDate) {
-      filter.transactionDate.$gte = new Date(options.startDate);
+      const start = new Date(options.startDate);
+      start.setHours(0, 0, 0, 0);
+      filter.transactionDate.$gte = start;
       delete options.startDate;
     }
     if (options.endDate) {
-      filter.transactionDate.$lte = new Date(options.endDate);
+      const end = new Date(options.endDate);
+      end.setHours(23, 59, 59, 999);
+      filter.transactionDate.$lte = end;
       delete options.endDate;
     }
   }
@@ -258,9 +283,12 @@ const queryLedgerEntries = async (filter, options) => {
     await recalculateBalances(filter.supplier);
   }
 
-  const balanceBeforePage = await getBalanceBeforePage(filter, page, limit);
+  const balanceBeforePage = rangeStartDate && page <= 1
+    ? await getOpeningBalanceBeforeDate(filter, rangeStartDate)
+    : await getBalanceBeforePage(filter, page, limit);
   const entries = await SupplierLedger.paginate(filter, options);
   entries.balanceBeforePage = balanceBeforePage;
+  entries.openingBalance = rangeStartDate ? balanceBeforePage : undefined;
   return entries;
 };
 

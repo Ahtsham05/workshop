@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Table,
   TableBody,
@@ -19,7 +26,8 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -43,7 +51,21 @@ import {
 } from '@/features/invoice/utils/print-utils';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
-import { LEDGER_STATEMENT_SORT } from '@/features/accounting/utils/ledger-display';
+import { LedgerCategoryCards } from './ledger-category-cards';
+import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
+import {
+  isManualLedgerEntry,
+  isSimSaleLedgerRow,
+  isLoadSaleLedgerRow,
+  isCashWithdrawalLedgerRow,
+  groupCustomerLedgerEntries,
+  type CustomerLedgerCategoryGroup,
+} from '@/features/accounting/utils/customer-ledger-categories';
+import {
+  getCustomerLedgerEntryActions,
+  getLedgerFormPreset,
+} from '@/features/accounting/utils/customer-ledger-entry-navigation';
+import { cn } from '@/lib/utils';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
 import {
@@ -79,25 +101,6 @@ function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string)
   if (k === 'credit') return t('Credit');
   if (k === 'pending') return t('Pending');
   return raw;
-}
-
-function isSimSaleLedgerRow(entry: LedgerEntry): boolean {
-  if (entry.transactionType !== 'sale') return false;
-  const ref = String(entry.reference || '').toUpperCase();
-  if (ref.includes('SIM-SALE')) return true;
-  return /\bsim sale\b/i.test(entry.description || '');
-}
-
-/** Load Management sale — ledger referenceId is LoadTransaction, not sales Invoice. */
-function isLoadSaleLedgerRow(entry: LedgerEntry): boolean {
-  const ref = String(entry.reference || '').toUpperCase();
-  if (ref.includes('LOAD-SALE')) return true;
-  return /\bload sale\b/i.test(entry.description || '') || /\bfor load sale\b/i.test(entry.description || '');
-}
-
-/** Cash Management (wallet withdrawal/deposit) — referenceId is CashWithdrawal, not Invoice. */
-function isCashWithdrawalLedgerRow(entry: LedgerEntry): boolean {
-  return /CW-WITH|CW-DEPO/i.test(String(entry.reference || ''));
 }
 
 function resolveInvoiceCustomerForPrint(invoice: any, fallbackName: string): { name: string; nameUrdu?: string } {
@@ -695,8 +698,39 @@ function CashWithdrawalDetailDialogContent({
   );
 }
 
+function getDefaultLedgerDateRange() {
+  const now = new Date();
+  return {
+    startDate: format(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30), 'yyyy-MM-dd'),
+    endDate: format(now, 'yyyy-MM-dd'),
+  };
+}
+
+const CUSTOMER_LEDGER_VIEW_MODE_KEY = 'customer-ledger-view-mode';
+
+type LedgerViewMode = 'list' | 'category';
+
+function getStoredLedgerViewMode(): LedgerViewMode {
+  try {
+    const stored = localStorage.getItem(CUSTOMER_LEDGER_VIEW_MODE_KEY);
+    if (stored === 'list' || stored === 'category') return stored;
+  } catch {
+    /* ignore */
+  }
+  return 'list';
+}
+
+function storeLedgerViewMode(mode: LedgerViewMode) {
+  try {
+    localStorage.setItem(CUSTOMER_LEDGER_VIEW_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetailsProps) {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
@@ -719,19 +753,24 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   const [loadSaleDialogOpen, setLoadSaleDialogOpen] = useState(false);
   const [viewingCashWithdrawalId, setViewingCashWithdrawalId] = useState<string | null>(null);
   const [cashWithdrawalDialogOpen, setCashWithdrawalDialogOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-  const [balanceBeforePage, setBalanceBeforePage] = useState(0);
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [dateRange, setDateRange] = useState(getDefaultLedgerDateRange);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<LedgerViewMode>(getStoredLedgerViewMode);
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
+  const [activeCategoryGroup, setActiveCategoryGroup] = useState<CustomerLedgerCategoryGroup | null>(null);
+  const [ledgerFormPreset, setLedgerFormPreset] = useState<{
+    transactionType: string;
+    paymentMethod?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchLedgerEntries();
     fetchCustomerBalance();
-  }, [customer._id, currentPage, pageSize]);
+  }, [customer._id, dateRange.startDate, dateRange.endDate]);
 
   const fetchLedgerEntries = async () => {
     try {
@@ -740,13 +779,14 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
         params: {
           customer: customer._id,
           sortBy: LEDGER_STATEMENT_SORT,
-          page: currentPage,
-          limit: pageSize
+          page: 1,
+          limit: 5000,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
         },
       });
       setEntries(response.data.results || []);
-      setBalanceBeforePage(Number(response.data.balanceBeforePage) || 0);
-      setTotalPages(response.data.totalPages || 1);
+      setOpeningBalance(Number(response.data.openingBalance ?? response.data.balanceBeforePage) || 0);
       setTotalResults(response.data.totalResults || 0);
     } catch (error: any) {
       toast.error(t('Failed to load ledger entries'));
@@ -802,6 +842,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   const handleCloseForm = () => {
     setShowEntryForm(false);
     setEditingEntry(null);
+    setLedgerFormPreset(null);
   };
 
   const handleDeleteEntry = async (entry: LedgerEntry) => {
@@ -865,12 +906,152 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   };
 
   /** True when this line was added via Accounts → Add Entry (no linked sales invoice / SIM sale / etc.). */
-  const isManualEntry = (entry: LedgerEntry) => {
-    const rid = entry.referenceId as unknown;
-    if (rid == null) return true;
-    if (typeof rid === 'string' && !rid.trim()) return true;
-    return false;
+  const isManualEntry = isManualLedgerEntry;
+
+  const periodSummary = useMemo(() => {
+    const periodDebit = entries.reduce((sum, entry) => sum + (Number(entry.debit) || 0), 0);
+    const periodCredit = entries.reduce((sum, entry) => sum + (Number(entry.credit) || 0), 0);
+    const closingBalance = entries.length > 0
+      ? entries[entries.length - 1].balance
+      : openingBalance;
+    return { periodDebit, periodCredit, closingBalance };
+  }, [entries, openingBalance]);
+
+  const applyLast30Days = () => setDateRange(getDefaultLedgerDateRange());
+
+  const categoryGroups = useMemo(() => groupCustomerLedgerEntries(entries), [entries]);
+
+  const totalCategoryActivity = useMemo(
+    () => categoryGroups.reduce((sum, group) => sum + group.totalDebit + group.totalCredit, 0),
+    [categoryGroups],
+  );
+
+  const openCategorySheet = (group: CustomerLedgerCategoryGroup) => {
+    setActiveCategoryGroup(group);
+    setCategorySheetOpen(true);
   };
+
+  const categoryEntryActions = useMemo(
+    () =>
+      activeCategoryGroup
+        ? getCustomerLedgerEntryActions(activeCategoryGroup.category, customer._id)
+        : [],
+    [activeCategoryGroup, customer._id],
+  );
+
+  const handleNavigateEntry = (action: ReturnType<typeof getCustomerLedgerEntryActions>[number]) => {
+    setCategorySheetOpen(false);
+    navigate({ to: action.to, search: action.search as any });
+  };
+
+  const handleOpenLedgerEntryForm = (categoryKey: string) => {
+    const preset = getLedgerFormPreset(categoryKey);
+    if (!preset) return;
+    setLedgerFormPreset(preset);
+    setEditingEntry(null);
+    setCategorySheetOpen(false);
+    setShowEntryForm(true);
+  };
+
+  const handleViewModeChange = (mode: LedgerViewMode) => {
+    setViewMode(mode);
+    storeLedgerViewMode(mode);
+  };
+
+  const renderLedgerActions = (entry: LedgerEntry) => (
+    <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
+      {canPrintLinkedCustomerEntry(entry) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handlePrintLinkedCustomerDoc(entry, 'receipt')}
+          disabled={printingRowId === String(entry.id || entry._id)}
+          className="h-8 w-8 p-0"
+          title={t('print_invoice_btn')}
+        >
+          <Printer className="w-4 h-4 text-slate-700" />
+        </Button>
+      )}
+      {usesInvoiceA4Print(entry) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handlePrintLinkedCustomerDoc(entry, 'a4')}
+          disabled={printingRowId === String(entry.id || entry._id)}
+          className="h-8 w-8 p-0"
+          title={t('print_a4') || 'Print A4 invoice'}
+        >
+          <Receipt className="w-4 h-4 text-slate-700" />
+        </Button>
+      )}
+      {entry.transactionType === 'payment_received' && entry.credit > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleGenerateReceipt(entry)}
+          className="h-8 w-8 p-0"
+          title={t('Generate Receipt')}
+        >
+          <Receipt className="w-4 h-4 text-blue-600" />
+        </Button>
+      )}
+      {isManualEntry(entry) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleEditEntry(entry)}
+          className="h-8 w-8 p-0"
+          title={t('Edit entry')}
+        >
+          <Edit className="w-4 h-4" />
+        </Button>
+      )}
+      {isManualEntry(entry) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleDeleteEntry(entry)}
+          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+          title={t('Delete entry')}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  );
+
+  const renderLedgerReference = (entry: LedgerEntry) =>
+    entry.referenceId ? (
+      <Button
+        variant="link"
+        className="h-auto p-0 font-normal text-blue-600 hover:text-blue-800"
+        onClick={() => handleViewLinkedCustomerEntry(entry)}
+      >
+        {entry.reference || entry.referenceId}
+      </Button>
+    ) : (
+      entry.reference || '—'
+    );
+
+  const renderStatementTable = (
+    tableEntries: LedgerEntry[],
+    options?: { showOpeningBalance?: boolean; pageOffset?: number },
+  ) => (
+    <LedgerStatementTable
+      party="customer"
+      entries={tableEntries}
+      balanceBeforePage={openingBalance}
+      pageOffset={options?.pageOffset ?? 0}
+      showOpeningBalance={options?.showOpeningBalance ?? false}
+      openingBalanceLabel={t('Opening Balance')}
+      t={t}
+      getTypeLabel={getTransactionTypeLabel}
+      getTypeBadgeVariant={getTransactionTypeBadge}
+      formatInvoiceType={(entry) => formatLedgerInvoiceType(entry, t)}
+      renderReference={renderLedgerReference}
+      renderActions={renderLedgerActions}
+    />
+  );
 
   const canPrintLinkedCustomerEntry = (entry: LedgerEntry) =>
     Boolean(entry.referenceId) &&
@@ -1124,26 +1305,10 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end sm:justify-between sm:flex-row flex-col gap-4">
-        <div className='flex gap-2 justify-between'>
-          <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {t('Back to Customers')}
-          </Button>
-          <div className="flex items-center gap-4">
-            <Label className="text-sm">{t('Show')}</Label>
-            <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
-              <SelectTrigger className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <Button variant="ghost" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          {t('Back to Customers')}
+        </Button>
         <div className="flex gap-2 items-center">
           <Button variant="outline" size="sm" onClick={exportToExcel}>
             <Download className="w-4 h-4 mr-2" />
@@ -1168,10 +1333,13 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
           </DialogHeader>
           {showEntryForm && (
             <LedgerEntryForm
+              key={`${editingEntry?.id || editingEntry?._id || 'new'}-${ledgerFormPreset?.transactionType || ''}`}
               ledgerType="customer"
               entityId={customer._id}
               entityName={customer.name}
               editingEntry={editingEntry}
+              defaultTransactionType={ledgerFormPreset?.transactionType}
+              defaultPaymentMethod={ledgerFormPreset?.paymentMethod}
               onSuccess={(createdEntry) => {
                 handleCloseForm();
                 fetchLedgerEntries();
@@ -1346,23 +1514,121 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
           <CardDescription>{t('Transaction History and Balance')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-600 mb-1">{t('Current Balance')}</div>
-            {balanceLoading ? (
-              <div className="text-2xl font-bold text-gray-400">{t('Loading...')}</div>
-            ) : currentBalance !== null ? (
-              <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
-                Rs{Math.abs(currentBalance).toFixed(2)}
-                {currentBalance > 0 && (
-                  <span className="text-sm text-red-600 ml-2">({t('Receivable')})</span>
-                )}
-                {currentBalance < 0 && (
-                  <span className="text-sm text-green-600 ml-2">({t('Payable')})</span>
-                )}
+          <div className="mb-6 grid gap-4 lg:grid-cols-2">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-600 mb-1">{t('Current Balance')}</div>
+              {balanceLoading ? (
+                <div className="text-2xl font-bold text-gray-400">{t('Loading...')}</div>
+              ) : currentBalance !== null ? (
+                <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
+                  Rs{Math.abs(currentBalance).toFixed(2)}
+                  {currentBalance > 0 && (
+                    <span className="text-sm text-red-600 ml-2">({t('Receivable')})</span>
+                  )}
+                  {currentBalance < 0 && (
+                    <span className="text-sm text-green-600 ml-2">({t('Payable')})</span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-2xl font-bold text-gray-600">Rs0.00</div>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">{t('Statement Period')}</p>
+                <Button variant="outline" size="sm" onClick={applyLast30Days}>
+                  {t('last_30_days')}
+                </Button>
               </div>
-            ) : (
-              <div className="text-2xl font-bold text-gray-600">Rs0.00</div>
-            )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">{t('start_date')}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn('w-full justify-start text-left font-normal')}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(new Date(dateRange.startDate), 'PPP')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={new Date(dateRange.startDate)}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          setDateRange((prev) => ({
+                            ...prev,
+                            startDate: format(date, 'yyyy-MM-dd'),
+                          }));
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">{t('end_date')}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn('w-full justify-start text-left font-normal')}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(new Date(dateRange.endDate), 'PPP')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={new Date(dateRange.endDate)}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          setDateRange((prev) => ({
+                            ...prev,
+                            endDate: format(date, 'yyyy-MM-dd'),
+                          }));
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('Opening Balance')}</p>
+              <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('customer', openingBalance)}`}>
+                {formatLedgerBalanceLabel('customer', openingBalance, t)}
+              </p>
+            </div>
+            <div className="rounded-lg border px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('Debit')}</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-red-600">
+                Rs{periodSummary.periodDebit.toFixed(2)}
+              </p>
+            </div>
+            <div className="rounded-lg border px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('Credit')}</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-green-600">
+                Rs{periodSummary.periodCredit.toFixed(2)}
+              </p>
+            </div>
+            <div className="rounded-lg border px-4 py-3">
+              <p className="text-xs text-muted-foreground">{t('Closing Balance')}</p>
+              <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('customer', periodSummary.closingBalance)}`}>
+                {formatLedgerBalanceLabel('customer', periodSummary.closingBalance, t)}
+              </p>
+            </div>
           </div>
 
           {loading ? (
@@ -1371,142 +1637,114 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
             <div className="text-center py-8 text-gray-500">{t('No transactions found')}</div>
           ) : (
             <>
-              <LedgerStatementTable
-                party="customer"
-                entries={entries}
-                balanceBeforePage={balanceBeforePage}
-                pageOffset={(currentPage - 1) * pageSize}
-                t={t}
-                getTypeLabel={getTransactionTypeLabel}
-                getTypeBadgeVariant={getTransactionTypeBadge}
-                formatInvoiceType={(entry) => formatLedgerInvoiceType(entry, t)}
-                renderReference={(entry) =>
-                  entry.referenceId ? (
-                    <Button
-                      variant="link"
-                      className="h-auto p-0 font-normal text-blue-600 hover:text-blue-800"
-                      onClick={() => handleViewLinkedCustomerEntry(entry)}
-                    >
-                      {entry.reference || entry.referenceId}
-                    </Button>
-                  ) : (
-                    entry.reference || '—'
-                  )
-                }
-                renderActions={(entry) => (
-                  <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
-                    {canPrintLinkedCustomerEntry(entry) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handlePrintLinkedCustomerDoc(entry, 'receipt')}
-                        disabled={printingRowId === String(entry.id || entry._id)}
-                        className="h-8 w-8 p-0"
-                        title={t('print_invoice_btn')}
-                      >
-                        <Printer className="w-4 h-4 text-slate-700" />
-                      </Button>
-                    )}
-                    {usesInvoiceA4Print(entry) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handlePrintLinkedCustomerDoc(entry, 'a4')}
-                        disabled={printingRowId === String(entry.id || entry._id)}
-                        className="h-8 w-8 p-0"
-                        title={t('print_a4') || 'Print A4 invoice'}
-                      >
-                        <Receipt className="w-4 h-4 text-slate-700" />
-                      </Button>
-                    )}
-                    {entry.transactionType === 'payment_received' && entry.credit > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleGenerateReceipt(entry)}
-                        className="h-8 w-8 p-0"
-                        title={t('Generate Receipt')}
-                      >
-                        <Receipt className="w-4 h-4 text-blue-600" />
-                      </Button>
-                    )}
-                    {isManualEntry(entry) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditEntry(entry)}
-                        className="h-8 w-8 p-0"
-                        title={t('Edit entry')}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {isManualEntry(entry) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteEntry(entry)}
-                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title={t('Delete entry')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
-              />
-
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-gray-600">
-                    {t('Showing')} {(currentPage - 1) * pageSize + 1} {t('to')} {Math.min(currentPage * pageSize, totalResults)} {t('of')} {totalResults} {t('entries')}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                    >
-                      {t('First')}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      {t('Previous')}
-                    </Button>
-                    <div className="flex items-center gap-2 px-3">
-                      <span className="text-sm text-gray-600">
-                        {t('Page')} {currentPage} {t('of')} {totalPages}
-                      </span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      {t('Next')}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                    >
-                      {t('Last')}
-                    </Button>
-                  </div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {format(new Date(dateRange.startDate), 'dd MMM yyyy')} — {format(new Date(dateRange.endDate), 'dd MMM yyyy')}
+                  {' · '}
+                  {totalResults} {t('entries')}
+                </span>
+                <div className="flex items-center gap-1 rounded-lg border p-1">
+                  <Button
+                    type="button"
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => handleViewModeChange('list')}
+                  >
+                    <List className="h-4 w-4" />
+                    {t('List View')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={viewMode === 'category' ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={() => handleViewModeChange('category')}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    {t('Category View')}
+                  </Button>
                 </div>
+              </div>
+
+              {viewMode === 'list' ? (
+                renderStatementTable(entries, { showOpeningBalance: true })
+              ) : (
+                <LedgerCategoryCards
+                  groups={categoryGroups}
+                  totalActivity={totalCategoryActivity}
+                  t={t}
+                  onSelectCategory={openCategorySheet}
+                />
               )}
             </>
           )}
         </CardContent>
       </Card>
+
+      <Sheet open={categorySheetOpen} onOpenChange={setCategorySheetOpen}>
+        <SheetContent
+          side="right"
+          className="w-full max-w-none sm:max-w-[min(96vw,1280px)] p-0 flex flex-col gap-0"
+        >
+          <SheetHeader className="px-6 pt-6 pb-4 pr-14 border-b flex-shrink-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <SheetTitle className="text-lg">
+                  {activeCategoryGroup ? t(activeCategoryGroup.category.labelKey) : ''} — {t('Ledger Details')}
+                </SheetTitle>
+                {activeCategoryGroup && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>
+                      {activeCategoryGroup.entries.length} {t('entries')}
+                    </span>
+                    {activeCategoryGroup.totalDebit > 0 && (
+                      <Badge variant="outline" className="font-normal text-red-700 border-red-200">
+                        {t('Debit')}: Rs{activeCategoryGroup.totalDebit.toFixed(2)}
+                      </Badge>
+                    )}
+                    {activeCategoryGroup.totalCredit > 0 && (
+                      <Badge variant="outline" className="font-normal text-green-700 border-green-200">
+                        {t('Credit')}: Rs{activeCategoryGroup.totalCredit.toFixed(2)}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+              {activeCategoryGroup && (
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {categoryEntryActions.length > 0 ? (
+                    categoryEntryActions.map((action) => (
+                      <Button
+                        key={action.id}
+                        size="sm"
+                        variant={action.cashAction === 'receive' ? 'outline' : 'default'}
+                        className="gap-1.5"
+                        onClick={() => handleNavigateEntry(action)}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {t(action.labelKey)}
+                      </Button>
+                    ))
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => handleOpenLedgerEntryForm(activeCategoryGroup.category.key)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t('Add Entry')}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4">
+            {activeCategoryGroup && renderStatementTable(activeCategoryGroup.entries)}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

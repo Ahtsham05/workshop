@@ -175,7 +175,7 @@ export default function InvoicePage() {
     items: [createEmptyManualInvoiceItem()],
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
-    customerId: 'walk-in',
+    customerId: search.customerId?.trim() || 'walk-in',
     type: 'cash',
     subtotal: 0,
     tax: 0,
@@ -523,6 +523,17 @@ export default function InvoicePage() {
         setLoading(false)
       })
   }, [dispatch])
+
+  useEffect(() => {
+    const customerId = search.customerId?.trim()
+    if (!customerId || currentView !== 'create') return
+    const match = customers.find((c) => c._id === customerId || c.id === customerId)
+    setInvoice((prev) => ({
+      ...prev,
+      customerId,
+      customerName: match?.name || prev.customerName,
+    }))
+  }, [search.customerId, customers, currentView])
 
   // Group products by category
   useEffect(() => {

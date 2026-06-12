@@ -41,6 +41,7 @@ import {
 
 interface ExpenseFormProps {
   expense?: any
+  defaultCategory?: string
   onSave: () => void
   onCancel: () => void
   isEdit?: boolean
@@ -48,7 +49,7 @@ interface ExpenseFormProps {
 
 const paymentMethods = ['Cash', 'Bank Transfer', 'Card', 'Cheque']
 
-export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: ExpenseFormProps) {
+export function ExpenseForm({ expense, defaultCategory, onSave, onCancel, isEdit = false }: ExpenseFormProps) {
   const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
@@ -70,7 +71,7 @@ export function ExpenseForm({ expense, onSave, onCancel, isEdit = false }: Expen
   const [deletingCat, setDeletingCat] = useState(false)
 
   const [formData, setFormData] = useState({
-    category: expense?.category || '',
+    category: expense?.category || defaultCategory || '',
     description: expense?.description || '',
     amount: expense?.amount || '',
     paymentMethod: expense?.paymentMethod || 'Cash',

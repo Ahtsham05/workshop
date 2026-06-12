@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,9 +17,26 @@ function getLast30DaysRange() {
   }
 }
 
-export function ExpenseCategorySection({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
+export function ExpenseCategorySection({
+  refreshTrigger = 0,
+  onAddExpense,
+  openCategoryRequest,
+  onOpenCategoryHandled,
+}: {
+  refreshTrigger?: number
+  onAddExpense?: (category: string) => void
+  openCategoryRequest?: { name: string; id: number } | null
+  onOpenCategoryHandled?: () => void
+}) {
   const { t } = useLanguage()
   const [range, setRange] = useState(getLast30DaysRange)
+  const sectionRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (openCategoryRequest) {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [openCategoryRequest?.id])
 
   const queryStartDate = format(range.startDate, 'yyyy-MM-dd')
   const queryEndDate = format(range.endDate, 'yyyy-MM-dd')
@@ -27,6 +44,7 @@ export function ExpenseCategorySection({ refreshTrigger = 0 }: { refreshTrigger?
   const applyLast30Days = () => setRange(getLast30DaysRange())
 
   return (
+    <div ref={sectionRef}>
     <Card>
       <CardHeader>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -114,8 +132,12 @@ export function ExpenseCategorySection({ refreshTrigger = 0 }: { refreshTrigger?
           startDate={queryStartDate}
           endDate={queryEndDate}
           refreshTrigger={refreshTrigger}
+          onAddExpense={onAddExpense}
+          openCategoryRequest={openCategoryRequest}
+          onOpenCategoryHandled={onOpenCategoryHandled}
         />
       </CardContent>
     </Card>
+    </div>
   )
 }

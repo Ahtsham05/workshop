@@ -32,6 +32,8 @@ interface LedgerEntryFormProps {
   entityId: string;
   entityName: string;
   editingEntry?: any;
+  defaultTransactionType?: string;
+  defaultPaymentMethod?: string;
   onSuccess?: (entry?: any) => void;
   onCancel?: () => void;
 }
@@ -41,6 +43,8 @@ export function LedgerEntryForm({
   entityId,
   // entityName,
   editingEntry,
+  defaultTransactionType,
+  defaultPaymentMethod,
   onSuccess,
   onCancel,
 }: LedgerEntryFormProps) {
@@ -71,12 +75,12 @@ export function LedgerEntryForm({
   };
 
   const [formData, setFormData] = useState({
-    transactionType: editingEntry?.transactionType || (ledgerType === 'customer' ? 'payment_received' : 'payment_made'),
+    transactionType: editingEntry?.transactionType || defaultTransactionType || (ledgerType === 'customer' ? 'payment_received' : 'payment_made'),
     description: editingEntry?.description || '',
     reference: editingEntry?.reference || '',
     debit: editingEntry?.debit ? editingEntry.debit.toString() : '',
     credit: editingEntry?.credit ? editingEntry.credit.toString() : '',
-    paymentMethod: isWalletPaymentMethod(editingEntry?.paymentMethod) ? 'Wallet' : (editingEntry?.paymentMethod || 'Cash'),
+    paymentMethod: isWalletPaymentMethod(editingEntry?.paymentMethod) ? 'Wallet' : (editingEntry?.paymentMethod || defaultPaymentMethod || 'Cash'),
     walletType: getWalletTypeFromPaymentMethod(editingEntry?.paymentMethod) || '',
     notes: editingEntry?.notes || '',
   });

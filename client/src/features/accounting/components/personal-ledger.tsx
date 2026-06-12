@@ -162,6 +162,8 @@ interface CategoryBreakdown {
 
 function EntryForm({
   editingEntry,
+  defaultCategory,
+  defaultTransactionType,
   categoryNamesByType = {},
   categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
   isCategoryCatalogLoading = false,
@@ -170,6 +172,8 @@ function EntryForm({
   onCancel,
 }: {
   editingEntry: LedgerEntry | null;
+  defaultCategory?: string;
+  defaultTransactionType?: string;
   categoryNamesByType?: Record<string, string[]>;
   categoryCatalogByType?: Record<string, ExpenseCategory[]>;
   isCategoryCatalogLoading?: boolean;
@@ -182,12 +186,12 @@ function EntryForm({
   const [categoryError, setCategoryError] = useState('');
   const [createCategory] = useCreateExpenseCategoryMutation();
   const [form, setForm] = useState<EntryFormData>({
-    transactionType: editingEntry?.transactionType || 'income',
+    transactionType: editingEntry?.transactionType || defaultTransactionType || 'income',
     transactionDate: editingEntry
       ? format(new Date(editingEntry.transactionDate), 'yyyy-MM-dd')
       : format(new Date(), 'yyyy-MM-dd'),
     description: editingEntry?.description || '',
-    category: editingEntry?.category || '',
+    category: editingEntry?.category || defaultCategory || '',
     reference: editingEntry?.reference || '',
     amount: editingEntry ? String(editingEntry.credit || editingEntry.debit || '') : '',
     paymentMethod: editingEntry?.paymentMethod || '',
@@ -476,6 +480,11 @@ export function PersonalLedger() {
   const [activeCategoryFlow, setActiveCategoryFlow] = useState<CategoryFlow>('expense');
   const [categoryDetailEntries, setCategoryDetailEntries] = useState<LedgerEntry[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [formDefaults, setFormDefaults] = useState<{
+    category: string;
+    flow: CategoryFlow;
+    transactionType: string;
+  } | null>(null);
   const [allLedgerCategoryNamesByType, setAllLedgerCategoryNamesByType] = useState<
     Record<string, string[]>
   >({});
@@ -522,9 +531,9 @@ export function PersonalLedger() {
 
   useEffect(() => {
     if (!showForm) return;
-    const type = (editingEntry?.transactionType || 'income') as TransactionCategoryType;
+    const type = (editingEntry?.transactionType || formDefaults?.transactionType || 'income') as TransactionCategoryType;
     refreshWalletCategoryType(type);
-  }, [showForm, editingEntry?.transactionType, refreshWalletCategoryType]);
+  }, [showForm, editingEntry?.transactionType, formDefaults?.transactionType, refreshWalletCategoryType]);
 
   useEffect(() => {
     fetchOpeningBalance();
@@ -564,7 +573,7 @@ export function PersonalLedger() {
     }
   };
 
-  const fetchReportEntries = async () => {
+  const fetchReportEntries = async (): Promise<LedgerEntry[]> => {
     try {
       setReportLoading(true);
       const params: any = {
@@ -578,9 +587,12 @@ export function PersonalLedger() {
       if (endDate) params.endDate = endDate;
 
       const response = await Axios.get(summery.fetchPersonalLedgerEntries.url, { params });
-      setReportEntries(response.data.results || []);
+      const results = response.data.results || [];
+      setReportEntries(results);
+      return results;
     } catch {
       toast.error(t('Failed to load report data'));
+      return [];
     } finally {
       setReportLoading(false);
     }
@@ -667,16 +679,21 @@ export function PersonalLedger() {
     }
   };
 
-  const handleFormSuccess = () => {
+  const handleFormSuccess = async () => {
+    const reopen = formDefaults;
     setShowForm(false);
     setEditingEntry(null);
+    setFormDefaults(null);
     setCurrentPage(1);
     invalidateCashBookCaches();
     fetchAllLedgerCategoryNames();
     fetchEntries();
-    fetchReportEntries();
+    const updatedEntries = await fetchReportEntries();
     fetchOpeningBalance();
     fetchSummary();
+    if (reopen) {
+      openCategoryDetail(reopen.category, reopen.flow, updatedEntries);
+    }
   };
 
   const resolveCategoryName = useCallback(
@@ -720,12 +737,13 @@ export function PersonalLedger() {
   );
 
   const openCategoryDetail = useCallback(
-    (catName: string, flow: CategoryFlow) => {
+    (catName: string, flow: CategoryFlow, entriesSource?: LedgerEntry[]) => {
+      const source = entriesSource ?? reportEntries;
       setActiveCategory(catName);
       setActiveCategoryFlow(flow);
       setSheetOpen(true);
       setExpandedRows(new Set());
-      const filtered = reportEntries.filter((entry) => {
+      const filtered = source.filter((entry) => {
         if (flow === 'expense') {
           if (entry.transactionType !== 'expense' || !(entry.debit > 0)) return false;
         } else if (!isIncomeLedgerType(entry.transactionType) || !(entry.credit > 0)) {
@@ -737,6 +755,18 @@ export function PersonalLedger() {
     },
     [reportEntries, resolveCategoryName],
   );
+
+  const handleAddFromCategory = useCallback(() => {
+    if (!activeCategory) return;
+    setFormDefaults({
+      category: activeCategory,
+      flow: activeCategoryFlow,
+      transactionType: activeCategoryFlow === 'income' ? 'income' : 'expense',
+    });
+    setEditingEntry(null);
+    setSheetOpen(false);
+    setShowForm(true);
+  }, [activeCategory, activeCategoryFlow]);
 
   const toggleRow = useCallback((i: number) => {
     setExpandedRows((prev) => {
@@ -1118,7 +1148,7 @@ export function PersonalLedger() {
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
           </Button>
-          <Button onClick={() => { setEditingEntry(null); setShowForm(true); }}>
+          <Button onClick={() => { setEditingEntry(null); setFormDefaults(null); setShowForm(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             {t('Add Entry')}
           </Button>
@@ -1127,7 +1157,10 @@ export function PersonalLedger() {
 
       {/* Form Dialog */}
       <Dialog open={showForm} onOpenChange={(open) => {
-        if (!open) { setEditingEntry(null); }
+        if (!open) {
+          setEditingEntry(null);
+          setFormDefaults(null);
+        }
         setShowForm(open);
       }}>
         <DialogContent className="max-w-xl">
@@ -1136,14 +1169,16 @@ export function PersonalLedger() {
           </DialogHeader>
           {showForm && (
             <EntryForm
-              key={editingEntry?.id || editingEntry?._id || 'new'}
+              key={`${editingEntry?.id || editingEntry?._id || 'new'}-${formDefaults?.category || ''}-${formDefaults?.transactionType || ''}`}
               editingEntry={editingEntry}
+              defaultCategory={formDefaults?.category}
+              defaultTransactionType={formDefaults?.transactionType}
               categoryNamesByType={categoryNamesByType}
               categoryCatalogByType={categoryCatalogByType}
               isCategoryCatalogLoading={isCategoryCatalogLoading}
               onCatalogRefresh={refreshWalletCategoryType}
               onSuccess={handleFormSuccess}
-              onCancel={() => { setShowForm(false); setEditingEntry(null); }}
+              onCancel={() => { setShowForm(false); setEditingEntry(null); setFormDefaults(null); }}
             />
           )}
         </DialogContent>
@@ -1262,26 +1297,36 @@ export function PersonalLedger() {
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <SheetTitle className="text-lg">
                 {activeCategory} —{' '}
                 {activeCategoryFlow === 'income'
                   ? t('income_category_details')
                   : t('Expense Details')}
               </SheetTitle>
-              <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                {activeCategory && (
+                  <Button size="sm" className="h-8 gap-1" onClick={handleAddFromCategory}>
+                    <Plus className="h-3.5 w-3.5" />
+                    {activeCategoryFlow === 'income' ? t('Add Income') : t('Add Expense')}
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            {categoryDetailEntries.length > 0 && (
+            {!reportLoading && (
               <div className="flex items-center justify-between mt-2">
                 <p className="text-sm text-muted-foreground">
                   {categoryDetailEntries.length} {t('entries')} · {formatCurrency(categoryDetailTotal)} {t('total')}
                 </p>
-                <Button variant="outline" size="sm" onClick={toggleAllDetailRows} className="h-7 text-xs gap-1">
-                  <ChevronsUpDown className="h-3 w-3" />
-                  {expandedRows.size === categoryDetailEntries.length ? t('Collapse All') : t('Expand All')}
-                </Button>
+                {categoryDetailEntries.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={toggleAllDetailRows} className="h-7 text-xs gap-1">
+                    <ChevronsUpDown className="h-3 w-3" />
+                    {expandedRows.size === categoryDetailEntries.length ? t('Collapse All') : t('Expand All')}
+                  </Button>
+                )}
               </div>
             )}
           </SheetHeader>

@@ -29,6 +29,8 @@ interface Props {
   entries: LedgerStatementEntry[];
   balanceBeforePage?: number;
   pageOffset?: number;
+  showOpeningBalance?: boolean;
+  openingBalanceLabel?: string;
   t: (key: string) => string;
   getTypeLabel: (entry: LedgerStatementEntry) => string;
   getTypeBadgeVariant: (type: string) => 'default' | 'secondary' | 'destructive' | 'outline';
@@ -42,6 +44,8 @@ export function LedgerStatementTable({
   entries,
   balanceBeforePage = 0,
   pageOffset = 0,
+  showOpeningBalance = false,
+  openingBalanceLabel,
   t,
   getTypeLabel,
   getTypeBadgeVariant,
@@ -72,10 +76,10 @@ export function LedgerStatementTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {pageOffset > 0 && (
+          {(pageOffset > 0 || showOpeningBalance) && (
             <TableRow className='bg-muted/30 font-medium'>
               <TableCell colSpan={8} className='text-sm text-muted-foreground'>
-                {t('Balance brought forward')}
+                {openingBalanceLabel || t('Balance brought forward')}
               </TableCell>
               <TableCell className={`text-right tabular-nums ${getLedgerBalanceTone(party, balanceBeforePage)}`}>
                 {formatLedgerBalanceLabel(party, balanceBeforePage, t)}

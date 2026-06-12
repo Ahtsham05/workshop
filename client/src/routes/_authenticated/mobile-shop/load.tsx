@@ -8,10 +8,12 @@ const loadSearchSchema = z.object({
   walletId: z.string().optional(),
   walletType: z.string().optional(),
   tab: z.enum(['purchase', 'sell']).optional(),
+  customerId: z.string().optional(),
+  supplierId: z.string().optional(),
 })
 
 function LoadRoute() {
-  const { walletId, walletType, tab } = Route.useSearch()
+  const { walletId, walletType, tab, customerId, supplierId } = Route.useSearch()
   useGetWalletsQuery()
   return (
     <MobileShopGuard>
@@ -19,6 +21,8 @@ function LoadRoute() {
         initialWalletId={walletId}
         initialWalletType={walletType}
         initialTab={tab}
+        initialCustomerId={customerId}
+        initialSupplierId={supplierId}
       />
     </MobileShopGuard>
   )

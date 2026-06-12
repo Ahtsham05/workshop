@@ -8,10 +8,11 @@ const cashManagementSearchSchema = z.object({
   walletId: z.string().optional(),
   walletType: z.string().optional(),
   action: z.enum(['withdrawal', 'deposit']).optional(),
+  customerId: z.string().optional(),
 })
 
 function CashManagementRoute() {
-  const { walletId, walletType, action } = Route.useSearch()
+  const { walletId, walletType, action, customerId } = Route.useSearch()
   useGetWalletsQuery()
   return (
     <MobileShopGuard>
@@ -20,6 +21,7 @@ function CashManagementRoute() {
         initialWalletId={walletId}
         initialWalletType={walletType}
         initialAction={action}
+        initialCustomerId={customerId}
       />
     </MobileShopGuard>
   )

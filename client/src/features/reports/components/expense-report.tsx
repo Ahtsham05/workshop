@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Plus,
   X,
 } from 'lucide-react'
 import {
@@ -56,6 +57,9 @@ interface ExpenseReportProps {
   endDate: string
   mode?: 'full' | 'categories'
   refreshTrigger?: number
+  onAddExpense?: (category: string) => void
+  openCategoryRequest?: { name: string; id: number } | null
+  onOpenCategoryHandled?: () => void
 }
 
 const COLORS = [
@@ -68,7 +72,7 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 }).format(v)
 
 export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseReportProps>(
-  ({ startDate, endDate, mode = 'full', refreshTrigger = 0 }, ref) => {
+  ({ startDate, endDate, mode = 'full', refreshTrigger = 0, onAddExpense, openCategoryRequest, onOpenCategoryHandled }, ref) => {
     const categoriesOnly = mode === 'categories'
     const { t } = useLanguage()
     const { data, isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })
@@ -132,6 +136,12 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       },
       [fetchCategory, startDate, endDate, t],
     )
+
+    useEffect(() => {
+      if (!openCategoryRequest) return
+      openCategoryDetail(openCategoryRequest.name)
+      onOpenCategoryHandled?.()
+    }, [openCategoryRequest?.id, openCategoryDetail, onOpenCategoryHandled])
 
     const toggleRow = useCallback((i: number) => {
       setExpandedRows((prev) => {
@@ -360,23 +370,40 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
             className="w-full sm:max-w-2xl p-0 flex flex-col"
           >
             <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <SheetTitle className="text-lg">
                   {activeCategory} — {t('Expense Details')}
                 </SheetTitle>
-                <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
-                  <X className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  {onAddExpense && activeCategory && (
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1"
+                      onClick={() => {
+                        setSheetOpen(false)
+                        onAddExpense(activeCategory)
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t('Add Expense')}
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-              {!detailLoading && detailData.length > 0 && (
+              {!detailLoading && (
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-sm text-muted-foreground">
                     {detailData.length} {t('entries')} · {fmt(detailTotal)} {t('total')}
                   </p>
-                  <Button variant="outline" size="sm" onClick={toggleAll} className="h-7 text-xs gap-1">
-                    <ChevronsUpDown className="h-3 w-3" />
-                    {expandedRows.size === detailData.length ? t('Collapse All') : t('Expand All')}
-                  </Button>
+                  {detailData.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={toggleAll} className="h-7 text-xs gap-1">
+                      <ChevronsUpDown className="h-3 w-3" />
+                      {expandedRows.size === detailData.length ? t('Collapse All') : t('Expand All')}
+                    </Button>
+                  )}
                 </div>
               )}
             </SheetHeader>

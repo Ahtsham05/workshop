@@ -286,6 +286,8 @@ type LoadManagementPageProps = {
   initialWalletType?: string
   initialTab?: 'purchase' | 'sell'
   initialAction?: 'withdrawal' | 'deposit'
+  initialCustomerId?: string
+  initialSupplierId?: string
 }
 
 function LoadManagementPage({
@@ -294,6 +296,8 @@ function LoadManagementPage({
   initialWalletType,
   initialTab,
   initialAction,
+  initialCustomerId,
+  initialSupplierId,
 }: LoadManagementPageProps) {
   const isCashManagementMode = mode === 'cash-management'
   const navigate = useNavigate()
@@ -307,7 +311,15 @@ function LoadManagementPage({
     walletType?: string
     tab?: 'purchase' | 'sell'
     action?: 'withdrawal' | 'deposit'
+    customerId?: string
+    supplierId?: string
   }
+
+  const navCustomerId = routerSearch?.customerId ?? initialCustomerId?.trim() ?? ''
+  const navSupplierId = routerSearch?.supplierId ?? initialSupplierId?.trim() ?? ''
+
+  const appendCustomerToSearch = <T extends Record<string, unknown>>(search: T): T & { customerId?: string } =>
+    navCustomerId ? { ...search, customerId: navCustomerId } : search
 
   const mergedNav = mergeWalletNavSearch(readWalletNavFromUrl(), {
     walletId: routerSearch?.walletId ?? initialWalletId,
@@ -407,13 +419,13 @@ function LoadManagementPage({
 
     navigate({
       to: managementPath,
-      search: {
+      search: appendCustomerToSearch({
         walletId: walletId || undefined,
         walletType: walletType || undefined,
         ...(isCashManagementMode
           ? { action: txAction ?? 'withdrawal' }
           : { tab: tab ?? 'sell' }),
-      },
+      }),
     })
   }
 
@@ -424,11 +436,11 @@ function LoadManagementPage({
     applyWalletToForms(navWallet, { tab })
     navigate({
       to: managementPath,
-      search: {
+      search: appendCustomerToSearch({
         walletId: resolveWalletId(navWallet) || navWalletId || undefined,
         walletType: navWallet.type?.trim() || navWalletType || undefined,
         tab,
-      },
+      }),
     })
   }
 
@@ -474,6 +486,23 @@ function LoadManagementPage({
       commissionRate: base.commissionRate,
     }
   })
+
+  useEffect(() => {
+    if (!navCustomerId) return
+    setSaleForm((prev) =>
+      prev.customerId === navCustomerId ? prev : { ...prev, customerId: navCustomerId },
+    )
+    setWithdrawalForm((prev) =>
+      prev.customerId === navCustomerId ? prev : { ...prev, customerId: navCustomerId },
+    )
+  }, [navCustomerId])
+
+  useEffect(() => {
+    if (!navSupplierId) return
+    setPurchaseForm((prev) =>
+      prev.savedSupplierId === navSupplierId ? prev : { ...prev, savedSupplierId: navSupplierId },
+    )
+  }, [navSupplierId])
 
   const selectedPurchaseWalletId =
     purchaseForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')

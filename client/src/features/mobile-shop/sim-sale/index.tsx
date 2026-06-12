@@ -96,7 +96,7 @@ const makeEmptyForm = (): SimSaleFormState => ({
   paymentWalletType: '',
 })
 
-export default function SimSalePage() {
+export default function SimSalePage({ initialCustomerId }: { initialCustomerId?: string }) {
   const dispatch = useDispatch()
   const [page, setPage] = useState(1)
   const limit = 10
@@ -132,6 +132,19 @@ export default function SimSalePage() {
       dispatch(fetchAllProducts({}) as any)
     }
   }, [dispatch, products.length])
+
+  useEffect(() => {
+    const customerId = initialCustomerId?.trim()
+    if (!customerId) return
+    const selected = customers.find((c: any) => c._id === customerId || c.id === customerId)
+    setShowForm(true)
+    setForm((prev) => ({
+      ...prev,
+      customerId,
+      customerName: selected?.name || prev.customerName,
+      customerMobile: selected?.phone || prev.customerMobile,
+    }))
+  }, [initialCustomerId, customers])
 
   // Computed values
   const simAmount = Number(form.simAmount) || 0
