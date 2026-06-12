@@ -3,7 +3,7 @@ import { Receipt } from 'lucide-react';
 import type { LedgerStatementEntry } from '@/features/accounting/components/ledger-statement-table';
 
 export interface LedgerCategoryGroup {
-  category: { key: string; labelKey: string };
+  category: { key: string; labelKey: string; sortOrder: number };
   entries: LedgerStatementEntry[];
   totalDebit: number;
   totalCredit: number;

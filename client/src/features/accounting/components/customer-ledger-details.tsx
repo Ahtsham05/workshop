@@ -51,7 +51,7 @@ import {
 } from '@/features/invoice/utils/print-utils';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
-import { LedgerCategoryCards } from './ledger-category-cards';
+import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
 import {
   isManualLedgerEntry,
@@ -59,7 +59,6 @@ import {
   isLoadSaleLedgerRow,
   isCashWithdrawalLedgerRow,
   groupCustomerLedgerEntries,
-  type CustomerLedgerCategoryGroup,
 } from '@/features/accounting/utils/customer-ledger-categories';
 import {
   getCustomerLedgerEntryActions,
@@ -761,7 +760,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<LedgerViewMode>(getStoredLedgerViewMode);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
-  const [activeCategoryGroup, setActiveCategoryGroup] = useState<CustomerLedgerCategoryGroup | null>(null);
+  const [activeCategoryGroup, setActiveCategoryGroup] = useState<LedgerCategoryGroup | null>(null);
   const [ledgerFormPreset, setLedgerFormPreset] = useState<{
     transactionType: string;
     paymentMethod?: string;
@@ -926,7 +925,7 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     [categoryGroups],
   );
 
-  const openCategorySheet = (group: CustomerLedgerCategoryGroup) => {
+  const openCategorySheet = (group: LedgerCategoryGroup) => {
     setActiveCategoryGroup(group);
     setCategorySheetOpen(true);
   };

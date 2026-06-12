@@ -19,6 +19,7 @@ export interface LedgerStatementEntry {
   reference?: string;
   referenceId?: string;
   invoiceType?: string;
+  paymentMethod?: string;
   debit: number;
   credit: number;
   balance: number;
