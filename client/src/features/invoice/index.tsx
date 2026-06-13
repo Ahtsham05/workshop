@@ -92,7 +92,7 @@ export interface Invoice {
   walkInCustomerName?: string
   language?: 'en' | 'ur'
   isUrduOnly?: boolean
-  type: 'cash' | 'credit' | 'pending'
+  type: 'cash' | 'credit' | 'pending' | 'quotation'
   status?: 'draft' | 'finalized' | 'paid' | 'cancelled' | 'refunded'
   subtotal: number
   tax: number
@@ -998,7 +998,7 @@ export default function InvoicePage() {
   }, [products, addToInvoice])
 
   // Update invoice type
-  const updateInvoiceType = useCallback((type: 'cash' | 'credit' | 'pending') => {
+  const updateInvoiceType = useCallback((type: 'cash' | 'credit' | 'pending' | 'quotation') => {
     const totals = calculateTotals(invoice.items, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
     
     setInvoice(prev => ({

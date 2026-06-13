@@ -70,6 +70,7 @@ export interface DashboardStats {
   walletBalance: number
   totalSalesReturns: number
   totalPurchaseReturns: number
+  totalPurchases?: number
   netSales: number
   netPurchase: number
   totalBillCollection: number

@@ -31,7 +31,7 @@ export interface PrintInvoiceData {
   /** Urdu name for registered customers (walk-in uses walk-in name only). */
   customerNameUrdu?: string
   walkInCustomerName?: string
-  type: 'cash' | 'credit' | 'pending'
+  type: 'cash' | 'credit' | 'pending' | 'quotation'
   subtotal: number
   tax: number
   discount: number
@@ -89,11 +89,17 @@ export function resolvePrintDocumentNumber(invoiceNumber: string, printAsQuotati
   return `QUO-${num}`
 }
 
+const isQuotationPrint = (data: PrintInvoiceData) =>
+  Boolean(data.printAsQuotation || data.type === 'quotation')
+
+const isQuoteStyleTotals = (type: PrintInvoiceData['type']) =>
+  type === 'pending' || type === 'quotation'
+
 function resolvePrintDocumentTitle(
   data: PrintInvoiceData,
   labels: { invoice_title: string; quotation_title?: string },
 ): string {
-  if (data.printAsQuotation) {
+  if (isQuotationPrint(data)) {
     return labels.quotation_title || 'Quotation'
   }
   return labels.invoice_title
@@ -196,6 +202,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     companyPhone,
   } = data
 
+  const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = receiptLabels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
@@ -226,7 +233,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   }
 
   const termsHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
-  const printNumber = resolvePrintDocumentNumber(invoiceNumber, data.printAsQuotation)
+  const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
   const documentTitle = resolvePrintDocumentTitle(data, labels)
   const documentDate = resolvePrintDocumentDate(data)
   const formattedDocumentDate = documentDate.toLocaleDateString(locale)
@@ -236,6 +243,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
       case 'cash': return urduTexts.cash
       case 'credit': return urduTexts.credit
       case 'pending': return urduTexts.pending
+      case 'quotation': return urduTexts.quotation_title || 'Quotation'
       default: return type
     }
   }
@@ -620,7 +628,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   <div class="invoice-info">
     <div class="info-row">
-      <span class="info-label">${data.printAsQuotation ? (urduTexts.quotation_number || 'Quotation No') : urduTexts.invoice_number}:</span>
+      <span class="info-label">${quotationPrint ? (urduTexts.quotation_number || 'Quotation No') : urduTexts.invoice_number}:</span>
       <span class="highlight">${printNumber}</span>
     </div>
     <div class="info-row">
@@ -671,7 +679,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   
   ${(() => {
     const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
-    if (type === 'pending') {
+    if (isQuoteStyleTotals(type)) {
       if (hasExtraCharges) {
         return `
   <div class="totals-section">
@@ -709,7 +717,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     return ''
   })()}
   
-  ${type !== 'pending' ? `
+  ${!isQuoteStyleTotals(type) ? `
     <div class="payment-section">
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
@@ -742,7 +750,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   ` : ''}
   
   <div class="barcode-section">
-    <div style="font-size: 10px; margin-bottom: 4px;">${urduTexts.invoice_number}</div>
+    <div style="font-size: 10px; margin-bottom: 4px;">${quotationPrint ? (urduTexts.quotation_number || 'Quotation No') : urduTexts.invoice_number}</div>
     <div class="barcode">${generateBarcodeText(printNumber)}</div>
     <div class="barcode-text">${printNumber}</div>
   </div>
@@ -795,6 +803,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     companyPhone,
   } = data
 
+  const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = a4Labels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
@@ -817,6 +826,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
       case 'cash': return urduTexts.cash
       case 'credit': return urduTexts.credit
       case 'pending': return urduTexts.pending
+      case 'quotation': return urduTexts.quotation_title || 'Quotation'
       default: return typeValue
     }
   }
@@ -831,7 +841,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
     language,
   )
 
-  const printNumber = resolvePrintDocumentNumber(invoiceNumber, data.printAsQuotation)
+  const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
   const documentTitle = resolvePrintDocumentTitle(data, labels)
 
   const printActions = buildPrintWindowActionsBlock(
@@ -862,7 +872,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   }
   if (chunks.length === 0) chunks.push([])
 
-  const detailsSectionTitle = data.printAsQuotation
+  const detailsSectionTitle = quotationPrint
     ? (urduTexts.quotation_details || 'Quotation Details')
     : urduTexts.invoice_details
 
@@ -911,13 +921,13 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 `
 
   const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
-  const showItemizedTotalsTable = type === 'pending' || hasExtraCharges
+  const showItemizedTotalsTable = isQuoteStyleTotals(type) || hasExtraCharges
 
   const itemizedTotalsTable = showItemizedTotalsTable
     ? `
 <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
     <table class="totals-table" style="width: 400px;">
-      ${type === 'pending' && subtotal > 0 ? `
+      ${isQuoteStyleTotals(type) && subtotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.subtotal}:</td>
         <td class="total-amount">${formatCurrency(subtotal)}</td>
@@ -947,7 +957,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
         <td class="total-amount">${formatCurrency(tax)}</td>
       </tr>
       ` : ''}
-      ${type === 'pending' ? `
+      ${isQuoteStyleTotals(type) ? `
       <tr class="final-total">
         <td class="total-label">${urduTexts.total}:</td>
         <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
@@ -963,7 +973,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const totalsBlock = `
 ${itemizedTotalsTable}
 
-  ${type !== 'pending' ? `
+  ${!isQuoteStyleTotals(type) ? `
   <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
     <table class="totals-table" style="width: 400px;">
       <tr>

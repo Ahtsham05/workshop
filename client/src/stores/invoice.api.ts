@@ -123,6 +123,16 @@ export const invoiceApi = createApi({
       invalidatesTags: ['Invoice'],
     }),
 
+    // Convert quotation to cash/credit invoice
+    convertQuotation: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/${id}/convert-quotation`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Invoice'],
+    }),
+
     // Get invoice statistics
     getInvoiceStatistics: builder.query({
       query: (params = {}) => ({
@@ -181,6 +191,7 @@ export const {
   useProcessPaymentMutation,
   useCancelInvoiceMutation,
   useDuplicateInvoiceMutation,
+  useConvertQuotationMutation,
   useGetInvoiceStatisticsQuery,
   useGetDailySalesReportQuery,
   useGetOutstandingInvoicesQuery,

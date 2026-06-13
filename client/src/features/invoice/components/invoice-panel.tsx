@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck } from 'lucide-react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice, createEmptyManualInvoiceItem } from '../index'
@@ -63,6 +63,7 @@ import {
   EntityQuickCreateDialogs,
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
+import { QuotationConvertDialog } from './quotation-convert-dialog'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -72,7 +73,7 @@ interface InvoicePanelProps {
   setInvoice: React.Dispatch<React.SetStateAction<Invoice>>
   updateQuantity: (itemId: string, newQuantity: number) => void
   removeFromInvoice: (itemId: string) => void
-  updateInvoiceType: (type: 'cash' | 'credit' | 'pending') => void
+  updateInvoiceType: (type: 'cash' | 'credit' | 'pending' | 'quotation') => void
   updateDiscount: (discountAmount: number) => void
   taxRate: number
   setTaxRate: (rate: number) => void
@@ -185,7 +186,7 @@ export function InvoicePanel({
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
-  const [printAsQuotation, setPrintAsQuotation] = useState(false)
+  const [showConvertDialog, setShowConvertDialog] = useState(false)
   // Print functionality using utility
   const printInvoice = useCallback(async (invoiceData: any) => {
     try {
@@ -240,7 +241,7 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
-        printAsQuotation,
+        printAsQuotation: invoiceData.type === 'quotation',
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData)
 
@@ -272,7 +273,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers, printAsQuotation])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // A4 Print functionality using utility
   const printA4Invoice = useCallback(async (invoiceData: any) => {
@@ -328,7 +329,7 @@ export function InvoicePanel({
           return customers.find((c) => String(c._id || c.id) === String(cid))?.nameUrdu?.trim()
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
-        printAsQuotation,
+        printAsQuotation: invoiceData.type === 'quotation',
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData)
 
@@ -360,7 +361,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers, printAsQuotation])
+  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -886,6 +887,7 @@ export function InvoicePanel({
       case 'cash': return 'bg-green-100 text-green-800'
       case 'credit': return 'bg-blue-100 text-blue-800'
       case 'pending': return 'bg-yellow-100 text-yellow-800'
+      case 'quotation': return 'bg-violet-100 text-violet-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -933,16 +935,6 @@ export function InvoicePanel({
                     setPrintReceiptInUrdu(v)
                     setInvoicePrintInUrdu(v)
                   }}
-                />
-              </div>
-              <div className='flex items-center gap-2'>
-                <Label htmlFor='invoice-print-quotation-header' className='text-sm font-normal whitespace-nowrap'>
-                  {t('quotation_print')}
-                </Label>
-                <Switch
-                  id='invoice-print-quotation-header'
-                  checked={printAsQuotation}
-                  onCheckedChange={setPrintAsQuotation}
                 />
               </div>
             </div>
@@ -1207,7 +1199,7 @@ export function InvoicePanel({
               <Select
                 value={invoice.type}
                 onOpenChange={setInvoiceTypeSelectOpen}
-                onValueChange={(value: 'cash' | 'credit' | 'pending') => updateInvoiceType(value)}
+                onValueChange={(value: 'cash' | 'credit' | 'pending' | 'quotation') => updateInvoiceType(value)}
               >
                 <SelectTrigger
                   ref={invoiceTypeTriggerRef}
@@ -1234,6 +1226,12 @@ export function InvoicePanel({
                     disabled={invoice.customerId === 'walk-in'}
                   >
                     {t('pending')}
+                  </SelectItem>
+                  <SelectItem 
+                    value="quotation" 
+                    disabled={invoice.customerId === 'walk-in'}
+                  >
+                    {t('quotation') || 'Quotation'}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1277,7 +1275,7 @@ export function InvoicePanel({
             </div>
           )}
 
-          {((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending') && invoice.customerId !== 'walk-in' ? (
+          {((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending' || invoice.type === 'quotation') && invoice.customerId !== 'walk-in' ? (
             <div>
               <Label htmlFor="customerDisplayName">{t('customer_name')}</Label>
               <SmartInput
@@ -1856,7 +1854,7 @@ export function InvoicePanel({
             </div>
 
             {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
-            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && (
+            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
               <div className='space-y-3'>
                 <div>
                   <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
@@ -1906,7 +1904,7 @@ export function InvoicePanel({
               </div>
             )}
 
-            {invoice.type !== 'pending' && (
+            {invoice.type !== 'pending' && invoice.type !== 'quotation' && (
               <>
                 {invoice.type === 'credit' && (
                   <div>
@@ -2020,6 +2018,18 @@ export function InvoicePanel({
           />
 
           {/* Save Buttons */}
+          {isEditing && editingInvoice?.type === 'quotation' && (
+            <Button
+              type='button'
+              className='w-full bg-emerald-600 hover:bg-emerald-700'
+              size='lg'
+              onClick={() => setShowConvertDialog(true)}
+            >
+              <FileCheck className='h-4 w-4 mr-2' />
+              {t('convert_to_invoice') || 'Convert to Invoice'}
+            </Button>
+          )}
+
           <div className='grid grid-cols-1 gap-3'>
             <Button 
               onClick={() => handleSaveInvoice('none')}
@@ -2099,6 +2109,16 @@ export function InvoicePanel({
           setQuickCreateProductItemId(null)
         }}
         onCreated={handleQuickCreated}
+      />
+
+      <QuotationConvertDialog
+        invoice={isEditing && editingInvoice?.type === 'quotation' ? editingInvoice : null}
+        open={showConvertDialog}
+        onOpenChange={setShowConvertDialog}
+        onConverted={() => {
+          onSaveSuccess?.()
+          onBackToList?.()
+        }}
       />
     </div>
   )

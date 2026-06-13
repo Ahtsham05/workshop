@@ -66,7 +66,7 @@ function StatCardContent({
           {valueSuffix}
         </div>
         {(change !== undefined || description) && (
-          <div className='mt-1 flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='mt-1 space-y-1 text-xs text-muted-foreground'>
             {change !== undefined && (
               <div
                 className={`flex items-center gap-1 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}
@@ -81,7 +81,7 @@ function StatCardContent({
                 </span>
               </div>
             )}
-            {description && <span>{description}</span>}
+            {description && <p>{description}</p>}
           </div>
         )}
       </CardContent>

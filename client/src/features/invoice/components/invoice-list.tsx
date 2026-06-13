@@ -44,6 +44,7 @@ import {
   Info,
   // RotateCcw,
   Clock,
+  FileCheck,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -62,6 +63,7 @@ import {
 import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
+import { QuotationConvertDialog } from './quotation-convert-dialog'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { Switch } from '@/components/ui/switch'
@@ -92,6 +94,7 @@ const typeColors: Record<string, string> = {
   cash: 'bg-emerald-100 text-emerald-800',
   credit: 'bg-blue-100 text-blue-800',
   pending: 'bg-yellow-100 text-yellow-800',
+  quotation: 'bg-violet-100 text-violet-800',
   'pending-converted': 'bg-green-500 text-white', // Converted pending invoices - bright green
 }
 
@@ -118,6 +121,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
   const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
   const [printInUrdu, setPrintInUrdu] = useState(() => getInvoicePrintInUrdu())
+  const [quotationToConvert, setQuotationToConvert] = useState<any>(null)
 
   // Debounce search term
   useEffect(() => {
@@ -339,6 +343,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         userPreferredLanguage: preferredLanguage,
         invoiceNote: branchData?.invoiceNote,
         printInUrdu,
+        printAsQuotation: invoice.type === 'quotation',
         previousBalance,
         newBalance: previousBalance + invoiceTotal - invoicePaid,
       }, invoice)
@@ -508,6 +513,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <SelectItem value="cash">{t('cash')}</SelectItem>
                   <SelectItem value="credit">{t('credit')}</SelectItem>
                   <SelectItem value="pending">{t('pending')}</SelectItem>
+                  <SelectItem value="quotation">{t('quotation') || 'Quotation'}</SelectItem>
                   <SelectItem value="pending-converted">{t('converted_pending')}</SelectItem>
                 </SelectContent>
               </Select>
@@ -678,6 +684,18 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             </div>
                           </DialogContent>
                         </Dialog>
+
+                        {canEdit && invoice.type === 'quotation' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setQuotationToConvert(invoice)}
+                            title={t('convert_to_invoice') || 'Convert to Invoice'}
+                            className="text-emerald-700 hover:text-emerald-800"
+                          >
+                            <FileCheck className="h-4 w-4" />
+                          </Button>
+                        )}
 
                         {canEdit && (
                           <Button
@@ -879,6 +897,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           currentRow={invoiceToDelete}
         />
       )}
+
+      <QuotationConvertDialog
+        invoice={quotationToConvert}
+        open={!!quotationToConvert}
+        onOpenChange={(open) => {
+          if (!open) setQuotationToConvert(null)
+        }}
+      />
     </div>
   )
 }

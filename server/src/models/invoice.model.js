@@ -54,7 +54,7 @@ const InvoiceSchema = new mongoose.Schema({
     // Invoice type and status
     type: { 
         type: String, 
-        enum: ['cash', 'credit', 'pending'], 
+        enum: ['cash', 'credit', 'pending', 'quotation'], 
         required: true,
         default: 'cash'
     },
@@ -145,29 +145,34 @@ InvoiceSchema.index({ organizationId: 1, branchId: 1 });
 InvoiceSchema.plugin(toJSON);
 InvoiceSchema.plugin(paginate);
 
+// Generate next document number (INV- or QUO- prefix)
+InvoiceSchema.statics.generateNextDocumentNumber = async function generateNextDocumentNumber(prefix = 'INV') {
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const docPrefix = `${prefix}-${year}${month}-`;
+
+    const lastInvoice = await mongoose.models.Invoice
+        .findOne({ invoiceNumber: { $regex: `^${docPrefix}` } })
+        .sort({ invoiceNumber: -1 })
+        .select('invoiceNumber')
+        .lean();
+
+    let nextNum = 1;
+    if (lastInvoice && lastInvoice.invoiceNumber) {
+        const lastNum = parseInt(lastInvoice.invoiceNumber.replace(docPrefix, ''), 10);
+        if (!isNaN(lastNum)) {
+            nextNum = lastNum + 1;
+        }
+    }
+
+    return `${docPrefix}${String(nextNum).padStart(6, '0')}`;
+};
+
 // Generate invoice number before saving
 InvoiceSchema.pre('save', async function(next) {
     if (this.isNew && !this.invoiceNumber) {
-        const year = new Date().getFullYear();
-        const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        const prefix = `INV-${year}${month}-`;
-
-        // Find the highest existing invoice number for this month to avoid race conditions
-        const lastInvoice = await mongoose.models.Invoice
-            .findOne({ invoiceNumber: { $regex: `^${prefix}` } })
-            .sort({ invoiceNumber: -1 })
-            .select('invoiceNumber')
-            .lean();
-
-        let nextNum = 1;
-        if (lastInvoice && lastInvoice.invoiceNumber) {
-            const lastNum = parseInt(lastInvoice.invoiceNumber.replace(prefix, ''), 10);
-            if (!isNaN(lastNum)) {
-                nextNum = lastNum + 1;
-            }
-        }
-
-        this.invoiceNumber = `${prefix}${String(nextNum).padStart(6, '0')}`;
+        const prefix = this.type === 'quotation' ? 'QUO' : 'INV';
+        this.invoiceNumber = await this.constructor.generateNextDocumentNumber(prefix);
     }
     next();
 });

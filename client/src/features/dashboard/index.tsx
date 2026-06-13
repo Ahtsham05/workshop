@@ -39,6 +39,14 @@ import {
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
 
+const DASHBOARD_CARD_GRID =
+  'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6'
+
+const formatSalesProfitSubtext = (salesProfit: number | undefined, t: (key: string) => string) =>
+  salesProfit != null
+    ? `${t('Profit')}: Rs ${salesProfit.toLocaleString()}`
+    : undefined
+
 export default function Dashboard() {
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
@@ -69,6 +77,8 @@ export default function Dashboard() {
   // Show the mobile-shop dashboard section for any mobile_shop organisation.
   // Individual cards that require a paid feature are further gated inside the section.
   const showMobileCards = isMobileShopBusiness(businessType)
+  const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t)
+  const netProfitAfterExpense = (stats?.totalProfit || 0) - (stats?.totalExpenses || 0)
 
   if (!isPlatformAdmin && !hasExplicitPermission('viewDashboard')) {
     return <Navigate to={getDefaultHomeRoute(user)} replace />
@@ -110,235 +120,187 @@ export default function Dashboard() {
           <QuickActions />
         </div>
 
-        {/* Mobile Shop — Row 1: Cash / Wallets / Load */}
+        {/* Mobile Shop — operations */}
         {showMobileCards && (
-          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
-            <StatCard
-              title={t('Cash in Hand')}
-              value={stats?.cashInHand || 0}
-              icon={<DollarSign className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={t('Available cash after expenses')}
-              isLoading={statsLoading}
-              tone='emerald'
-              link={{ to: '/cash-register' }}
-            />
-            <StatCard
-              title={t('Wallet Balance')}
-              value={stats?.walletBalance || 0}
-              icon={<WalletCards className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={t('Total balance across all wallets')}
-              isLoading={statsLoading}
-              tone='cyan'
-              link={{ to: '/mobile-shop/wallet' }}
-            />
-            <StatCard
-              title={t('Load Sold')}
-              value={stats?.totalLoadSold || 0}
-              icon={<Smartphone className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.totalLoadSoldProfit
-                  ? `${t('Profit')}: Rs ${(stats?.totalLoadSoldProfit || 0).toLocaleString()}`
-                  : t('Mobile load transactions')
-              }
-              isLoading={statsLoading}
-              tone='violet'
-              link={reportLink('load')}
-            />
-            <StatCard
-              title={t('Load Purchased')}
-              value={stats?.totalLoadPurchased || 0}
-              icon={<ShoppingBag className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.totalLoadPurchaseProfit
-                  ? `${t('Profit')}: Rs ${(stats?.totalLoadPurchaseProfit || 0).toLocaleString()}`
-                  : t('Load bought from distributors')
-              }
-              isLoading={statsLoading}
-              tone='sky'
-              link={reportLink('load')}
-            />
-          </div>
+          <>
+            <div className={DASHBOARD_CARD_GRID}>
+              <StatCard
+                title={t('Cash in Hand')}
+                value={stats?.cashInHand || 0}
+                icon={<DollarSign className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={t('Available cash after expenses')}
+                isLoading={statsLoading}
+                tone='emerald'
+                link={{ to: '/cash-register' }}
+              />
+              <StatCard
+                title={t('Wallet Balance')}
+                value={stats?.walletBalance || 0}
+                icon={<WalletCards className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={t('Total balance across all wallets')}
+                isLoading={statsLoading}
+                tone='cyan'
+                link={{ to: '/mobile-shop/wallet' }}
+              />
+              <StatCard
+                title={t('Load Sold')}
+                value={stats?.totalLoadSold || 0}
+                icon={<Smartphone className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.totalLoadSoldProfit
+                    ? `${t('Profit')}: Rs ${(stats?.totalLoadSoldProfit || 0).toLocaleString()}`
+                    : t('Mobile load transactions')
+                }
+                isLoading={statsLoading}
+                tone='violet'
+                link={reportLink('load')}
+              />
+              <StatCard
+                title={t('Load Purchased')}
+                value={stats?.totalLoadPurchased || 0}
+                icon={<ShoppingBag className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.totalLoadPurchaseProfit
+                    ? `${t('Profit')}: Rs ${(stats?.totalLoadPurchaseProfit || 0).toLocaleString()}`
+                    : t('Load bought from distributors')
+                }
+                isLoading={statsLoading}
+                tone='sky'
+                link={reportLink('load')}
+              />
+              <StatCard
+                title={t('Repair Income')}
+                value={stats?.totalRepairIncome || 0}
+                icon={<Wrench className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.totalRepairProfit
+                    ? `${t('Profit')}: Rs ${(stats?.totalRepairProfit || 0).toLocaleString()}`
+                    : t('Repair charges collected')
+                }
+                isLoading={statsLoading}
+                tone='orange'
+                link={reportLink('repair')}
+              />
+            </div>
+
+            <div className={DASHBOARD_CARD_GRID}>
+              <StatCard
+                title={t('Bill Collection')}
+                value={stats?.totalBillCollection || 0}
+                icon={<Receipt className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.billPaymentProfit
+                    ? `${t('Profit')}: Rs ${(stats?.billPaymentProfit || 0).toLocaleString()}`
+                    : t('Total utility bills collected')
+                }
+                isLoading={statsLoading}
+                tone='indigo'
+                link={reportLink('bill-payments')}
+              />
+              <StatCard
+                title={dateRange.period === 'today' ? t('Bills Due Today') : t('Bills Due in Period')}
+                value={
+                  dateRange.period === 'today'
+                    ? stats?.billsDueToday || 0
+                    : stats?.billsDueInPeriod ?? stats?.billsDueToday ?? 0
+                }
+                icon={<Clock className='h-4 w-4' />}
+                description={
+                  dateRange.period === 'today'
+                    ? t('Pending bills due today')
+                    : t('Pending bills due in selected period')
+                }
+                isLoading={statsLoading}
+                tone='amber'
+                link={{ to: '/mobile-shop/bill-payments', search: { filter: 'due-today' } }}
+              />
+              <StatCard
+                title={t('Overdue Bills')}
+                value={stats?.billsOverdue || 0}
+                icon={<AlertCircle className='h-4 w-4' />}
+                description={t('Bills past due date')}
+                isLoading={statsLoading}
+                tone='rose'
+                link={{ to: '/mobile-shop/bill-payments', search: { filter: 'overdue' } }}
+              />
+              <StatCard
+                title={t('Sim Sale')}
+                value={stats?.totalSimSale || 0}
+                icon={<IdCard className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.simSaleCount
+                    ? `${t('Profit')}: Rs ${(stats?.totalSimSaleProfit || 0).toLocaleString()} · ${stats.simSaleCount} ${t('sales')}`
+                    : t('SIM sales in selected period')
+                }
+                isLoading={statsLoading}
+                tone='violet'
+                link={reportLink('sim-sale')}
+              />
+              <StatCard
+                title={t('Services')}
+                value={stats?.totalServiceIncome || 0}
+                icon={<Briefcase className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.serviceInvoiceCount
+                    ? `${t('Profit')}: Rs ${(stats?.totalServiceProfit || stats?.totalServiceIncome || 0).toLocaleString()} · ${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
+                    : t('Service charges collected')
+                }
+                isLoading={statsLoading}
+                tone='emerald'
+                link={reportLink('services')}
+              />
+            </div>
+
+            <div className='mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2'>
+              <StatCard
+                title={t('Send')}
+                value={stats?.totalCashSend || 0}
+                icon={<ArrowUpRight className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.cashSendCount
+                    ? `${t('Profit')}: Rs ${(stats?.totalCashSendProfit || 0).toLocaleString()} · ${stats.cashSendCount} ${t('transactions')}`
+                    : t('Cash sent to customer accounts')
+                }
+                isLoading={statsLoading}
+                tone='cyan'
+                link={{ to: '/mobile-shop/cash-management' }}
+              />
+              <StatCard
+                title={t('Received')}
+                value={stats?.totalCashReceived || 0}
+                icon={<ArrowDownLeft className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={
+                  stats?.cashReceivedCount
+                    ? `${t('Profit')}: Rs ${(stats?.totalCashReceivedProfit || 0).toLocaleString()} · ${stats.cashReceivedCount} ${t('transactions')}`
+                    : t('Cash received from customers')
+                }
+                isLoading={statsLoading}
+                tone='sky'
+                link={{ to: '/mobile-shop/cash-management' }}
+              />
+            </div>
+          </>
         )}
 
-        {/* Mobile Shop — Row 2: Repair / Bills */}
-        {showMobileCards && (
-          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
-            <StatCard
-              title={t('Repair Income')}
-              value={stats?.totalRepairIncome || 0}
-              icon={<Wrench className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.totalRepairProfit
-                  ? `${t('Profit')}: Rs ${(stats?.totalRepairProfit || 0).toLocaleString()}`
-                  : t('Repair charges collected')
-              }
-              isLoading={statsLoading}
-              tone='orange'
-              link={reportLink('repair')}
-            />
-            <StatCard
-              title={t('Bill Collection')}
-              value={stats?.totalBillCollection || 0}
-              icon={<Receipt className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.billPaymentProfit
-                  ? `${t('Profit')}: Rs ${(stats?.billPaymentProfit || 0).toLocaleString()}`
-                  : t('Total utility bills collected')
-              }
-              isLoading={statsLoading}
-              tone='indigo'
-              link={reportLink('bill-payments')}
-            />
-            <StatCard
-              title={dateRange.period === 'today' ? t('Bills Due Today') : t('Bills Due in Period')}
-              value={
-                dateRange.period === 'today'
-                  ? stats?.billsDueToday || 0
-                  : stats?.billsDueInPeriod ?? stats?.billsDueToday ?? 0
-              }
-              icon={<Clock className='h-4 w-4' />}
-              description={
-                dateRange.period === 'today'
-                  ? t('Pending bills due today')
-                  : t('Pending bills due in selected period')
-              }
-              isLoading={statsLoading}
-              tone='amber'
-              link={{ to: '/mobile-shop/bill-payments', search: { filter: 'due-today' } }}
-            />
-            <StatCard
-              title={t('Overdue Bills')}
-              value={stats?.billsOverdue || 0}
-              icon={<AlertCircle className='h-4 w-4' />}
-              description={t('Bills past due date')}
-              isLoading={statsLoading}
-              tone='rose'
-              link={{ to: '/mobile-shop/bill-payments', search: { filter: 'overdue' } }}
-            />
-          </div>
-        )}
-
-        {/* Mobile Shop — Row 3: Sim Sale / Send / Received / Services */}
-        {showMobileCards && (
-          <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
-            <StatCard
-              title={t('Sim Sale')}
-              value={stats?.totalSimSale || 0}
-              icon={<IdCard className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.simSaleCount
-                  ? `${t('Profit')}: Rs ${(stats?.totalSimSaleProfit || 0).toLocaleString()} · ${stats.simSaleCount} ${t('sales')}`
-                  : t('SIM sales in selected period')
-              }
-              isLoading={statsLoading}
-              tone='violet'
-              link={reportLink('sim-sale')}
-            />
-            <StatCard
-              title={t('Send')}
-              value={stats?.totalCashSend || 0}
-              icon={<ArrowUpRight className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.cashSendCount
-                  ? `${t('Profit')}: Rs ${(stats?.totalCashSendProfit || 0).toLocaleString()} · ${stats.cashSendCount} ${t('transactions')}`
-                  : t('Cash sent to customer accounts')
-              }
-              isLoading={statsLoading}
-              tone='cyan'
-              link={{ to: '/mobile-shop/cash-management' }}
-            />
-            <StatCard
-              title={t('Received')}
-              value={stats?.totalCashReceived || 0}
-              icon={<ArrowDownLeft className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.cashReceivedCount
-                  ? `${t('Profit')}: Rs ${(stats?.totalCashReceivedProfit || 0).toLocaleString()} · ${stats.cashReceivedCount} ${t('transactions')}`
-                  : t('Cash received from customers')
-              }
-              isLoading={statsLoading}
-              tone='sky'
-              link={{ to: '/mobile-shop/cash-management' }}
-            />
-            <StatCard
-              title={t('Services')}
-              value={stats?.totalServiceIncome || 0}
-              icon={<Briefcase className='h-4 w-4' />}
-              valuePrefix='Rs '
-              description={
-                stats?.serviceInvoiceCount
-                  ? `${t('Profit')}: Rs ${(stats?.totalServiceProfit || stats?.totalServiceIncome || 0).toLocaleString()} · ${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
-                  : t('Service charges collected')
-              }
-              isLoading={statsLoading}
-              tone='emerald'
-              link={reportLink('services')}
-            />
-          </div>
-        )}
-
-        {/* Total profit & ROI */}
-        <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
-          <StatCard
-            title={t('Sales Profit')}
-            value={stats?.salesProfit || 0}
-            icon={<ShoppingCart className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={t('Profit from product invoices')}
-            isLoading={statsLoading}
-            tone='emerald'
-            link={reportLink('sales')}
-          />
-          <StatCard
-            title={t('total_expenses')}
-            value={stats?.totalExpenses || 0}
-            icon={<Receipt className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={t('Operating expenses in selected period')}
-            isLoading={statsLoading}
-            tone='rose'
-            link={{ to: '/accounting', search: { tab: 'expenses' } }}
-          />
-          <StatCard
-            title={t('total_profit')}
-            value={stats?.totalProfit || 0}
-            icon={<TrendingUp className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={t('Sum of all profit sources in selected period')}
-            isLoading={statsLoading}
-            tone={(stats?.totalProfit || 0) >= 0 ? 'emerald' : 'rose'}
-            link={reportLink('profit-loss')}
-          />
-          <StatCard
-            title='ROI'
-            value={stats?.roi ?? 0}
-            icon={<TrendingUp className='h-4 w-4' />}
-            valueSuffix='%'
-            description={t('Return on investment for selected period')}
-            isLoading={statsLoading}
-            tone={(stats?.roi ?? 0) >= 0 ? 'violet' : 'rose'}
-            link={reportLink('roi')}
-          />
-        </div>
-
-        {/* Statistics Cards */}
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6'>
+        {/* Business summary — ordered rows of 5 */}
+        <div className={DASHBOARD_CARD_GRID}>
           <StatCard
             title={t('Total Revenue')}
             value={stats?.totalRevenue || 0}
             change={stats?.totalRevenueChange}
             icon={<DollarSign className='h-4 w-4' />}
-            valuePrefix='Rs'
-            description={comparisonLabel}
+            valuePrefix='Rs '
+            description={salesProfitSubtext || comparisonLabel}
             isLoading={statsLoading}
             tone='emerald'
             link={reportLink('profit-loss')}
@@ -348,16 +310,66 @@ export default function Dashboard() {
             value={stats?.totalSales || 0}
             change={stats?.totalSalesChange}
             icon={<ShoppingCart className='h-4 w-4' />}
-            description={comparisonLabel}
+            description={salesProfitSubtext || comparisonLabel}
             isLoading={statsLoading}
             tone='sky'
             link={reportLink('sales')}
           />
           <StatCard
+            title={t('Sales Returns')}
+            value={stats?.totalSalesReturns || 0}
+            icon={<RefreshCcw className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Total amount refunded to customers')}
+            isLoading={statsLoading}
+            tone='rose'
+            link={reportLink('sales-returns')}
+          />
+          <StatCard
+            title={t('Net Sales')}
+            value={stats?.netSales || 0}
+            icon={<ShoppingCart className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Revenue after sales returns')}
+            isLoading={statsLoading}
+            tone='emerald'
+            link={reportLink('sales')}
+          />
+          <StatCard
+            title={t('total_purchases')}
+            value={stats?.totalPurchases || 0}
+            icon={<Package className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('total_purchase_amount_period')}
+            isLoading={statsLoading}
+            tone='orange'
+            link={reportLink('purchases')}
+          />
+          <StatCard
+            title={t('Purchase Returns')}
+            value={stats?.totalPurchaseReturns || 0}
+            icon={<RefreshCcw className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Total amount recovered from suppliers')}
+            isLoading={statsLoading}
+            tone='cyan'
+            link={reportLink('purchase-returns')}
+          />
+          <StatCard
+            title={t('Net Purchases')}
+            value={stats?.netPurchase || 0}
+            icon={<Package className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Total purchases minus returns')}
+            isLoading={statsLoading}
+            tone='orange'
+            link={reportLink('purchases')}
+          />
+          <StatCard
             title={t('Inventory Value')}
             value={stats?.totalInventoryValue || 0}
             icon={<Package className='h-4 w-4' />}
-            valuePrefix='Rs'
+            valuePrefix='Rs '
             description={t('Total stock value')}
             isLoading={statsLoading}
             tone='violet'
@@ -376,59 +388,51 @@ export default function Dashboard() {
             title={t('Pending Invoices')}
             value={stats?.pendingInvoices || 0}
             icon={<FileText className='h-4 w-4' />}
-            valuePrefix='Rs'
-            description={`${t('Total')}: Rs${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
+            valuePrefix='Rs '
+            description={`${t('Total')}: Rs ${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
             isLoading={statsLoading}
             tone='indigo'
             link={{ to: '/invoice', search: { view: 'list', type: 'pending' } }}
           />
-        </div>
-
-        {/* Returns Summary */}
-        <div className='grid gap-4 sm:grid-cols-2 mb-6'>
           <StatCard
-            title={t('Sales Returns')}
-            value={stats?.totalSalesReturns || 0}
-            icon={<RefreshCcw className='h-4 w-4' />}
+            title={t('total_profit')}
+            value={stats?.totalProfit || 0}
+            icon={<TrendingUp className='h-4 w-4' />}
             valuePrefix='Rs '
-            description={t('Total amount refunded to customers')}
+            description={t('Sum of all profit sources in selected period')}
+            isLoading={statsLoading}
+            tone={(stats?.totalProfit || 0) >= 0 ? 'emerald' : 'rose'}
+            link={reportLink('profit-loss')}
+          />
+          <StatCard
+            title={t('total_expenses')}
+            value={stats?.totalExpenses || 0}
+            icon={<Receipt className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Operating expenses in selected period')}
             isLoading={statsLoading}
             tone='rose'
-            link={reportLink('sales-returns')}
+            link={{ to: '/accounting', search: { tab: 'expenses' } }}
           />
           <StatCard
-            title={t('Purchase Returns')}
-            value={stats?.totalPurchaseReturns || 0}
-            icon={<RefreshCcw className='h-4 w-4' />}
+            title={t('net_profit_after_expense')}
+            value={netProfitAfterExpense}
+            icon={<TrendingUp className='h-4 w-4' />}
             valuePrefix='Rs '
-            description={t('Total amount recovered from suppliers')}
+            description={t('total_profit_minus_expenses')}
             isLoading={statsLoading}
-            tone='cyan'
-            link={reportLink('purchase-returns')}
-          />
-        </div>
-
-        {/* Net figures after returns */}
-        <div className='grid gap-4 sm:grid-cols-2 mb-6'>
-          <StatCard
-            title={t('Net Sales')}
-            value={stats?.netSales || 0}
-            icon={<ShoppingCart className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={t('Revenue after sales returns')}
-            isLoading={statsLoading}
-            tone='emerald'
-            link={reportLink('sales')}
+            tone={netProfitAfterExpense >= 0 ? 'emerald' : 'rose'}
+            link={reportLink('profit-loss')}
           />
           <StatCard
-            title={t('Net Purchases')}
-            value={stats?.netPurchase || 0}
-            icon={<Package className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={t('Total purchases minus returns')}
+            title='ROI'
+            value={stats?.roi ?? 0}
+            icon={<TrendingUp className='h-4 w-4' />}
+            valueSuffix='%'
+            description={t('Return on investment for selected period')}
             isLoading={statsLoading}
-            tone='orange'
-            link={reportLink('purchases')}
+            tone={(stats?.roi ?? 0) >= 0 ? 'violet' : 'rose'}
+            link={reportLink('roi')}
           />
         </div>
 

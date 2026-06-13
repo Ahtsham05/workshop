@@ -59,6 +59,10 @@ router
   .route('/:invoiceId/duplicate')
   .post(auth('createInvoices'), validate(invoiceValidation.duplicateInvoice), invoiceController.duplicateInvoice);
 
+router
+  .route('/:invoiceId/convert-quotation')
+  .post(auth('editInvoices'), validate(invoiceValidation.convertQuotation), invoiceController.convertQuotation);
+
 module.exports = router;
 
 /**

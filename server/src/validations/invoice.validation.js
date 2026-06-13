@@ -35,7 +35,7 @@ const createInvoice = {
     ).optional(),
     customerName: Joi.string().allow('').optional(),
     walkInCustomerName: Joi.string().allow('').optional(),
-    type: Joi.string().valid('cash', 'credit', 'pending').default('cash'),
+    type: Joi.string().valid('cash', 'credit', 'pending', 'quotation').default('cash'),
     subtotal: Joi.number().min(0).required(),
     tax: Joi.number().min(0).default(0),
     discount: Joi.number().min(0).default(0),
@@ -74,7 +74,7 @@ const createInvoice = {
 const getInvoices = {
   query: Joi.object({
     customerId: Joi.string().custom(objectId),
-    type: Joi.string().valid('cash', 'credit', 'pending'),
+    type: Joi.string().valid('cash', 'credit', 'pending', 'quotation'),
     status: Joi.string().valid('draft', 'finalized', 'paid', 'cancelled', 'refunded'),
     invoiceNumber: Joi.string(),
     dateFrom: Joi.date(),
@@ -105,7 +105,7 @@ const updateInvoice = {
     ).optional(),
     customerName: Joi.string().allow('').optional(),
     walkInCustomerName: Joi.string().allow('').optional(),
-    type: Joi.string().valid('cash', 'credit', 'pending').optional(),
+    type: Joi.string().valid('cash', 'credit', 'pending', 'quotation').optional(),
     subtotal: Joi.number().min(0).optional(),
     tax: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
@@ -171,7 +171,7 @@ const getInvoiceStatistics = {
     dateFrom: Joi.date(),
     dateTo: Joi.date(),
     customerId: Joi.string().custom(objectId),
-    type: Joi.string().valid('cash', 'credit', 'pending')
+    type: Joi.string().valid('cash', 'credit', 'pending', 'quotation')
   })
 };
 
@@ -212,6 +212,24 @@ const duplicateInvoice = {
   })
 };
 
+const convertQuotation = {
+  params: Joi.object({
+    invoiceId: Joi.string().custom(objectId)
+  }),
+  body: Joi.object({
+    targetType: Joi.string().valid('cash', 'credit').required(),
+    paidAmount: Joi.number().min(0).optional(),
+    dueDate: Joi.date().optional(),
+    paymentMethod: Joi.string().valid('cash', 'wallet', 'bank', 'card').optional(),
+    walletType: Joi.string().trim().when('paymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    notes: Joi.string().allow('').optional(),
+  }),
+};
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -225,5 +243,6 @@ module.exports = {
   getInvoicesByCustomer,
   getOutstandingInvoices,
   cancelInvoice,
-  duplicateInvoice
+  duplicateInvoice,
+  convertQuotation,
 };

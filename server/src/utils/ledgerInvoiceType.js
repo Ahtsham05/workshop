@@ -1,6 +1,6 @@
 /** Canonical invoice terms for ledger display (cash vs credit sale / purchase). */
 
-const CUSTOMER_INVOICE_TYPES = ['cash', 'credit', 'pending'];
+const CUSTOMER_INVOICE_TYPES = ['cash', 'credit', 'pending', 'quotation'];
 
 const normalizeCustomerInvoiceType = (type) => {
   if (type === undefined || type === null) return undefined;

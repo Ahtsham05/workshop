@@ -24,7 +24,7 @@ const postInvoiceToAccounts = (invoice) => {
     branchId: invoice.branchId,
     createdBy: invoice.createdBy,
   };
-  const isPostable = invoice.type !== 'pending' && !['draft', 'cancelled'].includes(invoice.status);
+  const isPostable = invoice.type !== 'pending' && invoice.type !== 'quotation' && !['draft', 'cancelled'].includes(invoice.status);
   if (!isPostable) {
     accountsSystemService.removePostingsForReference(scope, 'Invoice', invoice._id).catch(() => {});
     return;
@@ -218,6 +218,8 @@ const createInvoice = async (invoiceBody, userId) => {
     console.log('Customer validated:', customer.name);
   }
 
+  const isQuotation = invoiceBody.type === 'quotation';
+
   // Validate products and calculate totals
   const validatedItems = [];
   for (const item of invoiceBody.items) {
@@ -234,8 +236,8 @@ const createInvoice = async (invoiceBody, userId) => {
 
     const conversion = toStockQuantity({ product, item, businessType });
 
-    // Check stock availability for all invoice types
-    if (product.stockQuantity < conversion.stockQuantity) {
+    // Check stock availability (quotations do not reserve stock)
+    if (!isQuotation && product.stockQuantity < conversion.stockQuantity) {
       console.error('Insufficient stock:', {
         product: product.name,
         available: product.stockQuantity,
@@ -304,7 +306,7 @@ const createInvoice = async (invoiceBody, userId) => {
   postInvoiceToAccounts(invoice);
 
   // Create customer ledger entry for non-walk-in customers
-  if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending') {
+  if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending' && invoice.type !== 'quotation') {
     try {
       const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
       const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
@@ -356,15 +358,17 @@ const createInvoice = async (invoiceBody, userId) => {
     }
   }
 
-  // Update product stock quantities for all invoice types
-  console.log('Updating stock quantities for invoice type:', invoice.type);
-  for (const item of validatedItems) {
-    await Product.findByIdAndUpdate(
-      item.productId,
-      { $inc: { stockQuantity: -item.stockQuantity } },
-      { new: true }
-    );
-    console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
+  // Update product stock quantities (quotations do not affect stock until converted)
+  if (!isQuotation) {
+    console.log('Updating stock quantities for invoice type:', invoice.type);
+    for (const item of validatedItems) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { stockQuantity: -item.stockQuantity } },
+        { new: true }
+      );
+      console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
+    }
   }
 
   // Populate references conditionally
@@ -533,17 +537,22 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
   // If updating items, validate stock again
   if (updateBody.items) {
-    // Restore original stock quantities
-    for (const item of invoice.items) {
-      await Product.findByIdAndUpdate(
-        item.productId,
-        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
-        { new: true }
-      );
+    // Restore original stock quantities (quotations never deducted stock)
+    if (originalType !== 'quotation') {
+      for (const item of invoice.items) {
+        await Product.findByIdAndUpdate(
+          item.productId,
+          { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
+          { new: true }
+        );
+      }
     }
 
     // Validate new items and stock
     const validatedItems = [];
+    const willRemainQuotation =
+      originalType === 'quotation' && (updateBody.type === undefined || updateBody.type === 'quotation');
+
     for (const item of updateBody.items) {
       if (!item.productId) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Product ID is required for all items');
@@ -556,7 +565,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
       const conversion = getStockQuantityFromItem({ product, item, businessType });
 
-      if (product.stockQuantity < conversion.stockQuantity) {
+      if (!willRemainQuotation && product.stockQuantity < conversion.stockQuantity) {
         throw new ApiError(
           httpStatus.BAD_REQUEST, 
           `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
@@ -584,13 +593,15 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
     updateBody.items = validatedItems;
 
-    // Update stock quantities for new items
-    for (const item of validatedItems) {
-      await Product.findByIdAndUpdate(
-        item.productId,
-        { $inc: { stockQuantity: -item.stockQuantity } },
-        { new: true }
-      );
+    // Update stock quantities for new items (quotations do not affect stock)
+    if (!willRemainQuotation) {
+      for (const item of validatedItems) {
+        await Product.findByIdAndUpdate(
+          item.productId,
+          { $inc: { stockQuantity: -item.stockQuantity } },
+          { new: true }
+        );
+      }
     }
   }
 
@@ -637,6 +648,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   if (
     !isConvertedPending &&
     invoice.type !== 'pending' &&
+    invoice.type !== 'quotation' &&
     originalCustomerId &&
     originalCustomerId !== 'walk-in' &&
     (originalTotal !== newTotal ||
@@ -742,13 +754,15 @@ const deleteInvoiceById = async (invoiceId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
   }
   
-  // Restore stock quantities
-  for (const item of invoice.items) {
-    await Product.findByIdAndUpdate(
-      item.productId,
-      { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
-      { new: true }
-    );
+  // Restore stock quantities (quotations never deducted stock)
+  if (invoice.type !== 'quotation') {
+    for (const item of invoice.items) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
+        { new: true }
+      );
+    }
   }
 
   // Delete related customer ledger entries
@@ -790,6 +804,137 @@ const deleteInvoiceById = async (invoiceId) => {
 
   await invoice.deleteOne();
   return invoice;
+};
+
+/**
+ * Convert a quotation to a cash or credit invoice.
+ * Assigns a new INV number, deducts stock, and posts ledger/accounts.
+ */
+const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
+  const invoice = await Invoice.findById(invoiceId);
+
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
+  if (invoice.type !== 'quotation') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Only quotation invoices can be converted');
+  }
+  if (invoice.status === 'cancelled') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cancelled quotations cannot be converted');
+  }
+
+  const { targetType, paidAmount, dueDate, paymentMethod, walletType, notes } = convertBody;
+
+  if (targetType === 'credit' && (!invoice.customerId || invoice.customerId === 'walk-in')) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Credit invoices require a registered customer');
+  }
+
+  for (const item of invoice.items) {
+    const product = await Product.findById(item.productId);
+    if (!product) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Product not found for item ${item.name}`);
+    }
+    const stockQty = getStockQuantityFromItem(item);
+    if (product.stockQuantity < stockQty) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Required: ${stockQty}`,
+      );
+    }
+  }
+
+  const previousQuotationNumber = invoice.invoiceNumber;
+  invoice.type = targetType;
+  invoice.invoiceNumber = await Invoice.generateNextDocumentNumber('INV');
+  invoice.updatedBy = userId;
+  invoice.convertedBy = userId;
+  invoice.convertedAt = new Date();
+
+  if (dueDate) {
+    invoice.dueDate = dueDate;
+  }
+  if (paymentMethod) {
+    invoice.paymentMethod = paymentMethod;
+  }
+  if (walletType) {
+    invoice.walletType = walletType;
+  }
+
+  const conversionNote = `Converted from quotation ${previousQuotationNumber}`;
+  if (notes) {
+    invoice.notes = invoice.notes
+      ? `${conversionNote}\n${notes}\n${invoice.notes}`
+      : `${conversionNote}\n${notes}`;
+  } else {
+    invoice.notes = invoice.notes ? `${conversionNote}\n${invoice.notes}` : conversionNote;
+  }
+
+  if (targetType === 'cash') {
+    invoice.paidAmount = paidAmount !== undefined ? paidAmount : invoice.total;
+    invoice.balance = Math.max(0, invoice.total - invoice.paidAmount);
+    invoice.finalize();
+  } else {
+    invoice.paidAmount = paidAmount !== undefined ? paidAmount : 0;
+    invoice.balance = invoice.total - invoice.paidAmount;
+    invoice.finalize();
+  }
+
+  await invoice.save();
+  await syncInvoiceCashAndWalletEntries(invoice, 'cash', '', 0);
+  postInvoiceToAccounts(invoice);
+
+  for (const item of invoice.items) {
+    const stockQty = getStockQuantityFromItem(item);
+    await Product.findByIdAndUpdate(
+      item.productId,
+      { $inc: { stockQuantity: -stockQty } },
+      { new: true },
+    );
+  }
+
+  if (invoice.customerId && invoice.customerId !== 'walk-in') {
+    try {
+      const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
+      const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
+      const hasExistingLedger = await CustomerLedger.exists({ customer: invoice.customerId });
+
+      if (customer && !hasExistingLedger && Number(customer.balance || 0) !== 0) {
+        await customerLedgerService.syncOpeningBalanceEntry({
+          customerId: invoice.customerId,
+          amount: customer.balance,
+          organizationId: invoice.organizationId,
+          branchId: invoice.branchId,
+          transactionDate: customer.createdAt,
+        });
+      }
+
+      const ledgerInvoiceType = resolveInvoiceLedgerInvoiceType(invoice);
+      const ledgerEntries = buildCustomerSaleLedgerEntries({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+        customerId: invoice.customerId,
+        referenceId: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        displayReference: invoice.invoiceNumber,
+        description: `Sale Invoice #${invoice.invoiceNumber}`,
+        transactionDate: invoice.invoiceDate || new Date(),
+        total: invoice.total,
+        paidAmount: invoice.paidAmount,
+        invoiceType: ledgerInvoiceType,
+        paymentMethod: ledgerPaymentMethod,
+        notes: invoice.notes,
+        balance: invoice.balance,
+      });
+
+      for (const entry of ledgerEntries) {
+        await customerLedgerService.createLedgerEntry(entry);
+      }
+    } catch (error) {
+      console.error('Failed to create customer ledger entry on quotation conversion:', error);
+    }
+  }
+
+  return getInvoiceById(invoice._id);
 };
 
 /**
@@ -1000,5 +1145,6 @@ module.exports = {
   getInvoiceStatistics,
   getDailySalesReport,
   generateBillNumber,
-  getCustomerProductHistory
+  getCustomerProductHistory,
+  convertQuotationToInvoice,
 };
