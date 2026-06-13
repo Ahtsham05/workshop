@@ -1,8 +1,11 @@
 const footerLinks = [
-  { label: "Expertise", href: "#expertise" },
-  { label: "Services", href: "#services" },
-  { label: "About", href: "#about" },
-  { label: "Contact", href: "#contact" },
+  { label: "Expertise", href: "/#expertise" },
+  { label: "Services", href: "/#services" },
+  { label: "About", href: "/#about" },
+  { label: "Contact", href: "/#contact" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Terms", href: "/terms-and-conditions" },
+  { label: "Data Deletion", href: "/data-deletion" },
 ];
 
 export default function Footer() {
