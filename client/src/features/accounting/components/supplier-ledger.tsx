@@ -5,9 +5,10 @@ import { SupplierLedgerDetails } from './supplier-ledger-details';
 
 interface SupplierLedgerProps {
   initialSupplier?: any;
+  initialLedgerEntry?: string;
 }
 
-export function SupplierLedger({ initialSupplier }: SupplierLedgerProps) {
+export function SupplierLedger({ initialSupplier, initialLedgerEntry }: SupplierLedgerProps) {
   // const { t } = useLanguage();
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [view, setView] = useState<'list' | 'details'>('list');
@@ -36,6 +37,7 @@ export function SupplierLedger({ initialSupplier }: SupplierLedgerProps) {
       <SupplierLedgerDetails
         supplier={selectedSupplier}
         onBack={handleBack}
+        initialLedgerEntry={initialLedgerEntry}
       />
     );
   }

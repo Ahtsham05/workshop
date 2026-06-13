@@ -8,6 +8,7 @@ const accountingSearchSchema = z.object({
   customerName: z.string().optional(),
   supplierId: z.string().optional(),
   supplierName: z.string().optional(),
+  ledgerEntry: z.string().optional(),
 })
 
 export const Route = createFileRoute('/_authenticated/accounting/')({

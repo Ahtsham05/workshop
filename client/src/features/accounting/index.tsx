@@ -21,6 +21,7 @@ export default function AccountingPage() {
   const searchParams = useSearch({ strict: false }) as any;
   const [initialCustomer, setInitialCustomer] = useState<any>(null);
   const [initialSupplier, setInitialSupplier] = useState<any>(null);
+  const [initialLedgerEntry, setInitialLedgerEntry] = useState<string | undefined>(undefined);
   const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0);
 
   // Determine active tab from search params or default to dashboard
@@ -41,6 +42,7 @@ export default function AccountingPage() {
       console.log('Opening customer ledger for:', searchParams.customerName);
       setManualTab(null); // Reset manual tab to allow URL params to control
       const customerId = searchParams.customerId as string;
+      setInitialLedgerEntry(searchParams.ledgerEntry as string | undefined);
       setInitialCustomer({
         _id: customerId,
         name: searchParams.customerName || 'Customer',
@@ -58,6 +60,7 @@ export default function AccountingPage() {
     } else if (searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId) {
       console.log('Opening supplier ledger for:', searchParams.supplierName);
       setManualTab(null); // Reset manual tab to allow URL params to control
+      setInitialLedgerEntry(searchParams.ledgerEntry as string | undefined);
       setInitialSupplier({ 
         _id: searchParams.supplierId, 
         name: searchParams.supplierName || 'Supplier'
@@ -65,8 +68,9 @@ export default function AccountingPage() {
     } else {
       setInitialCustomer(null);
       setInitialSupplier(null);
+      setInitialLedgerEntry(undefined);
     }
-  }, [searchParams?.tab, searchParams?.customerId, searchParams?.customerName, searchParams?.supplierId, searchParams?.supplierName]);
+  }, [searchParams?.tab, searchParams?.customerId, searchParams?.customerName, searchParams?.supplierId, searchParams?.supplierName, searchParams?.ledgerEntry]);
 
   return (
     <div className="h-full w-full p-4 space-y-6">
@@ -117,12 +121,12 @@ export default function AccountingPage() {
 
         {/* Customer Ledger Tab */}
         <TabsContent value="customers">
-          <CustomerLedger initialCustomer={initialCustomer} />
+          <CustomerLedger initialCustomer={initialCustomer} initialLedgerEntry={initialLedgerEntry} />
         </TabsContent>
 
         {/* Supplier Ledger Tab */}
         <TabsContent value="suppliers">
-          <SupplierLedger initialSupplier={initialSupplier} />
+          <SupplierLedger initialSupplier={initialSupplier} initialLedgerEntry={initialLedgerEntry} />
         </TabsContent>
 
         {/* Personal Wallet Tab */}

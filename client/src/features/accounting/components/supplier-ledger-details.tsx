@@ -84,6 +84,7 @@ function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string)
 interface SupplierLedgerDetailsProps {
   supplier: any;
   onBack: () => void;
+  initialLedgerEntry?: string;
 }
 
 // Purchase dialog content component
@@ -426,7 +427,7 @@ function storeLedgerViewMode(mode: LedgerViewMode) {
   }
 }
 
-export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetailsProps) {
+export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -635,6 +636,11 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
     setCategorySheetOpen(false);
     setShowEntryForm(true);
   };
+
+  useEffect(() => {
+    if (!initialLedgerEntry) return;
+    handleOpenLedgerEntryForm(initialLedgerEntry);
+  }, [initialLedgerEntry]);
 
   const handleViewModeChange = (mode: LedgerViewMode) => {
     setViewMode(mode);

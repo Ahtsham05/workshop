@@ -119,6 +119,7 @@ function resolveInvoiceCustomerForPrint(invoice: any, fallbackName: string): { n
 interface CustomerLedgerDetailsProps {
   customer: any;
   onBack: () => void;
+  initialLedgerEntry?: string;
 }
 
 // Invoice dialog content component
@@ -727,7 +728,7 @@ function storeLedgerViewMode(mode: LedgerViewMode) {
   }
 }
 
-export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetailsProps) {
+export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: CustomerLedgerDetailsProps) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -951,6 +952,11 @@ export function CustomerLedgerDetails({ customer, onBack }: CustomerLedgerDetail
     setCategorySheetOpen(false);
     setShowEntryForm(true);
   };
+
+  useEffect(() => {
+    if (!initialLedgerEntry) return;
+    handleOpenLedgerEntryForm(initialLedgerEntry);
+  }, [initialLedgerEntry]);
 
   const handleViewModeChange = (mode: LedgerViewMode) => {
     setViewMode(mode);

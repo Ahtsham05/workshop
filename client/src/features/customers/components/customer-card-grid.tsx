@@ -5,6 +5,7 @@ import {
   ArrowDownLeft,
   ArrowUpFromLine,
   ArrowUpRight,
+  Banknote,
   BookOpen,
   NotebookText,
   Receipt,
@@ -62,6 +63,7 @@ const ACTION_ICONS: Record<string, typeof Receipt> = {
   'service-invoice': NotebookText,
   'cash-send': ArrowUpRight,
   'cash-receive': ArrowDownLeft,
+  'cash-payment-received': Banknote,
 }
 
 const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
@@ -70,6 +72,7 @@ const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
   'service-invoice': 'blue',
   'cash-send': 'orange',
   'cash-receive': 'emerald',
+  'cash-payment-received': 'emerald',
 }
 
 function resolveCustomerId(customer: Customer) {
@@ -145,6 +148,7 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
     const all = getCustomerQuickActions('sample')
     return all.filter((action) => {
       if (action.id === 'invoice-sale') return hasPermission('createInvoices' as never)
+      if (action.id === 'cash-payment-received') return hasPermission('manageLedgers' as never)
       if (!isMobileShop) return false
       if (action.id === 'load-sale') return hasPermission('viewLoadManagement' as never)
       if (action.id === 'sim-sale') return hasPermission('viewSimSales' as never)
@@ -165,17 +169,20 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
     })
   }
 
-  const handleNavigate = (action: CustomerLedgerEntryAction, customerId: string) => {
+  const handleNavigate = (action: CustomerLedgerEntryAction, customer: Customer) => {
+    const customerId = resolveCustomerId(customer)
     const search = Object.fromEntries(
-      Object.entries(action.search).map(([key, value]) => [
-        key,
-        key === 'customerId' ? customerId : value,
-      ]),
+      Object.entries(action.search).map(([key, value]) => {
+        if (key === 'customerId') return [key, customerId]
+        if (key === 'customerName') return [key, customer.name]
+        return [key, value]
+      }),
     )
     navigate({ to: action.to, search: search as never })
   }
 
-  const renderActions = (customerId: string) => {
+  const renderActions = (customer: Customer) => {
+    const customerId = resolveCustomerId(customer)
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'invoice-sale')
@@ -191,7 +198,7 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
               variant='primary'
               onClick={(e) => {
                 e.stopPropagation()
-                handleNavigate(primaryAction, customerId)
+                handleNavigate(primaryAction, customer)
               }}
             />
           ) : undefined
@@ -204,7 +211,7 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
             tone={ACTION_TONES[action.id]}
             onClick={(e) => {
               e.stopPropagation()
-              handleNavigate(action, customerId)
+              handleNavigate(action, customer)
             }}
           />
         ))}
@@ -258,7 +265,7 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
                   address={customer.address}
                   addressClassName={getTextClasses(customer.address || '', '')}
                   balance={balanceDisplay}
-                  actions={renderActions(customerId)}
+                  actions={renderActions(customer)}
                   ledgerLabel={t('customers_ledger')}
                   onOpenLedger={() => handleOpenLedger(customer)}
                 />

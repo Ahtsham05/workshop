@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
-import { ArrowDownToLine, BookOpen, Receipt } from 'lucide-react'
+import { ArrowDownToLine, Banknote, BookOpen, Receipt } from 'lucide-react'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,6 +50,12 @@ type Props = {
 const ACTION_ICONS: Record<string, typeof Receipt> = {
   'purchase-invoice': Receipt,
   'load-purchase': ArrowDownToLine,
+  'cash-payment-made': Banknote,
+}
+
+const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
+  'load-purchase': 'blue',
+  'cash-payment-made': 'orange',
 }
 
 function resolveSupplierId(supplier: Supplier) {
@@ -125,6 +131,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
     const all = getSupplierQuickActions('sample')
     return all.filter((action) => {
       if (action.id === 'purchase-invoice') return hasPermission('createPurchases' as never)
+      if (action.id === 'cash-payment-made') return hasPermission('manageLedgers' as never)
       if (action.id === 'load-purchase') {
         return isMobileShop && hasPermission('viewLoadManagement' as never)
       }
@@ -141,17 +148,20 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
     })
   }
 
-  const handleNavigate = (action: SupplierLedgerEntryAction, supplierId: string) => {
+  const handleNavigate = (action: SupplierLedgerEntryAction, supplier: Supplier) => {
+    const supplierId = resolveSupplierId(supplier)
     const search = Object.fromEntries(
-      Object.entries(action.search).map(([key, value]) => [
-        key,
-        key === 'supplierId' ? supplierId : value,
-      ]),
+      Object.entries(action.search).map(([key, value]) => {
+        if (key === 'supplierId') return [key, supplierId]
+        if (key === 'supplierName') return [key, supplier.name]
+        return [key, value]
+      }),
     )
     navigate({ to: action.to, search: search as never })
   }
 
-  const renderActions = (supplierId: string) => {
+  const renderActions = (supplier: Supplier) => {
+    const supplierId = resolveSupplierId(supplier)
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'purchase-invoice')
@@ -167,7 +177,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
               variant='primary'
               onClick={(e) => {
                 e.stopPropagation()
-                handleNavigate(primaryAction, supplierId)
+                handleNavigate(primaryAction, supplier)
               }}
             />
           ) : undefined
@@ -177,10 +187,10 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
             key={action.id}
             label={t(action.labelKey)}
             icon={ACTION_ICONS[action.id]}
-            tone='blue'
+            tone={ACTION_TONES[action.id] ?? 'blue'}
             onClick={(e) => {
               e.stopPropagation()
-              handleNavigate(action, supplierId)
+              handleNavigate(action, supplier)
             }}
           />
         ))}
@@ -234,7 +244,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
                   address={supplier.address}
                   addressClassName={getTextClasses(supplier.address || '', '')}
                   balance={balanceDisplay}
-                  actions={renderActions(supplierId)}
+                  actions={renderActions(supplier)}
                   ledgerLabel={t('suppliers_ledger')}
                   onOpenLedger={() => handleOpenLedger(supplier)}
                 />

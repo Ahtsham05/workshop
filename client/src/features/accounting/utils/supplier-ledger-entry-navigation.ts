@@ -3,7 +3,8 @@ import type { SupplierLedgerCategory } from './supplier-ledger-categories';
 export interface SupplierLedgerEntryAction {
   id: string;
   labelKey: string;
-  to: '/mobile-shop/load' | '/purchase-invoice';
+  ledgerEntry?: string;
+  to: '/mobile-shop/load' | '/purchase-invoice' | '/accounting';
   search: Record<string, string | undefined>;
 }
 
@@ -20,6 +21,17 @@ export function getSupplierQuickActions(supplierId: string): SupplierLedgerEntry
       labelKey: 'Buy Load',
       to: '/mobile-shop/load',
       search: { tab: 'purchase', supplierId },
+    },
+    {
+      id: 'cash-payment-made',
+      labelKey: 'Cash Paid',
+      ledgerEntry: 'payment_made',
+      to: '/accounting',
+      search: {
+        tab: 'supplier-ledger',
+        supplierId,
+        ledgerEntry: 'payment_made',
+      },
     },
   ];
 }

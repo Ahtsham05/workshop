@@ -5,9 +5,10 @@ import { CustomerLedgerDetails } from './customer-ledger-details';
 
 interface CustomerLedgerProps {
   initialCustomer?: any;
+  initialLedgerEntry?: string;
 }
 
-export function CustomerLedger({ initialCustomer }: CustomerLedgerProps) {
+export function CustomerLedger({ initialCustomer, initialLedgerEntry }: CustomerLedgerProps) {
   // const { t } = useLanguage();
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [view, setView] = useState<'list' | 'details'>('list');
@@ -39,6 +40,7 @@ export function CustomerLedger({ initialCustomer }: CustomerLedgerProps) {
       <CustomerLedgerDetails
         customer={selectedCustomer}
         onBack={handleBack}
+        initialLedgerEntry={initialLedgerEntry}
       />
     );
   }

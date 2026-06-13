@@ -6,7 +6,14 @@ export interface CustomerLedgerEntryAction {
   id: string;
   labelKey: string;
   cashAction?: LedgerCashAction;
-  to: '/mobile-shop/load' | '/mobile-shop/cash-management' | '/mobile-shop/sim-sale' | '/mobile-shop/services' | '/invoice';
+  ledgerEntry?: string;
+  to:
+    | '/mobile-shop/load'
+    | '/mobile-shop/cash-management'
+    | '/mobile-shop/sim-sale'
+    | '/mobile-shop/services'
+    | '/invoice'
+    | '/accounting';
   search: Record<string, string | undefined>;
 }
 
@@ -62,6 +69,17 @@ export function getCustomerQuickActions(customerId: string): CustomerLedgerEntry
       cashAction: 'receive',
       to: '/mobile-shop/cash-management',
       search: cashManagementSearch(customerId, 'receive'),
+    },
+    {
+      id: 'cash-payment-received',
+      labelKey: 'Cash Received',
+      ledgerEntry: 'payment_received',
+      to: '/accounting',
+      search: {
+        tab: 'customer-ledger',
+        customerId,
+        ledgerEntry: 'payment_received',
+      },
     },
   ];
 }

@@ -4,6 +4,7 @@ import {
   ArrowDownLeft,
   ArrowUpFromLine,
   ArrowUpRight,
+  Banknote,
   BookOpen,
   NotebookText,
   Receipt,
@@ -65,6 +66,7 @@ const ACTION_ICONS: Record<string, typeof Receipt> = {
   'service-invoice': NotebookText,
   'cash-send': ArrowUpRight,
   'cash-receive': ArrowDownLeft,
+  'cash-payment-received': Banknote,
 }
 
 const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
@@ -73,6 +75,7 @@ const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
   'service-invoice': 'blue',
   'cash-send': 'orange',
   'cash-receive': 'emerald',
+  'cash-payment-received': 'emerald',
 }
 
 export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, pagination }: Props) {
@@ -86,6 +89,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
     const all = getCustomerQuickActions('sample')
     return all.filter((action) => {
       if (action.id === 'invoice-sale') return hasPermission('createInvoices' as never)
+      if (action.id === 'cash-payment-received') return hasPermission('manageLedgers' as never)
       if (!isMobileShop) return false
       if (action.id === 'load-sale') return hasPermission('viewLoadManagement' as never)
       if (action.id === 'sim-sale') return hasPermission('viewSimSales' as never)
@@ -97,17 +101,18 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
     })
   }, [hasPermission, isMobileShop])
 
-  const handleNavigate = (action: CustomerLedgerEntryAction, customerId: string) => {
+  const handleNavigate = (action: CustomerLedgerEntryAction, customer: CustomerWithBalance) => {
     const search = Object.fromEntries(
-      Object.entries(action.search).map(([key, value]) => [
-        key,
-        key === 'customerId' ? customerId : value,
-      ]),
+      Object.entries(action.search).map(([key, value]) => {
+        if (key === 'customerId') return [key, customer._id]
+        if (key === 'customerName') return [key, customer.name]
+        return [key, value]
+      }),
     )
     navigate({ to: action.to, search: search as never })
   }
 
-  const renderActions = (customerId: string) => {
+  const renderActions = (customer: CustomerWithBalance) => {
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'invoice-sale')
@@ -123,7 +128,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
               variant='primary'
               onClick={(e) => {
                 e.stopPropagation()
-                handleNavigate(primaryAction, customerId)
+                handleNavigate(primaryAction, customer)
               }}
             />
           ) : undefined
@@ -136,7 +141,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
             tone={ACTION_TONES[action.id]}
             onClick={(e) => {
               e.stopPropagation()
-              handleNavigate(action, customerId)
+              handleNavigate(action, customer)
             }}
           />
         ))}
@@ -188,7 +193,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
                   address={customer.address}
                   addressClassName={getTextClasses(customer.address || '', '')}
                   balance={balanceDisplay}
-                  actions={renderActions(customer._id)}
+                  actions={renderActions(customer)}
                   ledgerLabel={t('customers_ledger')}
                   onOpenLedger={() => onSelectCustomer(customer)}
                 />

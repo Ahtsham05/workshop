@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowDownToLine, BookOpen, Receipt } from 'lucide-react'
+import { ArrowDownToLine, Banknote, BookOpen, Receipt } from 'lucide-react'
 import {
   EntityActionButton,
   EntityActionGrid,
@@ -53,6 +53,12 @@ type Props = {
 const ACTION_ICONS: Record<string, typeof Receipt> = {
   'purchase-invoice': Receipt,
   'load-purchase': ArrowDownToLine,
+  'cash-payment-made': Banknote,
+}
+
+const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
+  'load-purchase': 'blue',
+  'cash-payment-made': 'orange',
 }
 
 export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, pagination }: Props) {
@@ -66,6 +72,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
     const all = getSupplierQuickActions('sample')
     return all.filter((action) => {
       if (action.id === 'purchase-invoice') return hasPermission('createPurchases' as never)
+      if (action.id === 'cash-payment-made') return hasPermission('manageLedgers' as never)
       if (action.id === 'load-purchase') {
         return isMobileShop && hasPermission('viewLoadManagement' as never)
       }
@@ -73,17 +80,18 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
     })
   }, [hasPermission, isMobileShop])
 
-  const handleNavigate = (action: SupplierLedgerEntryAction, supplierId: string) => {
+  const handleNavigate = (action: SupplierLedgerEntryAction, supplier: SupplierWithBalance) => {
     const search = Object.fromEntries(
-      Object.entries(action.search).map(([key, value]) => [
-        key,
-        key === 'supplierId' ? supplierId : value,
-      ]),
+      Object.entries(action.search).map(([key, value]) => {
+        if (key === 'supplierId') return [key, supplier._id]
+        if (key === 'supplierName') return [key, supplier.name]
+        return [key, value]
+      }),
     )
     navigate({ to: action.to, search: search as never })
   }
 
-  const renderActions = (supplierId: string) => {
+  const renderActions = (supplier: SupplierWithBalance) => {
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'purchase-invoice')
@@ -99,7 +107,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
               variant='primary'
               onClick={(e) => {
                 e.stopPropagation()
-                handleNavigate(primaryAction, supplierId)
+                handleNavigate(primaryAction, supplier)
               }}
             />
           ) : undefined
@@ -109,10 +117,10 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
             key={action.id}
             label={t(action.labelKey)}
             icon={ACTION_ICONS[action.id]}
-            tone='blue'
+            tone={ACTION_TONES[action.id] ?? 'blue'}
             onClick={(e) => {
               e.stopPropagation()
-              handleNavigate(action, supplierId)
+              handleNavigate(action, supplier)
             }}
           />
         ))}
@@ -164,7 +172,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
                   address={supplier.address}
                   addressClassName={getTextClasses(supplier.address || '', '')}
                   balance={balanceDisplay}
-                  actions={renderActions(supplier._id)}
+                  actions={renderActions(supplier)}
                   ledgerLabel={t('suppliers_ledger')}
                   onOpenLedger={() => onSelectSupplier(supplier)}
                 />
