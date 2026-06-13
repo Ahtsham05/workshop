@@ -22,7 +22,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ArrowDownLeft, ArrowUpRight, Wallet, TrendingUp, ReceiptText } from 'lucide-react'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
-import { useGetWalletBalanceStatementQuery } from '@/stores/reports.api'
+import { useGetWalletBalanceStatementQuery, type WalletBalanceDetailItem } from '@/stores/reports.api'
+import { filterCashWallets } from '@/features/mobile-shop/utils/wallet-utils'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 
 interface MyWalletReportProps {
@@ -33,6 +34,12 @@ interface MyWalletReportProps {
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
+function formatReceiveSendTitle(item: WalletBalanceDetailItem) {
+  if (item.transactionType === 'withdrawal') return 'Receive'
+  if (item.transactionType === 'deposit') return 'Send'
+  return item.title
+}
+
 export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWalletReportProps>(
   ({ startDate, endDate }, ref) => {
     const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery(undefined, {
@@ -40,14 +47,20 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
       refetchOnReconnect: true,
       refetchOnMountOrArgChange: true,
     })
-    const wallets = walletsData?.results ?? []
+    const allWallets = walletsData?.results ?? []
+    const cashWallets = useMemo(() => filterCashWallets(allWallets), [allWallets])
     const [selectedWallet, setSelectedWallet] = useState<string>('')
 
     useEffect(() => {
-      if (!selectedWallet && wallets.length > 0) {
-        setSelectedWallet(wallets[0].type)
+      if (cashWallets.length === 0) {
+        setSelectedWallet('')
+        return
       }
-    }, [selectedWallet, wallets])
+      const stillValid = cashWallets.some((w) => w.type === selectedWallet)
+      if (!selectedWallet || !stillValid) {
+        setSelectedWallet(cashWallets[0].type ?? '')
+      }
+    }, [selectedWallet, cashWallets])
 
     const { data, isLoading: statementLoading } = useGetWalletBalanceStatementQuery(
       {
@@ -64,8 +77,8 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
     )
 
     const selectedWalletInfo = useMemo(
-      () => wallets.find((w) => w.type === selectedWallet),
-      [wallets, selectedWallet]
+      () => cashWallets.find((w) => w.type === selectedWallet),
+      [cashWallets, selectedWallet]
     )
 
     const ledgerRows = useMemo(() => {
@@ -78,35 +91,37 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
         accountNumber: string
         accountType: string
         customerName: string
-        inAmount: number
-        outAmount: number
+        receiveAmount: number
+        sendAmount: number
         profit: number
         balance: number
       }> = []
 
       data.rows.forEach((row) => {
-        row.detailItems.forEach((item) => {
-          runningBalance += item.walletImpact
-          result.push({
-            id: item.id,
-            date: item.date,
-            title: item.title,
-            accountNumber: item.accountNumber || '—',
-            accountType: item.customerAccountType || item.network || '—',
-            customerName: item.customerName || '—',
-            inAmount: item.walletImpact > 0 ? item.amount : 0,
-            outAmount: item.walletImpact < 0 ? item.amount : 0,
-            profit: item.profit || 0,
-            balance: runningBalance,
+        row.detailItems
+          .filter((item) => item.source === 'cash_withdrawal')
+          .forEach((item) => {
+            runningBalance += item.walletImpact
+            result.push({
+              id: item.id,
+              date: item.date,
+              title: formatReceiveSendTitle(item),
+              accountNumber: item.accountNumber || '—',
+              accountType: item.customerAccountType || item.network || '—',
+              customerName: item.customerName || '—',
+              receiveAmount: item.transactionType === 'withdrawal' ? item.amount : 0,
+              sendAmount: item.transactionType === 'deposit' ? item.amount : 0,
+              profit: item.profit || 0,
+              balance: runningBalance,
+            })
           })
-        })
       })
 
       return result
     }, [data])
 
-    const totalIn = ledgerRows.reduce((sum, row) => sum + row.inAmount, 0)
-    const totalOut = ledgerRows.reduce((sum, row) => sum + row.outAmount, 0)
+    const totalReceived = ledgerRows.reduce((sum, row) => sum + row.receiveAmount, 0)
+    const totalSend = ledgerRows.reduce((sum, row) => sum + row.sendAmount, 0)
     const totalProfit = ledgerRows.reduce((sum, row) => sum + row.profit, 0)
 
     useImperativeHandle(ref, () => ({
@@ -124,9 +139,9 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
             { Metric: 'Current Balance', Value: selectedWalletInfo?.balance ?? data.walletBalance ?? 0 },
             { Metric: 'Period Opening Balance', Value: data.periodOpeningBalance ?? 0 },
             { Metric: 'Period Closing Balance', Value: data.periodClosingBalance ?? 0 },
-            { Metric: 'Total Inflow', Value: totalIn },
-            { Metric: 'Total Outflow', Value: totalOut },
-            { Metric: 'Total Profit', Value: totalProfit },
+            { Metric: 'Total Received', Value: totalReceived },
+            { Metric: 'Total Send', Value: totalSend },
+            { Metric: 'Commission Profit', Value: totalProfit },
           ]
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
 
@@ -136,14 +151,14 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
             'Number / Account': row.accountNumber,
             'Account Type': row.accountType,
             Customer: row.customerName,
-            'In (+)': row.inAmount || '',
-            'Out (-)': row.outAmount || '',
-            Profit: row.profit,
+            Receive: row.receiveAmount || '',
+            Send: row.sendAmount || '',
+            'Commission Profit': row.profit,
             Balance: row.balance,
           }))
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(txRows), 'Transactions')
 
-          XLSX.writeFile(wb, `my-wallet-report-${selectedWallet || 'wallet'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `wallet-report-${selectedWallet || 'wallet'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
           toast.success('Wallet report exported successfully')
         } catch {
           toast.error('Failed to export wallet report')
@@ -153,11 +168,21 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
 
     if (walletsLoading || statementLoading) return <Skeleton className='h-[420px] w-full' />
 
+    if (cashWallets.length === 0) {
+      return (
+        <Card>
+          <CardContent className='py-12 text-center text-muted-foreground'>
+            No receive/send wallets found. Create a cash wallet in Wallet Management (do not include &quot;Load&quot; in the name).
+          </CardContent>
+        </Card>
+      )
+    }
+
     return (
       <div className='space-y-6'>
         <Card>
           <CardHeader>
-            <CardTitle>Wallet Report</CardTitle>
+            <CardTitle>Receive / Send Report</CardTitle>
           </CardHeader>
           <CardContent className='grid gap-4 md:grid-cols-3'>
             <div className='space-y-2'>
@@ -167,7 +192,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <SelectValue placeholder='Select wallet' />
                 </SelectTrigger>
                 <SelectContent>
-                  {wallets.map((wallet) => (
+                  {cashWallets.map((wallet) => (
                     <SelectItem key={wallet.id} value={wallet.type}>
                       <span className='capitalize'>{wallet.type}</span>
                     </SelectItem>
@@ -192,7 +217,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
 
         {data ? (
           <>
-            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5'>
+            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'>
               <Card className={kpiCardClass('slate')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Opening Balance</CardTitle>
@@ -204,19 +229,19 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
               </Card>
               <Card className={kpiCardClass('emerald')}>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Total Inflow</CardTitle>
+                  <CardTitle className='text-sm font-medium'>Total Received</CardTitle>
                 </CardHeader>
                 <CardContent className='flex items-center justify-between'>
-                  <p className='text-xl font-bold text-green-600'>+{fmt(totalIn)}</p>
+                  <p className='text-xl font-bold text-green-600'>+{fmt(totalReceived)}</p>
                   <ArrowDownLeft className='h-4 w-4 text-green-600' />
                 </CardContent>
               </Card>
               <Card className={kpiCardClass('rose')}>
                 <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>Total Outflow</CardTitle>
+                  <CardTitle className='text-sm font-medium'>Total Send</CardTitle>
                 </CardHeader>
                 <CardContent className='flex items-center justify-between'>
-                  <p className='text-xl font-bold text-red-600'>-{fmt(totalOut)}</p>
+                  <p className='text-xl font-bold text-red-600'>-{fmt(totalSend)}</p>
                   <ArrowUpRight className='h-4 w-4 text-red-600' />
                 </CardContent>
               </Card>
@@ -229,25 +254,34 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                   <ReceiptText className='h-4 w-4 text-muted-foreground' />
                 </CardContent>
               </Card>
+              <Card className={kpiCardClass('emerald')}>
+                <CardHeader className='pb-2'>
+                  <CardTitle className='text-sm font-medium'>Commission Profit</CardTitle>
+                </CardHeader>
+                <CardContent className='flex items-center justify-between'>
+                  <p className='text-xl font-bold text-green-600'>{fmt(totalProfit)}</p>
+                  <TrendingUp className='h-4 w-4 text-green-600' />
+                </CardContent>
+              </Card>
               <Card className={kpiCardClass('cyan')}>
                 <CardHeader className='pb-2'>
                   <CardTitle className='text-sm font-medium'>Closing Balance</CardTitle>
                 </CardHeader>
                 <CardContent className='flex items-center justify-between'>
                   <p className='text-xl font-bold text-purple-600'>{fmt(data.periodClosingBalance)}</p>
-                  <TrendingUp className='h-4 w-4 text-purple-600' />
+                  <Wallet className='h-4 w-4 text-purple-600' />
                 </CardContent>
               </Card>
             </div>
 
             <Card>
               <CardHeader>
-                <CardTitle>Wallet Transaction Ledger</CardTitle>
+                <CardTitle>Receive / Send Ledger</CardTitle>
               </CardHeader>
               <CardContent>
                 {ledgerRows.length === 0 ? (
                   <div className='py-10 text-center text-muted-foreground'>
-                    No wallet transactions found for selected date range.
+                    No receive/send transactions found for selected date range.
                   </div>
                 ) : (
                   <Table>
@@ -258,9 +292,9 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                         <TableHead>Number / Account</TableHead>
                         <TableHead>Account Type</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead className='text-right'>In (+)</TableHead>
-                        <TableHead className='text-right'>Out (-)</TableHead>
-                        <TableHead className='text-right'>Profit</TableHead>
+                        <TableHead className='text-right'>Receive</TableHead>
+                        <TableHead className='text-right'>Send</TableHead>
+                        <TableHead className='text-right'>Commission Profit</TableHead>
                         <TableHead className='text-right'>Balance</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -273,10 +307,10 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                           <TableCell className='capitalize'>{row.accountType}</TableCell>
                           <TableCell>{row.customerName}</TableCell>
                           <TableCell className='text-right text-green-600'>
-                            {row.inAmount > 0 ? `+${fmt(row.inAmount)}` : '—'}
+                            {row.receiveAmount > 0 ? `+${fmt(row.receiveAmount)}` : '—'}
                           </TableCell>
                           <TableCell className='text-right text-red-600'>
-                            {row.outAmount > 0 ? `-${fmt(row.outAmount)}` : '—'}
+                            {row.sendAmount > 0 ? `-${fmt(row.sendAmount)}` : '—'}
                           </TableCell>
                           <TableCell className='text-right'>
                             <Badge variant='secondary'>{fmt(row.profit)}</Badge>

@@ -23,6 +23,9 @@ const buildScope = (req) => {
   return scope;
 };
 
+/** Wallets whose name contains "load" are load purchase/sale wallets (same rule as mobile-shop UI). */
+const isLoadWalletName = (name) => /load/i.test(String(name || ''));
+
 const { parseBusinessDateBoundary: parseDateBoundary } = require('../utils/businessTimezone');
 
 const parseRange = (query) => {
@@ -1646,10 +1649,10 @@ async function getLoadReport(req, res) {
       simSaleLoadSold: simSm.totalSold,
       simSaleTransactions: simSm.totalTransactions,
     },
-    byWallet: mergedByWallet,
+    byWallet: mergedByWallet.filter((row) => isLoadWalletName(row._id)),
     datewise: mergedDatewise,
-    purchases,
-    wallets,
+    purchases: purchases.filter((row) => isLoadWalletName(row._id)),
+    wallets: wallets.filter((w) => isLoadWalletName(w.type)),
     withdrawalSummary: ws,
     withdrawalDatewise,
     period: { startDate: start, endDate: end },

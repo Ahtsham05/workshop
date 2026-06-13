@@ -1,17 +1,18 @@
-import { forwardRef, useImperativeHandle, useState } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { useGetLoadReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
-import { Wallet, TrendingUp, ShoppingCart, CircleDollarSign, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { Wallet, TrendingUp, ShoppingCart, CircleDollarSign } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { WalletBalanceStatement } from './wallet-balance-statement'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { isLoadWalletName } from '@/features/mobile-shop/utils/wallet-utils'
 
 interface LoadReportProps {
   startDate: string
@@ -23,6 +24,19 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
     const { t } = useLanguage()
     const { data, isLoading } = useGetLoadReportQuery({ startDate, endDate })
     const [selectedWallet, setSelectedWallet] = useState<string | null>(null)
+
+    const loadWallets = useMemo(
+      () => (data?.wallets ?? []).filter((w) => isLoadWalletName(w.type || '')),
+      [data?.wallets],
+    )
+    const loadByWallet = useMemo(
+      () => (data?.byWallet ?? []).filter((w) => isLoadWalletName(w._id || '')),
+      [data?.byWallet],
+    )
+    const loadPurchases = useMemo(
+      () => (data?.purchases ?? []).filter((p) => isLoadWalletName(p._id || '')),
+      [data?.purchases],
+    )
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -40,16 +54,16 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           ]
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary')
 
-          if (data.byWallet.length > 0) {
-            const bwData = data.byWallet.map(r => ({ Wallet: r._id, Transactions: r.transactions, 'Total Sold': r.totalSold, Profit: r.totalProfit }))
+          if (loadByWallet.length > 0) {
+            const bwData = loadByWallet.map(r => ({ Wallet: r._id, Transactions: r.transactions, 'Total Sold': r.totalSold, Profit: r.totalProfit }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bwData), 'By Wallet')
           }
           if (data.datewise.length > 0) {
             const dwData = data.datewise.map(r => ({ Date: r._id, Transactions: r.transactions, 'Total Sold': r.totalSold, Profit: r.totalProfit }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dwData), 'Date-wise')
           }
-          if (data.wallets.length > 0) {
-            const wData = data.wallets.map(r => ({ Type: r.type, Balance: r.balance }))
+          if (loadWallets.length > 0) {
+            const wData = loadWallets.map(r => ({ Type: r.type, Balance: r.balance }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wData), 'Wallet Balances')
           }
 
@@ -65,7 +79,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
 
     const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data?.summary
-    const savingsMap = new Map<string, number>((data?.purchases ?? []).map(p => [p._id, p.totalPurchaseProfit ?? 0]))
+    const savingsMap = new Map<string, number>(loadPurchases.map(p => [p._id, p.totalPurchaseProfit ?? 0]))
 
     return (
       <div className='space-y-6'>
@@ -164,24 +178,24 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           </Card>
         </div>
 
-        {/* Current Wallet Balances */}
-        {(data?.wallets?.length ?? 0) > 0 && (
+        {/* Current Wallet Balances — load wallets only (name contains "load") */}
+        {loadWallets.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Current Wallet Balances</CardTitle>
             </CardHeader>
             <CardContent>
               <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
-                {data!.wallets.map(w => (
+                {loadWallets.map(w => (
                   <div
                     key={w._id}
                     className='rounded-lg border p-3 cursor-pointer hover:border-primary hover:bg-muted/30 transition-colors'
                     onClick={() => setSelectedWallet(w.type)}
-                    title={`View ${w.type} balance statement`}
+                    title={`View ${w.type} load report`}
                   >
                     <p className='text-sm font-medium capitalize'>{w.type}</p>
                     <p className='text-xl font-bold text-blue-600'>{fmt(w.balance)}</p>
-                    <p className='text-xs text-muted-foreground mt-1'>Click to view statement →</p>
+                    <p className='text-xs text-muted-foreground mt-1'>Click to view load report →</p>
                   </div>
                 ))}
               </div>
@@ -189,8 +203,8 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           </Card>
         )}
 
-        {/* By Wallet type */}
-        {(data?.byWallet?.length ?? 0) > 0 && (
+        {/* By Wallet type — load wallets only */}
+        {loadByWallet.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Sales by Wallet / Network</CardTitle>
@@ -206,7 +220,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data!.byWallet.map(row => (
+                  {loadByWallet.map(row => (
                     <TableRow
                       key={row._id}
                       className='cursor-pointer hover:bg-muted/50'
@@ -224,8 +238,8 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           </Card>
         )}
 
-        {/* Stock purchased by wallet */}
-        {(data?.purchases?.length ?? 0) > 0 && (
+        {/* Stock purchased by wallet — load wallets only */}
+        {loadPurchases.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Load Purchased — by Wallet</CardTitle>
@@ -241,7 +255,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data!.purchases.map(row => (
+                  {loadPurchases.map(row => (
                     <TableRow key={row._id}>
                       <TableCell className='font-medium capitalize'>{row._id}</TableCell>
                       <TableCell className='text-right'><Badge variant='secondary'>{row.count}</Badge></TableCell>
@@ -286,100 +300,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           </Card>
         )}
 
-        {/* Cash Withdrawal / Deposit section */}
-        {(data?.withdrawalSummary?.totalCount ?? 0) > 0 && (
-          <>
-            <div>
-              <h3 className='mb-3 text-base font-semibold text-muted-foreground uppercase tracking-wide'>Cash Received &amp; Send</h3>
-              <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-                <Card className={kpiCardClass('slate')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Total Transactions</CardTitle>
-                    <div className={cn('shrink-0', toneIconWrapClass('slate'))}>
-                      <Wallet className='h-4 w-4' />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='text-2xl font-bold'>{data!.withdrawalSummary.totalCount}</div>
-                    <p className='text-xs text-muted-foreground'>
-                      {data!.withdrawalSummary.totalWithdrawals} received · {data!.withdrawalSummary.totalDeposits} send
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className={kpiCardClass('sky')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Received (cash out)</CardTitle>
-                    <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
-                      <ArrowUpCircle className='h-4 w-4' />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='text-2xl font-bold text-blue-600'>{fmt(data!.withdrawalSummary.totalWithdrawalAmount)}</div>
-                    <p className='text-xs text-muted-foreground'>customer digital → you give cash</p>
-                  </CardContent>
-                </Card>
-                <Card className={kpiCardClass('orange')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Send (cash in)</CardTitle>
-                    <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
-                      <ArrowDownCircle className='h-4 w-4' />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='text-2xl font-bold text-orange-600'>{fmt(data!.withdrawalSummary.totalDepositAmount)}</div>
-                    <p className='text-xs text-muted-foreground'>customer gives cash → you send digital</p>
-                  </CardContent>
-                </Card>
-                <Card className={kpiCardClass('emerald')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Commission Profit</CardTitle>
-                    <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
-                      <TrendingUp className='h-4 w-4' />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='text-2xl font-bold text-green-600'>{fmt(data!.withdrawalSummary.totalProfit)}</div>
-                    <p className='text-xs text-muted-foreground'>earned from received &amp; send commission</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {(data?.withdrawalDatewise?.length ?? 0) > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Received / Send — Date-wise</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead className='text-right'>Count</TableHead>
-                        <TableHead className='text-right'>Received</TableHead>
-                        <TableHead className='text-right'>Send</TableHead>
-                        <TableHead className='text-right'>Commission Profit</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data!.withdrawalDatewise.map(row => (
-                        <TableRow key={row._id}>
-                          <TableCell>{row._id}</TableCell>
-                          <TableCell className='text-right'><Badge variant='secondary'>{row.count}</Badge></TableCell>
-                          <TableCell className='text-right text-blue-600 font-medium'>{fmt(row.totalWithdrawalAmount)}</TableCell>
-                          <TableCell className='text-right text-orange-600 font-medium'>{fmt(row.totalDepositAmount)}</TableCell>
-                          <TableCell className='text-right text-green-600 font-medium'>{fmt(row.totalProfit)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </>
-        )}
-
-        {!(data?.byWallet?.length) && !(data?.datewise?.length) && !(data?.withdrawalDatewise?.length) && (
+        {!loadByWallet.length && !(data?.datewise?.length) && (
           <Card>
             <CardContent className='py-12 text-center text-muted-foreground'>
               No load transactions found for the selected date range.
@@ -393,6 +314,7 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           startDate={startDate}
           endDate={endDate}
           onClose={() => setSelectedWallet(null)}
+          loadOnly
         />
       </div>
     )

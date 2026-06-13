@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Download, Wallet, TrendingUp, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight } from 'lucide-react'
-import { useGetWalletBalanceStatementQuery } from '@/stores/reports.api'
+import { useGetWalletBalanceStatementQuery, type WalletBalanceStatement as WalletBalanceStatementData } from '@/stores/reports.api'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -31,6 +31,8 @@ interface WalletBalanceStatementProps {
   startDate: string
   endDate: string
   onClose: () => void
+  /** When true, hide cash withdrawal/deposit and show only load sales, purchases, and sim-sale load. */
+  loadOnly?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -49,6 +51,37 @@ const getFlowLabel = (impact: number) => (impact >= 0 ? 'IN' : 'OUT')
 const getPurchaseAmount = (amount: number, walletImpact: number) => (walletImpact >= 0 ? amount : 0)
 const getSellAmount = (amount: number, walletImpact: number) => (walletImpact < 0 ? amount : 0)
 
+const LOAD_SOURCES = new Set(['load', 'sim_sale', 'load_purchase'])
+
+type LoadOnlyRow = WalletBalanceStatementData['rows'][number] & { totalPurchased: number }
+
+function applyLoadOnlyFilter(statement: WalletBalanceStatementData): WalletBalanceStatementData & { rows: LoadOnlyRow[] } {
+  const rows: LoadOnlyRow[] = statement.rows.map((row) => {
+    const detailItems = row.detailItems.filter((item) => LOAD_SOURCES.has(item.source))
+    const totalSold = detailItems
+      .filter((item) => item.source === 'load' || item.source === 'sim_sale')
+      .reduce((sum, item) => sum + item.amount, 0)
+    const totalPurchased = detailItems
+      .filter((item) => item.source === 'load_purchase')
+      .reduce((sum, item) => sum + item.amount, 0)
+    const totalProfit = detailItems.reduce((sum, item) => sum + item.profit, 0)
+
+    return {
+      ...row,
+      detailItems,
+      totalSold,
+      totalPurchased,
+      totalWithdrawals: 0,
+      totalDeposits: 0,
+      totalProfit,
+      transactions: detailItems.length,
+      hasSales: detailItems.length > 0,
+    }
+  })
+
+  return { ...statement, rows }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WalletBalanceStatement({
@@ -56,15 +89,21 @@ export function WalletBalanceStatement({
   startDate,
   endDate,
   onClose,
+  loadOnly = false,
 }: WalletBalanceStatementProps) {
   const tableRef = useRef<HTMLDivElement>(null)
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [viewMode, setViewMode] = useState<'summary' | 'number-wise'>('summary')
   const skip = !walletType
 
-  const { data, isLoading } = useGetWalletBalanceStatementQuery(
+  const { data: rawData, isLoading } = useGetWalletBalanceStatementQuery(
     { walletType: walletType!, startDate, endDate },
     { skip }
+  )
+
+  const data = useMemo(
+    () => (rawData && loadOnly ? applyLoadOnlyFilter(rawData) : rawData),
+    [rawData, loadOnly],
   )
 
   const handleExport = () => {
@@ -122,8 +161,11 @@ export function WalletBalanceStatement({
   }
 
   const totalSold = data?.rows.reduce((s, r) => s + r.totalSold, 0) ?? 0
-  const totalWithdrawals = data?.rows.reduce((s, r) => s + r.totalWithdrawals, 0) ?? 0
-  const totalDeposits = data?.rows.reduce((s, r) => s + r.totalDeposits, 0) ?? 0
+  const totalPurchased = loadOnly
+    ? (data?.rows as LoadOnlyRow[] | undefined)?.reduce((s, r) => s + r.totalPurchased, 0) ?? 0
+    : 0
+  const totalWithdrawals = loadOnly ? 0 : data?.rows.reduce((s, r) => s + r.totalWithdrawals, 0) ?? 0
+  const totalDeposits = loadOnly ? 0 : data?.rows.reduce((s, r) => s + r.totalDeposits, 0) ?? 0
   const totalProfit = data?.rows.reduce((s, r) => s + r.totalProfit, 0) ?? 0
   const numberWiseRows = useMemo(() => {
     if (!data) return []
@@ -175,6 +217,7 @@ export function WalletBalanceStatement({
   const numberWiseTotalProfit = numberWiseDetailRows.reduce((sum, row) => sum + (row.item?.profit || 0), 0)
   const salesDays = data?.rows.filter((r) => r.hasSales).length ?? 0
   const noSaleDays = data?.rows.filter((r) => !r.hasSales).length ?? 0
+  const summaryColSpan = loadOnly ? 8 : 9
   const toggleRow = (date: string) => {
     setExpandedRows((prev) => ({ ...prev, [date]: !prev[date] }))
   }
@@ -186,7 +229,7 @@ export function WalletBalanceStatement({
           <div className='flex items-center justify-between pr-6'>
             <DialogTitle className='flex items-center gap-2 capitalize'>
               <Wallet className='h-5 w-5' />
-              {walletType} — Balance Statement
+              {walletType} — {loadOnly ? 'Load Report' : 'Balance Statement'}
             </DialogTitle>
             <div className='flex items-center gap-2'>
               <Button
@@ -230,7 +273,7 @@ export function WalletBalanceStatement({
         ) : !data ? null : (
           <div className='space-y-4'>
             {viewMode === 'summary' && (
-              <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6'>
+              <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${loadOnly ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
                 <Card className={kpiCardClass('slate')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
@@ -244,33 +287,48 @@ export function WalletBalanceStatement({
                 <Card className={kpiCardClass('sky')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
-                      <p className='text-xs text-muted-foreground'>Total Sold</p>
+                      <p className='text-xs text-muted-foreground'>Load Sold</p>
                       <ArrowUpCircle className='h-3.5 w-3.5 text-blue-500' />
                     </div>
                     <p className='text-lg font-bold text-blue-600'>{fmt(totalSold)}</p>
                     <p className='text-xs text-muted-foreground'>{salesDays} active days</p>
                   </CardContent>
                 </Card>
-                <Card className={kpiCardClass('emerald')}>
-                  <CardContent className='p-3'>
-                    <div className='flex items-center justify-between mb-1'>
-                      <p className='text-xs text-muted-foreground'>Received (+)</p>
-                      <ArrowDownCircle className='h-3.5 w-3.5 text-green-500' />
-                    </div>
-                    <p className='text-lg font-bold text-green-600'>{fmt(totalWithdrawals)}</p>
-                    <p className='text-xs text-muted-foreground'>cash out — balance ↑</p>
-                  </CardContent>
-                </Card>
-                <Card className={kpiCardClass('orange')}>
-                  <CardContent className='p-3'>
-                    <div className='flex items-center justify-between mb-1'>
-                      <p className='text-xs text-muted-foreground'>Send (−)</p>
-                      <ArrowUpCircle className='h-3.5 w-3.5 text-orange-500' />
-                    </div>
-                    <p className='text-lg font-bold text-orange-600'>{fmt(totalDeposits)}</p>
-                    <p className='text-xs text-muted-foreground'>cash in — balance ↓</p>
-                  </CardContent>
-                </Card>
+                {loadOnly ? (
+                  <Card className={kpiCardClass('orange')}>
+                    <CardContent className='p-3'>
+                      <div className='flex items-center justify-between mb-1'>
+                        <p className='text-xs text-muted-foreground'>Load Purchased</p>
+                        <ArrowDownCircle className='h-3.5 w-3.5 text-orange-500' />
+                      </div>
+                      <p className='text-lg font-bold text-orange-600'>{fmt(totalPurchased)}</p>
+                      <p className='text-xs text-muted-foreground'>stock added to wallet</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    <Card className={kpiCardClass('emerald')}>
+                      <CardContent className='p-3'>
+                        <div className='flex items-center justify-between mb-1'>
+                          <p className='text-xs text-muted-foreground'>Received (+)</p>
+                          <ArrowDownCircle className='h-3.5 w-3.5 text-green-500' />
+                        </div>
+                        <p className='text-lg font-bold text-green-600'>{fmt(totalWithdrawals)}</p>
+                        <p className='text-xs text-muted-foreground'>cash out — balance ↑</p>
+                      </CardContent>
+                    </Card>
+                    <Card className={kpiCardClass('orange')}>
+                      <CardContent className='p-3'>
+                        <div className='flex items-center justify-between mb-1'>
+                          <p className='text-xs text-muted-foreground'>Send (−)</p>
+                          <ArrowUpCircle className='h-3.5 w-3.5 text-orange-500' />
+                        </div>
+                        <p className='text-lg font-bold text-orange-600'>{fmt(totalDeposits)}</p>
+                        <p className='text-xs text-muted-foreground'>cash in — balance ↓</p>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
                 <Card className={kpiCardClass('emerald')}>
                   <CardContent className='p-3'>
                     <div className='flex items-center justify-between mb-1'>
@@ -306,8 +364,14 @@ export function WalletBalanceStatement({
                       <>
                         <TableHead className='text-right'>Opening Balance</TableHead>
                         <TableHead className='text-right'>Load Sold</TableHead>
-                        <TableHead className='text-right text-green-600'>Received (+)</TableHead>
-                        <TableHead className='text-right text-orange-600'>Send (−)</TableHead>
+                        {loadOnly ? (
+                          <TableHead className='text-right text-orange-600'>Load Purchased</TableHead>
+                        ) : (
+                          <>
+                            <TableHead className='text-right text-green-600'>Received (+)</TableHead>
+                            <TableHead className='text-right text-orange-600'>Send (−)</TableHead>
+                          </>
+                        )}
                         <TableHead className='text-right'>Profit</TableHead>
                         <TableHead className='text-right'>Txns</TableHead>
                         <TableHead className='text-right'>Closing Balance</TableHead>
@@ -360,20 +424,32 @@ export function WalletBalanceStatement({
                               <span className='text-muted-foreground'>—</span>
                             )}
                           </TableCell>
-                          <TableCell className='text-right'>
-                            {row.totalWithdrawals > 0 ? (
-                              <span className='font-medium text-green-600'>+{fmt(row.totalWithdrawals)}</span>
-                            ) : (
-                              <span className='text-muted-foreground'>—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className='text-right'>
-                            {row.totalDeposits > 0 ? (
-                              <span className='font-medium text-orange-600'>−{fmt(row.totalDeposits)}</span>
-                            ) : (
-                              <span className='text-muted-foreground'>—</span>
-                            )}
-                          </TableCell>
+                          {loadOnly ? (
+                            <TableCell className='text-right'>
+                              {(row as LoadOnlyRow).totalPurchased > 0 ? (
+                                <span className='font-medium text-orange-600'>{fmt((row as LoadOnlyRow).totalPurchased)}</span>
+                              ) : (
+                                <span className='text-muted-foreground'>—</span>
+                              )}
+                            </TableCell>
+                          ) : (
+                            <>
+                              <TableCell className='text-right'>
+                                {row.totalWithdrawals > 0 ? (
+                                  <span className='font-medium text-green-600'>+{fmt(row.totalWithdrawals)}</span>
+                                ) : (
+                                  <span className='text-muted-foreground'>—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className='text-right'>
+                                {row.totalDeposits > 0 ? (
+                                  <span className='font-medium text-orange-600'>−{fmt(row.totalDeposits)}</span>
+                                ) : (
+                                  <span className='text-muted-foreground'>—</span>
+                                )}
+                              </TableCell>
+                            </>
+                          )}
                           <TableCell className='text-right'>
                             {row.hasSales ? (
                               <span className='font-medium text-green-600'>{fmt(row.totalProfit)}</span>
@@ -395,13 +471,13 @@ export function WalletBalanceStatement({
                             {row.hasSales ? (
                               <Badge variant='default' className='bg-green-600 hover:bg-green-700 text-xs'>Active</Badge>
                             ) : (
-                              <Badge variant='outline' className='text-xs text-muted-foreground'>No Sale</Badge>
+                              <Badge variant='outline' className='text-xs text-muted-foreground'>{loadOnly ? 'No Load' : 'No Sale'}</Badge>
                             )}
                           </TableCell>
                         </TableRow>
                         {expandedRows[row.date] && row.detailItems.length > 0 && (
                           <TableRow className='bg-muted/20'>
-                            <TableCell colSpan={9} className='py-2'>
+                            <TableCell colSpan={summaryColSpan} className='py-2'>
                               <div className='space-y-2'>
                                 {row.detailItems.map((item) => (
                                   <div
@@ -455,7 +531,7 @@ export function WalletBalanceStatement({
                             <TableCell className='font-medium'>
                               {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
                             </TableCell>
-                            <TableCell className='text-muted-foreground'>No details</TableCell>
+                            <TableCell className='text-muted-foreground'>{loadOnly ? 'No load activity' : 'No details'}</TableCell>
                             <TableCell />
                             <TableCell />
                             <TableCell />
@@ -508,8 +584,14 @@ export function WalletBalanceStatement({
                       <TableCell>Total</TableCell>
                       <TableCell className='text-right'>{fmt(data.periodOpeningBalance)}</TableCell>
                       <TableCell className='text-right text-blue-600'>{fmt(totalSold)}</TableCell>
-                      <TableCell className='text-right text-green-600'>+{fmt(totalWithdrawals)}</TableCell>
-                      <TableCell className='text-right text-orange-600'>−{fmt(totalDeposits)}</TableCell>
+                      {loadOnly ? (
+                        <TableCell className='text-right text-orange-600'>{fmt(totalPurchased)}</TableCell>
+                      ) : (
+                        <>
+                          <TableCell className='text-right text-green-600'>+{fmt(totalWithdrawals)}</TableCell>
+                          <TableCell className='text-right text-orange-600'>−{fmt(totalDeposits)}</TableCell>
+                        </>
+                      )}
                       <TableCell className='text-right text-green-600'>{fmt(totalProfit)}</TableCell>
                       <TableCell className='text-right'>
                         <Badge>{data.rows.reduce((s, r) => s + r.transactions, 0)}</Badge>
@@ -538,8 +620,9 @@ export function WalletBalanceStatement({
             </div>
             {viewMode === 'number-wise' && (
               <p className='text-xs text-muted-foreground'>
-                Note: Purchase/Sell totals are based on wallet flow direction.
-                Positive flow appears in Purchase and negative flow appears in Sell.
+                {loadOnly
+                  ? 'Showing load sales, sim-sale load, and load purchases only.'
+                  : 'Note: Purchase/Sell totals are based on wallet flow direction. Positive flow appears in Purchase and negative flow appears in Sell.'}
               </p>
             )}
           </div>
