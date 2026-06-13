@@ -182,7 +182,6 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
   }
 
   const renderActions = (customer: Customer) => {
-    const customerId = resolveCustomerId(customer)
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'invoice-sale')

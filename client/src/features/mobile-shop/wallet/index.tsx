@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,19 +29,14 @@ import {
   Edit2,
   Trash2,
   Wallet,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   ArrowDownLeft,
   ArrowUpRight,
 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
-import { cn } from '@/lib/utils'
 import {
   CASH_RECEIVED_COMMISSION_LABEL,
   CASH_SEND_COMMISSION_LABEL,
   CASH_WALLET_RATES_SECTION,
-  cashReceivedCommissionBadge,
-  cashSendCommissionBadge,
 } from '@/features/mobile-shop/utils/cash-transaction-labels'
 import { isLoadWalletName, resolveWalletId } from '@/features/mobile-shop/utils/wallet-utils'
 import {
@@ -182,7 +184,7 @@ export default function WalletPage() {
       title='Wallet Management'
       description={`Create and manage your wallets (JazzCash, EasyPaisa, Bank Account, SIM Card, etc.) · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
-      <div className='grid gap-6 lg:grid-cols-[minmax(280px,360px)_1fr]'>
+      <div className='grid gap-6 lg:grid-cols-[1fr_2fr]'>
         <Card>
           <CardHeader>
             <CardTitle>{editingId ? 'Edit Wallet' : 'Add New Wallet'}</CardTitle>
@@ -275,160 +277,127 @@ export default function WalletPage() {
           </CardContent>
         </Card>
 
-        <div className='space-y-4'>
-          <div className='flex items-center justify-between'>
-            <h2 className='text-lg font-semibold'>Your Wallets ({wallets.length})</h2>
-          </div>
-
-          {isLoading ? (
-            <div className='flex items-center justify-center h-40 rounded-xl border bg-muted/20'>
-              <p className='text-muted-foreground'>Loading wallets...</p>
-            </div>
-          ) : wallets.length === 0 ? (
-            <div className='flex flex-col items-center justify-center h-40 rounded-xl border bg-muted/20 gap-2'>
-              <Wallet className='h-10 w-10 text-muted-foreground/40' />
-              <p className='text-muted-foreground'>No wallets yet. Add one to get started!</p>
-            </div>
-          ) : (
-            <div className='grid gap-4 sm:grid-cols-2'>
-              {wallets.map((wallet) => {
-                const loadWallet = isLoadWalletName(wallet.type)
-                return (
-                  <Card
-                    key={resolveWalletId(wallet) || wallet.type}
-                    className={cn(
-                      'relative overflow-hidden transition-shadow hover:shadow-md',
-                      loadWallet ? 'border-blue-200/80' : 'border-orange-200/80',
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'absolute top-0 left-0 right-0 h-1',
-                        loadWallet ? 'bg-blue-500' : 'bg-orange-500',
-                      )}
-                    />
-                    <CardHeader className='pb-2'>
-                      <div className='flex items-start justify-between gap-2'>
-                        <div className='min-w-0 flex-1'>
-                          <div className='flex items-center gap-2 mb-1'>
-                            <div
-                              className={cn(
-                                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                                loadWallet ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700',
-                              )}
-                            >
-                              <Wallet className='h-4 w-4' />
-                            </div>
-                            <Badge variant='secondary' className='text-xs shrink-0'>
-                              {loadWallet ? 'Load Wallet' : 'Cash Wallet'}
-                            </Badge>
-                          </div>
-                          <CardTitle className='text-base leading-tight break-words'>
-                            {wallet.type}
-                          </CardTitle>
-                        </div>
-                        <div className='flex shrink-0 gap-1'>
-                          <Button
-                            size='icon'
-                            variant='ghost'
-                            className='h-8 w-8'
-                            onClick={() => handleEdit(wallet)}
-                            title='Edit wallet'
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Wallets ({wallets.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className='flex items-center justify-center h-40'>
+                <p className='text-muted-foreground'>Loading wallets...</p>
+              </div>
+            ) : wallets.length === 0 ? (
+              <div className='flex flex-col items-center justify-center h-40 gap-2'>
+                <Wallet className='h-10 w-10 text-muted-foreground/40' />
+                <p className='text-muted-foreground'>No wallets yet. Add one to get started!</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Wallet Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Load Sale %</TableHead>
+                    <TableHead>Received %</TableHead>
+                    <TableHead>Send %</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead className='text-right'>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {wallets.map((wallet) => {
+                    const loadWallet = isLoadWalletName(wallet.type)
+                    return (
+                      <TableRow key={resolveWalletId(wallet) || wallet.type}>
+                        <TableCell className='font-medium max-w-[200px]'>
+                          <span className='line-clamp-2'>{wallet.type}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              loadWallet
+                                ? 'text-xs font-medium text-blue-700'
+                                : 'text-xs font-medium text-orange-700'
+                            }
                           >
-                            <Edit2 className='h-4 w-4' />
-                          </Button>
-                          <Button
-                            size='icon'
-                            variant='ghost'
-                            className='h-8 w-8 text-red-600 hover:text-red-700'
-                            onClick={() => setWalletToDelete({ id: resolveWalletId(wallet), type: wallet.type })}
-                            title='Delete wallet'
-                          >
-                            <Trash2 className='h-4 w-4' />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className='space-y-4'>
-                      <div>
-                        <p className='text-xs text-muted-foreground mb-0.5'>Balance</p>
-                        <p className='text-2xl font-bold text-green-600'>
+                            {loadWallet ? 'Load' : 'Cash'}
+                          </span>
+                        </TableCell>
+                        <TableCell className='text-green-600 font-semibold whitespace-nowrap'>
                           Rs {formatWalletBalance(wallet.balance)}
-                        </p>
-                      </div>
-
-                      <div className='flex flex-wrap gap-2 text-xs'>
-                        {loadWallet && Number(wallet.commissionRate ?? 0) > 0 && (
-                          <span className='rounded-md bg-blue-50 text-blue-700 px-2 py-1'>
-                            Load sale {Number(wallet.commissionRate).toFixed(2)}%
-                          </span>
-                        )}
-                        {!loadWallet && Number(wallet.withdrawalCommissionRate ?? 0) > 0 && (
-                          <span className='rounded-md bg-orange-50 text-orange-700 px-2 py-1'>
-                            {cashReceivedCommissionBadge(Number(wallet.withdrawalCommissionRate))}
-                          </span>
-                        )}
-                        {!loadWallet && Number(wallet.depositCommissionRate ?? 0) > 0 && (
-                          <span className='rounded-md bg-purple-50 text-purple-700 px-2 py-1'>
-                            {cashSendCommissionBadge(Number(wallet.depositCommissionRate))}
-                          </span>
-                        )}
-                      </div>
-
-                      <p className='text-xs text-muted-foreground'>
-                        Updated {formatWalletDate(wallet.updatedAt)}
-                      </p>
-
-                      <div className='grid grid-cols-2 gap-2 pt-1'>
-                        {loadWallet ? (
-                          <>
+                        </TableCell>
+                        <TableCell className='text-blue-600 whitespace-nowrap'>
+                          {Number(wallet.commissionRate ?? 0).toFixed(2)}%
+                        </TableCell>
+                        <TableCell className='text-orange-600 whitespace-nowrap'>
+                          {Number(wallet.withdrawalCommissionRate ?? 0).toFixed(2)}%
+                        </TableCell>
+                        <TableCell className='text-purple-600 whitespace-nowrap'>
+                          {Number(wallet.depositCommissionRate ?? 0).toFixed(2)}%
+                        </TableCell>
+                        <TableCell className='text-sm text-muted-foreground whitespace-nowrap'>
+                          {formatWalletDate(wallet.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className='flex flex-wrap items-center justify-end gap-1'>
+                            {!loadWallet && (
+                              <>
+                                <Button
+                                  size='sm'
+                                  type='button'
+                                  className='h-8 bg-purple-600 hover:bg-purple-700'
+                                  onClick={() =>
+                                    navigateWithWallet(wallet, { action: 'deposit' }, '/mobile-shop/cash-management')
+                                  }
+                                >
+                                  <ArrowDownLeft className='h-3.5 w-3.5 mr-1' />
+                                  Send
+                                </Button>
+                                <Button
+                                  size='sm'
+                                  type='button'
+                                  variant='outline'
+                                  className='h-8 border-orange-300 text-orange-700 hover:bg-orange-50'
+                                  onClick={() =>
+                                    navigateWithWallet(wallet, { action: 'withdrawal' }, '/mobile-shop/cash-management')
+                                  }
+                                >
+                                  <ArrowUpRight className='h-3.5 w-3.5 mr-1' />
+                                  Received
+                                </Button>
+                              </>
+                            )}
                             <Button
-                              type='button'
-                              className='bg-blue-600 hover:bg-blue-700'
-                              onClick={() => navigateWithWallet(wallet, { tab: 'purchase' }, '/mobile-shop/load')}
-                            >
-                              <ArrowDownToLine className='h-4 w-4 mr-1.5 shrink-0' />
-                              Purchase Load
-                            </Button>
-                            <Button
-                              type='button'
+                              size='sm'
                               variant='outline'
-                              className='border-blue-300 text-blue-700 hover:bg-blue-50'
-                              onClick={() => navigateWithWallet(wallet, { tab: 'sell' }, '/mobile-shop/load')}
+                              className='h-8'
+                              onClick={() => handleEdit(wallet)}
+                              title='Edit wallet'
                             >
-                              <ArrowUpFromLine className='h-4 w-4 mr-1.5 shrink-0' />
-                              Sale Load
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button
-                              type='button'
-                              className='bg-purple-600 hover:bg-purple-700'
-                              onClick={() => navigateWithWallet(wallet, { action: 'deposit' }, '/mobile-shop/cash-management')}
-                            >
-                              <ArrowDownLeft className='h-4 w-4 mr-1.5 shrink-0' />
-                              Send
+                              <Edit2 className='h-4 w-4' />
                             </Button>
                             <Button
-                              type='button'
+                              size='sm'
                               variant='outline'
-                              className='border-orange-300 text-orange-700 hover:bg-orange-50'
-                              onClick={() => navigateWithWallet(wallet, { action: 'withdrawal' }, '/mobile-shop/cash-management')}
+                              className='h-8 text-red-600 hover:text-red-700'
+                              onClick={() =>
+                                setWalletToDelete({ id: resolveWalletId(wallet), type: wallet.type })
+                              }
+                              title='Delete wallet'
                             >
-                              <ArrowUpRight className='h-4 w-4 mr-1.5 shrink-0' />
-                              Received
+                              <Trash2 className='h-4 w-4' />
                             </Button>
-                          </>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <AlertDialog open={!!walletToDelete} onOpenChange={(open) => !open && setWalletToDelete(null)}>

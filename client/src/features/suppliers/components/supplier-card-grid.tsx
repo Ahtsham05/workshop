@@ -161,7 +161,6 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
   }
 
   const renderActions = (supplier: Supplier) => {
-    const supplierId = resolveSupplierId(supplier)
     if (visibleActions.length === 0) return null
 
     const primaryAction = visibleActions.find((a) => a.id === 'purchase-invoice')
