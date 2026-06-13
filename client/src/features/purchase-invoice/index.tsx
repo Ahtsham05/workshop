@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
-import { useDispatch } from 'react-redux';
-import { useNavigate } from '@tanstack/react-router';
-import { AppDispatch } from '@/stores/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import { AppDispatch, RootState } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
 import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/sheet';
 import { Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeSuppliersList } from './utils/catalog-helpers';
 import {
   clearPurchaseWorkspace,
   savePurchaseWorkspace,
@@ -107,6 +108,8 @@ const getInitialShowProductCatalog = (): boolean => {
 const PurchaseInvoicePage = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { supplierId?: string };
+  const suppliersData = useSelector((state: RootState) => state.supplier.data);
   const { t } = useLanguage();
   const { hasPermission } = usePermissions();
   const [currentView, setCurrentView] = useState<ViewType>('create');
@@ -382,6 +385,37 @@ const PurchaseInvoicePage = () => {
         setLoading(false);
       });
   }, [dispatch]);
+
+  useEffect(() => {
+    const supplierId = search.supplierId?.trim();
+    if (!supplierId || currentView !== 'create' || isEditing) return;
+    const suppliers = normalizeSuppliersList(suppliersData);
+    const match = suppliers.find(
+      (s) => s._id === supplierId || (s as { id?: string }).id === supplierId,
+    );
+    if (!match) return;
+    const sid = match._id || (match as { id?: string }).id;
+    if (!sid) return;
+    setPurchase((prev) => {
+      const currentId = prev.supplier?._id || (prev.supplier as { id?: string })?.id;
+      if (currentId === sid) return prev;
+      return {
+        ...prev,
+        supplier: {
+          _id: sid,
+          name: match.name,
+          nameUrdu: match.nameUrdu,
+          phone: match.phone,
+          whatsapp: (match as { whatsapp?: string }).whatsapp,
+          email: match.email,
+          address: match.address,
+          balance: match.balance,
+          picture: match.picture,
+        },
+        paymentType: 'Credit',
+      };
+    });
+  }, [search.supplierId, suppliersData, currentView, isEditing]);
   
   // Group products by category
   useEffect(() => {

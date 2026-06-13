@@ -62,6 +62,11 @@ const serviceInvoiceSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+      index: true,
+    },
     items: {
       type: [serviceInvoiceItemSchema],
       validate: {

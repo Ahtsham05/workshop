@@ -29,6 +29,7 @@ export const supplierSchema = z.object({
     .nullable(),
   email: z.string().email({ message: 'Invalid email address.' }).optional(), // supplier email is optional
   phone: z.string().optional(), // supplier phone number is optional
+  whatsapp: z.string().optional(),
   address: z.string().optional(), // supplier address is optional
   balance: z.number().optional(),
   createdAt: z.string().optional(), // timestamp of when the supplier was created (optional)

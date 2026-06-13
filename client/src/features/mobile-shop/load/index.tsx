@@ -253,9 +253,10 @@ function buildPurchaseFormWithWallet(wallet: WalletLike): PurchaseFormState {
   }
 }
 
-function buildSaleFormWithWallet(wallet: WalletLike): LoadSaleFormState {
+function buildSaleFormWithWallet(wallet: WalletLike, customerId?: string): LoadSaleFormState {
   return {
     ...initialSaleForm,
+    customerId: customerId?.trim() || '',
     walletId: resolveWalletId(wallet),
     walletType: wallet.type || '',
     commissionRate: String(wallet.commissionRate ?? 0),
@@ -265,6 +266,7 @@ function buildSaleFormWithWallet(wallet: WalletLike): LoadSaleFormState {
 function buildWithdrawalFormWithWallet(
   wallet: WalletLike,
   action?: 'withdrawal' | 'deposit',
+  customerId?: string,
 ): WithdrawalFormState {
   const txType = action === 'deposit' ? 'deposit' : 'withdrawal'
   const rate =
@@ -273,6 +275,7 @@ function buildWithdrawalFormWithWallet(
       : String(wallet.depositCommissionRate ?? 0)
   return {
     ...initialWithdrawalForm,
+    customerId: customerId?.trim() || '',
     walletId: resolveWalletId(wallet),
     walletType: wallet.type || '',
     transactionType: txType,
@@ -377,7 +380,8 @@ function LoadManagementPage({
 
     if (isCashManagementMode) {
       const txAction = opts?.action ?? navAction ?? 'withdrawal'
-      const next = buildWithdrawalFormWithWallet(wallet, txAction)
+      const customerId = navCustomerId || withdrawalForm.customerId
+      const next = buildWithdrawalFormWithWallet(wallet, txAction, customerId)
       setWithdrawalForm(next)
       setBulkWithdrawalForm((prev) => ({
         ...prev,
@@ -400,10 +404,11 @@ function LoadManagementPage({
       return { ...prev, walletId, walletType, commissionRate: commission }
     })
     setSaleForm((prev) => {
-      if (prev.walletId === walletId && prev.walletType === walletType && prev.commissionRate === commission) {
+      const customerId = navCustomerId || prev.customerId
+      if (prev.walletId === walletId && prev.walletType === walletType && prev.commissionRate === commission && prev.customerId === customerId) {
         return prev
       }
-      return { ...prev, walletId, walletType, commissionRate: commission }
+      return { ...prev, walletId, walletType, commissionRate: commission, customerId }
     })
   }
 
@@ -464,20 +469,29 @@ function LoadManagementPage({
     return buildPurchaseFormWithWallet(navWalletAtInit)
   })
   const [saleForm, setSaleForm] = useState<LoadSaleFormState>(() => {
-    if (isCashManagementMode || navTab === 'purchase' || !navWalletAtInit) return initialSaleForm
-    return buildSaleFormWithWallet(navWalletAtInit)
+    if (isCashManagementMode || navTab === 'purchase' || !navWalletAtInit) {
+      return navCustomerId ? { ...initialSaleForm, customerId: navCustomerId } : initialSaleForm
+    }
+    return buildSaleFormWithWallet(navWalletAtInit, navCustomerId)
   })
   const [isPurchasePaidAmountManual, setIsPurchasePaidAmountManual] = useState(false)
   const [isSaleReceivedAmountManual, setIsSaleReceivedAmountManual] = useState(false)
   const [withdrawalForm, setWithdrawalForm] = useState<WithdrawalFormState>(() => {
-    if (!isCashManagementMode || !navWalletAtInit) return initialWithdrawalForm
-    return buildWithdrawalFormWithWallet(navWalletAtInit, navAction)
+    if (!isCashManagementMode || !navWalletAtInit) {
+      if (!navCustomerId) return initialWithdrawalForm
+      return {
+        ...initialWithdrawalForm,
+        customerId: navCustomerId,
+        transactionType: navAction === 'deposit' ? 'deposit' : 'withdrawal',
+      }
+    }
+    return buildWithdrawalFormWithWallet(navWalletAtInit, navAction, navCustomerId)
   })
   const [isWithdrawalCashAmountManual, setIsWithdrawalCashAmountManual] = useState(false)
   const [withdrawalEntryMode, setWithdrawalEntryMode] = useState<'single' | 'bulk'>('single')
   const [bulkWithdrawalForm, setBulkWithdrawalForm] = useState<BulkWithdrawalFormState>(() => {
     if (!isCashManagementMode || !navWalletAtInit) return makeInitialBulkWithdrawalForm()
-    const base = buildWithdrawalFormWithWallet(navWalletAtInit, navAction)
+    const base = buildWithdrawalFormWithWallet(navWalletAtInit, navAction, navCustomerId)
     return {
       ...makeInitialBulkWithdrawalForm(),
       walletId: base.walletId,
@@ -486,16 +500,6 @@ function LoadManagementPage({
       commissionRate: base.commissionRate,
     }
   })
-
-  useEffect(() => {
-    if (!navCustomerId) return
-    setSaleForm((prev) =>
-      prev.customerId === navCustomerId ? prev : { ...prev, customerId: navCustomerId },
-    )
-    setWithdrawalForm((prev) =>
-      prev.customerId === navCustomerId ? prev : { ...prev, customerId: navCustomerId },
-    )
-  }, [navCustomerId])
 
   useEffect(() => {
     if (!navSupplierId) return
@@ -562,6 +566,28 @@ function LoadManagementPage({
   const purchases = purchasesData?.results ?? []
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
+
+  useEffect(() => {
+    if (!navCustomerId) return
+    const match = customers.find(
+      (c: { id?: string; _id?: string; name?: string }) =>
+        c.id === navCustomerId || c._id === navCustomerId,
+    )
+    setSaleForm((prev) =>
+      prev.customerId === navCustomerId
+        ? prev
+        : { ...prev, customerId: navCustomerId, customerName: match?.name || prev.customerName },
+    )
+    setWithdrawalForm((prev) =>
+      prev.customerId === navCustomerId
+        ? prev
+        : {
+            ...prev,
+            customerId: navCustomerId,
+            customerName: match?.name || prev.customerName,
+          },
+    )
+  }, [navCustomerId, customers])
 
   useEffect(() => {
     if (!suppliers.length) {

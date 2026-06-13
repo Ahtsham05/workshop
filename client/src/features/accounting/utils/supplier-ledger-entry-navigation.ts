@@ -7,6 +7,23 @@ export interface SupplierLedgerEntryAction {
   search: Record<string, string | undefined>;
 }
 
+export function getSupplierQuickActions(supplierId: string): SupplierLedgerEntryAction[] {
+  return [
+    {
+      id: 'purchase-invoice',
+      labelKey: 'New Purchase',
+      to: '/purchase-invoice',
+      search: { supplierId },
+    },
+    {
+      id: 'load-purchase',
+      labelKey: 'Buy Load',
+      to: '/mobile-shop/load',
+      search: { tab: 'purchase', supplierId },
+    },
+  ];
+}
+
 export function getSupplierLedgerEntryActions(
   category: SupplierLedgerCategory,
   supplierId: string,
@@ -38,10 +55,23 @@ export function getSupplierLedgerEntryActions(
   return [];
 }
 
+const PAYMENT_METHOD_BY_CATEGORY: Record<string, string> = {
+  cash: 'Cash',
+  bank: 'Bank Transfer',
+  cheque: 'Cheque',
+  card: 'Card',
+  credit: 'Credit',
+  jazzcash: 'Wallet (JazzCash)',
+  easypaisa: 'Wallet (EasyPaisa)',
+  nagad: 'Wallet (Nagad)',
+};
+
 export function getSupplierLedgerFormPreset(categoryKey: string): {
   transactionType: string;
   paymentMethod?: string;
 } | null {
+  const paymentMethod = PAYMENT_METHOD_BY_CATEGORY[categoryKey];
+
   switch (categoryKey) {
     case 'opening_balance':
       return { transactionType: 'opening_balance' };
@@ -58,12 +88,18 @@ export function getSupplierLedgerFormPreset(categoryKey: string): {
     case 'adjustment':
       return { transactionType: 'adjustment' };
     case 'cash':
+    case 'bank':
+    case 'cheque':
+    case 'card':
+    case 'credit':
     case 'jazzcash':
     case 'easypaisa':
     case 'nagad':
     case 'wallet':
-    case 'bank':
-      return { transactionType: 'payment_made', paymentMethod: 'Cash' };
+      return {
+        transactionType: 'payment_made',
+        paymentMethod: paymentMethod || 'Cash',
+      };
     default:
       return { transactionType: 'payment_made', paymentMethod: 'Cash' };
   }

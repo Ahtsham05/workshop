@@ -2,13 +2,19 @@ import { useLanguage } from '@/context/language-context'
 import { useSupplierColumns } from './components/users-columns'
 import SupplierDialogs from './components/users-dialogs'
 import SupplierPrimaryButtons from './components/users-primary-buttons'
+import { SupplierCardGrid } from './components/supplier-card-grid'
+import { SupplierListToolbar } from './components/supplier-list-toolbar'
 import { SupplierTable } from './components/users-table'
 import SupplierProvider from './context/users-context'
+import {
+  getStoredSupplierListViewMode,
+  storeSupplierListViewMode,
+  type SupplierListViewMode,
+} from './utils/supplier-list-view'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState } from 'react'
 import { fetchSuppliers } from '@/stores/supplier.slice'
-import { Input } from '@/components/ui/input'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 
@@ -18,10 +24,11 @@ export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = useState(50)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
+  const [viewMode, setViewMode] = useState<SupplierListViewMode>(() => getStoredSupplierListViewMode())
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const { t } = useLanguage()
   const columns = useSupplierColumns()
@@ -29,12 +36,21 @@ export default function Suppliers() {
   const dispatch = useDispatch<AppDispatch>()
 
   useEffect(() => {
+    setViewMode(getStoredSupplierListViewMode())
+  }, [])
+
+  const handleViewModeChange = (mode: SupplierListViewMode) => {
+    setViewMode(mode)
+    storeSupplierListViewMode(mode)
+  }
+
+  useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearch])
 
   useEffect(() => {
     setLoading(true)
-    const limitValue = parseInt(String(limit), 10) || 10
+    const limitValue = parseInt(String(limit), 10) || 50
     const q = debouncedSearch.trim()
     const params = {
       page: currentPage,
@@ -68,31 +84,44 @@ export default function Suppliers() {
           <SupplierPrimaryButtons />
         </div>
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          <SupplierTable
-            data={suppliers}
-            columns={columns}
-            loading={loading}
-            toolbarLeading={
-              <Input
-                autoFocus
-                placeholder={t('search_suppliers')}
-                className='h-9 w-full'
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                aria-label={t('search_suppliers')}
-              />
-            }
-            paggination={{
-              totalPage,
-              currentPage,
-              setCurrentPage,
-              limit,
-              setLimit: (n: number) => {
-                setLimit(n)
-                setCurrentPage(1)
-              },
-            }}
+          <SupplierListToolbar
+            searchInput={searchInput}
+            onSearchChange={setSearchInput}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
           />
+          {viewMode === 'cards' ? (
+            <SupplierCardGrid
+              suppliers={suppliers}
+              loading={loading}
+              pagination={{
+                totalPage,
+                currentPage,
+                setCurrentPage,
+                limit,
+                setLimit: (n: number) => {
+                  setLimit(n)
+                  setCurrentPage(1)
+                },
+              }}
+            />
+          ) : (
+            <SupplierTable
+              data={suppliers}
+              columns={columns}
+              loading={loading}
+              paggination={{
+                totalPage,
+                currentPage,
+                setCurrentPage,
+                limit,
+                setLimit: (n: number) => {
+                  setLimit(n)
+                  setCurrentPage(1)
+                },
+              }}
+            />
+          )}
         </div>
 
       <SupplierDialogs setFetch={setFetch} />

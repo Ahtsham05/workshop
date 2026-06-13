@@ -176,7 +176,7 @@ export default function InvoicePage() {
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: search.customerId?.trim() || 'walk-in',
-    type: 'cash',
+    type: search.customerId?.trim() ? 'credit' : 'cash',
     subtotal: 0,
     tax: 0,
     discount: 0,
@@ -532,6 +532,9 @@ export default function InvoicePage() {
       ...prev,
       customerId,
       customerName: match?.name || prev.customerName,
+      type: 'credit',
+      paidAmount: 0,
+      balance: prev.total,
     }))
   }, [search.customerId, customers, currentView])
 

@@ -211,20 +211,21 @@ export interface ServiceInvoiceItemRecord {
 export interface ServiceInvoiceRecord {
   id: string
   invoiceNumber: string
+  customerId?: string
   customerName?: string
   customerPhone?: string
   items: ServiceInvoiceItemRecord[]
   subtotal: number
   totalAmount: number
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
+  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
   date: string
   notes?: string
 }
 
 export interface CreateServiceInvoiceInput {
+  customerId?: string
   customerName?: string
   customerPhone?: string
-  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
   date?: string
   notes?: string
   items: ServiceInvoiceItemInput[]
@@ -739,7 +740,7 @@ export const mobileShopApi = createApi({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
     }),
     updateServiceInvoice: builder.mutation<ServiceInvoiceRecord, { id: string; body: UpdateServiceInvoiceInput }>({
       query: ({ id, body }) => ({
@@ -747,14 +748,14 @@ export const mobileShopApi = createApi({
         method: 'PATCH',
         body,
       }),
-      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
     }),
     deleteServiceInvoice: builder.mutation<void, string>({
       query: (id) => ({
         url: `/services/invoices/${id}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard'],
+      invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
     }),
 
     // ─── Repair Stock Ledger ─────────────────────────────────────────────────

@@ -74,14 +74,16 @@ export function LedgerEntryForm({
     return method.includes('wallet');
   };
 
+  const initialPaymentMethod = editingEntry?.paymentMethod || defaultPaymentMethod || 'Cash';
+
   const [formData, setFormData] = useState({
     transactionType: editingEntry?.transactionType || defaultTransactionType || (ledgerType === 'customer' ? 'payment_received' : 'payment_made'),
     description: editingEntry?.description || '',
     reference: editingEntry?.reference || '',
     debit: editingEntry?.debit ? editingEntry.debit.toString() : '',
     credit: editingEntry?.credit ? editingEntry.credit.toString() : '',
-    paymentMethod: isWalletPaymentMethod(editingEntry?.paymentMethod) ? 'Wallet' : (editingEntry?.paymentMethod || defaultPaymentMethod || 'Cash'),
-    walletType: getWalletTypeFromPaymentMethod(editingEntry?.paymentMethod) || '',
+    paymentMethod: isWalletPaymentMethod(initialPaymentMethod) ? 'Wallet' : initialPaymentMethod,
+    walletType: getWalletTypeFromPaymentMethod(initialPaymentMethod) || '',
     notes: editingEntry?.notes || '',
   });
 

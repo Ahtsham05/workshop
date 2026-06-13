@@ -56,10 +56,16 @@ const getLeaves = catchAsync(async (req, res) => {
         const plain = leave.toObject ? leave.toObject() : leave;
         const employeeDoc = plain.employee;
         const leaveId = plain.id || plain._id?.toString?.() || String(plain._id || '');
+        let salaryImpact = { amount: 0, type: 'none', label: '-' };
+        try {
+          salaryImpact = await payrollService.computeLeaveSalaryImpact(plain, employeeDoc);
+        } catch (err) {
+          logger.warn(`Leave salary impact failed for ${leaveId}:`, err.message);
+        }
         return {
           ...plain,
           id: leaveId,
-          salaryImpact: await payrollService.computeLeaveSalaryImpact(plain, employeeDoc),
+          salaryImpact,
         };
       })
     );

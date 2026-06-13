@@ -1292,7 +1292,7 @@ export function SupplierLedgerDetails({ supplier, onBack }: SupplierLedgerDetail
                       onClick={() => handleOpenLedgerEntryForm(activeCategoryGroup.category.key)}
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      {t('Add Entry')}
+                      {t('Add Ledger Entry')}
                     </Button>
                   )}
                 </div>

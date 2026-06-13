@@ -27,7 +27,6 @@ import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
-import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -41,10 +40,14 @@ interface DataTableProps {
   data: Customer[]
   paggination: any
   loading?: boolean
-  toolbarLeading?: ReactNode
 }
 
-export function CustomerTable({ columns, data, paggination, loading, toolbarLeading }: DataTableProps) {
+export function CustomerTable({
+  columns,
+  data,
+  paggination,
+  loading,
+}: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -79,7 +82,7 @@ export function CustomerTable({ columns, data, paggination, loading, toolbarLead
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} leading={toolbarLeading} />
+      <DataTableToolbar table={table} />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>

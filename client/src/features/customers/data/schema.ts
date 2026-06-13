@@ -29,6 +29,8 @@ export const customerSchema = z.object({
     .nullable(),
   email: z.string().email({ message: 'Invalid email address.' }).optional(), // customer email is optional
   phone: z.string().optional(), // customer phone number is optional
+  whatsapp: z.string().optional(),
+  balance: z.number().optional(),
   address: z.string().optional(), // customer address is optional
   createdAt: z.string().optional(), // timestamp of when the customer was created (optional)
   updatedAt: z.string().optional(), // timestamp of when the customer was last updated (optional)

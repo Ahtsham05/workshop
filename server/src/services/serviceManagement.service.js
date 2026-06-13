@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Service, ServiceInvoice } = require('../models');
+const { Service, ServiceInvoice, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const {
   parseBusinessDateTime,
@@ -8,7 +8,25 @@ const {
   endOfBusinessDay,
   applyBusinessDateRange,
 } = require('../utils/businessTimezone');
+const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const cashBookService = require('./cashBook.service');
+const customerLedgerService = require('./customerLedger.service');
+
+const sanitizeId = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  return value;
+};
+
+const resolveLinkedCustomer = async ({ customerId, organizationId, branchId }) => {
+  const normalizedId = sanitizeId(customerId);
+  if (!normalizedId) return null;
+
+  const customer = await Customer.findOne({ _id: normalizedId, organizationId, branchId }).select('name phone mobile');
+  if (!customer) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Selected customer not found in this branch');
+  }
+  return customer;
+};
 
 const normalizeServiceInvoiceDates = (body) => {
   const next = { ...body };
@@ -22,6 +40,11 @@ const normalizeServiceInvoiceDates = (body) => {
 };
 
 const syncServiceInvoiceCashEntry = async (invoice) => {
+  if (invoice.customerId) {
+    await cashBookService.deleteEntriesByReference(invoice._id, 'ServiceInvoice');
+    return null;
+  }
+
   const cashAmount = Number(invoice.totalAmount || 0);
   if (cashAmount <= 0) {
     await cashBookService.deleteEntriesByReference(invoice._id, 'ServiceInvoice');
@@ -41,6 +64,40 @@ const syncServiceInvoiceCashEntry = async (invoice) => {
     date: invoice.date,
     createdBy: invoice.createdBy,
   });
+};
+
+const syncServiceInvoiceCustomerLedger = async (invoice) => {
+  await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
+
+  if (!invoice.customerId) return;
+
+  const serviceNames = (invoice.items || []).map((item) => item.serviceName).filter(Boolean);
+  const description = `Service invoice ${invoice.invoiceNumber}${serviceNames.length ? ` (${serviceNames.join(', ')})` : ''}`;
+  const ledgerEntries = buildCustomerSaleLedgerEntries({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    customerId: invoice.customerId,
+    referenceId: invoice._id,
+    invoiceNumber: invoice.invoiceNumber,
+    displayReference: invoice.invoiceNumber,
+    description,
+    transactionDate: invoice.date,
+    total: invoice.totalAmount,
+    paidAmount: 0,
+    invoiceType: 'credit',
+    paymentMethod: 'Credit',
+    notes: invoice.notes || description,
+    balance: Number(invoice.totalAmount || 0),
+  });
+
+  for (const entry of ledgerEntries) {
+    await customerLedgerService.createLedgerEntry(entry);
+  }
+};
+
+const syncServiceInvoiceRecords = async (invoice) => {
+  await syncServiceInvoiceCashEntry(invoice);
+  await syncServiceInvoiceCustomerLedger(invoice);
 };
 
 const createServiceDefinition = async (serviceBody) => {
@@ -169,13 +226,22 @@ const createServiceInvoice = async (invoiceBody) => {
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const invoiceNumber = await buildInvoiceNumber(normalizedBody, normalizedBody.date);
+  const linkedCustomer = await resolveLinkedCustomer({
+    customerId: normalizedBody.customerId,
+    organizationId: normalizedBody.organizationId,
+    branchId: normalizedBody.branchId,
+  });
 
   const invoice = await ServiceInvoice.create({
     organizationId: normalizedBody.organizationId,
     branchId: normalizedBody.branchId,
     invoiceNumber,
-    customerName: normalizedBody.customerName || '',
-    customerPhone: normalizedBody.customerPhone || '',
+    customerId: linkedCustomer ? linkedCustomer._id : undefined,
+    customerName: normalizedBody.customerName || (linkedCustomer ? linkedCustomer.name : '') || '',
+    customerPhone:
+      normalizedBody.customerPhone ||
+      (linkedCustomer ? linkedCustomer.phone || linkedCustomer.mobile || '' : '') ||
+      '',
     items,
     subtotal,
     totalAmount: subtotal,
@@ -186,7 +252,7 @@ const createServiceInvoice = async (invoiceBody) => {
     updatedBy: normalizedBody.updatedBy,
   });
 
-  await syncServiceInvoiceCashEntry(invoice);
+  await syncServiceInvoiceRecords(invoice);
   return invoice;
 };
 
@@ -269,6 +335,21 @@ const updateServiceInvoiceById = async (invoiceId, updateBody, userId) => {
     invoice.totalAmount = subtotal;
   }
 
+  if (updateBody.customerId !== undefined) {
+    const linkedCustomer = await resolveLinkedCustomer({
+      customerId: updateBody.customerId,
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+    });
+    invoice.customerId = linkedCustomer ? linkedCustomer._id : undefined;
+    if (linkedCustomer) {
+      if (updateBody.customerName === undefined) invoice.customerName = linkedCustomer.name;
+      if (updateBody.customerPhone === undefined) {
+        invoice.customerPhone = linkedCustomer.phone || linkedCustomer.mobile || '';
+      }
+    }
+  }
+
   if (updateBody.customerName !== undefined) invoice.customerName = updateBody.customerName || '';
   if (updateBody.customerPhone !== undefined) invoice.customerPhone = updateBody.customerPhone || '';
   if (updateBody.paymentMethod !== undefined) invoice.paymentMethod = updateBody.paymentMethod || 'cash';
@@ -279,13 +360,14 @@ const updateServiceInvoiceById = async (invoiceId, updateBody, userId) => {
   invoice.updatedBy = userId;
 
   await invoice.save();
-  await syncServiceInvoiceCashEntry(invoice);
+  await syncServiceInvoiceRecords(invoice);
   return invoice;
 };
 
 const deleteServiceInvoiceById = async (invoiceId) => {
   const invoice = await getServiceInvoiceById(invoiceId);
   await cashBookService.deleteEntriesByReference(invoice._id, 'ServiceInvoice');
+  await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
   await invoice.deleteOne();
   return invoice;
 };

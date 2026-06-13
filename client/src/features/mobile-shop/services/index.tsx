@@ -1,17 +1,10 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -21,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import {
@@ -45,6 +39,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import {
   formatBusinessDateTime,
   parseBusinessDateTimeLocal,
@@ -66,9 +61,9 @@ type InvoiceLine = {
 }
 
 type InvoiceForm = {
+  customerId: string
   customerName: string
   customerPhone: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
   notes: string
   date: string
 }
@@ -84,15 +79,29 @@ const initialCatalogForm = (): CatalogForm => ({
 })
 
 const initialInvoiceForm = (): InvoiceForm => ({
+  customerId: '',
   customerName: '',
   customerPhone: '',
-  paymentMethod: 'cash',
   notes: '',
   date: toBusinessDateTimeLocal(),
 })
 
-export default function ServicesPage() {
-  const [activeTab, setActiveTab] = useState<'catalog' | 'invoices'>('catalog')
+const EMPTY_CUSTOMERS: Array<{
+  id?: string
+  _id?: string
+  name?: string
+  phone?: string
+  mobile?: string
+}> = []
+
+export default function ServicesPage({
+  initialCustomerId,
+  initialTab,
+}: {
+  initialCustomerId?: string
+  initialTab?: 'catalog' | 'invoices'
+}) {
+  const [activeTab, setActiveTab] = useState<'catalog' | 'invoices'>(initialTab === 'invoices' ? 'invoices' : 'catalog')
   const [catalogForm, setCatalogForm] = useState<CatalogForm>(initialCatalogForm)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceForm>(initialInvoiceForm)
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([])
@@ -111,6 +120,24 @@ export default function ServicesPage() {
 
   const { data: catalogData } = useGetServicesQuery({ page: catalogPage, limit: catalogLimit })
   const { data: invoiceData } = useGetServiceInvoicesQuery({ page: invoicePage, limit: invoiceLimit })
+  const { data: customersData } = useGetAllCustomersQuery(undefined)
+
+  const customers = useMemo(
+    () => (Array.isArray(customersData) ? customersData : EMPTY_CUSTOMERS),
+    [customersData],
+  )
+
+  const customerSelectOptions = useMemo(
+    () =>
+      customers
+        .map((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string }) => ({
+          value: c.id || c._id || '',
+          label: c.name || '',
+          sublabel: c.phone || c.mobile || undefined,
+        }))
+        .filter((option) => option.value),
+    [customers],
+  )
 
   const [createService, { isLoading: isCreatingCatalog }] = useCreateServiceMutation()
   const [updateService] = useUpdateServiceMutation()
@@ -157,6 +184,33 @@ export default function ServicesPage() {
   const setCatalogField = <K extends keyof CatalogForm>(key: K, value: CatalogForm[K]) => {
     setCatalogForm((prev) => ({ ...prev, [key]: value }))
   }
+
+  const handleInvoiceCustomerChange = (value: string) => {
+    const normalizedValue = value === '__none__' ? '' : value
+    const selectedCustomer = customers.find(
+      (c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string }) =>
+        c.id === normalizedValue || c._id === normalizedValue,
+    )
+    setInvoiceForm((prev) => ({
+      ...prev,
+      customerId: normalizedValue,
+      customerName: selectedCustomer?.name || '',
+      customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || '',
+    }))
+  }
+
+  const resolveCustomerId = useCallback(
+    (name?: string, phone?: string) => {
+      if (!name?.trim() && !phone?.trim()) return ''
+      const match = customers.find((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string }) => {
+        const customerPhone = c.phone || c.mobile || ''
+        if (phone?.trim() && customerPhone && customerPhone === phone.trim()) return true
+        return Boolean(name?.trim() && c.name?.trim() === name.trim())
+      })
+      return match ? match.id || match._id || '' : ''
+    },
+    [customers],
+  )
 
   const handleCreateCatalog = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -250,9 +304,9 @@ export default function ServicesPage() {
 
     try {
       const payload = {
+        customerId: invoiceForm.customerId || undefined,
         customerName: invoiceForm.customerName.trim(),
         customerPhone: invoiceForm.customerPhone.trim(),
-        paymentMethod: invoiceForm.paymentMethod,
         date: invoiceForm.date ? parseBusinessDateTimeLocal(invoiceForm.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
         notes: invoiceForm.notes.trim(),
         items: invoiceLines.map((line) => ({
@@ -282,7 +336,6 @@ export default function ServicesPage() {
         lines: [
           { label: 'Customer', value: inv.customerName || '—' },
           { label: 'Phone', value: inv.customerPhone || '—' },
-          { label: 'Payment', value: inv.paymentMethod },
           ...lineRows,
           { label: 'Subtotal', value: fmtRs(inv.subtotal) },
           { label: 'Total', value: fmtRs(inv.totalAmount) },
@@ -301,9 +354,9 @@ export default function ServicesPage() {
   const handleEditInvoice = (invoice: any) => {
     setEditingInvoiceId(invoice.id)
     setInvoiceForm({
+      customerId: invoice.customerId || resolveCustomerId(invoice.customerName, invoice.customerPhone),
       customerName: invoice.customerName || '',
       customerPhone: invoice.customerPhone || '',
-      paymentMethod: invoice.paymentMethod || 'cash',
       notes: invoice.notes || '',
       date: invoice.date ? toBusinessDateTimeLocal(new Date(invoice.date)) : toBusinessDateTimeLocal(),
     })
@@ -325,6 +378,42 @@ export default function ServicesPage() {
     setInvoiceForm(initialInvoiceForm())
     setInvoiceLines([])
   }
+
+  useEffect(() => {
+    if (!editingInvoiceId || invoiceForm.customerId) return
+    const matchedId = resolveCustomerId(invoiceForm.customerName, invoiceForm.customerPhone)
+    if (!matchedId) return
+    setInvoiceForm((prev) => ({ ...prev, customerId: matchedId }))
+  }, [editingInvoiceId, invoiceForm.customerId, invoiceForm.customerName, invoiceForm.customerPhone, resolveCustomerId])
+
+  useEffect(() => {
+    const customerId = initialCustomerId?.trim()
+    if (!customerId) return
+
+    const selected = customers.find(
+      (c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string }) =>
+        c.id === customerId || c._id === customerId,
+    )
+    const nextName = selected?.name || ''
+    const nextPhone = selected?.phone || selected?.mobile || ''
+
+    setActiveTab('invoices')
+    setInvoiceForm((prev) => {
+      if (
+        prev.customerId === customerId &&
+        prev.customerName === (nextName || prev.customerName) &&
+        prev.customerPhone === (nextPhone || prev.customerPhone)
+      ) {
+        return prev
+      }
+      return {
+        ...prev,
+        customerId,
+        customerName: nextName || prev.customerName,
+        customerPhone: nextPhone || prev.customerPhone,
+      }
+    })
+  }, [initialCustomerId, customers])
 
   const handleDeleteInvoice = async (id: string) => {
     const ok = window.confirm('Delete this invoice?')
@@ -482,28 +571,48 @@ export default function ServicesPage() {
               </CardHeader>
               <CardContent className='space-y-4'>
                 <div className='grid gap-3 md:grid-cols-2'>
+                  <div className='space-y-1.5 md:col-span-2 md:max-w-md'>
+                    <Label>Customer A/C</Label>
+                    <SearchableSelect
+                      options={customerSelectOptions}
+                      value={invoiceForm.customerId}
+                      onValueChange={handleInvoiceCustomerChange}
+                      placeholder='Nothing selected'
+                      searchPlaceholder='Search customers...'
+                      clearLabel='Nothing selected'
+                      emptyText='No customers found.'
+                    />
+                    <p className='text-xs text-muted-foreground'>
+                      Select a saved customer to post this invoice to the customer ledger.
+                    </p>
+                  </div>
                   <div className='space-y-1.5'>
                     <Label>Customer Name</Label>
-                    <Input value={invoiceForm.customerName} onChange={(e) => setInvoiceForm({ ...invoiceForm, customerName: e.target.value })} />
+                    <Input
+                      value={invoiceForm.customerName}
+                      onChange={(e) =>
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          customerName: e.target.value,
+                          customerId: '',
+                        }))
+                      }
+                      placeholder='Full name'
+                    />
                   </div>
                   <div className='space-y-1.5'>
                     <Label>Customer Phone</Label>
-                    <Input value={invoiceForm.customerPhone} onChange={(e) => setInvoiceForm({ ...invoiceForm, customerPhone: e.target.value })} />
-                  </div>
-                  <div className='space-y-1.5'>
-                    <Label>Payment Method</Label>
-                    <Select value={invoiceForm.paymentMethod} onValueChange={(value: any) => setInvoiceForm({ ...invoiceForm, paymentMethod: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='cash'>Cash</SelectItem>
-                        <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                        <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                        <SelectItem value='bank'>Bank</SelectItem>
-                        <SelectItem value='card'>Card</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      value={invoiceForm.customerPhone}
+                      onChange={(e) =>
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          customerPhone: e.target.value,
+                          customerId: '',
+                        }))
+                      }
+                      placeholder='03xxxxxxxxx'
+                    />
                   </div>
                   <div className='space-y-1.5'>
                     <Label>Date</Label>
@@ -696,14 +805,13 @@ export default function ServicesPage() {
                         <TableHead>Customer</TableHead>
                         <TableHead className='text-right'>Items</TableHead>
                         <TableHead className='text-right'>Total</TableHead>
-                        <TableHead>Payment</TableHead>
                         <TableHead className='text-right'>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {invoices.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
+                          <TableCell colSpan={6} className='text-center py-8 text-muted-foreground'>
                             No service invoices found
                           </TableCell>
                         </TableRow>
@@ -718,7 +826,6 @@ export default function ServicesPage() {
                           </TableCell>
                           <TableCell className='text-right'>{invoice.items?.length ?? 0}</TableCell>
                           <TableCell className='text-right font-semibold'>{fmtAmt(invoice.totalAmount)}</TableCell>
-                          <TableCell className='capitalize'>{invoice.paymentMethod}</TableCell>
                           <TableCell className='text-right'>
                             <div className='flex justify-end gap-2'>
                               <Button variant='outline' size='sm' onClick={() => handleEditInvoice(invoice)}>

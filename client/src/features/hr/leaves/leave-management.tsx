@@ -76,7 +76,7 @@ export default function LeaveManagement() {
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
 
-  const { data, isLoading, refetch } = useGetLeavesQuery({
+  const { data, isLoading, isError, refetch } = useGetLeavesQuery({
     page,
     limit: 10,
     search: search || undefined,
@@ -338,7 +338,7 @@ export default function LeaveManagement() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{t('Pending')}</p>
                 <p className="text-3xl font-bold text-yellow-600">
-                  {data?.results?.filter((l: any) => l.status === 'Pending').length || 0}
+                  {allLeavesData?.results?.filter((l: any) => l.status === 'Pending').length || 0}
                 </p>
               </div>
               <div className="p-3 rounded-full bg-yellow-50">
@@ -354,7 +354,7 @@ export default function LeaveManagement() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{t('Approved')}</p>
                 <p className="text-3xl font-bold text-green-600">
-                  {data?.results?.filter((l: any) => l.status === 'Approved').length || 0}
+                  {allLeavesData?.results?.filter((l: any) => l.status === 'Approved').length || 0}
                 </p>
               </div>
               <div className="p-3 rounded-full bg-green-50">
@@ -370,7 +370,7 @@ export default function LeaveManagement() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{t('Rejected')}</p>
                 <p className="text-3xl font-bold text-red-600">
-                  {data?.results?.filter((l: any) => l.status === 'Rejected').length || 0}
+                  {allLeavesData?.results?.filter((l: any) => l.status === 'Rejected').length || 0}
                 </p>
               </div>
               <div className="p-3 rounded-full bg-red-50">
@@ -385,7 +385,7 @@ export default function LeaveManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{t('Total Leaves')}</p>
-                <p className="text-3xl font-bold">{data?.totalResults || 0}</p>
+                <p className="text-3xl font-bold">{allLeavesData?.totalResults || 0}</p>
               </div>
               <div className="p-3 rounded-full bg-blue-50">
                 <Calendar className="h-6 w-6 text-blue-600" />
@@ -517,6 +517,12 @@ export default function LeaveManagement() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       {t('Loading...')}
+                    </TableCell>
+                  </TableRow>
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-destructive">
+                      {t('Failed to load leave requests')}
                     </TableCell>
                   </TableRow>
                 ) : data?.results?.length === 0 ? (

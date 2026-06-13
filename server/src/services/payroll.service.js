@@ -81,6 +81,7 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}, optio
 };
 
 const getBasicSalaryForMonth = async (employee, month, year) => {
+  if (!employee) return 0;
   const payroll = await Payroll.findOne({
     employee: employee._id || employee.id,
     month,
@@ -93,6 +94,13 @@ const getBasicSalaryForMonth = async (employee, month, year) => {
 };
 
 const computeLeaveSalaryImpact = async (leave, employee) => {
+  if (!employee) {
+    return {
+      amount: 0,
+      type: 'none',
+      label: '-',
+    };
+  }
   const startDate = new Date(leave.startDate);
   const endDate = new Date(leave.endDate);
   const months = getMonthsInRange(startDate, endDate);

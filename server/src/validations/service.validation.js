@@ -42,6 +42,7 @@ const deleteService = {
 
 const createServiceInvoice = {
   body: Joi.object().keys({
+    customerId: Joi.string().custom(objectId),
     customerName: Joi.string().allow('').default(''),
     customerPhone: Joi.string().allow('').default(''),
     paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank', 'card').default('cash'),
@@ -79,6 +80,7 @@ const updateServiceInvoice = {
   }),
   body: Joi.object()
     .keys({
+      customerId: Joi.string().custom(objectId).allow(null, ''),
       customerName: Joi.string().allow(''),
       customerPhone: Joi.string().allow(''),
       paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank', 'card'),

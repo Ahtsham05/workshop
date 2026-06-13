@@ -53,10 +53,19 @@ export function ContactMediaNameCell({
   const initials = initialsFromName(name)
 
   const profileInner = profileUrl ? (
-    <img src={profileUrl} alt='' className='h-8 w-8 rounded-full object-cover' />
+    <img
+      src={profileUrl}
+      alt=''
+      className={cn('rounded-full object-cover', compact ? 'h-7 w-7' : 'h-8 w-8')}
+    />
   ) : (
-    <div className='flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/70 text-[10px] font-semibold text-muted-foreground'>
-      {initials || <User className='h-3.5 w-3.5 opacity-70' aria-hidden />}
+    <div
+      className={cn(
+        'flex items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/70 font-semibold text-muted-foreground',
+        compact ? 'h-7 w-7 text-[9px]' : 'h-8 w-8 text-[10px]',
+      )}
+    >
+      {initials || <User className={cn('opacity-70', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} aria-hidden />}
     </div>
   )
 
@@ -130,13 +139,20 @@ export function ContactMediaNameCell({
           <div className={cn('flex min-w-0 items-center', compact ? 'gap-1.5' : 'gap-2')}>
             <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
               <LongText
-                className={getTextClasses(name, 'max-w-none shrink-0 font-medium')}
+                className={getTextClasses(
+                  name,
+                  cn('max-w-none shrink-0 font-semibold leading-snug', compact ? 'text-sm' : 'font-medium'),
+                )}
               >
                 {name}
               </LongText>
               {nameUrdu ? (
                 <span
-                  className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(nameUrdu))}
+                  className={cn(
+                    'min-w-0 truncate leading-snug',
+                    compact ? 'text-xs' : '',
+                    getUrduSecondaryNameClasses(nameUrdu),
+                  )}
                   dir='rtl'
                 >
                   {nameUrdu}
