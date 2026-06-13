@@ -96,6 +96,7 @@ const paymentRoute = require('./payment.route');
 const adminRoute = require('./admin.route');
 
 const translateRoute = require('./translate.route');
+const syncRoute = require('./sync.route');
 
 const router = express.Router();
 
@@ -123,6 +124,10 @@ const defaultRoutes = [
   {
     path: '/translate',
     route: translateRoute,
+  },
+  {
+    path: '/sync',
+    route: syncRoute,
   },
   {
     path: '/customers',
@@ -462,6 +467,7 @@ const protectedPaths = [
   '/roles',
   '/products',
   '/categories',
+  '/sync',
   '/customers',
   '/suppliers',
   '/purchases',

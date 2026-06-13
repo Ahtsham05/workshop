@@ -1,0 +1,79 @@
+{
+  "name": "logix-plus-desktop",
+  "version": "1.0.0",
+  "description": "Logix Plus Solutions — offline-capable desktop client",
+  "author": {
+    "name": "Logix Plus Solutions",
+    "email": "support@logixplus.com"
+  },
+  "homepage": "https://logixplus.com",
+  "main": "electron/main.mjs",
+  "type": "module",
+  "scripts": {
+    "dev": "electron .",
+    "build:renderer": "cd ../client && npm run build:electron",
+    "pack": "npm run build:renderer && electron-builder --dir",
+    "dist": "node scripts/build.mjs",
+    "dist:linux": "node scripts/build.mjs linux",
+    "dist:win": "node scripts/build.mjs win",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "build": {
+    "appId": "com.logixplus.desktop",
+    "productName": "Logix Plus Solutions",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "out/renderer/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "npmRebuild": true,
+    "linux": {
+      "target": ["deb", "AppImage"],
+      "category": "Office",
+      "maintainer": "Logix Plus Solutions <support@logixplus.com>",
+      "synopsis": "Logix Plus POS — offline-capable desktop client",
+      "desktop": {
+        "Name": "Logix Plus Solutions",
+        "Comment": "Logix Plus POS desktop client",
+        "Categories": "Office;Finance;"
+      }
+    },
+    "deb": {
+      "depends": ["libnotify4", "libxtst6", "libnss3"]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Logix Plus Solutions"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "electron-store": "^10.0.0"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9"
+  }
+}

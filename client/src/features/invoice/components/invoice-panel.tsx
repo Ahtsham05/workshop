@@ -48,6 +48,9 @@ import {
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { useSync } from '@/lib/sync/use-sync'
+import { buildOfflineInvoicePayload } from '@/lib/sync/offline-invoice'
+import { getElectronAPI } from '@/lib/sync/electron'
 import { normalizeInvoiceNotesHtml } from '@/lib/rich-text-utils'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
@@ -176,6 +179,7 @@ export function InvoicePanel({
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
+  const { isElectron, online } = useSync()
   
   // Fetch active branch data for invoice printing
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -768,17 +772,45 @@ export function InvoicePanel({
       console.log('Saving invoice - isEditing:', isEditing, 'editingInvoice._id:', editingInvoice?._id)
       console.log('Invoice data being sent:', invoiceData)
       
-      const result = isEditing && editingInvoice?._id 
-        ? await updateInvoice({ id: editingInvoice._id, ...invoiceData }).unwrap()
-        : await createInvoice(invoiceData).unwrap()
+      let result: Record<string, unknown>
+
+      const canSaveOffline =
+        isElectron &&
+        !online &&
+        !isEditing &&
+        invoice.type === 'cash' &&
+        invoice.paymentMethod !== 'wallet'
+
+      if (canSaveOffline) {
+        const electron = getElectronAPI()
+        const syncStatus = await electron?.sync.status()
+        const deviceId = syncStatus?.deviceId || 'local-device'
+        const { clientId, localInvoiceNumber, operation } = buildOfflineInvoicePayload(invoiceData, deviceId)
+        await electron?.sync.queue(operation)
+        result = {
+          ...invoiceData,
+          id: clientId,
+          invoiceNumber: localInvoiceNumber,
+          _offline: true,
+        }
+        toast.success(`Invoice ${localInvoiceNumber} saved offline. It will sync when you are back online.`)
+      } else if (isEditing && editingInvoice?._id) {
+        result = await updateInvoice({ id: editingInvoice._id, ...invoiceData }).unwrap()
+      } else {
+        result = await createInvoice(invoiceData).unwrap()
+      }
       
       console.log('Save result:', result)
       
-      const successMessage = isEditing 
+      const successMessage = canSaveOffline
+        ? null
+        : isEditing 
         ? `Invoice ${editingInvoice?.invoiceNumber || result.invoiceNumber} updated successfully!`
         : `Invoice ${result.invoiceNumber} created successfully!`
       
-      toast.success(successMessage)
+      if (successMessage) {
+        toast.success(successMessage)
+      }
       
       // Call success callback to commit stock changes
       if (onSaveSuccess) {
@@ -833,8 +865,8 @@ export function InvoicePanel({
         // Calculate previous balance before current invoice:
         // server returned `updatedBalance` which likely includes this invoice.
         // invoiceEffect = current invoice total - paid now
-        const invoiceTotal = result.total ?? invoice.total ?? 0
-        const invoicePaid = result.paidAmount ?? invoice.paidAmount ?? 0
+        const invoiceTotal = Number(result.total ?? invoice.total ?? 0)
+        const invoicePaid = Number(result.paidAmount ?? invoice.paidAmount ?? 0)
         const invoiceEffect = invoiceTotal - invoicePaid
         const previousBalanceBeforeInvoice = updatedBalance - invoiceEffect
 
@@ -873,7 +905,7 @@ export function InvoicePanel({
       // Reset saving state
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),

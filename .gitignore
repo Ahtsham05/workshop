@@ -8,4 +8,7 @@ server/.wwebjs_cache
 # Safety net: ignore if service ever writes to workspace root by mistake
 .wwebjs_auth
 .wwebjs_cache
-desktop/
+desktop/out/
+desktop/node_modules/
+desktop/dist/
+desktop/.env.production

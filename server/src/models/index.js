@@ -102,3 +102,5 @@ module.exports.WhatsAppConversation = require('./whatsappConversation.model');
 module.exports.WhatsAppMessage = require('./whatsappMessage.model');
 module.exports.WhatsAppCampaign = require('./whatsappCampaign.model');
 module.exports.WhatsAppWebhookLog = require('./whatsappWebhookLog.model');
+module.exports.SyncDevice = require('./syncDevice.model');
+module.exports.SyncRecord = require('./syncRecord.model');

@@ -5,7 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(() => ({
+  base: process.env.VITE_ELECTRON === 'true' ? './' : '/',
   plugins: [
     TanStackRouterVite({
       target: 'react',
@@ -54,4 +55,4 @@ export default defineConfig({
       '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
     },
   },
-})
+}))
