@@ -24,8 +24,8 @@ import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { useSelector } from 'react-redux'
-import { RootState } from '@/stores/store'
+import { useSelector, useDispatch } from 'react-redux'
+import { RootState, AppDispatch } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -43,6 +43,15 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { fetchSuppliers } from '@/stores/supplier.slice'
+import { fetchAllProducts } from '@/stores/product.slice'
+import { usePermissions } from '@/context/permission-context'
+import {
+  EntityCreateEmptyPrompt,
+  EntityCreateShortcutButton,
+  EntityQuickCreateDialogs,
+  type QuickCreateState,
+} from '@/components/entity-create-shortcut'
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -58,6 +67,7 @@ interface PurchasePanelProps {
   editingPurchase?: any
   products: any[]
   productsLoading?: boolean
+  setProducts?: React.Dispatch<React.SetStateAction<any[]>>
 }
 
 export default function PurchasePanel({
@@ -74,8 +84,13 @@ export default function PurchasePanel({
   editingPurchase,
   products,
   productsLoading = false,
+  setProducts,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
+  const { hasPermission } = usePermissions()
+  const canCreateSupplier = hasPermission('createSuppliers' as never)
+  const canCreateProduct = hasPermission('createProducts' as never)
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
@@ -85,6 +100,8 @@ export default function PurchasePanel({
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
   const [aiScanOpen, setAiScanOpen] = useState(false)
+  const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
+  const [quickCreateProductIndex, setQuickCreateProductIndex] = useState<number | null>(null)
 
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const purchasePriceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -353,6 +370,45 @@ export default function PurchasePanel({
     [focusPaymentType, setPurchase],
   )
 
+  const openQuickCreate = useCallback(
+    (type: 'supplier' | 'product', defaultName?: string, productIndex?: number) => {
+      setQuickCreate({ type, defaultName: defaultName?.trim() || undefined })
+      if (productIndex != null) setQuickCreateProductIndex(productIndex)
+      if (type === 'supplier') setSupplierSelectOpen(false)
+      if (type === 'product') {
+        setProductSelectOpen('')
+        setProductSearchQuery('')
+      }
+    },
+    [],
+  )
+
+  const handleQuickCreated = useCallback(
+    async (type: 'customer' | 'supplier' | 'product', entity: any) => {
+      if (type === 'supplier') {
+        await dispatch(fetchSuppliers({ page: 1, limit: 1000 }))
+        selectSupplier({
+          ...entity,
+          _id: entity._id || entity.id,
+        })
+        return
+      }
+
+      if (type === 'product') {
+        const data = await dispatch(fetchAllProducts({})).unwrap()
+        const list = data?.results || (Array.isArray(data) ? data : [])
+        setProducts?.(list)
+        const created =
+          list.find((p: any) => (p._id || p.id) === (entity._id || entity.id)) || entity
+        if (quickCreateProductIndex != null) {
+          handleProductSelect(quickCreateProductIndex, created)
+        }
+        setQuickCreateProductIndex(null)
+      }
+    },
+    [dispatch, handleProductSelect, quickCreateProductIndex, selectSupplier, setProducts],
+  )
+
   // Handle save purchase
   const handleSavePurchase = useCallback(
     async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
@@ -560,6 +616,7 @@ export default function PurchasePanel({
            <Label className="mb-2">
               {t('Supplier')} <span className="text-red-500">*</span>
             </Label>
+            <div className="flex gap-2">
             <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -572,7 +629,7 @@ export default function PurchasePanel({
                       onEnterAdvance(e, focusPaymentType)
                     }
                   }}
-                  className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
+                  className={`flex-1 justify-between min-h-[2.5rem] h-auto py-0 ${
                     !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'border-red-500 bg-red-50' : ''
                   }`}
                 >
@@ -624,9 +681,18 @@ export default function PurchasePanel({
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                       {t('Loading suppliers...')}
                     </div>
-                  ) : (
-                    <CommandEmpty>{t('No suppliers found')}</CommandEmpty>
-                  )}
+                  ) : filteredSuppliers.length === 0 ? (
+                    canCreateSupplier ? (
+                      <EntityCreateEmptyPrompt
+                        message={t('No suppliers found')}
+                        actionLabel={t('add_supplier')}
+                        onCreate={() => openQuickCreate('supplier', supplierSearchQuery)}
+                      />
+                    ) : (
+                      <CommandEmpty>{t('No suppliers found')}</CommandEmpty>
+                    )
+                  ) : null}
+                  {!suppliersLoading && filteredSuppliers.length > 0 ? (
                   <CommandList className="max-h-[300px] overflow-y-auto">
                     <CommandGroup>
                       {filteredSuppliers.map((supplier, index) => {
@@ -676,11 +742,28 @@ export default function PurchasePanel({
                           </CommandItem>
                         )
                       })}
+                      {canCreateSupplier ? (
+                        <CommandItem
+                          onSelect={() => openQuickCreate('supplier', supplierSearchQuery)}
+                          className="flex cursor-pointer items-center gap-2 border-t p-3 text-primary"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{t('add_supplier')}</span>
+                        </CommandItem>
+                      ) : null}
                     </CommandGroup>
                   </CommandList>
+                  ) : null}
                 </Command>
               </PopoverContent>
             </Popover>
+            {canCreateSupplier ? (
+              <EntityCreateShortcutButton
+                label={t('add_supplier')}
+                onClick={() => openQuickCreate('supplier', supplierSearchQuery)}
+              />
+            ) : null}
+            </div>
 
             <div>
               <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
@@ -782,6 +865,18 @@ export default function PurchasePanel({
         <CardHeader>
           <div className='flex items-center justify-between'>
             <CardTitle>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
+            <div className="flex items-center gap-2">
+              {canCreateProduct ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openQuickCreate('product', productSearchQuery)}
+                  className="flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('add_product')}
+                </Button>
+              ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -796,6 +891,7 @@ export default function PurchasePanel({
               <Plus className='h-4 w-4' />
               {t('Add Item')}
             </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-4">
@@ -844,9 +940,17 @@ export default function PurchasePanel({
                                       {t('loading_products')}
                                     </div>
                                   ) : filteredPurchaseProducts.length === 0 ? (
-                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                      {t('No products found')}
-                                    </div>
+                                    canCreateProduct ? (
+                                      <EntityCreateEmptyPrompt
+                                        message={t('No products found')}
+                                        actionLabel={t('add_product')}
+                                        onCreate={() => openQuickCreate('product', productSearchQuery, index)}
+                                      />
+                                    ) : (
+                                      <div className="py-6 text-center text-sm text-muted-foreground">
+                                        {t('No products found')}
+                                      </div>
+                                    )
                                   ) : (
                                     <CommandGroup>
                                       {filteredPurchaseProducts.map((product: any) => {
@@ -1288,6 +1392,15 @@ export default function PurchasePanel({
         suppliers={suppliers}
         products={products}
         onApply={handleApplyAiScan}
+      />
+
+      <EntityQuickCreateDialogs
+        state={quickCreate}
+        onClose={() => {
+          setQuickCreate(null)
+          setQuickCreateProductIndex(null)
+        }}
+        onCreated={handleQuickCreated}
       />
     </div>
   )

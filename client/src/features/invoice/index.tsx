@@ -1441,6 +1441,7 @@ export default function InvoicePage() {
               setTaxRate={setTaxRate}
               customers={customers}
               customersLoading={loading}
+              setCustomers={setCustomers}
               productsLoading={loading}
               products={products}
               setProducts={setProducts}

@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
@@ -62,6 +62,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
 
   const totalRevenue = currentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
   const totalSales = currentInvoices.length;
+  const salesProfit = currentInvoices.reduce((sum, inv) => sum + (inv.totalProfit || 0), 0);
 
   // Previous period for comparison
   const previousInvoices = await Invoice.find({
@@ -105,18 +106,30 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const totalProducts = await Product.countDocuments({ ...bf });
 
   const aggScopeEarly = buildAggregateScope(req);
-  const purchasesAgg = await Purchase.aggregate([
-    { $match: { ...aggScopeEarly, ...purchaseDateFilter } },
-    { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
+  const [purchasesAgg, expensesAgg] = await Promise.all([
+    Purchase.aggregate([
+      { $match: { ...aggScopeEarly, ...purchaseDateFilter } },
+      { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
+    ]),
+    Expense.aggregate([
+      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate) } },
+      { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
+    ]),
   ]);
   const totalPurchases = purchasesAgg[0]?.totalPurchases || 0;
+  const totalExpenses = expensesAgg[0]?.totalExpenses || 0;
 
   let mobileSummary = {
     totalLoadSold: 0,
     totalRepairIncome: 0,
     totalBillCollection: 0,
     billPaymentProfit: 0,
-    totalProfit: totalRevenue,
+    salesProfit,
+    grossProfit: salesProfit,
+    totalProfit: salesProfit,
+    totalExpenses,
+    roi: 0,
+    totalInvestment: totalInventoryValue + totalExpenses,
     cashInHand: 0,
     jazzcashBalance: 0,
     easypaisaBalance: 0,
@@ -208,6 +221,15 @@ const getDashboardStats = catchAsync(async (req, res) => {
 
   const netSales = totalRevenue - totalSalesReturns;
   const netPurchase = totalPurchases - totalPurchaseReturns;
+
+  if (businessType !== 'mobile_shop') {
+    mobileSummary.totalProfit = mobileSummary.grossProfit ?? salesProfit;
+    if (mobileSummary.totalInvestment > 0) {
+      mobileSummary.roi = parseFloat(
+        ((mobileSummary.totalProfit / mobileSummary.totalInvestment) * 100).toFixed(2),
+      );
+    }
+  }
 
   res.status(httpStatus.OK).send({
     totalRevenue,

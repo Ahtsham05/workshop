@@ -59,10 +59,12 @@ interface Props {
   currentRow?: any
   open: boolean
   onOpenChange: (open: boolean) => void
-  setFetch: any
+  setFetch?: any
+  onCreated?: (entity: any) => void
+  defaultName?: string
 }
 
-export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
+export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const { t, isRTL } = useLanguage()
   const isEdit = !!currentRow
   
@@ -104,6 +106,11 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
     }
   }, [phoneValue, form, isEdit, currentRow])
 
+  useEffect(() => {
+    if (!open || isEdit || !defaultName?.trim()) return
+    form.setValue('name', defaultName.trim())
+  }, [open, isEdit, defaultName, form])
+
   const dispatch = useDispatch<AppDispatch>()
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -124,13 +131,17 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
     if (isEdit) {
       await dispatch(updateSupplier({ ...payload, _id: currentRow?.id })).then(() => {
         toast.success(t('supplier_updated_success'))
-        setFetch((prev: any) => !prev)
+        setFetch?.((prev: any) => !prev)
       })
     } else {
-      await dispatch(addSupplier(payload)).then(() => {
+      try {
+        const created = await dispatch(addSupplier(payload)).unwrap()
         toast.success(t('supplier_created_success'))
-        setFetch((prev: any) => !prev)
-      })
+        setFetch?.((prev: any) => !prev)
+        onCreated?.(created)
+      } catch {
+        return
+      }
     }
     form.reset()
     onOpenChange(false)

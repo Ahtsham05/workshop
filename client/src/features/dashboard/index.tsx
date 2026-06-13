@@ -18,7 +18,7 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package } from 'lucide-react'
+import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
@@ -138,7 +138,11 @@ export default function Dashboard() {
               value={stats?.totalLoadSold || 0}
               icon={<Smartphone className='h-4 w-4' />}
               valuePrefix='Rs '
-              description={t('Mobile load transactions')}
+              description={
+                stats?.totalLoadSoldProfit
+                  ? `${t('Profit')}: Rs ${(stats?.totalLoadSoldProfit || 0).toLocaleString()}`
+                  : t('Mobile load transactions')
+              }
               isLoading={statsLoading}
               tone='violet'
               link={reportLink('load')}
@@ -148,7 +152,11 @@ export default function Dashboard() {
               value={stats?.totalLoadPurchased || 0}
               icon={<ShoppingBag className='h-4 w-4' />}
               valuePrefix='Rs '
-              description={t('Load bought from distributors')}
+              description={
+                stats?.totalLoadPurchaseProfit
+                  ? `${t('Profit')}: Rs ${(stats?.totalLoadPurchaseProfit || 0).toLocaleString()}`
+                  : t('Load bought from distributors')
+              }
               isLoading={statsLoading}
               tone='sky'
               link={reportLink('load')}
@@ -164,7 +172,11 @@ export default function Dashboard() {
               value={stats?.totalRepairIncome || 0}
               icon={<Wrench className='h-4 w-4' />}
               valuePrefix='Rs '
-              description={t('Repair charges collected')}
+              description={
+                stats?.totalRepairProfit
+                  ? `${t('Profit')}: Rs ${(stats?.totalRepairProfit || 0).toLocaleString()}`
+                  : t('Repair charges collected')
+              }
               isLoading={statsLoading}
               tone='orange'
               link={reportLink('repair')}
@@ -174,7 +186,11 @@ export default function Dashboard() {
               value={stats?.totalBillCollection || 0}
               icon={<Receipt className='h-4 w-4' />}
               valuePrefix='Rs '
-              description={t('Total utility bills collected')}
+              description={
+                stats?.billPaymentProfit
+                  ? `${t('Profit')}: Rs ${(stats?.billPaymentProfit || 0).toLocaleString()}`
+                  : t('Total utility bills collected')
+              }
               isLoading={statsLoading}
               tone='indigo'
               link={reportLink('bill-payments')}
@@ -260,7 +276,7 @@ export default function Dashboard() {
               valuePrefix='Rs '
               description={
                 stats?.serviceInvoiceCount
-                  ? `${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
+                  ? `${t('Profit')}: Rs ${(stats?.totalServiceProfit || stats?.totalServiceIncome || 0).toLocaleString()} · ${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
                   : t('Service charges collected')
               }
               isLoading={statsLoading}
@@ -269,6 +285,50 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+        {/* Total profit & ROI */}
+        <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6'>
+          <StatCard
+            title={t('Sales Profit')}
+            value={stats?.salesProfit || 0}
+            icon={<ShoppingCart className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Profit from product invoices')}
+            isLoading={statsLoading}
+            tone='emerald'
+            link={reportLink('sales')}
+          />
+          <StatCard
+            title={t('total_expenses')}
+            value={stats?.totalExpenses || 0}
+            icon={<Receipt className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Operating expenses in selected period')}
+            isLoading={statsLoading}
+            tone='rose'
+            link={{ to: '/accounting', search: { tab: 'expenses' } }}
+          />
+          <StatCard
+            title={t('total_profit')}
+            value={stats?.totalProfit || 0}
+            icon={<TrendingUp className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={t('Sum of all profit sources in selected period')}
+            isLoading={statsLoading}
+            tone={(stats?.totalProfit || 0) >= 0 ? 'emerald' : 'rose'}
+            link={reportLink('profit-loss')}
+          />
+          <StatCard
+            title='ROI'
+            value={stats?.roi ?? 0}
+            icon={<TrendingUp className='h-4 w-4' />}
+            valueSuffix='%'
+            description={t('Return on investment for selected period')}
+            isLoading={statsLoading}
+            tone={(stats?.roi ?? 0) >= 0 ? 'violet' : 'rose'}
+            link={reportLink('roi')}
+          />
+        </div>
 
         {/* Statistics Cards */}
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6'>

@@ -99,10 +99,12 @@ interface Props {
   currentRow?: any
   open: boolean
   onOpenChange: (open: boolean) => void
-  setFetch: any
+  setFetch?: any
+  onCreated?: (entity: any) => void
+  defaultName?: string
 }
 
-export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
+export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const isEdit = !!currentRow
   const { t, isRTL } = useLanguage()
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
@@ -191,17 +193,26 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch }: 
   const productSessionKey = open ? (currentRow?.id ?? currentRow?._id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
 
+  useEffect(() => {
+    if (!open || isEdit || !defaultName?.trim()) return
+    form.setValue('name', defaultName.trim())
+  }, [open, isEdit, defaultName, form])
+
   const onSubmit = async (values: productForm) => {
     if (isEdit) {
       await dispatch(updateProduct({ ...values, _id: currentRow?.id || currentRow?._id })).then(() => {
         toast.success(t('product_updated_successfully'))
-        setFetch((prev: any) => !prev)
+        setFetch?.((prev: any) => !prev)
       })
     } else {
-      await dispatch(addProduct(values)).then(() => {
+      try {
+        const created = await dispatch(addProduct(values)).unwrap()
         toast.success(t('product_created_successfully'))
-        setFetch((prev: any) => !prev)
-      })
+        setFetch?.((prev: any) => !prev)
+        onCreated?.(created)
+      } catch {
+        return
+      }
     }
     form.reset()
     onOpenChange(false)

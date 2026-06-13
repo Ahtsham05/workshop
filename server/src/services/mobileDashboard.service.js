@@ -10,6 +10,8 @@ const {
   SimSale,
   CashWithdrawal,
   ServiceInvoice,
+  Product,
+  SalesReturn,
 } = require('../models');
 const { startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
 const { refreshOverdueStatuses } = require('./billPayment.service');
@@ -113,11 +115,13 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     simSales,
     cashSendReceive,
     serviceInvoices,
+    salesReturns,
+    inventoryAgg,
   ] = await Promise.all([
     Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
     LoadTransaction.find(datedTxMatch).select('amount profit paymentMethod walletType'),
     LoadPurchase.find(datedTxMatch).select('amount profit paymentMethod walletType'),
-    RepairJob.find(datedTxMatch).select('charges paymentMethod'),
+    RepairJob.find(datedTxMatch).select('charges cost paymentMethod status'),
     Expense.find({
       organizationId,
       ...(branchId ? { branchId } : {}),
@@ -134,10 +138,30 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     BillPayment.find({
       ...billBaseMatch,
       ...billPeriodFilter,
-    }).select('totalReceived serviceCharge paymentMethod'),
-    SimSale.find(datedTxMatch).select('saleAmount commission'),
+    }).select('totalReceived serviceCharge latePaymentLoss netBillProfit status paymentMethod'),
+    SimSale.find(datedTxMatch).select('saleAmount purchaseAmount commission'),
     CashWithdrawal.find(datedTxMatch).select('amount profit transactionType'),
     ServiceInvoice.find(datedTxMatch).select('totalAmount'),
+    SalesReturn.find({
+      organizationId: orgId,
+      ...(branchOid ? { branchId: branchOid } : {}),
+      status: { $ne: 'rejected' },
+      ...(dateRange ? { date: dateRange } : {}),
+    }).select('totalAmount'),
+    Product.aggregate([
+      {
+        $match: {
+          organizationId: orgId,
+          ...(branchOid ? { branchId: branchOid } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } },
+        },
+      },
+    ]),
   ]);
 
   const totalSales = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
@@ -145,14 +169,18 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const salesCash = calculateSalesCash(invoices);
 
   const totalLoadSold = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const totalLoadSoldProfit = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.profit || 0), 0);
   const loadCash = loadTransactions.reduce((sum, transaction) => {
     return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
   }, 0);
   const totalLoadPurchased = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
-  const loadPurchaseProfit = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.profit || 0), 0);
-  const loadProfit = loadPurchaseProfit;
+  const totalLoadPurchaseProfit = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.profit || 0), 0);
 
   const totalRepairIncome = repairJobs.reduce((sum, job) => sum + Number(job.charges || 0), 0);
+  const totalRepairProfit = repairJobs.reduce((sum, job) => {
+    if (!['completed', 'delivered'].includes(String(job.status || ''))) return sum;
+    return sum + Number(job.charges || 0) - Number(job.cost || 0);
+  }, 0);
   const repairCash = repairJobs.reduce((sum, job) => {
     return job.paymentMethod === 'cash' ? sum + Number(job.charges || 0) : sum;
   }, 0);
@@ -170,7 +198,10 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   }, 0);
 
   const totalSimSale = simSales.reduce((sum, sale) => sum + Number(sale.saleAmount || 0), 0);
-  const totalSimSaleProfit = simSales.reduce((sum, sale) => sum + Number(sale.commission || 0), 0);
+  const totalSimSaleProfit = simSales.reduce(
+    (sum, sale) => sum + Number(sale.commission ?? (Number(sale.saleAmount || 0) - Number(sale.purchaseAmount || 0))),
+    0,
+  );
   const simSaleCount = simSales.length;
 
   // User-facing Send = deposit; Received = withdrawal (see cash-transaction-labels)
@@ -184,7 +215,48 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const cashReceivedCount = cashReceivedTx.length;
 
   const totalServiceIncome = serviceInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+  const totalServiceProfit = totalServiceIncome;
   const serviceInvoiceCount = serviceInvoices.length;
+
+  const walletBalances = wallets.reduce(
+    (accumulator, wallet) => {
+      const normalizedType = String(wallet.type || '').trim().toLowerCase();
+      const balance = Number(wallet.balance || 0);
+
+      if (normalizedType === 'jazzcash') {
+        accumulator.jazzcash += balance;
+      }
+
+      if (normalizedType === 'easypaisa') {
+        accumulator.easypaisa += balance;
+      }
+
+      accumulator.total += balance;
+      return accumulator;
+    },
+    { jazzcash: 0, easypaisa: 0, total: 0 }
+  );
+
+  const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const salesReturnsImpact = salesReturns.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
+  const inventoryValue = inventoryAgg[0]?.total || 0;
+
+  const grossProfit =
+    salesProfit +
+    totalLoadPurchaseProfit +
+    totalLoadSoldProfit +
+    totalRepairProfit +
+    totalServiceProfit +
+    totalSimSaleProfit +
+    billPaymentProfit +
+    totalCashSendProfit +
+    totalCashReceivedProfit;
+
+  // Total profit = sum of all profit sources shown on dashboard cards
+  const totalProfit = grossProfit;
+  const netProfit = grossProfit - totalExpenses - salesReturnsImpact;
+  const totalInvestment = inventoryValue + walletBalances.total + totalExpenses;
+  const roi = totalInvestment > 0 ? parseFloat(((totalProfit / totalInvestment) * 100).toFixed(2)) : 0;
 
   // Count due-today and overdue (Pakistan calendar day)
   const todayStr = toBusinessCalendarDate(new Date());
@@ -215,44 +287,27 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     return purchase.paymentMethod === 'cash' ? sum + Number(purchase.amount || 0) : sum;
   }, 0);
 
-  const walletBalances = wallets.reduce(
-    (accumulator, wallet) => {
-      const normalizedType = String(wallet.type || '').trim().toLowerCase();
-      const balance = Number(wallet.balance || 0);
-
-      if (normalizedType === 'jazzcash') {
-        accumulator.jazzcash += balance;
-      }
-
-      if (normalizedType === 'easypaisa') {
-        accumulator.easypaisa += balance;
-      }
-
-      accumulator.total += balance;
-      return accumulator;
-    },
-    { jazzcash: 0, easypaisa: 0, total: 0 }
-  );
-
   const cashInHand = salesCash + loadCash + repairCash + billPaymentCash - expensesCash - loadPurchasesCash;
 
   return {
     totalSales,
+    salesProfit,
     totalLoadSold,
+    totalLoadSoldProfit,
     totalLoadPurchased,
+    totalLoadPurchaseProfit,
     totalRepairIncome,
+    totalRepairProfit,
     totalBillCollection,
     billPaymentProfit,
     billLatePaymentLoss,
-    totalProfit:
-      salesProfit +
-      loadProfit +
-      totalRepairIncome +
-      billPaymentProfit +
-      totalSimSaleProfit +
-      totalCashSendProfit +
-      totalCashReceivedProfit +
-      totalServiceIncome,
+    grossProfit,
+    totalProfit,
+    netProfit,
+    totalExpenses,
+    salesReturnsImpact,
+    roi,
+    totalInvestment,
     cashInHand,
     jazzcashBalance: walletBalances.jazzcash,
     easypaisaBalance: walletBalances.easypaisa,
@@ -270,6 +325,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     totalCashReceivedProfit,
     cashReceivedCount,
     totalServiceIncome,
+    totalServiceProfit,
     serviceInvoiceCount,
   };
 };

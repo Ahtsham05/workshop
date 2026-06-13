@@ -53,6 +53,17 @@ export interface DashboardStats {
   totalLoadPurchased: number
   totalRepairIncome: number
   totalProfit: number
+  grossProfit?: number
+  salesProfit?: number
+  totalExpenses?: number
+  roi?: number
+  totalInvestment?: number
+  totalLoadSoldProfit?: number
+  totalLoadPurchaseProfit?: number
+  totalRepairProfit?: number
+  totalServiceProfit?: number
+  netProfit?: number
+  salesReturnsImpact?: number
   cashInHand: number
   jazzcashBalance: number
   easypaisaBalance: number

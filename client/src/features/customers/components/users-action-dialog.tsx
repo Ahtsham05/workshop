@@ -58,10 +58,12 @@ interface Props {
   currentRow?: any
   open: boolean
   onOpenChange: (open: boolean) => void
-  setFetch: any
+  setFetch?: any
+  onCreated?: (entity: any) => void
+  defaultName?: string
 }
 
-export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch }: Props) {
+export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const isEdit = !!currentRow
   const { t, isRTL } = useLanguage()
   const form = useForm<customerForm>({
@@ -86,6 +88,11 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
 
   const customerSessionKey = open ? (currentRow?.id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', customerSessionKey)
+
+  useEffect(() => {
+    if (!open || isEdit || !defaultName?.trim()) return
+    form.setValue('name', defaultName.trim())
+  }, [open, isEdit, defaultName, form])
 
   const dispatch = useDispatch<AppDispatch>()
 
@@ -117,13 +124,17 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
     if (isEdit) {
       await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).then(() => {
         toast.success(t('customer_updated_success'))
-        setFetch((prev: any) => !prev)
+        setFetch?.((prev: any) => !prev)
       })
     } else {
-      await dispatch(addCustomer(payload)).then(() => {
+      try {
+        const created = await dispatch(addCustomer(payload)).unwrap()
         toast.success(t('customer_created_success'))
-        setFetch((prev: any) => !prev)
-      })
+        setFetch?.((prev: any) => !prev)
+        onCreated?.(created)
+      } catch {
+        return
+      }
     }
     form.reset()
     onOpenChange(false)

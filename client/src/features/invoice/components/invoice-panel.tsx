@@ -29,8 +29,8 @@ import summery from '@/utils/summery'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
-import { useSelector } from 'react-redux'
-import { RootState } from '@/stores/store'
+import { useSelector, useDispatch } from 'react-redux'
+import { RootState, AppDispatch } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import {
@@ -54,6 +54,15 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import { fetchCustomers } from '@/stores/customer.slice'
+import { fetchAllProducts } from '@/stores/product.slice'
+import { usePermissions } from '@/context/permission-context'
+import {
+  EntityCreateEmptyPrompt,
+  EntityCreateShortcutButton,
+  EntityQuickCreateDialogs,
+  type QuickCreateState,
+} from '@/components/entity-create-shortcut'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -69,6 +78,7 @@ interface InvoicePanelProps {
   setTaxRate: (rate: number) => void
   customers: any[]
   customersLoading?: boolean
+  setCustomers?: React.Dispatch<React.SetStateAction<any[]>>
   productsLoading?: boolean
   products: any[]
   setProducts: React.Dispatch<React.SetStateAction<any[]>>
@@ -92,6 +102,7 @@ export function InvoicePanel({
   // setTaxRate,
   customers,
   customersLoading = false,
+  setCustomers,
   productsLoading = false,
   products,
   setProducts,
@@ -103,6 +114,10 @@ export function InvoicePanel({
   showProductCost = false,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
+  const { hasPermission } = usePermissions()
+  const canCreateCustomer = hasPermission('createCustomers' as never)
+  const canCreateProduct = hasPermission('createProducts' as never)
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
   const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
   const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
@@ -116,6 +131,8 @@ export function InvoicePanel({
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(false)
   const [cashReceivedInput, setCashReceivedInput] = useState('')
+  const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
+  const [quickCreateProductItemId, setQuickCreateProductItemId] = useState<string | null>(null)
 
   // Refs for keyboard Enter navigation
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -588,6 +605,60 @@ export function InvoicePanel({
   const focusInvoiceType = useCallback(() => focusField(invoiceTypeTriggerRef.current), [])
   const focusInvoiceDate = useCallback(() => focusField(invoiceDateRef.current), [])
 
+  const openQuickCreate = useCallback(
+    (type: 'customer' | 'product', defaultName?: string, productItemId?: string) => {
+      setQuickCreate({ type, defaultName: defaultName?.trim() || undefined })
+      if (productItemId) setQuickCreateProductItemId(productItemId)
+      if (type === 'customer') setCustomerSelectOpen(false)
+      if (type === 'product') {
+        setProductSelectOpen('')
+        setProductSearchQuery('')
+      }
+    },
+    [],
+  )
+
+  const handleQuickCreated = useCallback(
+    async (type: 'customer' | 'supplier' | 'product', entity: any) => {
+      if (type === 'customer') {
+        const data = await dispatch(fetchCustomers({ page: 1, limit: 1000 })).unwrap()
+        const list = data?.results || (Array.isArray(data) ? data : [])
+        setCustomers?.(list)
+        const customerId = entity._id || entity.id
+        const created = list.find((c: any) => (c._id || c.id) === customerId) || entity
+        setInvoice((prev) => ({
+          ...prev,
+          customerId,
+          customerName: created.name,
+          type: 'credit',
+        }))
+        setCustomerSearchQuery('')
+        focusInvoiceType()
+        return
+      }
+
+      if (type === 'product') {
+        const data = await dispatch(fetchAllProducts({})).unwrap()
+        const list = data?.results || (Array.isArray(data) ? data : [])
+        setProducts(list)
+        const created = list.find((p: any) => (p._id || p.id) === (entity._id || entity.id)) || entity
+        if (quickCreateProductItemId) {
+          handleProductSelect(quickCreateProductItemId, created)
+        }
+        setQuickCreateProductItemId(null)
+      }
+    },
+    [
+      dispatch,
+      focusInvoiceType,
+      handleProductSelect,
+      quickCreateProductItemId,
+      setCustomers,
+      setInvoice,
+      setProducts,
+    ],
+  )
+
   const handleDiscountChange = useCallback((value: string) => {
     setDiscountInput(value)
     const discountAmount = parseFloat(value) || 0
@@ -898,6 +969,7 @@ export function InvoicePanel({
               <Label htmlFor="customer" className='mb-2'>
                 {t('customer')} <span className="text-red-500">*</span>
               </Label>
+              <div className="flex gap-2">
               <Popover open={customerSelectOpen} onOpenChange={setCustomerSelectOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -909,7 +981,7 @@ export function InvoicePanel({
                         onEnterAdvance(e, focusInvoiceType)
                       }
                     }}
-                    className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
+                    className={`flex-1 justify-between min-h-[2.5rem] h-auto py-0 ${
                       !invoice.customerId ? 'border-red-500 bg-red-50' : ''
                     }`}
                   >
@@ -1020,9 +1092,17 @@ export function InvoicePanel({
                         <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
                         {t('Loading customers...')}
                       </div>
-                    ) : (
-                      <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
-                    )}
+                    ) : filteredCustomers.length === 0 && customerSearchQuery.trim() ? (
+                      canCreateCustomer ? (
+                        <EntityCreateEmptyPrompt
+                          message={t('no_customers_found')}
+                          actionLabel={t('add_customer')}
+                          onCreate={() => openQuickCreate('customer', customerSearchQuery)}
+                        />
+                      ) : (
+                        <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
+                      )
+                    ) : null}
                     <CommandList className="max-h-[300px] overflow-y-auto">
                       <CommandGroup>
                         <CommandItem
@@ -1099,11 +1179,27 @@ export function InvoicePanel({
                             </CommandItem>
                           )
                         })}
+                        {canCreateCustomer ? (
+                          <CommandItem
+                            onSelect={() => openQuickCreate('customer', customerSearchQuery)}
+                            className="flex cursor-pointer items-center gap-2 border-t p-3 text-primary"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>{t('add_customer')}</span>
+                          </CommandItem>
+                        ) : null}
                       </CommandGroup>
                     </CommandList>
                   </Command>
                 </PopoverContent>
               </Popover>
+              {canCreateCustomer ? (
+                <EntityCreateShortcutButton
+                  label={t('add_customer')}
+                  onClick={() => openQuickCreate('customer', customerSearchQuery)}
+                />
+              ) : null}
+              </div>
             </div>
             
             <div>
@@ -1203,6 +1299,18 @@ export function InvoicePanel({
         <CardHeader>
           <div className='flex items-center justify-between'>
             <CardTitle>{t('invoice_items')} ({invoice.items.length})</CardTitle>
+            <div className="flex items-center gap-2">
+              {canCreateProduct ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openQuickCreate('product', productSearchQuery)}
+                  className="flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('add_product')}
+                </Button>
+              ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -1218,6 +1326,7 @@ export function InvoicePanel({
               <Plus className='h-4 w-4' />
               {t('add_item')}
             </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className='p-4'>
@@ -1318,9 +1427,17 @@ export function InvoicePanel({
                                       {t('loading_products')}
                                     </div>
                                   ) : filteredProducts.length === 0 ? (
-                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                      {t('no_products_found')}
-                                    </div>
+                                    canCreateProduct ? (
+                                      <EntityCreateEmptyPrompt
+                                        message={t('no_products_found')}
+                                        actionLabel={t('add_product')}
+                                        onCreate={() => openQuickCreate('product', productSearchQuery, item.id)}
+                                      />
+                                    ) : (
+                                      <div className="py-6 text-center text-sm text-muted-foreground">
+                                        {t('no_products_found')}
+                                      </div>
+                                    )
                                   ) : (
                                     <CommandGroup>
                                       {filteredProducts.map((product) => {
@@ -1974,6 +2091,15 @@ export function InvoicePanel({
           </div>
         </CardContent>
       </Card>
+
+      <EntityQuickCreateDialogs
+        state={quickCreate}
+        onClose={() => {
+          setQuickCreate(null)
+          setQuickCreateProductItemId(null)
+        }}
+        onCreated={handleQuickCreated}
+      />
     </div>
   )
 }

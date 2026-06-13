@@ -856,6 +856,7 @@ const PurchaseInvoicePage = () => {
               editingPurchase={editingPurchase}
               products={products}
               productsLoading={loading}
+              setProducts={setProducts}
             />
           </div>
 
