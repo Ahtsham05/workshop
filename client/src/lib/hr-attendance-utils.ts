@@ -20,6 +20,7 @@ export type LeaveLike = {
 
 export type AttendanceLike = {
   status?: string;
+  checkIn?: string | Date | null;
 } | null | undefined;
 
 /** Match server resolveDayStatus — default unmarked days are Present. */
@@ -27,12 +28,17 @@ export function resolveDayStatus(attendance: AttendanceLike, leave: LeaveLike): 
   const attendanceStatus = attendance?.status;
 
   if (attendanceStatus === 'Holiday') return 'Holiday';
-  if (attendanceStatus === 'Absent') return 'Absent';
-  if (attendanceStatus === 'On Leave') return 'On Leave';
 
   if (leave?.status === 'Approved') {
     return leave.isHalfDay ? 'Half-Day' : 'On Leave';
   }
+
+  if (attendanceStatus === 'Absent') {
+    if ((attendance as { checkIn?: string | Date | null })?.checkIn) return 'Present';
+    return 'Absent';
+  }
+  if (attendanceStatus === 'On Leave') return 'On Leave';
+
   if (leave?.status === 'Pending') {
     return leave.isHalfDay ? 'Half-Day' : 'Absent';
   }

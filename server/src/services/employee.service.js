@@ -185,8 +185,27 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
   delete cleanedBody.employeeId;
   delete cleanedBody.designation;
 
+  const oldName = `${employee.firstName} ${employee.lastName}`.trim();
+
   Object.assign(employee, cleanedBody);
   await employee.save();
+
+  const newName = `${employee.firstName} ${employee.lastName}`.trim();
+  if (
+    oldName
+    && newName
+    && oldName.toLowerCase() !== newName.toLowerCase()
+    && employee.organizationId
+    && employee.branchId
+  ) {
+    await expenseCategoryService.renameEmployeeCategory(
+      employee.organizationId,
+      employee.branchId,
+      oldName,
+      newName,
+    );
+  }
+
   return employee;
 };
 

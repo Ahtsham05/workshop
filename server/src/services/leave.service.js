@@ -44,8 +44,7 @@ const syncAttendanceForApprovedLeave = async (leave) => {
       continue;
     }
 
-    // Approved leave always overrides Present/Late unless employee has check-in/out.
-    if (existing.checkIn || existing.checkOut) continue;
+    // Approved leave overrides attendance even when check-in/out exists.
     existing.status = leave.isHalfDay ? 'Half-Day' : 'On Leave';
     existing.notes = existing.notes ? `${existing.notes} ${AUTO_LEAVE_SYNC_NOTE}` : AUTO_LEAVE_SYNC_NOTE;
     await existing.save();

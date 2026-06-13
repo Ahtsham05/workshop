@@ -60,6 +60,11 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
     setReturnToCategory(null);
   }, []);
 
+  const handleCategoryUpdated = () => {
+    setRefreshTrigger((prev) => prev + 1);
+    onExpenseChange?.();
+  };
+
   if (viewMode === 'create' || viewMode === 'edit') {
     return (
       <ExpenseForm
@@ -67,6 +72,7 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
         defaultCategory={defaultCategory}
         onSave={handleSaveSuccess}
         onCancel={handleCancel}
+        onCategoryUpdated={handleCategoryUpdated}
         isEdit={viewMode === 'edit'}
       />
     );

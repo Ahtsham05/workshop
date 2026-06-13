@@ -25,12 +25,18 @@ const resolveDayStatus = (attendance, leave) => {
   const attendanceStatus = attendance?.status;
 
   if (attendanceStatus === 'Holiday') return 'Holiday';
-  if (attendanceStatus === 'Absent') return 'Absent';
-  if (attendanceStatus === 'On Leave') return 'On Leave';
 
+  // Approved leave overrides attendance (including check-in / present days).
   if (leave?.status === 'Approved') {
     return leave.isHalfDay ? 'Half-Day' : 'On Leave';
   }
+
+  if (attendanceStatus === 'Absent') {
+    // Checked-in without approved leave should not count as absent.
+    if (attendance?.checkIn) return 'Present';
+    return 'Absent';
+  }
+  if (attendanceStatus === 'On Leave') return 'On Leave';
 
   // Unapproved leave is treated as absent for attendance and payroll.
   if (leave?.status === 'Pending') {

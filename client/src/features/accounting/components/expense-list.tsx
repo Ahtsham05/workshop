@@ -109,6 +109,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   const exportToExcel = () => {
     try {
       const data = expenses.map(expense => ({
+        'Expense No': expense.expenseNumber || '-',
         'Date': format(new Date(expense.date), 'MMM dd, yyyy'),
         'Category': expense.category,
         'Description': expense.description,
@@ -270,6 +271,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>{t('Expense No')}</TableHead>
                   <TableHead>{t('Date')}</TableHead>
                   <TableHead>{t('Category')}</TableHead>
                   <TableHead>{t('Description')}</TableHead>
@@ -282,13 +284,16 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               <TableBody>
                 {expenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {t('No expenses found')}
                     </TableCell>
                   </TableRow>
                 ) : (
                   expenses.map((expense) => (
                     <TableRow key={expense.id}>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {expense.expenseNumber || '-'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />

@@ -4,6 +4,26 @@ const ApiError = require('../utils/ApiError');
 const { normalizeDateOnly, computeAttendanceStatsFromData, resolveDayStatus, eachDateInRange } = require('../utils/attendanceStats');
 const payrollService = require('./payroll.service');
 
+const syncPayrollAfterAttendanceChange = async (attendance, userId) => {
+  if (!attendance?.date) return;
+  const employeeId = attendance.employee?._id || attendance.employee;
+  if (!employeeId) return;
+
+  const attendanceDate = normalizeDateOnly(attendance.date);
+  const scope = {
+    organizationId: attendance.organizationId,
+    branchId: attendance.branchId,
+  };
+
+  await payrollService.syncPayrollForMonth(
+    employeeId,
+    attendanceDate.getMonth() + 1,
+    attendanceDate.getFullYear(),
+    userId,
+    scope,
+  );
+};
+
 const createAttendance = async (attendanceBody) => {
   const employee = await Employee.findOne({
     _id: attendanceBody.employee,
@@ -67,16 +87,19 @@ const updateAttendanceById = async (attendanceId, updateBody) => {
   
   Object.assign(attendance, updateBody);
   await attendance.save();
+  await syncPayrollAfterAttendanceChange(attendance, updateBody.updatedBy);
   return attendance;
 };
 
-const deleteAttendanceById = async (attendanceId) => {
+const deleteAttendanceById = async (attendanceId, userId) => {
   const attendance = await getAttendanceById(attendanceId);
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Attendance not found');
   }
+  const snapshot = attendance.toObject();
   await attendance.deleteOne();
-  return attendance;
+  await syncPayrollAfterAttendanceChange(snapshot, userId);
+  return snapshot;
 };
 
 const markCheckIn = async (employeeId, locationData = {}) => {
@@ -126,11 +149,13 @@ const markCheckIn = async (employeeId, locationData = {}) => {
     Object.assign(existingAttendance, attendanceData);
     await existingAttendance.save();
     await existingAttendance.populate('employee shift');
+    await syncPayrollAfterAttendanceChange(existingAttendance, locationData.userId);
     return existingAttendance;
   }
   
   const newAttendance = await Attendance.create(attendanceData);
   await newAttendance.populate('employee shift');
+  await syncPayrollAfterAttendanceChange(newAttendance, locationData.userId);
   return newAttendance;
 };
 
@@ -161,6 +186,7 @@ const markCheckOut = async (employeeId) => {
   
   await attendance.save();
   await attendance.populate('employee shift');
+  await syncPayrollAfterAttendanceChange(attendance);
   return attendance;
 };
 
@@ -243,11 +269,26 @@ const markAttendanceStatus = async (body, scope = {}) => {
   let status = body.status || 'Present';
   const approvedLeave = await getApprovedLeaveForDate(body.employee, attendanceDate, scope);
   const pendingLeave = await getPendingLeaveForDate(body.employee, attendanceDate, scope);
-  const explicitStatuses = ['Absent', 'Late', 'Half-Day', 'On Leave', 'Holiday'];
+  const explicitStatuses = ['Present', 'Absent', 'Late', 'Half-Day', 'On Leave', 'Holiday'];
   if (approvedLeave && !explicitStatuses.includes(status)) {
     status = approvedLeave.isHalfDay ? 'Half-Day' : 'On Leave';
   } else if (pendingLeave && !explicitStatuses.includes(status)) {
     status = pendingLeave.isHalfDay ? 'Half-Day' : 'Absent';
+  }
+
+  const existing = await Attendance.findOne(filter);
+
+  // Clearing absent: remove attendance-only records so default-present applies.
+  if (status === 'Present' && existing && !existing.checkIn && !existing.checkOut) {
+    const snapshot = existing.toObject();
+    await existing.deleteOne();
+    await syncPayrollAfterAttendanceChange(snapshot, scope.userId);
+    return {
+      employee: body.employee,
+      date: attendanceDate,
+      status: 'Present',
+      deleted: true,
+    };
   }
 
   const update = {
@@ -260,7 +301,6 @@ const markAttendanceStatus = async (body, scope = {}) => {
   if (body.checkIn) update.checkIn = body.checkIn;
   if (body.checkOut) update.checkOut = body.checkOut;
 
-  const existing = await Attendance.findOne(filter);
   if (existing) {
     Object.assign(existing, update);
     if (existing.checkIn && existing.checkOut) {
@@ -269,6 +309,7 @@ const markAttendanceStatus = async (body, scope = {}) => {
     }
     await existing.save();
     await existing.populate('employee shift');
+    await syncPayrollAfterAttendanceChange(existing, scope.userId);
     return existing;
   }
 
@@ -277,6 +318,7 @@ const markAttendanceStatus = async (body, scope = {}) => {
     ...update,
   });
   await created.populate('employee shift');
+  await syncPayrollAfterAttendanceChange(created, scope.userId);
   return created;
 };
 
@@ -407,7 +449,7 @@ const computeEmployeeAttendanceStats = async (employeeId, periodStart, periodEnd
   const { Leave } = require('../models');
   const leaves = await Leave.find({
     employee: employeeId,
-    status: { $in: ['Approved', 'Pending'] },
+    status: { $in: ['Approved', 'Pending', 'Rejected'] },
     startDate: { $lte: endDate },
     endDate: { $gte: startDate },
   });
@@ -449,7 +491,7 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
 
   const leaves = await Leave.find({
     employee: employeeId,
-    status: { $in: ['Approved', 'Pending'] },
+    status: { $in: ['Approved', 'Pending', 'Rejected'] },
     startDate: { $lte: monthEnd },
     endDate: { $gte: monthStart },
   });
@@ -483,6 +525,21 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
     });
   leaves
     .filter((leave) => leave.status === 'Pending')
+    .forEach((leave) => {
+      const overlapStart = normalizeDateOnly(leave.startDate) > effectiveStart
+        ? normalizeDateOnly(leave.startDate)
+        : effectiveStart;
+      const overlapEnd = normalizeDateOnly(leave.endDate) < monthEnd
+        ? normalizeDateOnly(leave.endDate)
+        : monthEnd;
+      eachDateInRange(overlapStart, overlapEnd).forEach((date) => {
+        if (!leaveOnDate.has(date.getTime())) {
+          leaveOnDate.set(date.getTime(), leave);
+        }
+      });
+    });
+  leaves
+    .filter((leave) => leave.status === 'Rejected')
     .forEach((leave) => {
       const overlapStart = normalizeDateOnly(leave.startDate) > effectiveStart
         ? normalizeDateOnly(leave.startDate)

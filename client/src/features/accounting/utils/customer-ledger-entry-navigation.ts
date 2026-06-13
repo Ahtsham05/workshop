@@ -39,7 +39,7 @@ export function getCustomerQuickActions(customerId: string): CustomerLedgerEntry
     },
     {
       id: 'sim-sale',
-      labelKey: 'New Sim Sale',
+      labelKey: 'Sim Sale',
       to: '/mobile-shop/sim-sale',
       search: { customerId },
     },
@@ -87,7 +87,7 @@ export function getCustomerLedgerEntryActions(
     return [
       {
         id: 'sim-sale',
-        labelKey: 'New Sim Sale',
+        labelKey: 'Sim Sale',
         to: '/mobile-shop/sim-sale',
         search: { customerId },
       },

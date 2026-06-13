@@ -44,12 +44,20 @@ interface ExpenseFormProps {
   defaultCategory?: string
   onSave: () => void
   onCancel: () => void
+  onCategoryUpdated?: () => void
   isEdit?: boolean
 }
 
 const paymentMethods = ['Cash', 'Bank Transfer', 'Card', 'Cheque']
 
-export function ExpenseForm({ expense, defaultCategory, onSave, onCancel, isEdit = false }: ExpenseFormProps) {
+export function ExpenseForm({
+  expense,
+  defaultCategory,
+  onSave,
+  onCancel,
+  onCategoryUpdated,
+  isEdit = false,
+}: ExpenseFormProps) {
   const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
@@ -124,6 +132,7 @@ export function ExpenseForm({ expense, defaultCategory, onSave, onCancel, isEdit
       }
       toast.success(t('Category updated'))
       refetch()
+      onCategoryUpdated?.()
       setCategoryEditor(null)
     } catch (err: any) {
       toast.error(err?.data?.message || t('Failed to update category'))

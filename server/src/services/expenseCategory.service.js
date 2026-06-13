@@ -138,10 +138,82 @@ const createCategory = async (data, organizationId, branchId, userId) => {
   }
 };
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const propagateCategoryNameChange = async ({
+  organizationId,
+  branchId,
+  oldName,
+  newName,
+  transactionType = 'business_expense',
+}) => {
+  const oldLabel = String(oldName || '').trim();
+  const newLabel = String(newName || '').trim();
+  if (!oldLabel || !newLabel || oldLabel.toLowerCase() === newLabel.toLowerCase()) {
+    return;
+  }
+
+  const Expense = require('../models/expense.model');
+  const PersonalLedger = require('../models/personalLedger.model');
+  const oldCategoryRegex = { $regex: `^${escapeRegex(oldLabel)}$`, $options: 'i' };
+
+  if (transactionType === 'business_expense') {
+    await Expense.updateMany(
+      { organizationId, branchId, category: oldCategoryRegex },
+      { $set: { category: newLabel } },
+    );
+
+    const expenses = await Expense.find({
+      organizationId,
+      branchId,
+      description: { $regex: escapeRegex(oldLabel), $options: 'i' },
+    });
+
+    await Promise.all(
+      expenses.map(async (expense) => {
+        expense.description = expense.description.replace(
+          new RegExp(escapeRegex(oldLabel), 'gi'),
+          newLabel,
+        );
+        await expense.save();
+      }),
+    );
+    return;
+  }
+
+  await PersonalLedger.updateMany(
+    {
+      organizationId,
+      branchId,
+      transactionType,
+      category: oldCategoryRegex,
+    },
+    { $set: { category: newLabel } },
+  );
+
+  const ledgerEntries = await PersonalLedger.find({
+    organizationId,
+    branchId,
+    transactionType,
+    description: { $regex: escapeRegex(oldLabel), $options: 'i' },
+  });
+
+  await Promise.all(
+    ledgerEntries.map(async (entry) => {
+      entry.description = entry.description.replace(
+        new RegExp(escapeRegex(oldLabel), 'gi'),
+        newLabel,
+      );
+      await entry.save();
+    }),
+  );
+};
+
 const updateCategory = async (id, data, organizationId) => {
   const cat = await ExpenseCategory.findOne({ _id: id, organizationId });
   if (!cat) throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
 
+  const oldName = cat.name;
   const patch = { ...data };
   if (patch.transactionType !== undefined) {
     patch.transactionType = normalizeTransactionType(patch.transactionType);
@@ -167,6 +239,17 @@ const updateCategory = async (id, data, organizationId) => {
 
   Object.assign(cat, patch);
   await cat.save();
+
+  if (patch.name && patch.name !== oldName) {
+    await propagateCategoryNameChange({
+      organizationId: cat.organizationId,
+      branchId: cat.branchId,
+      oldName,
+      newName: cat.name,
+      transactionType: cat.transactionType,
+    });
+  }
+
   return cat;
 };
 
@@ -179,7 +262,54 @@ const deleteCategory = async (id, organizationId) => {
 
 const EMPLOYEE_CATEGORY_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6'];
 
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const renameEmployeeCategory = async (organizationId, branchId, oldName, newName) => {
+  const oldLabel = String(oldName || '').trim();
+  const newLabel = String(newName || '').trim();
+  if (!oldLabel || !newLabel || oldLabel.toLowerCase() === newLabel.toLowerCase()) {
+    return null;
+  }
+
+  const category = await ExpenseCategory.findOne({
+    organizationId,
+    branchId,
+    transactionType: 'business_expense',
+    name: { $regex: `^${escapeRegex(oldLabel)}$`, $options: 'i' },
+  });
+
+  const existingTarget = await ExpenseCategory.findOne({
+    organizationId,
+    branchId,
+    transactionType: 'business_expense',
+    name: { $regex: `^${escapeRegex(newLabel)}$`, $options: 'i' },
+  });
+
+  if (category && existingTarget && String(category._id) !== String(existingTarget._id)) {
+    await propagateCategoryNameChange({
+      organizationId,
+      branchId,
+      oldName: oldLabel,
+      newName: newLabel,
+      transactionType: 'business_expense',
+    });
+    await category.deleteOne();
+    return existingTarget;
+  }
+
+  if (category) {
+    category.name = newLabel;
+    await category.save();
+  }
+
+  await propagateCategoryNameChange({
+    organizationId,
+    branchId,
+    oldName: oldLabel,
+    newName: newLabel,
+    transactionType: 'business_expense',
+  });
+
+  return category || existingTarget || null;
+};
 
 const findOrCreateEmployeeCategory = async (organizationId, branchId, userId, categoryName) => {
   const name = String(categoryName || '').trim();
@@ -223,4 +353,5 @@ module.exports = {
   deleteCategory,
   seedDefaultsForType,
   findOrCreateEmployeeCategory,
+  renameEmployeeCategory,
 };

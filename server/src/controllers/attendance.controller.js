@@ -85,17 +85,24 @@ const getAttendance = catchAsync(async (req, res) => {
 });
 
 const updateAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.updateAttendanceById(req.params.attendanceId, req.body);
+  const attendance = await attendanceService.updateAttendanceById(req.params.attendanceId, {
+    ...req.body,
+    updatedBy: req.user?.id,
+  });
   res.send(attendance);
 });
 
 const deleteAttendance = catchAsync(async (req, res) => {
-  await attendanceService.deleteAttendanceById(req.params.attendanceId);
+  await attendanceService.deleteAttendanceById(req.params.attendanceId, req.user?.id);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
 const markCheckIn = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.markCheckIn(req.body.employee, { location: req.body.location, ...getBranchContext(req) });
+  const attendance = await attendanceService.markCheckIn(req.body.employee, {
+    location: req.body.location,
+    userId: req.user?.id,
+    ...getBranchContext(req),
+  });
   res.status(httpStatus.CREATED).send(attendance);
 });
 

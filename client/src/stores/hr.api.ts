@@ -103,19 +103,19 @@ export const hrApi = createApi({
     }),
     markCheckIn: builder.mutation({
       query: (data) => ({ url: '/attendance/checkin', method: 'POST', body: data }),
-      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance'],
+      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance', 'Payroll'],
     }),
     markCheckOut: builder.mutation({
       query: (data) => ({ url: '/attendance/checkout', method: 'POST', body: data }),
-      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance'],
+      invalidatesTags: [{ type: 'Attendance', id: 'LIST' }, 'Attendance', 'Payroll'],
     }),
     updateAttendance: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/attendance/${id}`, method: 'PATCH', body: data }),
-      invalidatesTags: ['Attendance'],
+      invalidatesTags: ['Attendance', 'Payroll'],
     }),
     deleteAttendance: builder.mutation({
       query: (id) => ({ url: `/attendance/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['Attendance'],
+      invalidatesTags: ['Attendance', 'Payroll'],
     }),
     markBulkAttendance: builder.mutation({
       query: (data) => ({ url: '/attendance/bulk', method: 'POST', body: data }),
