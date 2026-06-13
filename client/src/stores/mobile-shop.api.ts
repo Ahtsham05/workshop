@@ -494,7 +494,7 @@ export interface CreateSimSaleInput {
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
