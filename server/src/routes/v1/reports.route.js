@@ -58,6 +58,10 @@ router
   .route('/installments')
   .get(auth('viewReports'), reportsController.getInstallmentReport);
 
+router
+  .route('/activity-summary')
+  .get(auth('viewReports'), reportsController.getActivitySummaryReport);
+
 module.exports = router;
 
 /**

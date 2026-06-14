@@ -36,6 +36,7 @@ import { RoiReport } from './components/roi-report'
 import { SimSaleReport } from './components/sim-sale-report'
 import { InstallmentReport } from './components/installment-report'
 import { MyWalletReport } from './components/my-wallet-report'
+import { ActivitySummaryReport } from './components/activity-summary-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -92,7 +93,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className='space-y-6 p-6'>
+    <div className='space-y-6 p-6 min-w-0 max-w-full'>
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
@@ -226,6 +227,7 @@ export default function ReportsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className='overflow-x-auto pb-1'>
           <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full sm:min-w-0'>
+            <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
             <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
             <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
@@ -265,6 +267,10 @@ export default function ReportsPage() {
             )}
           </TabsList>
         </div>
+
+        <TabsContent value='summary' className='mt-6'>
+          <ActivitySummaryReport ref={activeTab === 'summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+        </TabsContent>
 
         <TabsContent value='sales' className='mt-6'>
           <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />

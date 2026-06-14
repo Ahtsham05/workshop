@@ -453,6 +453,7 @@ const REPORT_PREFETCH_URLS = [
   '/reports/roi/monthly?from=2020-01-01&to=2030-12-31',
   '/reports/sim-sales?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/installments?startDate=2020-01-01&endDate=2030-12-31',
+  '/reports/activity-summary?startDate=2020-01-01&endDate=2030-12-31',
 ];
 
 const BASE_PREFETCH_URLS = [

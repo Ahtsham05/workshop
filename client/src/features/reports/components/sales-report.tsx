@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, Fragment } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -372,9 +372,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   </TableHeader>
                   <TableBody>
                     {productsByDate.map(({ date, items }) => (
-                      <>
+                      <Fragment key={`date-group-${date}`}>
                         {/* Date group header */}
-                        <TableRow key={`date-${date}`} className='bg-muted/40 border-t'>
+                        <TableRow className='bg-muted/40 border-t'>
                           <TableCell
                             colSpan={6}
                             className='py-2 px-4 font-semibold text-sm text-foreground'
@@ -413,7 +413,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             </TableCell>
                           </TableRow>
                         ))}
-                      </>
+                      </Fragment>
                     ))}
                   </TableBody>
 
@@ -459,10 +459,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       const isOpen = expandedRows.has(inv._id)
                       const totalQty = inv.items.reduce((s, i) => s + i.quantity, 0)
                       return (
-                        <>
+                        <Fragment key={inv._id}>
                           {/* ── Invoice row ── */}
                           <TableRow
-                            key={inv._id}
                             className='cursor-pointer hover:bg-muted/40 transition-colors'
                             onClick={() => toggleRow(inv._id)}
                           >
@@ -580,7 +579,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               <TableCell />
                             </TableRow>
                           ))}
-                        </>
+                        </Fragment>
                       )
                     })}
                   </TableBody>

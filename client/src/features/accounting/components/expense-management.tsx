@@ -91,17 +91,17 @@ export function ExpenseManagement({ onExpenseChange }: ExpenseManagementProps) {
         </Button>
       </div>
 
-      <ExpenseList
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        refreshTrigger={refreshTrigger}
-      />
-
       <ExpenseCategorySection
         refreshTrigger={refreshTrigger}
         onAddExpense={handleCreateNew}
         openCategoryRequest={returnToCategory}
         onOpenCategoryHandled={handleOpenCategoryHandled}
+      />
+
+      <ExpenseList
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        refreshTrigger={refreshTrigger}
       />
     </div>
   );

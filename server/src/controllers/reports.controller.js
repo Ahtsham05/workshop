@@ -1,7 +1,8 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger } = require('../models');
+const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
  * Build a scoped match with properly cast ObjectIds for aggregate pipelines.
@@ -1994,6 +1995,531 @@ const getInstallmentReport = catchAsync(async (req, res) => {
   });
 });
 
+const formatItemsSummary = (items, nameKey = 'name', qtyKey = 'quantity') => {
+  if (!items || items.length === 0) return '';
+  const preview = items.slice(0, 3).map((item) => `${item[nameKey] || 'Item'} x${item[qtyKey] || 1}`);
+  const suffix = items.length > 3 ? ` +${items.length - 3} more` : '';
+  return preview.join(', ') + suffix;
+};
+
+const capitalize = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+
+const isValidRefObjectId = (id) => {
+  if (id == null || id === '' || id === 'walk-in') return false;
+  const s = String(id);
+  if (!/^[a-fA-F0-9]{24}$/.test(s)) return false;
+  try {
+    return String(new mongoose.Types.ObjectId(s)) === s;
+  } catch {
+    return false;
+  }
+};
+
+const resolveCustomersById = async (docs, idField = 'customerId') => {
+  const ids = [
+    ...new Set(
+      docs
+        .map((doc) => doc[idField])
+        .filter((id) => isValidRefObjectId(id))
+        .map((id) => String(id)),
+    ),
+  ];
+  if (ids.length === 0) return new Map();
+  const customers = await Customer.find({ _id: { $in: ids } })
+    .select('name phone nameUrdu')
+    .lean();
+  return new Map(customers.map((c) => [String(c._id), c]));
+};
+
+/* ── Activity Summary (all modules) ─────────────────────────────────────────── */
+const getActivitySummaryReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { module: moduleFilter } = req.query;
+
+  const dateMatch = (field) => ({ [field]: { $gte: start, $lte: end } });
+
+  const [
+    invoices,
+    purchases,
+    salesReturns,
+    purchaseReturns,
+    expenses,
+    loadSales,
+    loadPurchases,
+    cashWithdrawals,
+    simSales,
+    repairJobs,
+    serviceInvoices,
+    billPayments,
+    installmentPayments,
+    customerPayments,
+    supplierPayments,
+  ] = await Promise.all([
+    Invoice.find({
+      ...scope,
+      ...dateMatch('invoiceDate'),
+      status: { $ne: 'cancelled' },
+    })
+      .select('invoiceNumber invoiceDate type status total paidAmount balance walkInCustomerName customerName customerId items')
+      .lean(),
+    Purchase.find({ ...scope, ...dateMatch('purchaseDate') })
+      .select('invoiceNumber purchaseDate paymentType status totalAmount paidAmount balance supplier items')
+      .populate('supplier', 'name phone nameUrdu')
+      .lean(),
+    SalesReturn.find({
+      ...scope,
+      ...dateMatch('date'),
+      status: { $ne: 'rejected' },
+    })
+      .select('returnNumber date totalAmount status customerName customerId invoiceId items')
+      .lean(),
+    PurchaseReturn.find({
+      ...scope,
+      ...dateMatch('date'),
+      status: { $ne: 'rejected' },
+    })
+      .select('returnNumber date totalAmount status supplierId items')
+      .populate('supplierId', 'name phone')
+      .lean(),
+    Expense.find({ ...scope, ...dateMatch('date') })
+      .select('category description amount paymentMethod date referenceId')
+      .lean(),
+    LoadTransaction.find({ ...scope, ...dateMatch('date') })
+      .select('walletType customerName mobileNumber amount receivedAmount paymentMethod paymentWalletType date notes')
+      .lean(),
+    LoadPurchase.find({ ...scope, ...dateMatch('date') })
+      .select('walletType supplierName amount paidAmount paymentMethod paymentWalletType date notes')
+      .lean(),
+    CashWithdrawal.find({ ...scope, ...dateMatch('date') })
+      .select('walletType transactionType amount customerName customerNumber customerAccountType cashAmount date notes')
+      .lean(),
+    SimSale.find({ ...scope, ...dateMatch('date') })
+      .select('jobNumber date productName walletType simAmount loadAmount saleAmount purchaseAmount customerName customerPhone paymentMethod notes')
+      .lean(),
+    RepairJob.find({ ...scope, ...dateMatch('date') })
+      .select('date customerName phone deviceModel issue status charges advanceAmount paymentMethod technician')
+      .lean(),
+    ServiceInvoice.find({ ...scope, ...dateMatch('date') })
+      .select('invoiceNumber date customerName customerPhone totalAmount paymentMethod items')
+      .lean(),
+    BillPayment.find({
+      ...scope,
+      $or: [
+        { paymentDate: { $gte: start, $lte: end } },
+        { paymentDate: { $in: [null, undefined] }, createdAt: { $gte: start, $lte: end } },
+      ],
+    })
+      .select('referenceNumber paymentDate createdAt customerName billType companyName billAmount serviceCharge totalReceived status paymentMethod')
+      .lean(),
+    InstallmentPayment.find({ ...scope, ...dateMatch('date') })
+      .select('amount paymentNumber paymentMethod isDownPayment date notes installmentPlanId')
+      .populate('installmentPlanId', 'customerName customerPhone planNumber')
+      .lean(),
+    CustomerLedger.find({
+      ...scope,
+      ...dateMatch('transactionDate'),
+      transactionType: { $in: ['payment_received', 'payment_made'] },
+    })
+      .select('transactionType transactionDate reference description debit credit balance paymentMethod customer')
+      .populate('customer', 'name phone nameUrdu')
+      .lean(),
+    SupplierLedger.find({
+      ...scope,
+      ...dateMatch('transactionDate'),
+      transactionType: { $in: ['payment_made', 'payment_received'] },
+    })
+      .select('transactionType transactionDate reference description debit credit balance paymentMethod supplier')
+      .populate('supplier', 'name phone nameUrdu')
+      .lean(),
+  ]);
+
+  const [customerById, returnCustomerById] = await Promise.all([
+    resolveCustomersById(invoices, 'customerId'),
+    resolveCustomersById(salesReturns, 'customerId'),
+  ]);
+
+  const entries = [];
+
+  invoices.forEach((inv) => {
+    const pay = normalizeInvoicePayment(inv);
+    const customer = isValidRefObjectId(inv.customerId)
+      ? customerById.get(String(inv.customerId))
+      : null;
+    const party = customer?.name || inv.walkInCustomerName || inv.customerName || 'Walk-in Customer';
+    const isCash = inv.type === 'cash';
+    entries.push({
+      id: String(inv._id),
+      date: inv.invoiceDate,
+      module: 'Sales',
+      subType: isCash ? 'Cash Sale' : capitalize(inv.type) + ' Sale',
+      reference: inv.invoiceNumber || '',
+      party,
+      partyPhone: customer?.phone || '',
+      paymentType: isCash ? 'Cash' : capitalize(inv.type),
+      direction: 'in',
+      totalAmount: inv.total || 0,
+      paidAmount: pay.paidAmount,
+      balance: pay.balance,
+      description: `Sale invoice ${inv.invoiceNumber || ''}`,
+      details: formatItemsSummary(inv.items),
+      status: pay.displayStatus === 'cash' ? 'paid' : (pay.balance > 0 ? 'partial' : 'paid'),
+    });
+  });
+
+  purchases.forEach((pur) => {
+    const pay = normalizePurchasePayment(pur);
+    const supplier = pur.supplier && typeof pur.supplier === 'object' ? pur.supplier : null;
+    const isCash = pur.paymentType === 'Cash';
+    entries.push({
+      id: String(pur._id),
+      date: pur.purchaseDate,
+      module: 'Purchases',
+      subType: isCash ? 'Cash Purchase' : `${pur.paymentType || 'Credit'} Purchase`,
+      reference: pur.invoiceNumber || '',
+      party: supplier?.name || 'Supplier',
+      partyPhone: supplier?.phone || '',
+      paymentType: pur.paymentType || 'Cash',
+      direction: 'out',
+      totalAmount: pur.totalAmount || 0,
+      paidAmount: pay.paidAmount,
+      balance: pay.balance,
+      description: `Purchase ${pur.invoiceNumber || ''}`,
+      details: formatItemsSummary(pur.items),
+      status: pay.displayStatus === 'cash' ? 'paid' : (pay.balance > 0 ? 'partial' : 'paid'),
+    });
+  });
+
+  salesReturns.forEach((ret) => {
+    const customer = isValidRefObjectId(ret.customerId)
+      ? returnCustomerById.get(String(ret.customerId))
+      : null;
+    entries.push({
+      id: String(ret._id),
+      date: ret.date,
+      module: 'Sales Returns',
+      subType: 'Sales Return',
+      reference: ret.returnNumber || '',
+      party: customer?.name || ret.customerName || 'Customer',
+      partyPhone: customer?.phone || '',
+      paymentType: 'Refund',
+      direction: 'out',
+      totalAmount: ret.totalAmount || 0,
+      paidAmount: ret.totalAmount || 0,
+      balance: 0,
+      description: `Sales return ${ret.returnNumber || ''}`,
+      details: formatItemsSummary(ret.items, 'name', 'quantity'),
+      status: ret.status || 'completed',
+    });
+  });
+
+  purchaseReturns.forEach((ret) => {
+    const supplier = ret.supplierId && typeof ret.supplierId === 'object' ? ret.supplierId : null;
+    entries.push({
+      id: String(ret._id),
+      date: ret.date,
+      module: 'Purchase Returns',
+      subType: 'Purchase Return',
+      reference: ret.returnNumber || '',
+      party: supplier?.name || 'Supplier',
+      partyPhone: supplier?.phone || '',
+      paymentType: 'Refund',
+      direction: 'in',
+      totalAmount: ret.totalAmount || 0,
+      paidAmount: ret.totalAmount || 0,
+      balance: 0,
+      description: `Purchase return ${ret.returnNumber || ''}`,
+      details: formatItemsSummary(ret.items, 'name', 'quantity'),
+      status: ret.status || 'completed',
+    });
+  });
+
+  expenses.forEach((exp) => {
+    entries.push({
+      id: String(exp._id),
+      date: exp.date,
+      module: 'Expenses',
+      subType: exp.category || 'Expense',
+      reference: exp.referenceId ? String(exp.referenceId) : '',
+      party: exp.category || 'Expense',
+      partyPhone: '',
+      paymentType: capitalize(exp.paymentMethod) || 'Cash',
+      direction: 'out',
+      totalAmount: exp.amount || 0,
+      paidAmount: exp.amount || 0,
+      balance: 0,
+      description: exp.description || exp.category || 'Expense',
+      details: exp.category || '',
+      status: 'paid',
+    });
+  });
+
+  loadSales.forEach((tx) => {
+    entries.push({
+      id: String(tx._id),
+      date: tx.date,
+      module: 'Load',
+      subType: 'Load Sale',
+      reference: tx.mobileNumber || '',
+      party: tx.customerName || 'Customer',
+      partyPhone: tx.mobileNumber || '',
+      paymentType: capitalize(tx.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: tx.receivedAmount || tx.amount || 0,
+      paidAmount: tx.receivedAmount || tx.amount || 0,
+      balance: 0,
+      description: `Load sale on ${tx.walletType || 'wallet'}`,
+      details: `Load: ${tx.amount || 0} | Wallet: ${tx.walletType || ''}${tx.notes ? ` | ${tx.notes}` : ''}`,
+      status: 'completed',
+    });
+  });
+
+  loadPurchases.forEach((lp) => {
+    entries.push({
+      id: String(lp._id),
+      date: lp.date,
+      module: 'Load',
+      subType: 'Load Purchase',
+      reference: lp.walletType || '',
+      party: lp.supplierName || 'Supplier',
+      partyPhone: '',
+      paymentType: capitalize(lp.paymentMethod) || 'Cash',
+      direction: 'out',
+      totalAmount: lp.amount || 0,
+      paidAmount: lp.paidAmount || lp.amount || 0,
+      balance: 0,
+      description: `Load purchase for ${lp.walletType || 'wallet'}`,
+      details: `Amount: ${lp.amount || 0} | Wallet: ${lp.walletType || ''}${lp.notes ? ` | ${lp.notes}` : ''}`,
+      status: 'completed',
+    });
+  });
+
+  cashWithdrawals.forEach((cw) => {
+    const isReceive = cw.transactionType === 'withdrawal';
+    entries.push({
+      id: String(cw._id),
+      date: cw.date,
+      module: 'Cash Management',
+      subType: isReceive ? 'Cash Received' : 'Cash Sent',
+      reference: cw.customerNumber || '',
+      party: cw.customerName || 'Customer',
+      partyPhone: cw.customerNumber || '',
+      paymentType: capitalize(cw.customerAccountType) || 'Wallet',
+      direction: isReceive ? 'in' : 'out',
+      totalAmount: cw.amount || 0,
+      paidAmount: cw.cashAmount || cw.amount || 0,
+      balance: 0,
+      description: `${isReceive ? 'Receive' : 'Send'} via ${cw.walletType || 'wallet'}`,
+      details: `Wallet: ${cw.walletType || ''} | Account: ${cw.customerNumber || '—'}${cw.notes ? ` | ${cw.notes}` : ''}`,
+      status: 'completed',
+    });
+  });
+
+  simSales.forEach((sim) => {
+    entries.push({
+      id: String(sim._id),
+      date: sim.date,
+      module: 'Sim Sale',
+      subType: 'Sim + Load Sale',
+      reference: `SIM-${sim.jobNumber || ''}`,
+      party: sim.customerName || 'Customer',
+      partyPhone: sim.customerPhone || '',
+      paymentType: capitalize(sim.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: sim.saleAmount || 0,
+      paidAmount: sim.saleAmount || 0,
+      balance: 0,
+      description: `Sim sale: ${sim.productName || 'SIM'}`,
+      details: `SIM: ${sim.simAmount || 0} | Load: ${sim.loadAmount || 0} | Wallet: ${sim.walletType || ''}`,
+      status: 'completed',
+    });
+  });
+
+  repairJobs.forEach((job) => {
+    entries.push({
+      id: String(job._id),
+      date: job.date,
+      module: 'Repairing',
+      subType: 'Repair Job',
+      reference: String(job._id).slice(-6).toUpperCase(),
+      party: job.customerName || 'Customer',
+      partyPhone: job.phone || '',
+      paymentType: capitalize(job.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: job.charges || 0,
+      paidAmount: job.advanceAmount || 0,
+      balance: Math.max(0, (job.charges || 0) - (job.advanceAmount || 0)),
+      description: `${job.deviceModel || 'Device'} — ${job.issue || 'Repair'}`,
+      details: `Status: ${job.status || ''} | Technician: ${job.technician || '—'}`,
+      status: job.status || 'pending',
+    });
+  });
+
+  serviceInvoices.forEach((svc) => {
+    entries.push({
+      id: String(svc._id),
+      date: svc.date,
+      module: 'Services',
+      subType: 'Service Invoice',
+      reference: svc.invoiceNumber || '',
+      party: svc.customerName || 'Customer',
+      partyPhone: svc.customerPhone || '',
+      paymentType: capitalize(svc.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: svc.totalAmount || 0,
+      paidAmount: svc.totalAmount || 0,
+      balance: 0,
+      description: `Service invoice ${svc.invoiceNumber || ''}`,
+      details: formatItemsSummary(svc.items, 'serviceName', 'quantity'),
+      status: 'paid',
+    });
+  });
+
+  billPayments.forEach((bill) => {
+    const billDate = bill.paymentDate || bill.createdAt;
+    entries.push({
+      id: String(bill._id),
+      date: billDate,
+      module: 'Bill Payments',
+      subType: capitalize(bill.billType) + ' Bill',
+      reference: bill.referenceNumber || '',
+      party: bill.customerName || 'Customer',
+      partyPhone: '',
+      paymentType: capitalize(bill.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: bill.totalReceived || 0,
+      paidAmount: bill.billAmount || 0,
+      balance: 0,
+      description: `${bill.companyName || 'Utility'} bill payment`,
+      details: `Bill: ${bill.billAmount || 0} | Service charge: ${bill.serviceCharge || 0}`,
+      status: bill.status || 'completed',
+    });
+  });
+
+  installmentPayments.forEach((pmt) => {
+    const plan = pmt.installmentPlanId && typeof pmt.installmentPlanId === 'object'
+      ? pmt.installmentPlanId
+      : null;
+    entries.push({
+      id: String(pmt._id),
+      date: pmt.date,
+      module: 'Installments',
+      subType: pmt.isDownPayment ? 'Down Payment' : 'Installment Payment',
+      reference: plan?.planNumber ? `PLAN-${plan.planNumber}` : `PAY-${pmt.paymentNumber || ''}`,
+      party: plan?.customerName || 'Customer',
+      partyPhone: plan?.customerPhone || '',
+      paymentType: capitalize(pmt.paymentMethod) || 'Cash',
+      direction: 'in',
+      totalAmount: pmt.amount || 0,
+      paidAmount: pmt.amount || 0,
+      balance: 0,
+      description: pmt.isDownPayment ? 'Installment down payment' : `Installment payment #${pmt.paymentNumber || ''}`,
+      details: pmt.notes || '',
+      status: 'paid',
+    });
+  });
+
+  customerPayments.forEach((entry) => {
+    const customer = entry.customer && typeof entry.customer === 'object' ? entry.customer : null;
+    const isReceived = entry.transactionType === 'payment_received';
+    const amount = isReceived ? (entry.credit || 0) : (entry.debit || 0);
+    entries.push({
+      id: String(entry._id),
+      date: entry.transactionDate,
+      module: 'Customer Payments',
+      subType: isReceived ? 'Cash Received' : 'Cash Paid',
+      reference: entry.reference || '',
+      party: customer?.name || 'Customer',
+      partyPhone: customer?.phone || '',
+      paymentType: capitalize(entry.paymentMethod) || 'Cash',
+      direction: isReceived ? 'in' : 'out',
+      totalAmount: amount,
+      paidAmount: amount,
+      balance: 0,
+      description: entry.description || (isReceived ? 'Payment received from customer' : 'Payment made to customer'),
+      details: entry.reference ? `Ref: ${entry.reference}` : '',
+      status: 'completed',
+    });
+  });
+
+  supplierPayments.forEach((entry) => {
+    const supplier = entry.supplier && typeof entry.supplier === 'object' ? entry.supplier : null;
+    const isPaid = entry.transactionType === 'payment_made';
+    const amount = isPaid ? (entry.debit || 0) : (entry.credit || 0);
+    entries.push({
+      id: String(entry._id),
+      date: entry.transactionDate,
+      module: 'Supplier Payments',
+      subType: isPaid ? 'Cash Paid' : 'Cash Received',
+      reference: entry.reference || '',
+      party: supplier?.name || 'Supplier',
+      partyPhone: supplier?.phone || '',
+      paymentType: capitalize(entry.paymentMethod) || 'Cash',
+      direction: isPaid ? 'out' : 'in',
+      totalAmount: amount,
+      paidAmount: amount,
+      balance: 0,
+      description: entry.description || (isPaid ? 'Payment made to supplier' : 'Payment received from supplier'),
+      details: entry.reference ? `Ref: ${entry.reference}` : '',
+      status: 'completed',
+    });
+  });
+
+  entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const filteredEntries = moduleFilter
+    ? entries.filter((entry) => entry.module.toLowerCase() === String(moduleFilter).toLowerCase())
+    : entries;
+
+  const byModuleMap = {};
+  filteredEntries.forEach((entry) => {
+    if (!byModuleMap[entry.module]) {
+      byModuleMap[entry.module] = { module: entry.module, count: 0, totalAmount: 0, cashIn: 0, cashOut: 0 };
+    }
+    const row = byModuleMap[entry.module];
+    row.count += 1;
+    row.totalAmount += entry.totalAmount || 0;
+    if (entry.direction === 'in') row.cashIn += entry.paidAmount || 0;
+    if (entry.direction === 'out') row.cashOut += entry.paidAmount || 0;
+  });
+
+  const summary = {
+    totalEntries: filteredEntries.length,
+    totalAmount: filteredEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    cashReceived: filteredEntries.filter((e) => e.direction === 'in').reduce((sum, e) => sum + (e.paidAmount || 0), 0),
+    cashPaid: filteredEntries.filter((e) => e.direction === 'out').reduce((sum, e) => sum + (e.paidAmount || 0), 0),
+    creditSalesBalance: filteredEntries
+      .filter((e) => e.module === 'Sales' && e.balance > 0)
+      .reduce((sum, e) => sum + e.balance, 0),
+    creditPurchaseBalance: filteredEntries
+      .filter((e) => e.module === 'Purchases' && e.balance > 0)
+      .reduce((sum, e) => sum + e.balance, 0),
+    cashSales: filteredEntries
+      .filter((e) => e.module === 'Sales' && e.paymentType === 'Cash')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    creditSales: filteredEntries
+      .filter((e) => e.module === 'Sales' && e.paymentType !== 'Cash')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    cashPurchases: filteredEntries
+      .filter((e) => e.module === 'Purchases' && e.paymentType === 'Cash')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+    creditPurchases: filteredEntries
+      .filter((e) => e.module === 'Purchases' && e.paymentType !== 'Cash')
+      .reduce((sum, e) => sum + (e.totalAmount || 0), 0),
+  };
+
+  res.status(httpStatus.OK).send({
+    entries: filteredEntries,
+    byModule: Object.values(byModuleMap).sort((a, b) => b.count - a.count),
+    summary,
+    period: { startDate: start, endDate: end },
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -2004,4 +2530,5 @@ module.exports = {
   getLoadReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,
   getSimSaleReport, getInstallmentReport,
+  getActivitySummaryReport,
 };

@@ -657,10 +657,55 @@ export interface InstallmentReport {
   recentPlans: InstallmentPlanRecord[]
   period: { startDate: string; endDate: string }
 }
+
+export interface ActivitySummaryEntry {
+  id: string
+  date: string
+  module: string
+  subType: string
+  reference: string
+  party: string
+  partyPhone?: string
+  paymentType: string
+  direction: 'in' | 'out' | 'neutral'
+  totalAmount: number
+  paidAmount: number
+  balance: number
+  description: string
+  details?: string
+  status: string
+}
+
+export interface ActivitySummaryByModule {
+  module: string
+  count: number
+  totalAmount: number
+  cashIn: number
+  cashOut: number
+}
+
+export interface ActivitySummaryReport {
+  entries: ActivitySummaryEntry[]
+  byModule: ActivitySummaryByModule[]
+  summary: {
+    totalEntries: number
+    totalAmount: number
+    cashReceived: number
+    cashPaid: number
+    creditSalesBalance: number
+    creditPurchaseBalance: number
+    cashSales: number
+    creditSales: number
+    cashPurchases: number
+    creditPurchases: number
+  }
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -936,6 +981,16 @@ export const reportsApi = createApi({
       },
       providesTags: ['InstallmentReport'],
     }),
+    getActivitySummaryReport: builder.query<ActivitySummaryReport, { startDate?: string; endDate?: string; module?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.module) searchParams.set('module', params.module)
+        return `/activity-summary?${searchParams.toString()}`
+      },
+      providesTags: ['ActivitySummaryReport'],
+    }),
   }),
 })
 
@@ -966,4 +1021,5 @@ export const {
   useGetSimSaleReportQuery,
   useLazyGetSimSaleReportQuery,
   useGetInstallmentReportQuery,
+  useGetActivitySummaryReportQuery,
 } = reportsApi
