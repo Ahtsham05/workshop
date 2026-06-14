@@ -3,7 +3,13 @@ const catchAsync = require('../utils/catchAsync');
 const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, RepairJob, ServiceInvoice, CashWithdrawal, SimSale, Purchase } = require('../models');
 const { isValidObjectId } = mongoose;
 
-const { parseBusinessDateBoundary: parseDateBoundary } = require('../utils/businessTimezone');
+const { parseBusinessDateBoundary: parseDateBoundary, toBusinessCalendarDate, eachBusinessCalendarDate, BUSINESS_TZ } = require('../utils/businessTimezone');
+
+const businessDateGroup = (field = '$date') => ({
+  $dateToString: { format: '%Y-%m-%d', date: field, timezone: BUSINESS_TZ },
+});
+
+const toCalendarDateKey = (value) => toBusinessCalendarDate(new Date(value));
 
 const getRange = (query) => {
   const now = new Date();
@@ -273,7 +279,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          _id: businessDateGroup('$date'),
           totalSold: { $sum: '$amount' },
           loadProfit: { $sum: '$profit' },
           loadTransactions: { $sum: 1 },
@@ -285,7 +291,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          _id: businessDateGroup('$date'),
           totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
           totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
           cashProfit: { $sum: '$profit' },
@@ -298,7 +304,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          _id: businessDateGroup('$date'),
           totalSimSaleLoad: { $sum: '$loadAmount' },
           simSaleCommission: { $sum: '$commission' },
           simSaleTransactions: { $sum: 1 },
@@ -310,7 +316,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          _id: businessDateGroup('$date'),
           totalPurchased: { $sum: '$amount' },
           totalPurchaseProfit: { $sum: '$profit' },
           purchaseTransactions: { $sum: 1 },
@@ -411,7 +417,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   };
 
   loadDetails.forEach((item) => {
-    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    const dateKey = toCalendarDateKey(item.date);
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
@@ -433,7 +439,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   });
 
   cashDetails.forEach((item) => {
-    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    const dateKey = toCalendarDateKey(item.date);
     const isWithdrawal = item.transactionType === 'withdrawal';
     ensureBucket(dateKey).push({
       id: String(item._id),
@@ -456,7 +462,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   });
 
   simSaleDetails.forEach((item) => {
-    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    const dateKey = toCalendarDateKey(item.date);
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
@@ -478,7 +484,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     });
   });
   loadPurchaseDetails.forEach((item) => {
-    const dateKey = new Date(item.date).toISOString().slice(0, 10);
+    const dateKey = toCalendarDateKey(item.date);
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
@@ -500,7 +506,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   });
 
   walletEntriesInRange.forEach((entry) => {
-    const dateKey = new Date(entry.date).toISOString().slice(0, 10);
+    const dateKey = toCalendarDateKey(entry.date);
     const impact = entry.type === 'in' ? Number(entry.amount || 0) : -Number(entry.amount || 0);
     let title = entry.type === 'in' ? 'Wallet Inflow' : 'Wallet Outflow';
     let accountNumber = '';
@@ -555,11 +561,9 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     });
   });
 
-  // ── 4. Build every calendar date in range ──
+  // ── 4. Build every calendar date in range (Pakistan timezone) ──
   const rows = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const key = cursor.toISOString().slice(0, 10);
+  eachBusinessCalendarDate(start, end).forEach((key) => {
     const ld = loadMap[key];
     const cw = cashMap[key];
     const ss = simSaleMap[key];
@@ -573,7 +577,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     rows.push({
       date: key,
       hasSales: !!(ld || cw || ss || lp),
-      totalSold: ldTotalSold,
+      totalSold: ldTotalSold + ssTotalSimSaleLoad,
       totalSimSaleLoad: ssTotalSimSaleLoad,
       totalWithdrawals: cwTotalWithdrawals,
       totalDeposits: cwTotalDeposits,
@@ -587,8 +591,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       }),
     });
     rows[rows.length - 1].netWalletImpact = rows[rows.length - 1].detailItems.reduce((sum, item) => sum + Number(item.walletImpact || 0), 0);
-    cursor.setDate(cursor.getDate() + 1);
-  }
+  });
 
   // ── 5. Walk backwards to assign running balances from detailed net impact ──
   let runningClose = closingAtEnd;

@@ -143,6 +143,27 @@ const parseBusinessDateTime = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+/**
+ * Inclusive list of YYYY-MM-DD calendar dates between two Date boundaries (Pakistan).
+ * @param {Date} startDate
+ * @param {Date} endDate
+ * @returns {string[]}
+ */
+const eachBusinessCalendarDate = (startDate, endDate) => {
+  const startKey = toBusinessCalendarDate(startDate);
+  const endKey = toBusinessCalendarDate(endDate);
+  if (!startKey || !endKey) return [];
+
+  const dates = [];
+  let cursor = startOfBusinessDay(startKey);
+  const endMs = startOfBusinessDay(endKey).getTime();
+  while (cursor.getTime() <= endMs) {
+    dates.push(toBusinessCalendarDate(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+};
+
 module.exports = {
   BUSINESS_TZ,
   PKT_OFFSET_MS,
@@ -153,4 +174,5 @@ module.exports = {
   parseBusinessDateBoundary,
   parseBusinessDateTime,
   applyBusinessDateRange,
+  eachBusinessCalendarDate,
 };

@@ -1,5 +1,5 @@
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +12,9 @@ import { toast } from 'sonner'
 import { WalletBalanceStatement } from './wallet-balance-statement'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
-import { isLoadWalletName } from '@/features/mobile-shop/utils/wallet-utils'
+import { isLoadWalletName, normalizeWalletTypeParam } from '@/features/mobile-shop/utils/wallet-utils'
+
+const normalizeWalletKey = (name: string) => normalizeWalletTypeParam(name).toLowerCase()
 
 interface LoadReportProps {
   startDate: string
@@ -36,6 +38,34 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
     const loadPurchases = useMemo(
       () => (data?.purchases ?? []).filter((p) => isLoadWalletName(p._id || '')),
       [data?.purchases],
+    )
+    const soldByWallet = useMemo(() => {
+      const map = new Map<string, { totalSold: number; transactions: number; walletLabel: string }>()
+      loadByWallet.forEach((row) => {
+        const key = normalizeWalletKey(row._id || '')
+        if (!key) return
+        const existing = map.get(key)
+        if (existing) {
+          existing.totalSold += row.totalSold
+          existing.transactions += row.transactions
+        } else {
+          map.set(key, {
+            totalSold: row.totalSold,
+            transactions: row.transactions,
+            walletLabel: row._id,
+          })
+        }
+      })
+      return map
+    }, [loadByWallet])
+
+    const resolveWalletSold = useCallback(
+      (walletType: string) => soldByWallet.get(normalizeWalletKey(walletType)),
+      [soldByWallet],
+    )
+    const totalCurrentBalance = useMemo(
+      () => loadWallets.reduce((sum, w) => sum + (w.balance || 0), 0),
+      [loadWallets],
     )
 
     useImperativeHandle(ref, () => ({
@@ -178,26 +208,60 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
           </Card>
         </div>
 
-        {/* Current Wallet Balances — load wallets only (name contains "load") */}
+        {/* Wallet overview — balance + sold per wallet */}
         {loadWallets.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Current Wallet Balances</CardTitle>
+              <div className='flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between'>
+                <div>
+                  <CardTitle>Wallet Overview</CardTitle>
+                  <CardDescription>
+                    Current balance and total sold in the selected period
+                  </CardDescription>
+                </div>
+                <div className='flex flex-wrap gap-4 text-sm'>
+                  <div>
+                    <p className='text-xs text-muted-foreground'>Total Current Balance</p>
+                    <p className='text-lg font-bold text-blue-600'>{fmt(totalCurrentBalance)}</p>
+                  </div>
+                  <div>
+                    <p className='text-xs text-muted-foreground'>Total Sold (Period)</p>
+                    <p className='text-lg font-bold text-emerald-600'>{fmt(s?.totalSold ?? 0)}</p>
+                  </div>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
-                {loadWallets.map(w => (
-                  <div
-                    key={w._id}
-                    className='rounded-lg border p-3 cursor-pointer hover:border-primary hover:bg-muted/30 transition-colors'
-                    onClick={() => setSelectedWallet(w.type)}
-                    title={`View ${w.type} load report`}
-                  >
-                    <p className='text-sm font-medium capitalize'>{w.type}</p>
-                    <p className='text-xl font-bold text-blue-600'>{fmt(w.balance)}</p>
-                    <p className='text-xs text-muted-foreground mt-1'>Click to view load report →</p>
-                  </div>
-                ))}
+                {loadWallets.map((w) => {
+                  const sold = resolveWalletSold(w.type || '')
+                  return (
+                    <div
+                      key={w._id}
+                      className='rounded-lg border p-4 cursor-pointer hover:border-primary hover:bg-muted/30 transition-colors'
+                      onClick={() => setSelectedWallet(w.type)}
+                      title={`View ${w.type} load report`}
+                    >
+                      <p className='text-sm font-medium capitalize mb-3'>{w.type}</p>
+                      <div className='space-y-3'>
+                        <div>
+                          <p className='text-xs text-muted-foreground'>Current Balance</p>
+                          <p className='text-xl font-bold text-blue-600'>{fmt(w.balance)}</p>
+                        </div>
+                        <div className='border-t pt-3'>
+                          <p className='text-xs text-muted-foreground'>Sold (Period)</p>
+                          <p className='text-lg font-semibold text-emerald-600'>
+                            {fmt(sold?.totalSold ?? 0)}
+                          </p>
+                          <p className='text-xs text-muted-foreground mt-1'>
+                            {sold?.transactions ?? 0} transaction{(sold?.transactions ?? 0) === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                      </div>
+                      <p className='text-xs text-primary mt-3 opacity-70'>Click to view details →</p>
+                    </div>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

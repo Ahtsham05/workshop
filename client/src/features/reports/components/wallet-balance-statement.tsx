@@ -44,6 +44,13 @@ const fmt = (v: number) =>
     minimumFractionDigits: 0,
   }).format(v)
 
+const formatCalendarDate = (dateStr: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+  if (!match) return format(new Date(dateStr), 'dd MMM yyyy')
+  const [, y, m, d] = match
+  return format(new Date(Number(y), Number(m) - 1, Number(d)), 'dd MMM yyyy')
+}
+
 const getFlowBadgeStyles = (impact: number) =>
   impact >= 0 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'
 
@@ -413,7 +420,7 @@ export function WalletBalanceStatement({
                               ) : (
                                 <span className='w-4' />
                               )}
-                              {format(new Date(row.date), 'dd MMM yyyy')}
+                              {formatCalendarDate(row.date)}
                             </button>
                           </TableCell>
                           <TableCell className='text-right'>{fmt(row.openingBalance)}</TableCell>
@@ -529,7 +536,7 @@ export function WalletBalanceStatement({
                         return (
                           <TableRow key={`no-detail-${entry.date}-${idx}`}>
                             <TableCell className='font-medium'>
-                              {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
+                              {showDate ? formatCalendarDate(entry.date) : ''}
                             </TableCell>
                             <TableCell className='text-muted-foreground'>{loadOnly ? 'No load activity' : 'No details'}</TableCell>
                             <TableCell />

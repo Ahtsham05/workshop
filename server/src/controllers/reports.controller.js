@@ -27,7 +27,11 @@ const buildScope = (req) => {
 /** Wallets whose name contains "load" are load purchase/sale wallets (same rule as mobile-shop UI). */
 const isLoadWalletName = (name) => /load/i.test(String(name || ''));
 
-const { parseBusinessDateBoundary: parseDateBoundary } = require('../utils/businessTimezone');
+const { parseBusinessDateBoundary: parseDateBoundary, BUSINESS_TZ } = require('../utils/businessTimezone');
+
+const businessDateGroup = (field = '$date') => ({
+  $dateToString: { format: '%Y-%m-%d', date: field, timezone: BUSINESS_TZ },
+});
 
 const parseRange = (query) => {
   const end = parseDateBoundary(query.endDate, true) || new Date();
@@ -1523,7 +1527,7 @@ async function getLoadReport(req, res) {
     ]),
     LoadTransaction.aggregate([
       { $match: txMatch },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, transactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' } } },
+      { $group: { _id: businessDateGroup('$date'), transactions: { $sum: 1 }, totalSold: { $sum: '$amount' }, totalProfit: { $sum: '$profit' } } },
       { $sort: { _id: 1 } },
     ]),
     LoadPurchase.aggregate([
@@ -1580,7 +1584,7 @@ async function getLoadReport(req, res) {
       { $match: simSaleMatch },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          _id: businessDateGroup('$date'),
           transactions: { $sum: 1 },
           totalSold: { $sum: '$loadAmount' },
         },
