@@ -5,7 +5,6 @@
 
 import type { PermissionKey } from '@/lib/permission-registry';
 import { hasAnyPermission } from '@/lib/permission-resolve';
-import { normalizeBusinessType } from '@/lib/business-types';
 import {
   deriveSchoolRole,
   isPathAllowedForSchoolRole,
@@ -15,6 +14,7 @@ import {
 } from '@/lib/school-permissions';
 import type { AppUser } from '@/lib/rbac';
 import { getDefaultHomeRoute } from '@/lib/default-home-route';
+import { resolveActiveBusinessType } from '@/lib/organization-context';
 
 export interface RouteRule {
   prefix: string;
@@ -63,6 +63,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/mobile-shop/bill-payments', businessTypes: ['mobile_shop'], anyPermission: ['viewBillPayments'] },
   { prefix: '/mobile-shop/installments', businessTypes: ['mobile_shop'], anyPermission: ['viewInstallments'] },
   { prefix: '/mobile-shop/cash-book', anyPermission: ['viewCashBook'] },
+  { prefix: '/cash-book', anyPermission: ['viewCashBook'] },
 
   // HR
   { prefix: '/hr/employees', anyPermission: ['getEmployees'] },
@@ -109,7 +110,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/invoice', anyPermission: ['viewInvoices'] },
   { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'viewInvoices'] },
   { prefix: '/accounting', anyPermission: ['viewAccounting'] },
-  { prefix: '/cash-register', anyPermission: ['viewCashRegister'] },
+  { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/reports', anyPermission: ['viewReports'] },
 
   // Dashboard — exact match only (see matchesPrefix)
@@ -145,7 +146,8 @@ function matchesPrefix(pathname: string, prefix: string): boolean {
 
 function findRouteRule(pathname: string): RouteRule | null {
   const path = normalizePath(pathname);
-  for (const rule of ROUTE_RULES) {
+  const sorted = [...ROUTE_RULES].sort((a, b) => b.prefix.length - a.prefix.length);
+  for (const rule of sorted) {
     if (matchesPrefix(path, rule.prefix)) return rule;
   }
   return null;
@@ -193,7 +195,7 @@ export function resolveRouteAccess(
 
   if (isPlatformAdmin(user)) return { allowed: true };
 
-  const businessType = normalizeBusinessType(user.businessType);
+  const businessType = resolveActiveBusinessType(user.businessType);
   const schoolRole = deriveSchoolRole(user);
   const permissions = user.role?.permissions ?? null;
 

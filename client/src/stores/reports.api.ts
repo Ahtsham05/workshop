@@ -719,6 +719,7 @@ export interface SalesPurchaseSummaryReport {
     expenseCount: number
     myWalletExpense: number
     myWalletExpenseCount: number
+    cashInHand: number
     salesTransactions: number
     purchaseTransactions: number
   }

@@ -148,11 +148,11 @@ export default function CashBookPage() {
           </p>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
+      <Card className='my-4'>
+        <CardHeader className='pt-5'>
           <CardTitle>Date Filter</CardTitle>
         </CardHeader>
-        <CardContent className='space-y-4'>
+        <CardContent className='space-y-4 pb-5'>
           <div className='grid gap-4 md:grid-cols-2'>
             <div className='space-y-2'>
               <Label htmlFor='cashbook-start-date'>Start Date</Label>

@@ -23,14 +23,14 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { Receipt, ShoppingCart, TrendingUp, Wallet } from 'lucide-react'
+import { Receipt, ShoppingCart, TrendingUp, Wallet, DollarSign } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { normalizeBusinessType } from '@/lib/business-types'
+import { normalizeBusinessType, isCashBookBusiness } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { ReportBreakdownRow } from './report-breakdown-row'
@@ -86,6 +86,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
+  const showCashBookFeatures = isCashBookBusiness(org?.businessType || user?.businessType)
 
   const { data, isLoading } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
 
@@ -127,6 +128,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
           { Metric: 'Total Purchases', Value: data.summary.totalPurchases },
           { Metric: 'Total Expenses', Value: data.summary.totalExpenses },
           { Metric: 'My Wallet Expense', Value: data.summary.myWalletExpense },
+          { Metric: 'Cash in Hand', Value: data.summary.cashInHand },
           { Metric: 'Sales Transactions', Value: data.summary.salesTransactions },
           { Metric: 'Purchase Transactions', Value: data.summary.purchaseTransactions },
         ]
@@ -161,8 +163,8 @@ export const SalesPurchaseSummaryReport = forwardRef<
   if (isLoading) {
     return (
       <div className='space-y-4'>
-        <div className={reportKpiGridClass}>
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className={cn(reportKpiGridClass, showCashBookFeatures && 'lg:grid-cols-3 xl:grid-cols-5')}>
+          {Array.from({ length: showCashBookFeatures ? 5 : 4 }).map((_, i) => (
             <Skeleton key={i} className='h-[120px] w-full' />
           ))}
         </div>
@@ -177,7 +179,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
 
   return (
     <div className='space-y-6'>
-      <div className={reportKpiGridClass}>
+      <div className={cn(reportKpiGridClass, showCashBookFeatures && 'lg:grid-cols-3 xl:grid-cols-5')}>
         <Card className={kpiCardClass('emerald')}>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
             <CardTitle className={reportKpiLabelClass}>Total Sales</CardTitle>
@@ -241,6 +243,23 @@ export const SalesPurchaseSummaryReport = forwardRef<
             </CardContent>
           </Card>
         </Link>
+
+        {showCashBookFeatures && (
+          <Link to='/cash-book' className='block'>
+            <Card className={cn(kpiCardClass('emerald'), 'h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md')}>
+              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                <CardTitle className={reportKpiLabelClass}>Cash in Hand</CardTitle>
+                <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+                  <DollarSign className='h-4 w-4' />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className={`${reportKpiValueClass} text-emerald-600`}>{fmt(summary?.cashInHand ?? 0)}</div>
+                <p className={reportKpiSubClass}>Available cash after expenses</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
       </div>
 
       <div className={reportBreakdownGridClass}>

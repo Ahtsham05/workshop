@@ -19,7 +19,7 @@ export const PERMISSION_FALLBACKS: Partial<Record<PermissionKey, PermissionKey>>
   manageExpenses: 'viewAccounting',
   manageLedgers: 'viewAccounting',
   managePersonalWallet: 'viewAccounting',
-  viewCashBook: 'viewAccounting',
+  viewCashBook: 'viewDashboard',
   manageCashBook: 'viewCashBook',
   viewCashRegister: 'viewAccounting',
   manageCashRegister: 'viewCashRegister',

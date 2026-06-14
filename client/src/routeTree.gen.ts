@@ -18,6 +18,7 @@ import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/v
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
+import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as AuthenticatedActivitiesImport } from './routes/_authenticated/activities'
 import { Route as errors503Import } from './routes/(errors)/503'
@@ -180,6 +181,12 @@ const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
 const AuthenticatedCashRegisterRoute = AuthenticatedCashRegisterImport.update({
   id: '/cash-register',
   path: '/cash-register',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedCashBookRoute = AuthenticatedCashBookImport.update({
+  id: '/cash-book',
+  path: '/cash-book',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -1121,6 +1128,13 @@ declare module '@tanstack/react-router' {
       path: '/barcode-demo'
       fullPath: '/barcode-demo'
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/cash-book': {
+      id: '/_authenticated/cash-book'
+      path: '/cash-book'
+      fullPath: '/cash-book'
+      preLoaderRoute: typeof AuthenticatedCashBookImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/cash-register': {
@@ -2107,6 +2121,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedActivitiesRoute: typeof AuthenticatedActivitiesRoute
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
@@ -2170,6 +2185,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedActivitiesRoute: AuthenticatedActivitiesRoute,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
@@ -2257,6 +2273,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -2386,6 +2403,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
@@ -2516,6 +2534,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/activities': typeof AuthenticatedActivitiesRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -2649,6 +2668,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/barcode-demo'
+    | '/cash-book'
     | '/cash-register'
     | '/reports'
     | '/school'
@@ -2777,6 +2797,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/barcode-demo'
+    | '/cash-book'
     | '/cash-register'
     | '/reports'
     | '/voice-demo'
@@ -2905,6 +2926,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/activities'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/reports'
     | '/_authenticated/school'
@@ -3084,6 +3106,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings",
         "/_authenticated/activities",
         "/_authenticated/barcode-demo",
+        "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/reports",
         "/_authenticated/school",
@@ -3200,6 +3223,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/cash-book": {
+      "filePath": "_authenticated/cash-book.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/cash-register": {

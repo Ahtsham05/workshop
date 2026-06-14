@@ -48,3 +48,13 @@ export const isWholesaleRetailBusiness = (value?: string | null) => {
 export const isRestaurantBusiness = (value?: string | null) => {
   return normalizeBusinessType(value) === 'restaurant'
 }
+
+/** Cash Book & Track Cash — available for all org types except school and restaurant */
+export const CASH_BOOK_EXCLUDED_BUSINESS_TYPES = ['school', 'restaurant'] as const
+
+export const isCashBookBusiness = (value?: string | null) => {
+  const type = normalizeBusinessType(value)
+  return !CASH_BOOK_EXCLUDED_BUSINESS_TYPES.includes(
+    type as (typeof CASH_BOOK_EXCLUDED_BUSINESS_TYPES)[number],
+  )
+}

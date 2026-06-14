@@ -154,7 +154,7 @@ export const sidebarData: SidebarData = {
         },
         {
           title: 'Cash Book',
-          url: '/mobile-shop/cash-book',
+          url: '/cash-book',
           icon: NotebookText,
           permission: 'viewCashBook',
           excludeBusinessTypes: ['school', 'restaurant'],

@@ -176,6 +176,12 @@ const getDashboardStats = catchAsync(async (req, res) => {
       ...summary,
       cashInHand: cashBookSummary.closingBalance,
     };
+  } else if (!['school', 'restaurant'].includes(businessType)) {
+    const cashBookSummary = await cashBookService.getCashInHandSummary({
+      organizationId,
+      branchId: req.branchId,
+    });
+    mobileSummary.cashInHand = cashBookSummary.closingBalance;
   }
 
   const aggScope = buildAggregateScope(req);

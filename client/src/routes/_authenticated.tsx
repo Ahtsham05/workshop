@@ -1,5 +1,5 @@
-import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { Link } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { createFileRoute, redirect, Outlet, Link } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { AuthenticatedHeader } from '@/components/layout/authenticated-header'
 import { Main } from '@/components/layout/main'
@@ -17,6 +17,7 @@ import { deriveSchoolRole } from '@/lib/school-permissions'
 import { restoreSessionFromCache } from '@/lib/auth-cache'
 import { looksLikeJwt } from '@/lib/auth-token'
 import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
+import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
 
 /**
  * Authenticated layout component.
@@ -33,6 +34,12 @@ function AuthenticatedLayout() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
+
+  useEffect(() => {
+    if (orgData?.businessType) {
+      setActiveOrganizationBusinessType(orgData.businessType)
+    }
+  }, [orgData?.businessType])
 
   const storedUser = (() => {
     try {

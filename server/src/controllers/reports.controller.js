@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger } = require('../models');
+const { cashBookService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
@@ -2811,6 +2812,12 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
       purchases: roundReportAmount(monthlyPurchasesMap[month] || 0),
     }));
 
+  const organizationId = req.organizationId || req.user?.organizationId;
+  const cashBookSummary = await cashBookService.getCashInHandSummary({
+    organizationId,
+    branchId: req.branchId,
+  });
+
   res.status(httpStatus.OK).send({
     summary: {
       totalSales,
@@ -2819,6 +2826,7 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
       expenseCount: expenses.count,
       myWalletExpense: roundReportAmount(walletExpenses.amount),
       myWalletExpenseCount: walletExpenses.count,
+      cashInHand: roundReportAmount(cashBookSummary.closingBalance),
       salesTransactions,
       purchaseTransactions,
     },

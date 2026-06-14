@@ -47,7 +47,7 @@ const PERMISSION_HOME: Partial<Record<PermissionKey, string>> = {
   viewCategories: '/categories',
   viewSalesReturns: '/sales-returns',
   viewAccounting: '/accounting',
-  viewCashBook: '/mobile-shop/cash-book',
+  viewCashBook: '/cash-book',
   viewCashRegister: '/cash-register',
   viewAccountsSystem: '/school/accounts',
   viewWallet: '/mobile-shop/wallet',

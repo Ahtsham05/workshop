@@ -21,7 +21,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
+import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness, isCashBookBusiness } from '@/lib/business-types'
 import { getDefaultHomeRoute } from '@/lib/default-home-route'
 import {
   Smartphone,
@@ -77,6 +77,7 @@ export default function Dashboard() {
   // Show the mobile-shop dashboard section for any mobile_shop organisation.
   // Individual cards that require a paid feature are further gated inside the section.
   const showMobileCards = isMobileShopBusiness(businessType)
+  const showCashBookFeatures = isCashBookBusiness(businessType)
   const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t)
   const netProfitAfterExpense = (stats?.totalProfit || 0) - (stats?.totalExpenses || 0)
 
@@ -255,6 +256,18 @@ export default function Dashboard() {
                 link={reportLink('services')}
               />
             </>
+          )}
+          {showCashBookFeatures && !showMobileCards && (
+            <StatCard
+              title={t('Cash in Hand')}
+              value={stats?.cashInHand || 0}
+              icon={<DollarSign className='h-4 w-4' />}
+              valuePrefix='Rs '
+              description={t('Available cash after expenses')}
+              isLoading={statsLoading}
+              tone='emerald'
+              link={{ to: '/cash-book' }}
+            />
           )}
           <StatCard
             title='Total Receivable'

@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import CashBookPage from '@/features/mobile-shop/cash-book'
-import { MobileShopGuard } from '@/components/mobile-shop-guard'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/mobile-shop/cash-book')({
-  component: () => (
-    <MobileShopGuard>
-      <CashBookPage />
-    </MobileShopGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: '/cash-book' })
+  },
 })
