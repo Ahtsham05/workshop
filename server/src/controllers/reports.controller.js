@@ -2553,6 +2553,281 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
   });
 });
 
+const roundReportAmount = (value) => parseFloat((value || 0).toFixed(2));
+
+const aggregateSumCount = async (Model, match, sumExpr) => {
+  const result = await Model.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: sumExpr }, count: { $sum: 1 } } },
+  ]);
+  return { amount: result[0]?.total || 0, count: result[0]?.count || 0 };
+};
+
+const monthlyAmountMap = async (Model, dateField, sumExpr, match = {}) => {
+  const results = await Model.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m', date: `$${dateField}`, timezone: BUSINESS_TZ } },
+        total: { $sum: sumExpr },
+      },
+    },
+  ]);
+  return results.reduce((acc, row) => {
+    acc[row._id] = row.total || 0;
+    return acc;
+  }, {});
+};
+
+const mergeMonthlyTotals = (...maps) => {
+  const merged = {};
+  maps.forEach((map) => {
+    Object.entries(map).forEach(([month, amount]) => {
+      merged[month] = (merged[month] || 0) + (amount || 0);
+    });
+  });
+  return merged;
+};
+
+const billPaymentDateMatch = (start, end) => ({
+  $or: [
+    { paymentDate: { $gte: start, $lte: end } },
+    { paymentDate: { $in: [null, undefined] }, createdAt: { $gte: start, $lte: end } },
+  ],
+});
+
+const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const dateRange = (field) => ({ [field]: { $gte: start, $lte: end } });
+
+  const [
+    salesInvoices,
+    purchases,
+    salesReturns,
+    purchaseReturns,
+    expenses,
+    loadSales,
+    loadPurchases,
+    cashReceived,
+    cashSent,
+    simSales,
+    simPurchases,
+    repairSales,
+    repairPurchases,
+    services,
+    billSales,
+    billPurchases,
+    installments,
+    customerReceived,
+    customerPaid,
+    supplierReceived,
+    supplierPaid,
+    walletExpenses,
+  ] = await Promise.all([
+    aggregateSumCount(
+      Invoice,
+      { ...scope, ...dateRange('invoiceDate'), status: { $ne: 'cancelled' } },
+      '$total',
+    ),
+    aggregateSumCount(Purchase, { ...scope, ...dateRange('purchaseDate') }, '$totalAmount'),
+    aggregateSumCount(
+      SalesReturn,
+      { ...scope, ...dateRange('date'), status: { $ne: 'rejected' } },
+      '$totalAmount',
+    ),
+    aggregateSumCount(
+      PurchaseReturn,
+      { ...scope, ...dateRange('date'), status: { $ne: 'rejected' } },
+      '$totalAmount',
+    ),
+    aggregateSumCount(Expense, { ...scope, ...dateRange('date') }, '$amount'),
+    aggregateSumCount(LoadTransaction, { ...scope, ...dateRange('date') }, { $ifNull: ['$receivedAmount', '$amount'] }),
+    aggregateSumCount(LoadPurchase, { ...scope, ...dateRange('date') }, '$amount'),
+    aggregateSumCount(
+      CashWithdrawal,
+      { ...scope, ...dateRange('date'), transactionType: 'withdrawal' },
+      '$amount',
+    ),
+    aggregateSumCount(
+      CashWithdrawal,
+      { ...scope, ...dateRange('date'), transactionType: 'deposit' },
+      '$amount',
+    ),
+    aggregateSumCount(SimSale, { ...scope, ...dateRange('date') }, '$saleAmount'),
+    aggregateSumCount(SimSale, { ...scope, ...dateRange('date') }, '$purchaseAmount'),
+    aggregateSumCount(RepairJob, { ...scope, ...dateRange('date') }, '$charges'),
+    aggregateSumCount(RepairJob, { ...scope, ...dateRange('date') }, { $ifNull: ['$cost', 0] }),
+    aggregateSumCount(ServiceInvoice, { ...scope, ...dateRange('date') }, '$totalAmount'),
+    aggregateSumCount(
+      BillPayment,
+      { ...scope, ...billPaymentDateMatch(start, end) },
+      '$totalReceived',
+    ),
+    aggregateSumCount(
+      BillPayment,
+      { ...scope, ...billPaymentDateMatch(start, end) },
+      '$billAmount',
+    ),
+    aggregateSumCount(InstallmentPayment, { ...scope, ...dateRange('date') }, '$amount'),
+    aggregateSumCount(
+      CustomerLedger,
+      { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_received' },
+      '$credit',
+    ),
+    aggregateSumCount(
+      CustomerLedger,
+      { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' },
+      '$debit',
+    ),
+    aggregateSumCount(
+      SupplierLedger,
+      { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_received' },
+      '$credit',
+    ),
+    aggregateSumCount(
+      SupplierLedger,
+      { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' },
+      '$debit',
+    ),
+    aggregateSumCount(
+      PersonalLedger,
+      { ...scope, ...dateRange('transactionDate'), transactionType: 'expense' },
+      '$debit',
+    ),
+  ]);
+
+  const modules = [
+    { module: 'Sales', sales: salesInvoices.amount, purchases: 0, salesCount: salesInvoices.count, purchaseCount: 0, mobileOnly: false },
+    { module: 'Purchases', sales: 0, purchases: purchases.amount, salesCount: 0, purchaseCount: purchases.count, mobileOnly: false },
+    { module: 'Sales Returns', sales: 0, purchases: salesReturns.amount, salesCount: 0, purchaseCount: salesReturns.count, mobileOnly: false },
+    { module: 'Purchase Returns', sales: purchaseReturns.amount, purchases: 0, salesCount: purchaseReturns.count, purchaseCount: 0, mobileOnly: false },
+    { module: 'Load Sale', sales: loadSales.amount, purchases: 0, salesCount: loadSales.count, purchaseCount: 0, mobileOnly: true },
+    { module: 'Load Purchase', sales: 0, purchases: loadPurchases.amount, salesCount: 0, purchaseCount: loadPurchases.count, mobileOnly: true },
+    { module: 'Cash Received', sales: cashReceived.amount, purchases: 0, salesCount: cashReceived.count, purchaseCount: 0, mobileOnly: true },
+    { module: 'Cash Sent', sales: 0, purchases: cashSent.amount, salesCount: 0, purchaseCount: cashSent.count, mobileOnly: true },
+    { module: 'Sim Sale', sales: simSales.amount, purchases: simPurchases.amount, salesCount: simSales.count, purchaseCount: simPurchases.count, mobileOnly: true },
+    { module: 'Repairing', sales: repairSales.amount, purchases: repairPurchases.amount, salesCount: repairSales.count, purchaseCount: repairPurchases.count, mobileOnly: true },
+    { module: 'Services', sales: services.amount, purchases: 0, salesCount: services.count, purchaseCount: 0, mobileOnly: true },
+    { module: 'Bill Payments', sales: billSales.amount, purchases: billPurchases.amount, salesCount: billSales.count, purchaseCount: billPurchases.count, mobileOnly: true },
+    { module: 'Installments', sales: installments.amount, purchases: 0, salesCount: installments.count, purchaseCount: 0, mobileOnly: true },
+    { module: 'Expenses', sales: 0, purchases: expenses.amount, salesCount: 0, purchaseCount: expenses.count, mobileOnly: false },
+    { module: 'Customer Payments', sales: customerReceived.amount, purchases: customerPaid.amount, salesCount: customerReceived.count, purchaseCount: customerPaid.count, mobileOnly: false },
+    { module: 'Supplier Payments', sales: supplierReceived.amount, purchases: supplierPaid.amount, salesCount: supplierReceived.count, purchaseCount: supplierPaid.count, mobileOnly: false },
+    { module: 'Wallet Expense', sales: 0, purchases: walletExpenses.amount, salesCount: 0, purchaseCount: walletExpenses.count, mobileOnly: true },
+  ].map((row) => ({
+    ...row,
+    sales: roundReportAmount(row.sales),
+    purchases: roundReportAmount(row.purchases),
+  }));
+
+  const totalSales = roundReportAmount(modules.reduce((sum, row) => sum + row.sales, 0));
+  const totalPurchases = roundReportAmount(modules.reduce((sum, row) => sum + row.purchases, 0));
+  const salesTransactions = modules.reduce((sum, row) => sum + row.salesCount, 0);
+  const purchaseTransactions = modules.reduce((sum, row) => sum + row.purchaseCount, 0);
+
+  const [
+    salesByMonth,
+    purchaseReturnsByMonth,
+    loadSalesByMonth,
+    cashReceivedByMonth,
+    simSalesByMonth,
+    repairSalesByMonth,
+    servicesByMonth,
+    billSalesByMonth,
+    installmentsByMonth,
+    customerReceivedByMonth,
+    supplierReceivedByMonth,
+    purchasesByMonth,
+    salesReturnsByMonth,
+    expensesByMonth,
+    loadPurchasesByMonth,
+    cashSentByMonth,
+    simPurchasesByMonth,
+    repairPurchasesByMonth,
+    billPurchasesByMonth,
+    customerPaidByMonth,
+    supplierPaidByMonth,
+    walletExpensesByMonth,
+  ] = await Promise.all([
+    monthlyAmountMap(Invoice, 'invoiceDate', '$total', { ...scope, ...dateRange('invoiceDate'), status: { $ne: 'cancelled' } }),
+    monthlyAmountMap(PurchaseReturn, 'date', '$totalAmount', { ...scope, ...dateRange('date'), status: { $ne: 'rejected' } }),
+    monthlyAmountMap(LoadTransaction, 'date', { $ifNull: ['$receivedAmount', '$amount'] }, { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(CashWithdrawal, 'date', '$amount', { ...scope, ...dateRange('date'), transactionType: 'withdrawal' }),
+    monthlyAmountMap(SimSale, 'date', '$saleAmount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(RepairJob, 'date', '$charges', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(ServiceInvoice, 'date', '$totalAmount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(BillPayment, 'paymentDate', '$totalReceived', { ...scope, ...billPaymentDateMatch(start, end) }),
+    monthlyAmountMap(InstallmentPayment, 'date', '$amount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(CustomerLedger, 'transactionDate', '$credit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_received' }),
+    monthlyAmountMap(SupplierLedger, 'transactionDate', '$credit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_received' }),
+    monthlyAmountMap(Purchase, 'purchaseDate', '$totalAmount', { ...scope, ...dateRange('purchaseDate') }),
+    monthlyAmountMap(SalesReturn, 'date', '$totalAmount', { ...scope, ...dateRange('date'), status: { $ne: 'rejected' } }),
+    monthlyAmountMap(Expense, 'date', '$amount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(LoadPurchase, 'date', '$amount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(CashWithdrawal, 'date', '$amount', { ...scope, ...dateRange('date'), transactionType: 'deposit' }),
+    monthlyAmountMap(SimSale, 'date', '$purchaseAmount', { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(RepairJob, 'date', { $ifNull: ['$cost', 0] }, { ...scope, ...dateRange('date') }),
+    monthlyAmountMap(BillPayment, 'paymentDate', '$billAmount', { ...scope, ...billPaymentDateMatch(start, end) }),
+    monthlyAmountMap(CustomerLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' }),
+    monthlyAmountMap(SupplierLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' }),
+    monthlyAmountMap(PersonalLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'expense' }),
+  ]);
+
+  const monthlySalesMap = mergeMonthlyTotals(
+    salesByMonth,
+    purchaseReturnsByMonth,
+    loadSalesByMonth,
+    cashReceivedByMonth,
+    simSalesByMonth,
+    repairSalesByMonth,
+    servicesByMonth,
+    billSalesByMonth,
+    installmentsByMonth,
+    customerReceivedByMonth,
+    supplierReceivedByMonth,
+  );
+  const monthlyPurchasesMap = mergeMonthlyTotals(
+    purchasesByMonth,
+    salesReturnsByMonth,
+    expensesByMonth,
+    loadPurchasesByMonth,
+    cashSentByMonth,
+    simPurchasesByMonth,
+    repairPurchasesByMonth,
+    billPurchasesByMonth,
+    customerPaidByMonth,
+    supplierPaidByMonth,
+    walletExpensesByMonth,
+  );
+
+  const monthly = Array.from(
+    new Set([...Object.keys(monthlySalesMap), ...Object.keys(monthlyPurchasesMap)]),
+  )
+    .sort()
+    .map((month) => ({
+      month,
+      sales: roundReportAmount(monthlySalesMap[month] || 0),
+      purchases: roundReportAmount(monthlyPurchasesMap[month] || 0),
+    }));
+
+  res.status(httpStatus.OK).send({
+    summary: {
+      totalSales,
+      totalPurchases,
+      totalExpenses: roundReportAmount(expenses.amount),
+      expenseCount: expenses.count,
+      myWalletExpense: roundReportAmount(walletExpenses.amount),
+      myWalletExpenseCount: walletExpenses.count,
+      salesTransactions,
+      purchaseTransactions,
+    },
+    modules,
+    monthly,
+    period: { startDate: start, endDate: end },
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -2564,4 +2839,5 @@ module.exports = {
   getRoiReport, getMonthlyRoi,
   getSimSaleReport, getInstallmentReport,
   getActivitySummaryReport,
+  getSalesPurchaseSummaryReport,
 };

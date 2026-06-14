@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
@@ -222,6 +222,55 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const netSales = totalRevenue - totalSalesReturns;
   const netPurchase = totalPurchases - totalPurchaseReturns;
 
+  const aggScopeBalances = buildAggregateScope(req);
+  const expenseDateFilter = buildDateMatch('transactionDate', startDate, endDate);
+  const [receivablesAgg, payablesAgg, walletExpenseAgg] = await Promise.all([
+    Customer.aggregate([
+      { $match: aggScopeBalances },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $max: [0, { $ifNull: ['$balance', 0] }] } },
+          count: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$balance', 0] }, 0] }, 1, 0] } },
+        },
+      },
+    ]),
+    Supplier.aggregate([
+      { $match: aggScopeBalances },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $max: [0, { $ifNull: ['$balance', 0] }] } },
+          count: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$balance', 0] }, 0] }, 1, 0] } },
+        },
+      },
+    ]),
+    PersonalLedger.aggregate([
+      {
+        $match: {
+          ...aggScopeBalances,
+          ...expenseDateFilter,
+          transactionType: 'expense',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ['$debit', 0] } },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const round2 = (n) => parseFloat((n || 0).toFixed(2));
+  const totalReceivable = round2(receivablesAgg[0]?.total || 0);
+  const totalPayable = round2(payablesAgg[0]?.total || 0);
+  const myWalletExpense = round2(walletExpenseAgg[0]?.total || 0);
+  const myWalletExpenseCount = walletExpenseAgg[0]?.count || 0;
+  const receivableCount = receivablesAgg[0]?.count || 0;
+  const payableCount = payablesAgg[0]?.count || 0;
+
   if (businessType !== 'mobile_shop') {
     mobileSummary.totalProfit = mobileSummary.grossProfit ?? salesProfit;
     if (mobileSummary.totalInvestment > 0) {
@@ -252,6 +301,12 @@ const getDashboardStats = catchAsync(async (req, res) => {
     purchaseReturnCount,
     netSales,
     netPurchase,
+    totalReceivable,
+    totalPayable,
+    myWalletExpense,
+    myWalletExpenseCount,
+    receivableCount,
+    payableCount,
     period: {
       preset: dateRange.period,
       startDate: dateRange.startCalendar,

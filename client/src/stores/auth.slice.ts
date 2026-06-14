@@ -3,6 +3,7 @@ import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuild
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
 import { looksLikeJwt } from "@/lib/auth-token";
+import { clearAllAuthStorage } from "@/lib/auth-cache";
 
 interface AuthState {
   data: any | null;
@@ -156,16 +157,11 @@ const authSlice = createSlice({
       .addCase(refreshToken.fulfilled, (state, action) => {
         state.data = { ...state?.data, tokens: action.payload}; // Assuming payload has the user data
       })
-      .addCase(logout.fulfilled, (state, action) => {
-        console.log("logout",action.payload);
+      .addCase(logout.fulfilled, (state) => {
         state.data = null;
         state.activeBranchId = null;
         state.activeBranchName = null;
-        localStorage.removeItem("user");
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("activeBranchId");
-        localStorage.removeItem("activeBranchName");
+        clearAllAuthStorage();
       })
       .addMatcher(
         isAnyOf(

@@ -1,32 +1,32 @@
 import { useDispatch } from 'react-redux'
-import { useNavigate } from '@tanstack/react-router'
 import { AppDispatch } from '@/stores/store'
-import { setActiveBranch, setUser } from '@/stores/auth.slice'
+import { logout, setActiveBranch, setUser } from '@/stores/auth.slice'
 import { useAuth } from '@/context/auth-context'
+import { clearAllAuthStorage } from '@/lib/auth-cache'
 import toast from 'react-hot-toast'
 
 export function useLogout() {
   const dispatch = useDispatch<AppDispatch>()
-  const navigate = useNavigate()
   const { clearOfflineMode } = useAuth()
 
-  const handleLogout = () => {
-    // Clear client auth state immediately (no API dependency).
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem('refreshToken')
+
+    try {
+      if (refreshToken) {
+        await dispatch(logout({ refreshToken })).unwrap()
+      }
+    } catch {
+      // Still clear local session even if the API call fails.
+    }
+
     dispatch(setUser(null))
     dispatch(setActiveBranch(null))
     clearOfflineMode()
+    clearAllAuthStorage()
 
-    // Clear persisted auth data.
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('user')
-    localStorage.removeItem('activeBranchId')
-    localStorage.removeItem('activeBranchName')
     toast.success('Logged out successfully')
-
-    // Force hard navigation to break out of any pending guarded route state.
-    navigate({ to: '/sign-in', search: { redirect: '/' }, replace: true })
-    window.location.assign('/sign-in')
+    window.location.href = '/sign-in'
   }
 
   return { logout: handleLogout }

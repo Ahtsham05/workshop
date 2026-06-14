@@ -75,6 +75,26 @@ export async function restoreSessionFromCache(): Promise<boolean> {
   return true
 }
 
+/** Remove offline/cached credentials so logout cannot auto-restore the session. */
+export function clearAuthCache(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(AUTH_CACHE_KEYS.user)
+  localStorage.removeItem(AUTH_CACHE_KEYS.token)
+  localStorage.removeItem(AUTH_CACHE_KEYS.email)
+}
+
+/** Clear all client-side auth/session keys used by login, offline mode, and branch scope. */
+export function clearAllAuthStorage(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
+  localStorage.removeItem('user')
+  localStorage.removeItem('activeBranchId')
+  localStorage.removeItem('activeBranchName')
+  localStorage.removeItem('offlineMode')
+  clearAuthCache()
+}
+
 function normalizeLoginIdentifier(value: string): string {
   return value.trim().toLowerCase()
 }

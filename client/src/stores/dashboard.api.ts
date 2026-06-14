@@ -90,6 +90,12 @@ export interface DashboardStats {
   cashReceivedCount?: number
   totalServiceIncome?: number
   serviceInvoiceCount?: number
+  totalReceivable?: number
+  totalPayable?: number
+  myWalletExpense?: number
+  myWalletExpenseCount?: number
+  receivableCount?: number
+  payableCount?: number
   period?: {
     preset: string
     startDate: string

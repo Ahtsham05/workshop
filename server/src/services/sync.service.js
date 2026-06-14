@@ -454,6 +454,7 @@ const REPORT_PREFETCH_URLS = [
   '/reports/sim-sales?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/installments?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/activity-summary?startDate=2020-01-01&endDate=2030-12-31',
+  '/reports/sales-purchase-summary?startDate=2020-01-01&endDate=2030-12-31',
 ];
 
 const BASE_PREFETCH_URLS = [

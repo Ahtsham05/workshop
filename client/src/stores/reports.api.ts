@@ -702,10 +702,35 @@ export interface ActivitySummaryReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface SalesPurchaseModuleRow {
+  module: string
+  sales: number
+  purchases: number
+  salesCount: number
+  purchaseCount: number
+  mobileOnly: boolean
+}
+
+export interface SalesPurchaseSummaryReport {
+  summary: {
+    totalSales: number
+    totalPurchases: number
+    totalExpenses: number
+    expenseCount: number
+    myWalletExpense: number
+    myWalletExpenseCount: number
+    salesTransactions: number
+    purchaseTransactions: number
+  }
+  modules: SalesPurchaseModuleRow[]
+  monthly: { month: string; sales: number; purchases: number }[]
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -991,6 +1016,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['ActivitySummaryReport'],
     }),
+    getSalesPurchaseSummaryReport: builder.query<SalesPurchaseSummaryReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/sales-purchase-summary?${searchParams.toString()}`
+      },
+      providesTags: ['SalesPurchaseSummaryReport'],
+    }),
   }),
 })
 
@@ -1022,4 +1056,5 @@ export const {
   useLazyGetSimSaleReportQuery,
   useGetInstallmentReportQuery,
   useGetActivitySummaryReportQuery,
+  useGetSalesPurchaseSummaryReportQuery,
 } = reportsApi

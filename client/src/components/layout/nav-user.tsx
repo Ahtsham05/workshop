@@ -43,7 +43,7 @@ export function NavUser({
   const { logout: handleLogout } = useLogout()
   
   const logoutHandler = () => {
-    handleLogout()
+    void handleLogout()
   }
   return (
     <SidebarMenu>
@@ -114,7 +114,12 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logoutHandler}>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                logoutHandler()
+              }}
+            >
               <LogOut />
               {t('log_out') || 'Log out'}
             </DropdownMenuItem>

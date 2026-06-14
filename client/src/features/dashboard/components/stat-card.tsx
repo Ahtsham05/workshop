@@ -1,12 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import {
-  STAT_CARD_TONE_STYLES,
-  type StatCardTone,
-} from '@/lib/stat-card-tones'
+import { toneColor, type StatCardTone } from '@/lib/stat-card-tones'
 
 export type { StatCardTone }
 
@@ -25,11 +22,19 @@ interface StatCardProps {
   isLoading?: boolean
   valuePrefix?: string
   valueSuffix?: string
-  /** Dark gradient + accent — defaults to slate */
   tone?: StatCardTone
-  /** Navigate to a related page or report */
   link?: StatCardLink
   onClick?: () => void
+}
+
+function formatValue(
+  value: string | number,
+  valuePrefix: string,
+  valueSuffix: string,
+): string {
+  const core =
+    typeof value === 'number' ? value.toLocaleString() : value
+  return `${valuePrefix}${core}${valueSuffix}`
 }
 
 function StatCardContent({
@@ -44,48 +49,70 @@ function StatCardContent({
   tone = 'slate',
   interactive = false,
 }: Omit<StatCardProps, 'isLoading' | 'link' | 'onClick'> & { interactive?: boolean }) {
+  const color = toneColor(tone)
   const isPositive = trend === 'up' || (change !== undefined && change >= 0)
-  const styles = STAT_CARD_TONE_STYLES[tone]
+  const displayValue = formatValue(value, valuePrefix, valueSuffix)
+  const barWidth =
+    change !== undefined ? Math.min(Math.abs(change), 100) : null
 
   return (
-    <Card
+    <div
       className={cn(
-        'transition-all duration-200',
-        interactive ? 'hover:shadow-lg hover:-translate-y-0.5' : 'hover:shadow-md',
-        styles.card
+        'flex h-full w-full flex-col rounded-xl border bg-card p-4 text-left shadow-sm transition-all',
+        interactive && 'group cursor-pointer hover:border-primary/50 hover:shadow-md',
       )}
     >
-      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-        <CardTitle className='text-sm font-medium'>{title}</CardTitle>
-        <div className={cn('shrink-0', styles.iconWrap)}>{icon}</div>
-      </CardHeader>
-      <CardContent>
-        <div className='text-2xl font-bold tracking-tight'>
-          {valuePrefix}
-          {typeof value === 'number' ? value.toLocaleString() : value}
-          {valueSuffix}
-        </div>
-        {(change !== undefined || description) && (
-          <div className='mt-1 space-y-1 text-xs text-muted-foreground'>
-            {change !== undefined && (
-              <div
-                className={`flex items-center gap-1 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}
-              >
-                {isPositive ? (
-                  <TrendingUp className='h-3 w-3' />
-                ) : (
-                  <TrendingDown className='h-3 w-3' />
-                )}
-                <span className='font-medium'>
-                  {Math.abs(change).toFixed(1)}%
-                </span>
-              </div>
+      <div className='mb-3 flex items-center justify-between gap-2'>
+        <span
+          className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white [&_svg]:h-4 [&_svg]:w-4'
+          style={{ backgroundColor: color }}
+        >
+          {icon}
+        </span>
+        {change !== undefined && (
+          <Badge
+            variant='secondary'
+            className={cn(
+              'gap-1 text-xs tabular-nums',
+              isPositive
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                : 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
             )}
-            {description && <p>{description}</p>}
-          </div>
+          >
+            {isPositive ? (
+              <TrendingUp className='h-3 w-3' />
+            ) : (
+              <TrendingDown className='h-3 w-3' />
+            )}
+            {Math.abs(change).toFixed(1)}%
+          </Badge>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      <p className='mb-0.5 line-clamp-2 text-sm font-semibold leading-tight'>{title}</p>
+      <p className='text-xl font-bold tabular-nums' style={{ color }}>
+        {displayValue}
+      </p>
+
+      {description && (
+        <p className='mt-2 line-clamp-2 text-xs text-muted-foreground'>{description}</p>
+      )}
+
+      {barWidth !== null && (
+        <div className='mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted'>
+          <div
+            className='h-full rounded-full transition-all'
+            style={{ width: `${barWidth}%`, backgroundColor: color }}
+          />
+        </div>
+      )}
+
+      {interactive && (
+        <p className='mt-1.5 text-xs text-primary opacity-0 transition-opacity group-hover:opacity-100'>
+          View details →
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -103,23 +130,19 @@ export function StatCard({
   link,
   onClick,
 }: StatCardProps) {
-  const styles = STAT_CARD_TONE_STYLES[tone]
   const interactive = Boolean(link || onClick)
 
   if (isLoading) {
     return (
-      <Card className={cn('hover:shadow-md transition-shadow duration-200', styles.card)}>
-        <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-          <CardTitle className='text-sm font-medium'>
-            <Skeleton className={cn('h-4 w-24', styles.skeleton)} />
-          </CardTitle>
-          <Skeleton className={cn('h-9 w-9 rounded-xl', styles.skeleton)} />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className={cn('mb-2 h-8 w-32', styles.skeleton)} />
-          <Skeleton className={cn('h-3 w-40', styles.skeleton)} />
-        </CardContent>
-      </Card>
+      <div className='h-full rounded-xl border bg-card p-4 shadow-sm'>
+        <div className='mb-3 flex items-center justify-between'>
+          <Skeleton className='h-9 w-9 rounded-lg' />
+          <Skeleton className='h-5 w-14 rounded-full' />
+        </div>
+        <Skeleton className='mb-2 h-4 w-28' />
+        <Skeleton className='mb-3 h-7 w-24' />
+        <Skeleton className='h-3 w-full' />
+      </div>
     )
   }
 
@@ -143,7 +166,7 @@ export function StatCard({
       <Link
         to={link.to}
         search={link.search}
-        className='block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        className='block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
       >
         {content}
       </Link>
@@ -162,7 +185,7 @@ export function StatCard({
             onClick()
           }
         }}
-        className='cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        className='h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
       >
         {content}
       </div>

@@ -18,7 +18,7 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp } from 'lucide-react'
+import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness } from '@/lib/business-types'
@@ -120,10 +120,10 @@ export default function Dashboard() {
           <QuickActions />
         </div>
 
-        {/* Mobile Shop — operations */}
-        {showMobileCards && (
-          <>
-            <div className={DASHBOARD_CARD_GRID}>
+        {/* KPI cards — single flowing grid (5 per row on xl) */}
+        <div className={DASHBOARD_CARD_GRID}>
+          {showMobileCards && (
+            <>
               <StatCard
                 title={t('Cash in Hand')}
                 value={stats?.cashInHand || 0}
@@ -186,9 +186,6 @@ export default function Dashboard() {
                 tone='orange'
                 link={reportLink('repair')}
               />
-            </div>
-
-            <div className={DASHBOARD_CARD_GRID}>
               <StatCard
                 title={t('Bill Collection')}
                 value={stats?.totalBillCollection || 0}
@@ -257,9 +254,44 @@ export default function Dashboard() {
                 tone='emerald'
                 link={reportLink('services')}
               />
-            </div>
-
-            <div className='mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2'>
+            </>
+          )}
+          <StatCard
+            title='Total Receivable'
+            value={stats?.totalReceivable || 0}
+            icon={<Users className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={`${stats?.receivableCount || 0} ${t('customers')} · ${t('customers_ledger')}`}
+            isLoading={statsLoading}
+            tone='cyan'
+            link={{ to: '/accounting', search: { tab: 'customers' } }}
+          />
+          <StatCard
+            title='Total Payable'
+            value={stats?.totalPayable || 0}
+            icon={<Building2 className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={`${stats?.payableCount || 0} ${t('suppliers')} · ${t('suppliers_ledger')}`}
+            isLoading={statsLoading}
+            tone='amber'
+            link={{ to: '/accounting', search: { tab: 'suppliers' } }}
+          />
+          <StatCard
+            title='My Wallet'
+            value={stats?.myWalletExpense || 0}
+            icon={<Wallet className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={
+              stats?.myWalletExpenseCount
+                ? `${stats.myWalletExpenseCount} ${t('entries')} · ${t('total_money_out_expense')}`
+                : t('total_money_out_expense')
+            }
+            isLoading={statsLoading}
+            tone='rose'
+            link={{ to: '/accounting', search: { tab: 'wallet' } }}
+          />
+          {showMobileCards && (
+            <>
               <StatCard
                 title={t('Send')}
                 value={stats?.totalCashSend || 0}
@@ -288,12 +320,8 @@ export default function Dashboard() {
                 tone='sky'
                 link={{ to: '/mobile-shop/cash-management' }}
               />
-            </div>
-          </>
-        )}
-
-        {/* Business summary — ordered rows of 5 */}
-        <div className={DASHBOARD_CARD_GRID}>
+            </>
+          )}
           <StatCard
             title={t('Total Revenue')}
             value={stats?.totalRevenue || 0}

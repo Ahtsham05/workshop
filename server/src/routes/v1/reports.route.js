@@ -62,6 +62,10 @@ router
   .route('/activity-summary')
   .get(auth('viewReports'), reportsController.getActivitySummaryReport);
 
+router
+  .route('/sales-purchase-summary')
+  .get(auth('viewReports'), reportsController.getSalesPurchaseSummaryReport);
+
 module.exports = router;
 
 /**

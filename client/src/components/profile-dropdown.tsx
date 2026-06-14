@@ -28,9 +28,8 @@ export function ProfileDropdown() {
   const { isInstallable, install } = usePWAInstall()
   const { logout: safeLogout } = useLogout()
   
-  const logoutHandler = async () => {
-    safeLogout()
-    toast.success(t('logout_success'))
+  const logoutHandler = () => {
+    void safeLogout()
   }
 
   const handleInstallApp = async () => {
@@ -118,7 +117,12 @@ export function ProfileDropdown() {
           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logoutHandler}>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            logoutHandler()
+          }}
+        >
           {t('log_out')}
           <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
         </DropdownMenuItem>
