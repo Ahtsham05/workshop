@@ -69,11 +69,11 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
               className="object-cover"
             />
             <AvatarFallback className="bg-primary/10">
-              {category.name.charAt(0).toUpperCase()}
+              {(category.name?.charAt(0) || '?').toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className={getTextClasses(category.name, 'shrink-0 font-medium')}>{category.name}</span>
+            <span className={getTextClasses(category.name || 'Unnamed category', 'shrink-0 font-medium')}>{category.name || 'Unnamed category'}</span>
             {urdu ? (
               <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
                 {urdu}

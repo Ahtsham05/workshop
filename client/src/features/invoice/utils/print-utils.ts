@@ -1,5 +1,6 @@
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
+import { isElectronApp } from '@/lib/sync/electron'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
 import {
   buildPrintActionsLabels,
@@ -1743,36 +1744,30 @@ export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContac
   ensureInvoicePrintPdfBridge()
   if (contact) stashPrintContact(contact)
 
-  const printWindow = window.open('', '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
-  
-  if (printWindow) {
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    
-    // Wait for all resources including fonts and images to load
-    const waitForLoad = () => {
-      if (printWindow.document.readyState === 'complete') {
-        // Additional delay to ensure fonts are rendered
-        setTimeout(() => {
-          try {
-            printWindow.print()
-          } catch (error) {
-            console.error('Print error:', error)
-            // Fallback: close window if print fails
-            printWindow.close()
-          }
-        }, 1000)
-      } else {
-        setTimeout(waitForLoad, 100)
-      }
-    }
-    
-    printWindow.onload = waitForLoad
-    // Fallback in case onload doesn't trigger
-    setTimeout(waitForLoad, 500)
-  } else {
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const printWindow = window.open(blobUrl, '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
+
+  if (!printWindow) {
+    URL.revokeObjectURL(blobUrl)
     throw new Error('Unable to open print window. Please check your popup blocker.')
   }
+
+  printWindow.addEventListener(
+    'load',
+    () => {
+      URL.revokeObjectURL(blobUrl)
+      if (isElectronApp()) return
+      setTimeout(() => {
+        try {
+          printWindow.print()
+        } catch (error) {
+          console.error('Print error:', error)
+        }
+      }, 1000)
+    },
+    { once: true },
+  )
 }
 
 export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowContact): void => {
@@ -1781,71 +1776,28 @@ export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowCont
   ensureInvoicePrintPdfBridge()
   if (contact) stashPrintContact(contact)
 
-  const printWindow = window.open('', '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
-  
-  if (printWindow) {
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    
-    // Wait for all resources including fonts and images to load
-    const waitForLoad = () => {
-      if (printWindow.document.readyState === 'complete') {
-        // Check if fonts are loaded
-        if (printWindow.document.fonts && printWindow.document.fonts.status === 'loaded') {
-          // Additional delay to ensure everything is rendered properly
-          setTimeout(() => {
-            try {
-              printWindow.print()
-            } catch (error) {
-              console.error('A4 Print error:', error)
-              // Fallback: close window if print fails
-              printWindow.close()
-            }
-          }, 1500)
-        } else {
-          // Wait for fonts to load
-          if (printWindow.document.fonts && printWindow.document.fonts.ready) {
-            printWindow.document.fonts.ready.then(() => {
-              setTimeout(() => {
-                try {
-                  printWindow.print()
-                } catch (error) {
-                  console.error('A4 Print error:', error)
-                  printWindow.close()
-                }
-              }, 1000)
-            }).catch(() => {
-              // If font loading fails, still try to print
-              setTimeout(() => {
-                try {
-                  printWindow.print()
-                } catch (error) {
-                  console.error('A4 Print error:', error)
-                  printWindow.close()
-                }
-              }, 1000)
-            })
-          } else {
-            // Fallback if fonts API not available
-            setTimeout(() => {
-              try {
-                printWindow.print()
-              } catch (error) {
-                console.error('A4 Print error:', error)
-                printWindow.close()
-              }
-            }, 1500)
-          }
-        }
-      } else {
-        setTimeout(waitForLoad, 100)
-      }
-    }
-    
-    printWindow.onload = waitForLoad
-    // Fallback in case onload doesn't trigger
-    setTimeout(waitForLoad, 500)
-  } else {
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const printWindow = window.open(blobUrl, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
+
+  if (!printWindow) {
+    URL.revokeObjectURL(blobUrl)
     throw new Error('Unable to open print window. Please check your popup blocker.')
   }
+
+  printWindow.addEventListener(
+    'load',
+    () => {
+      URL.revokeObjectURL(blobUrl)
+      if (isElectronApp()) return
+      setTimeout(() => {
+        try {
+          printWindow.print()
+        } catch (error) {
+          console.error('A4 Print error:', error)
+        }
+      }, 1500)
+    },
+    { once: true },
+  )
 }

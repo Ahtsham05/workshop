@@ -4,38 +4,44 @@ Electron desktop app with **SQLite** local storage — no MongoDB or Node.js on 
 
 ## How deployment works
 
+The desktop app **includes and auto-starts the Express API** on `http://127.0.0.1:3000` when you open it. Client PCs do **not** need Node.js or a separate terminal — double-click the app and both the UI and backend run together.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  YOUR SERVER (one place — cloud, VPS, or shop back-office) │
-│  Express API + MongoDB                                   │
-│  Always running (you manage this once)                   │
-└───────────────────────────┬─────────────────────────────┘
-                            │ HTTPS / LAN
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-   Cashier PC 1        Cashier PC 2        Cashier PC 3
-   (installer only)    (installer only)    (installer only)
-   Double-click app    Double-click app    Double-click app
+│  Logix Plus Desktop (single app window)                  │
+│  ┌─────────────────┐    ┌─────────────────────────────┐ │
+│  │ React UI        │───▶│ Embedded Express API :3000  │ │
+│  │ (Electron)      │    │ (auto-started on launch)    │ │
+│  └────────┬────────┘    └──────────────┬──────────────┘ │
+│           │ SQLite offline cache        │ HTTPS when online│
+└───────────┼─────────────────────────────┼─────────────────┘
+            │                             ▼
+            │              MongoDB Atlas (cloud) when online
+            └─ offline invoices queue locally
 ```
 
-- **Client PCs** install the desktop app only. Double-click the shortcut — no terminal, no Node.js.
-- **Your server** runs separately (hosted or on one shop machine). All desktops connect to it over the network.
-- **Offline**: invoices queue locally in SQLite; they sync when the network is back.
+- **Client PCs** install the desktop app only. Double-click — no terminal, no manual `npm start`.
+- **MongoDB** stays in the cloud (Atlas). When offline, login uses cached credentials and invoices queue in local SQLite.
+- **Online**: embedded API connects to MongoDB Atlas automatically when internet is available.
 
 ---
 
 ## For you (developer): build the installer
 
-### 1. Set the server URL
+### 1. Configure server credentials (bundled into the app)
 
-Copy the example env file and set your production API URL (must include `/v1`):
+The desktop installer embeds your Express API. Before building, set MongoDB and JWT in `server/.env.production`:
 
 ```bash
-cp desktop/.env.production.example desktop/.env.production
-# Edit: VITE_BACKEND_URL=https://your-server.com/v1
+cp server/.env.example server/.env.production
+# Edit: MONGODB_URL, JWT_SECRET, etc.
 ```
 
-For a shop LAN server use e.g. `http://192.168.1.100:3000/v1`.
+The build copies this to `desktop/server.env` automatically. The app API URL defaults to the embedded backend:
+
+`http://127.0.0.1:3000/v1`
+
+Optional: override in `desktop/.env.production` only if pointing at a remote server instead.
 
 ### 2. Build on Ubuntu (`.deb` + AppImage)
 

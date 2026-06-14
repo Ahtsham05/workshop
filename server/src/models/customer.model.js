@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const syncVersionPlugin = require('./plugins/syncVersion.plugin');
 
 const CustomerSchema = new mongoose.Schema({
   organizationId: {
@@ -49,6 +50,7 @@ const CustomerSchema = new mongoose.Schema({
 CustomerSchema.index({ organizationId: 1, branchId: 1 });
 
 // Add plugin that converts mongoose to json
+CustomerSchema.plugin(syncVersionPlugin);
 CustomerSchema.plugin(toJSON);
 CustomerSchema.plugin(paginate);
 

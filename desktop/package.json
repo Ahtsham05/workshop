@@ -30,13 +30,38 @@
       "out/renderer/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "../server",
+        "to": "server",
+        "filter": [
+          "**/*",
+          "!**/.git/**",
+          "!**/coverage/**",
+          "!**/logs/**",
+          "!**/*.test.js",
+          "!**/tests/**"
+        ]
+      },
+      {
+        "from": "server.env",
+        "to": "server.env"
+      }
+    ],
     "asar": true,
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**/*"
     ],
     "npmRebuild": true,
     "linux": {
-      "target": ["deb", "AppImage"],
+      "target": [
+        "deb",
+        "AppImage"
+      ],
       "category": "Office",
       "maintainer": "Logix Plus Solutions <support@logixplus.com>",
       "synopsis": "Logix Plus POS — offline-capable desktop client",
@@ -47,13 +72,19 @@
       }
     },
     "deb": {
-      "depends": ["libnotify4", "libxtst6", "libnss3"]
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ]
     },
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -68,6 +99,7 @@
     }
   },
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "better-sqlite3": "^11.8.1",
     "electron-store": "^10.0.0"
   },

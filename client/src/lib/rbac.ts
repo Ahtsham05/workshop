@@ -41,6 +41,7 @@ export interface AppUser {
   schoolRole?: string
   linkedTeacherId?: string | null
   linkedStudentIds?: string[]
+  onboardingComplete?: boolean
   role?: { name?: string; permissions?: Record<string, boolean> }
   organizationId?: string
 }

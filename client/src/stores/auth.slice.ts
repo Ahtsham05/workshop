@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, isAnyOf, PayloadAction } from "@reduxjs/
 import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuilder } from "../utils/errorHandler";
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
+import { looksLikeJwt } from "@/lib/auth-token";
 
 interface AuthState {
   data: any | null;
@@ -17,10 +18,24 @@ interface AuthState {
  */
 function loadInitialAuthData(): any | null {
   try {
-    const token = localStorage.getItem('accessToken')
-    const userStr = localStorage.getItem('user')
+    let token = localStorage.getItem('accessToken')
+    let userStr = localStorage.getItem('user')
     const refreshToken = localStorage.getItem('refreshToken')
-    if (token && userStr) {
+
+    // Only restore plaintext cached credentials synchronously. Encrypted offline
+    // cache tokens are restored asynchronously by AuthProvider / route guards.
+    if ((!token || !userStr) && !looksLikeJwt(token)) {
+      const cachedUser = localStorage.getItem('cached_user')
+      const cachedToken = localStorage.getItem('cached_token')
+      if (cachedUser && cachedToken && looksLikeJwt(cachedToken)) {
+        localStorage.setItem('accessToken', cachedToken)
+        localStorage.setItem('user', cachedUser)
+        token = cachedToken
+        userStr = cachedUser
+      }
+    }
+
+    if (token && userStr && looksLikeJwt(token)) {
       const user = JSON.parse(userStr)
       if (user?.id) {
         return {

@@ -2,6 +2,17 @@ import { createAsyncThunk, createSlice, isAnyOf, PayloadAction } from "@reduxjs/
 import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuilder } from "../utils/errorHandler";
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
+import {
+  getAllLocalSuppliers,
+  getLocalSuppliersPage,
+  withOfflineCatalogFallback,
+} from "@/lib/sync/offline-catalog";
+import {
+  createSupplierOffline,
+  getOfflineMutationContext,
+  updateSupplierOffline,
+  withOfflineMutationFallback,
+} from "@/lib/sync/offline-mutations";
 
 // Define the initial state type
 interface SupplierState {
@@ -16,35 +27,50 @@ const initialState: SupplierState = {
 export const fetchSuppliers = createAsyncThunk(
   'supplier/fetchSuppliers',
   catchAsync(async (params: any) => {
-    const query = new URLSearchParams(params).toString();
-    const response = await Axios({
-      ...summery.fetchSuppliers, // Assuming your API for fetching suppliers is stored in summery
-      url: `${summery.fetchSuppliers.url}?${query}`, // Append query parameters to the URL
-    });
-    return response.data;
+    return withOfflineCatalogFallback(
+      async () => {
+        const query = new URLSearchParams(params).toString();
+        const response = await Axios({
+          ...summery.fetchSuppliers,
+          url: `${summery.fetchSuppliers.url}?${query}`,
+        });
+        return response.data;
+      },
+      () => getLocalSuppliersPage(params),
+    );
   })
 );
 
 export const addSupplier = createAsyncThunk(
   'supplier/addSupplier',
   catchAsync(async (data: any) => {
-    const response = await Axios({
-      ...summery.addSupplier, // Assuming your API for adding a supplier
-      data,
-    });
-    return response.data;
+    return withOfflineMutationFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.addSupplier,
+          data,
+        });
+        return response.data;
+      },
+      () => createSupplierOffline(data, getOfflineMutationContext()),
+    );
   })
 );
 
 export const updateSupplier = createAsyncThunk(
   'supplier/updateSupplier',
   catchAsync(async (data: any) => {
-    const response = await Axios({
-      ...summery.updateSupplier, // Assuming your API for updating a supplier
-      url: `${summery.updateSupplier.url}/${data._id}`, // Assuming the supplier ID is part of the URL
-      data,
-    });
-    return response.data;
+    return withOfflineMutationFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.updateSupplier,
+          url: `${summery.updateSupplier.url}/${data._id}`,
+          data,
+        });
+        return response.data;
+      },
+      () => updateSupplierOffline(data, getOfflineMutationContext()),
+    );
   })
 );
 
@@ -62,10 +88,22 @@ export const deleteSupplier = createAsyncThunk(
 export const fetchAllSuppliers = createAsyncThunk(
   'supplier/fetchAllSuppliers',
   catchAsync(async () => {
-    const response = await Axios({
-      ...summery.fetchAllSuppliers, // Assuming your API for fetching suppliers is stored in summery
-    })
-    return response.data
+    return withOfflineCatalogFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.fetchAllSuppliers,
+        })
+        return response.data
+      },
+      async () => {
+        const rows = await getAllLocalSuppliers()
+        return rows.map((supplier) => ({
+          value: supplier.id || supplier._id,
+          label: supplier.name,
+          ...supplier,
+        }))
+      },
+    )
   })
 )
 

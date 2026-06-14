@@ -1,4 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { createTimeoutSignal } from '@/lib/api-timeout';
+import { cacheAxiosGetResponse, shouldUseOfflineFallback, tryOfflineAxiosFallback } from '@/lib/sync/offline-http';
+import { getElectronAPI, isElectronApp } from '@/lib/sync/electron';
 import summery from './summery';
 // Create the Axios instance
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1';
@@ -49,6 +52,7 @@ const refreshTokens = async (): Promise<string> => {
   const response: AxiosResponse = await axios({
     ...summery.loginRefresh,
     baseURL: baseUrl,
+    signal: createTimeoutSignal(),
     headers: {
       Authorization: `Bearer ${refreshtoken}`,
     },
@@ -67,6 +71,8 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
 // Axios request interceptor to add Authorization token
 Axios.interceptors.request.use(
   (config: CustomAxiosRequestConfig) => {
+    config.signal = createTimeoutSignal(config.signal as AbortSignal | undefined);
+
     const accessToken = getAccessToken();
     if (accessToken) {
       config.headers!.Authorization = `Bearer ${accessToken}`;
@@ -115,9 +121,48 @@ const AUTH_NO_REFRESH_PATHS = [
 const isAuthNoRefreshRequest = (url?: string): boolean =>
   !!url && AUTH_NO_REFRESH_PATHS.some((path) => url.includes(path));
 
+function buildAxiosRelativePath(config: { url?: string; baseURL?: string }): string {
+  const base = config.baseURL || import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:3000/v1';
+  const path = config.url || '/';
+  const full = path.startsWith('http') ? path : `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+  try {
+    const parsed = new URL(full);
+    return `${parsed.pathname.replace(/^\/v1/, '')}${parsed.search}`;
+  } catch {
+    return path;
+  }
+}
+
 // Axios response interceptor to handle 401 errors and refresh tokens
 Axios.interceptors.response.use(
-  (response: AxiosResponse) => response,
+  async (response: AxiosResponse) => {
+    if (isElectronApp()) {
+      await cacheAxiosGetResponse({
+        url: response.config.url,
+        method: response.config.method,
+        baseURL: response.config.baseURL,
+        status: response.status,
+        data: response.data,
+      });
+
+      const method = (response.config.method || 'get').toUpperCase();
+      if (method === 'GET') {
+        const electron = getElectronAPI();
+        if (electron?.http?.mergeResponse) {
+          try {
+            response.data = await electron.http.mergeResponse({
+              method,
+              path: buildAxiosRelativePath(response.config),
+              data: response.data,
+            });
+          } catch {
+            // keep original payload
+          }
+        }
+      }
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     const originRequest = error.config as CustomAxiosRequestConfig;
 
@@ -149,6 +194,9 @@ Axios.interceptors.response.use(
         return Axios(originRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return Promise.reject(refreshError);
+        }
         removeTokens();
         window.location.href = '/sign-in';
         return Promise.reject(refreshError);
@@ -156,6 +204,24 @@ Axios.interceptors.response.use(
         isRefreshing = false;
       }
     }
+
+    if (isElectronApp() && originRequest && shouldUseOfflineFallback(error)) {
+      try {
+        const offline = await tryOfflineAxiosFallback(originRequest);
+        if (offline) {
+          return {
+            data: offline.data,
+            status: offline.status,
+            statusText: 'OK',
+            headers: {},
+            config: originRequest,
+          } as AxiosResponse;
+        }
+      } catch {
+        // fall through to original error
+      }
+    }
+
     return Promise.reject(error);
   }
 );

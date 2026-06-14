@@ -7,7 +7,7 @@ import { NavigationProgress } from '@/components/navigation-progress'
 import { TokenRefreshInitializer } from '@/components/token-refresh-initializer'
 import { PWAInstallBanner } from '@/components/pwa-install-banner'
 import { SearchProvider } from '@/context/search-context'
-import GeneralError from '@/features/errors/general-error'
+import { RootError } from '@/components/root-error'
 import NotFoundError from '@/features/errors/not-found-error'
 
 /**
@@ -46,5 +46,5 @@ export const Route = createRootRouteWithContext<{
 }>()({
   component: RootComponent,
   notFoundComponent: NotFoundError,
-  errorComponent: GeneralError,
+  errorComponent: RootError,
 })

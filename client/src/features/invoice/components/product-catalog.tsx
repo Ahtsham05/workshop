@@ -410,9 +410,9 @@ export function ProductCatalog({
                             )}
                           >
                             <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
-                              Rs{product.price.toFixed(2)}
+                              Rs{Number(product.price ?? 0).toFixed(2)}
                             </span>
-                            <span key={`stock-${product._id}`}>Stock: {product.stockQuantity}</span>
+                            <span key={`stock-${product._id}`}>Stock: {Number(product.stockQuantity ?? 0)}</span>
                             {!showImages && product.barcode && (
                               <span key={`barcode-${product._id}`} className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}
@@ -427,7 +427,7 @@ export function ProductCatalog({
                                 }`}
                                 title="Purchase cost"
                               >
-                                Cost: Rs{product.cost.toFixed(2)}
+                                Cost: Rs{Number(product.cost ?? 0).toFixed(2)}
                               </span>
                             </div>
                           )}

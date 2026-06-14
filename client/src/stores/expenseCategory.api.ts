@@ -21,6 +21,14 @@ export interface ExpenseCategory {
 const categoryTagId = (transactionType?: TransactionCategoryType) =>
   transactionType ?? 'business_expense'
 
+function normalizeExpenseCategories(response: unknown): ExpenseCategory[] {
+  if (Array.isArray(response)) return response as ExpenseCategory[]
+  if (response && typeof response === 'object' && Array.isArray((response as { results?: unknown }).results)) {
+    return (response as { results: ExpenseCategory[] }).results
+  }
+  return []
+}
+
 export const expenseCategoryApi = createApi({
   reducerPath: 'expenseCategoryApi',
   baseQuery,
@@ -34,6 +42,7 @@ export const expenseCategoryApi = createApi({
         url: '/expense-categories',
         params: params?.transactionType ? { transactionType: params.transactionType } : undefined,
       }),
+      transformResponse: normalizeExpenseCategories,
       serializeQueryArgs: ({ queryArgs }) => categoryTagId(queryArgs?.transactionType),
       providesTags: (_result, _error, arg) => [
         { type: 'ExpenseCategory', id: categoryTagId(arg?.transactionType) },

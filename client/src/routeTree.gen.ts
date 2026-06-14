@@ -61,8 +61,14 @@ import { Route as AuthenticatedWhatsappAnalyticsImport } from './routes/_authent
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
+import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
+import { Route as AuthenticatedSettingsSyncImport } from './routes/_authenticated/settings/sync'
+import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authenticated/settings/offline'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
+import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
+import { Route as AuthenticatedSettingsBackupImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedRestaurantTablesImport } from './routes/_authenticated/restaurant/tables'
@@ -460,6 +466,26 @@ const AuthenticatedSettingsWhatsappRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsSyncConflictsRoute =
+  AuthenticatedSettingsSyncConflictsImport.update({
+    id: '/sync-conflicts',
+    path: '/sync-conflicts',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsSyncRoute = AuthenticatedSettingsSyncImport.update({
+  id: '/sync',
+  path: '/sync',
+  getParentRoute: () => AuthenticatedSettingsRouteRoute,
+} as any)
+
+const AuthenticatedSettingsOfflineRoute =
+  AuthenticatedSettingsOfflineImport.update({
+    id: '/offline',
+    path: '/offline',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsNotificationsRoute =
   AuthenticatedSettingsNotificationsImport.update({
     id: '/notifications',
@@ -467,10 +493,32 @@ const AuthenticatedSettingsNotificationsRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsLocalDatabaseRoute =
+  AuthenticatedSettingsLocalDatabaseImport.update({
+    id: '/local-database',
+    path: '/local-database',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsDisplayRoute =
   AuthenticatedSettingsDisplayImport.update({
     id: '/display',
     path: '/display',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsCacheRoute = AuthenticatedSettingsCacheImport.update(
+  {
+    id: '/cache',
+    path: '/cache',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any,
+)
+
+const AuthenticatedSettingsBackupRoute =
+  AuthenticatedSettingsBackupImport.update({
+    id: '/backup',
+    path: '/backup',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1229,6 +1277,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAppearanceImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/backup': {
+      id: '/_authenticated/settings/backup'
+      path: '/backup'
+      fullPath: '/settings/backup'
+      preLoaderRoute: typeof AuthenticatedSettingsBackupImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/cache': {
+      id: '/_authenticated/settings/cache'
+      path: '/cache'
+      fullPath: '/settings/cache'
+      preLoaderRoute: typeof AuthenticatedSettingsCacheImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/display': {
       id: '/_authenticated/settings/display'
       path: '/display'
@@ -1236,11 +1298,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsDisplayImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/local-database': {
+      id: '/_authenticated/settings/local-database'
+      path: '/local-database'
+      fullPath: '/settings/local-database'
+      preLoaderRoute: typeof AuthenticatedSettingsLocalDatabaseImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/notifications': {
       id: '/_authenticated/settings/notifications'
       path: '/notifications'
       fullPath: '/settings/notifications'
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/offline': {
+      id: '/_authenticated/settings/offline'
+      path: '/offline'
+      fullPath: '/settings/offline'
+      preLoaderRoute: typeof AuthenticatedSettingsOfflineImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/sync': {
+      id: '/_authenticated/settings/sync'
+      path: '/sync'
+      fullPath: '/settings/sync'
+      preLoaderRoute: typeof AuthenticatedSettingsSyncImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/sync-conflicts': {
+      id: '/_authenticated/settings/sync-conflicts'
+      path: '/sync-conflicts'
+      fullPath: '/settings/sync-conflicts'
+      preLoaderRoute: typeof AuthenticatedSettingsSyncConflictsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
     '/_authenticated/settings/whatsapp': {
@@ -1818,8 +1908,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
+  AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
+  AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
+  AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
+  AuthenticatedSettingsOfflineRoute: typeof AuthenticatedSettingsOfflineRoute
+  AuthenticatedSettingsSyncRoute: typeof AuthenticatedSettingsSyncRoute
+  AuthenticatedSettingsSyncConflictsRoute: typeof AuthenticatedSettingsSyncConflictsRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -1828,9 +1924,17 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
   {
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
+    AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
+    AuthenticatedSettingsCacheRoute: AuthenticatedSettingsCacheRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
+    AuthenticatedSettingsLocalDatabaseRoute:
+      AuthenticatedSettingsLocalDatabaseRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
+    AuthenticatedSettingsOfflineRoute: AuthenticatedSettingsOfflineRoute,
+    AuthenticatedSettingsSyncRoute: AuthenticatedSettingsSyncRoute,
+    AuthenticatedSettingsSyncConflictsRoute:
+      AuthenticatedSettingsSyncConflictsRoute,
     AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }
@@ -2160,8 +2264,14 @@ export interface FileRoutesByFullPath {
   '/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/sync': typeof AuthenticatedSettingsSyncRoute
+  '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
@@ -2281,8 +2391,14 @@ export interface FileRoutesByTo {
   '/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/sync': typeof AuthenticatedSettingsSyncRoute
+  '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
@@ -2405,8 +2521,14 @@ export interface FileRoutesById {
   '/_authenticated/restaurant/tables': typeof AuthenticatedRestaurantTablesRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/_authenticated/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/_authenticated/settings/sync': typeof AuthenticatedSettingsSyncRoute
+  '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
@@ -2531,8 +2653,14 @@ export interface FileRouteTypes {
     | '/restaurant/tables'
     | '/settings/account'
     | '/settings/appearance'
+    | '/settings/backup'
+    | '/settings/cache'
     | '/settings/display'
+    | '/settings/local-database'
     | '/settings/notifications'
+    | '/settings/offline'
+    | '/settings/sync'
+    | '/settings/sync-conflicts'
     | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
@@ -2651,8 +2779,14 @@ export interface FileRouteTypes {
     | '/restaurant/tables'
     | '/settings/account'
     | '/settings/appearance'
+    | '/settings/backup'
+    | '/settings/cache'
     | '/settings/display'
+    | '/settings/local-database'
     | '/settings/notifications'
+    | '/settings/offline'
+    | '/settings/sync'
+    | '/settings/sync-conflicts'
     | '/settings/whatsapp'
     | '/subscription/payment'
     | '/subscription/pricing'
@@ -2773,8 +2907,14 @@ export interface FileRouteTypes {
     | '/_authenticated/restaurant/tables'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
+    | '/_authenticated/settings/backup'
+    | '/_authenticated/settings/cache'
     | '/_authenticated/settings/display'
+    | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/notifications'
+    | '/_authenticated/settings/offline'
+    | '/_authenticated/settings/sync'
+    | '/_authenticated/settings/sync-conflicts'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
@@ -2986,8 +3126,14 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings/account",
         "/_authenticated/settings/appearance",
+        "/_authenticated/settings/backup",
+        "/_authenticated/settings/cache",
         "/_authenticated/settings/display",
+        "/_authenticated/settings/local-database",
         "/_authenticated/settings/notifications",
+        "/_authenticated/settings/offline",
+        "/_authenticated/settings/sync",
+        "/_authenticated/settings/sync-conflicts",
         "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
       ]
@@ -3167,12 +3313,36 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/appearance.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/backup": {
+      "filePath": "_authenticated/settings/backup.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/cache": {
+      "filePath": "_authenticated/settings/cache.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/display": {
       "filePath": "_authenticated/settings/display.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/local-database": {
+      "filePath": "_authenticated/settings/local-database.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/notifications": {
       "filePath": "_authenticated/settings/notifications.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/offline": {
+      "filePath": "_authenticated/settings/offline.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/sync": {
+      "filePath": "_authenticated/settings/sync.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/sync-conflicts": {
+      "filePath": "_authenticated/settings/sync-conflicts.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/whatsapp": {

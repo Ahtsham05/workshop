@@ -2,6 +2,11 @@ import { createAsyncThunk, createSlice, isAnyOf, PayloadAction } from "@reduxjs/
 import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuilder } from "../utils/errorHandler";
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
+import {
+  getAllLocalProducts,
+  getLocalProductsPage,
+  withOfflineCatalogFallback,
+} from "@/lib/sync/offline-catalog";
 
 // Define the initial state type
 interface ProductState {
@@ -18,12 +23,17 @@ const initialState: ProductState = {
 export const fetchProducts = createAsyncThunk(
     'product/fetchProducts',
     catchAsync(async (params: any) => {
-        const query = new URLSearchParams(params).toString();
-        const response = await Axios({
-            ...summery.fetchProducts, // Assuming your API for fetching products is stored in summery
-            url: `${summery.fetchProducts.url}?${query}`, // Append query parameters to the URL
-        });
-        return response.data;
+        return withOfflineCatalogFallback(
+            async () => {
+                const query = new URLSearchParams(params).toString();
+                const response = await Axios({
+                    ...summery.fetchProducts,
+                    url: `${summery.fetchProducts.url}?${query}`,
+                });
+                return response.data;
+            },
+            () => getLocalProductsPage(params),
+        );
     })
 );
 
@@ -66,10 +76,15 @@ export const deleteProduct = createAsyncThunk(
 export const fetchAllProducts = createAsyncThunk(
     'product/fetchAllProducts',
     catchAsync(async (_) => {
-        const response = await Axios({
-            ...summery.fetchAllProducts, // Assuming your API for fetching products is stored in summery
-        })
-        return response.data
+        return withOfflineCatalogFallback(
+            async () => {
+                const response = await Axios({
+                    ...summery.fetchAllProducts,
+                });
+                return response.data;
+            },
+            () => getAllLocalProducts(),
+        );
     })
 )
 

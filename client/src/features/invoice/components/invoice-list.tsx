@@ -596,7 +596,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                 {currentInvoices.map((invoice: any) => (
                   <TableRow key={invoice._id}>
                     <TableCell className="font-medium">
-                      {invoice.invoiceNumber}
+                      <div className="flex items-center gap-2">
+                        {invoice.invoiceNumber}
+                        {invoice.offlinePending && (
+                          <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                            {t('Pending sync') || 'Pending sync'}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className='max-w-[14rem]'>
                       <div className='flex min-w-0 items-center gap-2'>

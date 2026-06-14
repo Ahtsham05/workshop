@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useGetTrialStatusQuery } from '@/stores/subscription.api'
 import { getPlanLabel } from '@/lib/feature-access'
+import { isElectronApp } from '@/lib/sync/electron'
 import { AlertTriangle } from 'lucide-react'
 
 /** Height reserved for the trial/subscription top banner (sidebar + main content offset). */
@@ -60,7 +61,11 @@ function useAppTopBannerOffset(active: boolean) {
 export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryProps) {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { data: trialStatus, isLoading } = useGetTrialStatusQuery()
+  const offline = typeof navigator !== 'undefined' && !navigator.onLine
+  const skipTrialChecks = offline || (isElectronApp() && localStorage.getItem('offlineMode') === 'true')
+  const { data: trialStatus, isLoading, isError } = useGetTrialStatusQuery(undefined, {
+    skip: skipTrialChecks,
+  })
 
   const expiredAccessAllowedPaths = ['/subscription/payment', '/subscription/pricing', '/payments', '/subscription']
   const canAccessExpiredPath = expiredAccessAllowedPaths.some(
@@ -73,12 +78,15 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
 
   // Expired users should land directly on renew/payment flow.
   useEffect(() => {
+    if (skipTrialChecks || isError) return
     if (!isLoading && trialStatus?.trialExpired && !canAccessExpiredPath) {
       navigate({ to: '/subscription/payment' as any, replace: true })
     }
-  }, [isLoading, trialStatus?.trialExpired, canAccessExpiredPath, navigate])
+  }, [skipTrialChecks, isError, isLoading, trialStatus?.trialExpired, canAccessExpiredPath, navigate])
 
   const showTrialEndingBanner =
+    !skipTrialChecks &&
+    !isError &&
     !isLoading &&
     !trialStatus?.trialExpired &&
     trialStatus?.daysRemaining != null &&
@@ -87,8 +95,12 @@ export function TrialExpirationBoundary({ children }: TrialExpirationBoundaryPro
 
   useAppTopBannerOffset(showTrialEndingBanner)
 
-  // If loading, show nothing
-  if (isLoading) {
+  // If loading online trial status, still render the app shell.
+  if (!skipTrialChecks && isLoading) {
+    return <div>{children}</div>
+  }
+
+  if (skipTrialChecks || isError) {
     return <div>{children}</div>
   }
 

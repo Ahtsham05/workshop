@@ -14,6 +14,9 @@ import { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
 import { resolveRouteAccess } from '@/lib/route-permissions'
 import { deriveSchoolRole } from '@/lib/school-permissions'
+import { restoreSessionFromCache } from '@/lib/auth-cache'
+import { looksLikeJwt } from '@/lib/auth-token'
+import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
 
 /**
  * Authenticated layout component.
@@ -76,6 +79,7 @@ function AuthenticatedLayout() {
                 </Button>
               </div>
             )}
+            <LocalDatabaseSetupBanner />
             <Main className="min-h-0 flex-1 overflow-auto">
               <Outlet />
             </Main>
@@ -90,10 +94,16 @@ function AuthenticatedLayout() {
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
     // Check authentication on the client side
-    const token = localStorage.getItem('accessToken')
-    const user = localStorage.getItem('user')
-    
-    if (!token || !user) {
+    let token = localStorage.getItem('accessToken')
+    let user = localStorage.getItem('user')
+
+    if (!token || !user || !looksLikeJwt(token)) {
+      await restoreSessionFromCache()
+      token = localStorage.getItem('accessToken')
+      user = localStorage.getItem('user')
+    }
+
+    if (!token || !user || !looksLikeJwt(token)) {
       throw redirect({
         to: '/sign-in',
         search: {

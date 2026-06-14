@@ -49,7 +49,7 @@ export function ProductCatalog({
   // Set default selected category to "Other" on first load
   useEffect(() => {
     if (allCategories.length > 0 && !selectedCategoryId) {
-      const otherCategory = allCategories.find(cat => cat.name.toLowerCase() === 'other')
+      const otherCategory = allCategories.find(cat => (cat.name || '').toLowerCase() === 'other')
       if (otherCategory) {
         setSelectedCategoryId(otherCategory._id)
       } else {
@@ -331,9 +331,9 @@ export function ProductCatalog({
                             )}
                           >
                             <span className='font-medium text-foreground text-sm'>
-                              Rs{product.price.toFixed(2)}
+                              Rs{Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0).toFixed(2)}
                             </span>
-                            <span>Stock: {product.stockQuantity}</span>
+                            <span>Stock: {Number(product.stockQuantity ?? 0)}</span>
                             {!showImages && product.barcode && (
                               <span className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}

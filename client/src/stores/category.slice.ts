@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { catchAsync } from '../utils/errorHandler'
 import Axios from '../utils/Axios'
 import summery from '../utils/summery'
+import { getLocalCategoriesPage, withOfflineCatalogFallback } from '@/lib/sync/offline-catalog'
 
 export interface Category {
   id: string
@@ -46,11 +47,16 @@ export const fetchCategories = createAsyncThunk(
     }, {} as any)
     
     const query = new URLSearchParams(filteredParams).toString()
-    const response = await Axios({
-      ...summery.fetchCategories,
-      url: `${summery.fetchCategories.url}?${query}`,
-    })
-    return response.data
+    return withOfflineCatalogFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.fetchCategories,
+          url: `${summery.fetchCategories.url}?${query}`,
+        })
+        return response.data
+      },
+      () => getLocalCategoriesPage(filteredParams),
+    )
   })
 )
 

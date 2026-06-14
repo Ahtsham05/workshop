@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const syncVersionPlugin = require('./plugins/syncVersion.plugin');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
 const { BUSINESS_TYPES } = require('../config/businessTypes');
 
@@ -104,6 +105,7 @@ ProductSchema.pre(['updateOne', 'findOneAndUpdate'], function(next) {
 });
 
 // add plugin that converts mongoose to json
+ProductSchema.plugin(syncVersionPlugin);
 ProductSchema.plugin(toJSON);
 ProductSchema.plugin(paginate);
 

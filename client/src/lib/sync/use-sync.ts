@@ -7,6 +7,8 @@ const DEFAULT_STATUS: SyncStatus = {
   failed: 0,
   productCount: 0,
   customerCount: 0,
+  categoryCount: 0,
+  supplierCount: 0,
   lastPullAt: null,
   lastPushAt: null,
   deviceId: null,
@@ -23,6 +25,9 @@ export function useSync() {
     try {
       const next = await electron.sync.status()
       setStatus(next)
+      if (next.lastPullAt) {
+        setBootstrapped(true)
+      }
     } catch {
       // ignore
     }
@@ -38,8 +43,9 @@ export function useSync() {
     }) => {
       if (!electron) return
       await electron.sync.configure(config)
+      await refreshStatus()
     },
-    [electron],
+    [electron, refreshStatus],
   )
 
   const bootstrap = useCallback(async () => {
@@ -92,5 +98,7 @@ export function useSync() {
     queue: electron?.sync.queue,
     listLocalProducts: electron?.db.products,
     listLocalCustomers: electron?.db.customers,
+    listLocalCategories: electron?.db.categories,
+    listLocalSuppliers: electron?.db.suppliers,
   }
 }

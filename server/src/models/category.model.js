@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
+const syncVersionPlugin = require('./plugins/syncVersion.plugin');
 
 const CategorySchema = new mongoose.Schema({
     organizationId: {
@@ -31,6 +32,7 @@ const CategorySchema = new mongoose.Schema({
 CategorySchema.index({ organizationId: 1, branchId: 1 });
 
 // add plugin that converts mongoose to json
+CategorySchema.plugin(syncVersionPlugin);
 CategorySchema.plugin(toJSON);
 CategorySchema.plugin(paginate);
 

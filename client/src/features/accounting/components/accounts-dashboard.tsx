@@ -30,6 +30,14 @@ interface DashboardStats {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
+function normalizeArray<T = any>(value: unknown): T[] {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object' && Array.isArray((value as { results?: unknown }).results)) {
+    return (value as { results: T[] }).results
+  }
+  return []
+}
+
 const toMonthKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
@@ -122,17 +130,16 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
       });
 
       // Calculate totals
-      const expensesByCategory = expenseSummaryResponse.data || [];
+      const expensesByCategory = normalizeArray(expenseSummaryResponse.data);
       const monthlyExpenses = expensesByCategory.reduce((sum: number, cat: any) => sum + cat.totalAmount, 0);
 
-      const customers = customersResponse.data || [];
+      const customers = normalizeArray(customersResponse.data);
       const totalReceivables = customers.reduce((sum: number, customer: any) => sum + Math.max(0, customer.balance || 0), 0);
 
-      const suppliers = suppliersResponse.data || [];
+      const suppliers = normalizeArray(suppliersResponse.data);
       const totalPayables = suppliers.reduce((sum: number, supplier: any) => sum + Math.max(0, supplier.balance || 0), 0);
 
-      // Format expense trends
-      const trends = (expenseTrendsResponse.data || []).map((item: any) => ({
+      const trends = normalizeArray(expenseTrendsResponse.data).map((item: any) => ({
         month: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
         amount: item.totalAmount,
       }));

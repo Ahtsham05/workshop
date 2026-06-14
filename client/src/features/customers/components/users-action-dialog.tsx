@@ -122,14 +122,21 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           ...(idCardBack ? { idCardBack } : {}),
         }
     if (isEdit) {
-      await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).then(() => {
-        toast.success(t('customer_updated_success'))
-        setFetch?.((prev: any) => !prev)
-      })
+      const updated = await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).unwrap()
+      toast.success(
+        updated?.offlinePending
+          ? 'Customer updated offline — will sync when you are back online'
+          : t('customer_updated_success'),
+      )
+      setFetch?.((prev: any) => !prev)
     } else {
       try {
         const created = await dispatch(addCustomer(payload)).unwrap()
-        toast.success(t('customer_created_success'))
+        toast.success(
+          created?.offlinePending
+            ? 'Customer saved offline — will sync when you are back online'
+            : t('customer_created_success'),
+        )
         setFetch?.((prev: any) => !prev)
         onCreated?.(created)
       } catch {

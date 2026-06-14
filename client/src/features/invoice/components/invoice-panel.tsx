@@ -12,7 +12,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
-import { useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
+import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow } from '../utils/print-utils'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import {
@@ -51,6 +51,7 @@ import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoi
 import { useSync } from '@/lib/sync/use-sync'
 import { buildOfflineInvoicePayload } from '@/lib/sync/offline-invoice'
 import { getElectronAPI } from '@/lib/sync/electron'
+import { isApiUnreachable } from '@/lib/auth-cache'
 import { normalizeInvoiceNotesHtml } from '@/lib/rich-text-utils'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
@@ -774,35 +775,44 @@ export function InvoicePanel({
       
       let result: Record<string, unknown>
 
-      const canSaveOffline =
-        isElectron &&
-        !online &&
-        !isEditing &&
-        invoice.type === 'cash' &&
-        invoice.paymentMethod !== 'wallet'
+      const canQueueOffline = isElectron && !isEditing
 
-      if (canSaveOffline) {
+      const saveOffline = async (): Promise<Record<string, unknown>> => {
         const electron = getElectronAPI()
         const syncStatus = await electron?.sync.status()
         const deviceId = syncStatus?.deviceId || 'local-device'
         const { clientId, localInvoiceNumber, operation } = buildOfflineInvoicePayload(invoiceData, deviceId)
         await electron?.sync.queue(operation)
-        result = {
+        dispatch(invoiceApi.util.invalidateTags(['Invoice']))
+        toast.success(`Invoice ${localInvoiceNumber} saved offline. It will sync when you are back online.`)
+        return {
           ...invoiceData,
           id: clientId,
           invoiceNumber: localInvoiceNumber,
           _offline: true,
         }
-        toast.success(`Invoice ${localInvoiceNumber} saved offline. It will sync when you are back online.`)
+      }
+
+      if (canQueueOffline && !online) {
+        result = await saveOffline()
       } else if (isEditing && editingInvoice?._id) {
         result = await updateInvoice({ id: editingInvoice._id, ...invoiceData }).unwrap()
       } else {
-        result = await createInvoice(invoiceData).unwrap()
+        try {
+          result = await createInvoice(invoiceData).unwrap()
+        } catch (error) {
+          if (canQueueOffline && isApiUnreachable(error)) {
+            result = await saveOffline()
+          } else {
+            throw error
+          }
+        }
       }
       
       console.log('Save result:', result)
       
-      const successMessage = canSaveOffline
+      const successMessage =
+        result._offline || (canQueueOffline && !online)
         ? null
         : isEditing 
         ? `Invoice ${editingInvoice?.invoiceNumber || result.invoiceNumber} updated successfully!`

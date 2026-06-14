@@ -22,6 +22,8 @@ import { signinWithEmailPassword } from '@/stores/auth.slice'
 import { getUserHome } from '@/lib/rbac'
 import type { AppUser } from '@/lib/rbac'
 import { resolveRouteAccess } from '@/lib/route-permissions'
+import { useAuth } from '@/context/auth-context'
+import { isNetworkError } from '@/lib/auth-cache'
 import toast from 'react-hot-toast'
 
 type UserAuthFormProps = HTMLAttributes<HTMLFormElement>
@@ -48,6 +50,7 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const search = useSearch({ from: '/(auth)/sign-in' })
   const navigate = useNavigate()
+  const { cacheCredentials, loginFromCache, clearOfflineMode } = useAuth()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -57,7 +60,36 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
     },
   })
   const dispatch = useDispatch<AppDispatch>()
-  
+
+  function navigateAfterLogin(loggedInUser: AppUser) {
+    if (!loggedInUser?.onboardingComplete) {
+      navigate({ to: '/onboarding', replace: true })
+      return
+    }
+
+    const isSchoolTeacher =
+      loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
+    if (isSchoolTeacher) {
+      navigate({ to: '/school/portals/teacher', replace: true })
+      return
+    }
+
+    if (loggedInUser?.schoolRole === 'parent') {
+      navigate({ to: '/school/portals/parent', replace: true })
+      return
+    }
+
+    if (loggedInUser?.schoolRole === 'student') {
+      navigate({ to: '/school/portals/student', replace: true })
+      return
+    }
+
+    const defaultHome = getUserHome(loggedInUser)
+    const requested = search.redirect || defaultHome
+    const access = resolveRouteAccess(loggedInUser, requested)
+    navigate({ to: access.allowed ? requested : defaultHome, replace: true })
+  }
+
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)
 
@@ -66,45 +98,31 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
 
       toast.success('Login successful!')
 
-      // Store authentication data
-      localStorage.setItem('accessToken', result?.tokens?.access?.token)
+      const accessToken = result?.tokens?.access?.token
+      localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('refreshToken', result?.tokens?.refresh?.token)
       localStorage.setItem('user', JSON.stringify(result?.user))
-      // Always clear stale branch from previous session so the new user's
-      // requests never carry a branch ID that belongs to another account.
       localStorage.removeItem('activeBranchId')
       localStorage.removeItem('activeBranchName')
 
-      // Redirect to onboarding if not completed
-      if (!result?.user?.onboardingComplete) {
-        navigate({ to: '/onboarding', replace: true })
-        return
+      if (accessToken && result?.user) {
+        await cacheCredentials(result.user, accessToken, data.email)
       }
+      clearOfflineMode()
 
-      // School teachers go directly to their portal — never to the admin area
-      const loggedInUser = result?.user as AppUser
-      const isSchoolTeacher =
-        loggedInUser?.schoolRole === 'teacher' || !!loggedInUser?.linkedTeacherId
-      if (isSchoolTeacher) {
-        navigate({ to: '/school/portals/teacher', replace: true })
-        return
-      }
-
-      if (loggedInUser?.schoolRole === 'parent') {
-        navigate({ to: '/school/portals/parent', replace: true })
-        return
-      }
-
-      if (loggedInUser?.schoolRole === 'student') {
-        navigate({ to: '/school/portals/student', replace: true })
-        return
-      }
-
-      const defaultHome = getUserHome(loggedInUser)
-      const requested = search.redirect || defaultHome
-      const access = resolveRouteAccess(loggedInUser, requested)
-      navigate({ to: access.allowed ? requested : defaultHome, replace: true })
+      navigateAfterLogin(result?.user as AppUser)
     } catch (error: unknown) {
+      if (isNetworkError(error) || !navigator.onLine) {
+        const offlineResult = await loginFromCache(data.email)
+        if (offlineResult.success) {
+          toast.success('Logged in offline using cached credentials')
+          navigateAfterLogin(offlineResult.user as AppUser)
+          return
+        }
+        toast.error(offlineResult.message)
+        return
+      }
+
       const err = error as { response?: { data?: { message?: string } }; message?: string }
       const message =
         err?.response?.data?.message ||

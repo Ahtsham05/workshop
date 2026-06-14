@@ -87,4 +87,5 @@ module.exports.performanceReviewService = require('./performanceReview.service.j
 module.exports.employeeLedgerService = require('./employeeLedger.service.js');
 module.exports.restaurantService = require('./restaurant.service.js');
 module.exports.syncService = require('./sync.service.js');
+module.exports.systemService = require('./system.service.js');
 module.exports.whatsappEnterprise = require('./whatsapp/index.js');

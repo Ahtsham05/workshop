@@ -91,7 +91,10 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing }: Props) {
       }
       categoryMap.get(categoryId)!.products.push({
         ...product,
-        stockQuantity: product.stockQuantity || 0,
+        name: product.name || product.nameUrdu || 'Unnamed product',
+        price: Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0),
+        cost: Number(product.cost ?? (product as { purchasePrice?: number }).purchasePrice ?? 0),
+        stockQuantity: Number(product.stockQuantity ?? (product as { stock?: number }).stock ?? 0),
       })
     })
     setCategorizedProducts(Array.from(categoryMap.values()))

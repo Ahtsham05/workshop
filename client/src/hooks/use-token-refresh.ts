@@ -3,6 +3,8 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { refreshToken, logout } from '@/stores/auth.slice'
 import { useNavigate } from '@tanstack/react-router'
+import { isApiUnreachable } from '@/lib/auth-cache'
+import { looksLikeJwt } from '@/lib/auth-token'
 
 // Hook to handle token refresh
 export function useTokenRefresh() {
@@ -18,42 +20,55 @@ export function useTokenRefresh() {
   }
 
   const handleTokenRefresh = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return false
+    }
+
+    if (localStorage.getItem('offlineMode') === 'true') {
+      return false
+    }
+
     const refreshTokenValue = localStorage.getItem('refreshToken')
+    const accessToken = localStorage.getItem('accessToken')
+
+    if (!looksLikeJwt(accessToken)) {
+      return false
+    }
     
     if (!refreshTokenValue) {
-      // No refresh token, logout user
-      await dispatch(logout({}))
-      if (navigate) {
-        navigate({ to: '/sign-in', search: { redirect: '/_authenticated/' }, replace: true })
-      } else {
-        // Fallback: use window.location if navigate isn't available
-        window.location.href = '/sign-in'
-      }
       return false
     }
 
     try {
       const action = await dispatch(refreshToken({ refreshToken: refreshTokenValue }))
       
-      if (action.payload?.access?.token) {
-        // Update stored tokens
+      if (refreshToken.fulfilled.match(action) && action.payload?.access?.token) {
         localStorage.setItem('accessToken', action.payload.access.token)
         if (action.payload.refresh?.token) {
           localStorage.setItem('refreshToken', action.payload.refresh.token)
         }
         return true
-      } else {
-        // Refresh failed, logout user
+      }
+
+      // Only force logout when refresh was rejected with auth failure, not network errors.
+      if (refreshToken.rejected.match(action)) {
+        const reason = action.payload ?? action.error
+        if (isApiUnreachable(reason) || isApiUnreachable(action.error)) {
+          return false
+        }
         await dispatch(logout({}))
         if (navigate) {
           navigate({ to: '/sign-in', search: { redirect: '/_authenticated/' }, replace: true })
         } else {
           window.location.href = '/sign-in'
         }
-        return false
       }
+      return false
     } catch (error) {
       console.error('Token refresh failed:', error)
+      if (isApiUnreachable(error)) {
+        return false
+      }
       await dispatch(logout({}))
       if (navigate) {
         navigate({ to: '/sign-in', search: { redirect: '/_authenticated/' }, replace: true })
@@ -68,11 +83,10 @@ export function useTokenRefresh() {
   const checkAndRefreshToken = useCallback(() => {
     const token = localStorage.getItem('accessToken')
     
-    if (!token) return
+    if (!looksLikeJwt(token)) return
 
     try {
-      // Decode JWT token to check expiration (basic implementation)
-      const payload = JSON.parse(atob(token.split('.')[1]))
+      const payload = JSON.parse(atob(token!.split('.')[1]))
       const currentTime = Date.now() / 1000
       
       // If token expires in the next 5 minutes, refresh it

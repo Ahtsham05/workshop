@@ -2,6 +2,17 @@ import { createAsyncThunk, createSlice, isAnyOf, PayloadAction } from "@reduxjs/
 import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuilder } from "../utils/errorHandler";
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
+import {
+  getAllLocalCustomers,
+  getLocalCustomersPage,
+  withOfflineCatalogFallback,
+} from "@/lib/sync/offline-catalog";
+import {
+  createCustomerOffline,
+  getOfflineMutationContext,
+  updateCustomerOffline,
+  withOfflineMutationFallback,
+} from "@/lib/sync/offline-mutations";
 
 // Define the initial state type
 interface CustomerState {
@@ -16,35 +27,50 @@ const initialState: CustomerState = {
 export const fetchCustomers = createAsyncThunk(
   'customer/fetchCustomers',
   catchAsync(async (params: any) => {
-    const query = new URLSearchParams(params).toString();
-    const response = await Axios({
-      ...summery.fetchCustomers, // Assuming your API for fetching customers is stored in summery
-      url: `${summery.fetchCustomers.url}?${query}`, // Append query parameters to the URL
-    });
-    return response.data;
+    return withOfflineCatalogFallback(
+      async () => {
+        const query = new URLSearchParams(params).toString();
+        const response = await Axios({
+          ...summery.fetchCustomers,
+          url: `${summery.fetchCustomers.url}?${query}`,
+        });
+        return response.data;
+      },
+      () => getLocalCustomersPage(params),
+    );
   })
 );
 
 export const addCustomer = createAsyncThunk(
   'customer/addCustomer',
   catchAsync(async (data: any) => {
-    const response = await Axios({
-      ...summery.addCustomer, // Assuming your API for adding a customer
-      data,
-    });
-    return response.data;
+    return withOfflineMutationFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.addCustomer,
+          data,
+        });
+        return response.data;
+      },
+      () => createCustomerOffline(data, getOfflineMutationContext()),
+    );
   })
 );
 
 export const updateCustomer = createAsyncThunk(
   'customer/updateCustomer',
   catchAsync(async (data: any) => {
-    const response = await Axios({
-      ...summery.updateCustomer, // Assuming your API for updating a customer
-      url: `${summery.updateCustomer.url}/${data._id}`, // Assuming the customer ID is part of the URL
-      data,
-    });
-    return response.data;
+    return withOfflineMutationFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.updateCustomer,
+          url: `${summery.updateCustomer.url}/${data._id}`,
+          data,
+        });
+        return response.data;
+      },
+      () => updateCustomerOffline(data, getOfflineMutationContext()),
+    );
   })
 );
 
@@ -62,10 +88,15 @@ export const deleteCustomer = createAsyncThunk(
 export const fetchAllCutomers = createAsyncThunk(
   'supplier/fetchAllCutomers',
   catchAsync(async () => {
-    const response = await Axios({
-      ...summery.fetchAllCutomers, // Assuming your API for fetching Cutomers is stored in summery
-    })
-    return response.data
+    return withOfflineCatalogFallback(
+      async () => {
+        const response = await Axios({
+          ...summery.fetchAllCutomers,
+        });
+        return response.data;
+      },
+      () => getAllLocalCustomers(),
+    );
   })
 )
 

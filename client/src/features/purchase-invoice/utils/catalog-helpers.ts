@@ -23,8 +23,17 @@ export function normalizeSuppliersList(data: unknown): Supplier[] {
 
 export function normalizeProductsList(items: unknown): Product[] {
   if (!items) return []
-  if (Array.isArray(items)) return items as Product[]
-  return []
+  const list = Array.isArray(items) ? items : []
+  return list.map((item) => {
+    const product = item as Product & { salePrice?: number; purchasePrice?: number; stock?: number }
+    return {
+      ...product,
+      name: product.name || product.nameUrdu || 'Unnamed product',
+      price: Number(product.price ?? product.salePrice ?? 0),
+      cost: Number(product.cost ?? product.purchasePrice ?? 0),
+      stockQuantity: Number(product.stockQuantity ?? product.stock ?? 0),
+    }
+  })
 }
 
 export function extractFirstPhone(raw: string | undefined | null): string {

@@ -81,9 +81,8 @@
     
     <!-- PWA Service Worker Registration -->
     <script type="module">
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && location.protocol !== 'file:') {
         window.addEventListener('load', () => {
-          // Register in prod for offline caching; also on localhost for push notifications in dev
           const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
           if (import.meta.env.PROD || isLocalhost) {
             navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});

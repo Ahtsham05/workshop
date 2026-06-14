@@ -62,7 +62,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
 
     if (search) {
       filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
+        (product.name || '').toLowerCase().includes(search.toLowerCase()) ||
         product.barcode?.toLowerCase().includes(search.toLowerCase())
       );
     }
@@ -238,8 +238,8 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                           {product.stockQuantity} {product.unit || 'pcs'}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">Rs{product.price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">Rs{product.cost.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">Rs{Number(product.price ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">Rs{Number(product.cost ?? 0).toFixed(2)}</TableCell>
                       <TableCell>{getStockBadge(product.stockQuantity)}</TableCell>
                     </TableRow>
                   ))

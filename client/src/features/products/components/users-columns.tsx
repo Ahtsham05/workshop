@@ -56,8 +56,8 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
             </div>
           )}
           <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
-            <LongText className={getTextClasses(row.getValue('name'), 'max-w-36 shrink-0')}>
-              {row.getValue('name')}
+            <LongText className={getTextClasses(row.getValue('name') || 'Unnamed product', 'max-w-36 shrink-0')}>
+              {row.getValue('name') || 'Unnamed product'}
             </LongText>
             {urdu ? (
               <span
@@ -126,12 +126,18 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
   {
     accessorKey: 'price',
     header: ({ column }) => <DataTableColumnHeader column={column} title='price' />,
-    cell: ({ row }) => <div>{row.getValue('price')}</div>,
+    cell: ({ row }) => {
+      const value = Number(row.getValue('price') ?? 0)
+      return <div>{value}</div>
+    },
   },
   {
     accessorKey: 'cost',
     header: ({ column }) => <DataTableColumnHeader column={column} title='cost' />,
-    cell: ({ row }) => <div>{row.getValue('cost')}</div>,
+    cell: ({ row }) => {
+      const value = Number(row.getValue('cost') ?? 0)
+      return <div>{value}</div>
+    },
   },
   {
     accessorKey: 'stockQuantity',

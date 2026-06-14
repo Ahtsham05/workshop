@@ -1,11 +1,9 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-// import { AxiosError } from 'axios'
 import {
-  // QueryCache,
   QueryClient,
 } from '@tanstack/react-query'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
+import { RouterProvider, createRouter, createHashHistory } from '@tanstack/react-router'
 // import { toast } from 'sonner'
 // import { useAuthStore } from '@/stores/authStore'
 // import { handleServerError } from '@/utils/handle-server-error'
@@ -26,6 +24,7 @@ import { routeTree } from './routeTree.gen'
 import { Toaster } from 'react-hot-toast'
 
 const queryClient = new QueryClient({})
+const isElectronApp = import.meta.env.VITE_ELECTRON === 'true'
 
 // Create a new router instance
 const router = createRouter({
@@ -33,6 +32,7 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  ...(isElectronApp ? { history: createHashHistory() } : {}),
 })
 
 // Register the router instance for type safety

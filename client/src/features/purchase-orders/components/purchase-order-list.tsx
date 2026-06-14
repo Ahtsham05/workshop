@@ -165,8 +165,9 @@ export default function PurchaseOrderList({
   }
 
   const computeProgress = (po: PurchaseOrder) => {
-    const ordered = po.items.reduce((s, i) => s + Number(i.quantity || 0), 0)
-    const received = po.items.reduce(
+    const items = po.items || []
+    const ordered = items.reduce((s, i) => s + Number(i.quantity || 0), 0)
+    const received = items.reduce(
       (s, i) => s + Math.min(Number(i.quantity || 0), Number(i.receivedQuantity || 0)),
       0
     )
@@ -372,7 +373,7 @@ export default function PurchaseOrderList({
                             : '—'}
                         </TableCell>
                         <TableCell>
-                          <Badge variant='outline'>{po.items.length}</Badge>
+                          <Badge variant='outline'>{(po.items || []).length}</Badge>
                         </TableCell>
                         <TableCell className='min-w-[140px]'>
                           <div className='flex items-center gap-2'>

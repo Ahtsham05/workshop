@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Build production desktop installers.
- * Reads VITE_BACKEND_URL from desktop/.env.production or the environment.
+ * Bundles the Express API server and starts it automatically on app launch.
  *
  * Usage:
  *   node scripts/build.mjs          # build for current OS
@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.join(__dirname, '..');
 const clientRoot = path.join(desktopRoot, '..', 'client');
+const DEFAULT_EMBEDDED_API_URL = 'http://127.0.0.1:3000/v1';
 
 function loadApiUrl() {
   if (process.env.VITE_BACKEND_URL) {
@@ -23,16 +24,16 @@ function loadApiUrl() {
   }
 
   const envFile = path.join(desktopRoot, '.env.production');
-  if (!fs.existsSync(envFile)) return '';
-
-  for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const match = trimmed.match(/^VITE_BACKEND_URL\s*=\s*["']?([^"'\s#]+)["']?/);
-    if (match) return match[1].trim();
+  if (fs.existsSync(envFile)) {
+    for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const match = trimmed.match(/^VITE_BACKEND_URL\s*=\s*["']?([^"'\s#]+)["']?/);
+      if (match) return match[1].trim();
+    }
   }
 
-  return '';
+  return DEFAULT_EMBEDDED_API_URL;
 }
 
 function run(command, args, options = {}) {
@@ -49,24 +50,11 @@ function run(command, args, options = {}) {
 const platform = process.argv[2] || 'current';
 const apiUrl = loadApiUrl();
 
-if (!apiUrl) {
-  console.error(`
-ERROR: VITE_BACKEND_URL is required.
-
-Create desktop/.env.production (copy from .env.production.example) with your server URL, e.g.:
-
-  VITE_BACKEND_URL=https://your-server.com/v1
-
-Or pass it inline:
-
-  VITE_BACKEND_URL=https://your-server.com/v1 npm run dist
-`);
-  process.exit(1);
-}
-
 console.log(`\nBuilding Logix Plus Desktop`);
-console.log(`  API URL : ${apiUrl}`);
+console.log(`  API URL : ${apiUrl} (embedded backend auto-starts on launch)`);
 console.log(`  Platform: ${platform}\n`);
+
+run('node', ['scripts/prepare-server.mjs'], { cwd: desktopRoot });
 
 run('npm', ['run', 'build:electron'], {
   cwd: clientRoot,

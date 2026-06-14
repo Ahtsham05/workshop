@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
@@ -12,7 +13,7 @@ const prepareHeaders = (headers: Headers) => {
 }
 
 const cloudBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extra) => {
-  const baseQuery = fetchBaseQuery({ baseUrl: `${baseUrl}/whatsapp-cloud`, prepareHeaders })
+  const baseQuery = createAppFetchBaseQuery({ baseUrl: `${baseUrl}/whatsapp-cloud`, prepareHeaders })
   return baseQuery(args, api, extra)
 }
 

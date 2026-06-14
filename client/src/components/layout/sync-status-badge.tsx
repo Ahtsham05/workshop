@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux'
 import { Cloud, CloudOff, RefreshCw, Upload } from 'lucide-react'
 import { RootState } from '@/stores/store'
 import { useSync } from '@/lib/sync/use-sync'
+import { getElectronAPI } from '@/lib/sync/electron'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,11 +14,11 @@ import {
 } from '@/components/ui/tooltip'
 
 export function SyncStatusBadge() {
-  const { isElectron, online, status, bootstrapped, configure, bootstrap, runSync } = useSync()
+  const { isElectron, online, status, configure, bootstrap, runSync } = useSync()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
-  const apiBaseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
+  const apiBaseUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:3000/v1'
 
   useEffect(() => {
     if (!isElectron || !user?.organizationId || !activeBranchId || !accessToken) return
@@ -29,12 +30,18 @@ export function SyncStatusBadge() {
       organizationId: user.organizationId,
       deviceName: 'Desktop POS',
     })
-      .then(() => {
-        if (online && !bootstrapped) {
-          return bootstrap()
+      .then(async () => {
+        const electron = getElectronAPI()
+        if (!electron) return
+
+        const latest = await electron.sync.status()
+
+        if (online && !latest.lastPullAt) {
+          await bootstrap()
+          return
         }
         if (online) {
-          return runSync()
+          await runSync()
         }
       })
       .catch(() => {})
@@ -48,7 +55,6 @@ export function SyncStatusBadge() {
     bootstrap,
     runSync,
     online,
-    bootstrapped,
   ])
 
   if (!isElectron) return null
@@ -57,6 +63,9 @@ export function SyncStatusBadge() {
   const variant = online ? 'default' : 'secondary'
   const pending = status.pending
   const failed = status.failed
+  const cachedCount =
+    status.cacheCount ||
+    status.productCount + status.customerCount + status.supplierCount
 
   return (
     <TooltipProvider>
@@ -87,10 +96,16 @@ export function SyncStatusBadge() {
         <TooltipContent side="bottom" className="max-w-xs">
           <p className="font-medium">Desktop sync</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Products: {status.productCount} · Customers: {status.customerCount}
+            Cached API responses: {status.cacheCount || 0} · Catalog — Products: {status.productCount} · Customers: {status.customerCount} · Categories: {status.categoryCount} · Suppliers: {status.supplierCount}
           </p>
+          {!online && cachedCount > 0 && (
+            <p className="text-xs mt-1">All modules use cached data while offline (ERP, school, HR, and more).</p>
+          )}
+          {!online && cachedCount === 0 && (
+            <p className="text-xs mt-1">Go online once to download data for offline use.</p>
+          )}
           {pending > 0 && (
-            <p className="text-xs mt-1">{pending} invoice(s) waiting to upload when online.</p>
+            <p className="text-xs mt-1">{pending} change(s) waiting to upload when online.</p>
           )}
           {failed > 0 && (
             <p className="text-xs text-destructive mt-1">{failed} sync error(s). Check server logs.</p>

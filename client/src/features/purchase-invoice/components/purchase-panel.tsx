@@ -45,6 +45,10 @@ import { getSupplierId } from '../utils/scan-matching'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import { fetchAllProducts } from '@/stores/product.slice'
+import { useSync } from '@/lib/sync/use-sync'
+import { buildOfflinePurchasePayload } from '@/lib/sync/offline-purchase'
+import { getElectronAPI } from '@/lib/sync/electron'
+import { isApiUnreachable } from '@/lib/auth-cache'
 import { usePermissions } from '@/context/permission-context'
 import {
   EntityCreateEmptyPrompt,
@@ -89,6 +93,7 @@ export default function PurchasePanel({
   const { t } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
+  const { isElectron, online } = useSync()
   const canCreateSupplier = hasPermission('createSuppliers' as never)
   const canCreateProduct = hasPermission('createProducts' as never)
   const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
@@ -485,18 +490,45 @@ export default function PurchasePanel({
 
       console.log('Purchase data being sent to backend:', purchaseData)
 
+      const canQueueOffline = isElectron && !isEditing
+
+      const saveOffline = async () => {
+        const electron = getElectronAPI()
+        const syncStatus = await electron?.sync.status()
+        const deviceId = syncStatus?.deviceId || 'local-device'
+        const { clientId, localPurchaseNumber, operation } = buildOfflinePurchasePayload(purchaseData, deviceId)
+        await electron?.sync.queue(operation)
+        toast.success(`Purchase ${localPurchaseNumber} saved offline. It will sync when you are back online.`)
+        return {
+          ...purchaseData,
+          id: clientId,
+          invoiceNumber: localPurchaseNumber,
+          _offline: true,
+        }
+      }
+
       try {
         let result
         const purchaseId = editingPurchase?._id || editingPurchase?.id
-        if (isEditing && purchaseId) {
+        if (canQueueOffline && !online && !isEditing) {
+          result = await saveOffline()
+        } else if (isEditing && purchaseId) {
           result = await updatePurchase({
             id: purchaseId,
             data: purchaseData,
           }).unwrap()
           toast.success(t('Purchase updated successfully'))
         } else {
-          result = await createPurchase(purchaseData).unwrap()
-          toast.success(t('Purchase created successfully'))
+          try {
+            result = await createPurchase(purchaseData).unwrap()
+            toast.success(t('Purchase created successfully'))
+          } catch (error) {
+            if (canQueueOffline && isApiUnreachable(error)) {
+              result = await saveOffline()
+            } else {
+              throw error
+            }
+          }
         }
 
         // Refresh supplier balance after successful save
@@ -541,6 +573,8 @@ export default function PurchasePanel({
       printPurchase,
       onSaveSuccess,
       t,
+      isElectron,
+      online,
     ]
   )
 

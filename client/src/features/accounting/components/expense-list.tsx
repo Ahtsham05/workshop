@@ -56,7 +56,8 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   const { data: categoryData = [] } = useGetExpenseCategoriesQuery({
     transactionType: 'business_expense',
   });
-  const expenseCategories = ['All', ...categoryData.map((c) => c.name)];
+  const categories = Array.isArray(categoryData) ? categoryData : [];
+  const expenseCategories = ['All', ...categories.map((c) => c.name)];
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

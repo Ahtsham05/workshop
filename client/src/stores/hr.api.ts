@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1';
@@ -9,7 +10,7 @@ const baseQueryWithAuth: BaseQueryFn<
   unknown,
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
-  const baseQuery = fetchBaseQuery({
+  const baseQuery = createAppFetchBaseQuery({
     baseUrl: baseUrl,
     prepareHeaders: (headers) => {
       // Get token from localStorage

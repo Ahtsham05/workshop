@@ -1,19 +1,12 @@
 import type { SyncQueueOperation } from '@/types/electron'
-
-let localInvoiceSeq = 0
-
-function nextLocalInvoiceNumber(deviceId: string) {
-  localInvoiceSeq += 1
-  const shortId = deviceId.slice(0, 8)
-  return `LOCAL-INV-${shortId}-${String(localInvoiceSeq).padStart(5, '0')}`
-}
+import { nextOfflineSequence } from '@/lib/sync/offline-sequence'
 
 export function buildOfflineInvoicePayload(
   invoiceData: Record<string, unknown>,
   deviceId: string,
 ): { clientId: string; localInvoiceNumber: string; operation: SyncQueueOperation } {
   const clientId = crypto.randomUUID()
-  const localInvoiceNumber = nextLocalInvoiceNumber(deviceId)
+  const localInvoiceNumber = nextOfflineSequence('invoice', 'LOCAL-INV', deviceId)
 
   return {
     clientId,
@@ -24,7 +17,6 @@ export function buildOfflineInvoicePayload(
       operation: 'create',
       payload: {
         ...invoiceData,
-        type: 'cash',
         localInvoiceNumber,
         offlineCreatedAt: new Date().toISOString(),
       },

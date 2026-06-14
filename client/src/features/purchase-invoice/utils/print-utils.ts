@@ -626,31 +626,23 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
 }
 
 export const openPrintWindow = (htmlContent: string): void => {
-  const printWindow = window.open('', '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
-  if (printWindow) {
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    const waitForLoad = () => {
-      if (printWindow.document.readyState === 'complete') {
-        setTimeout(() => { try { printWindow.print() } catch (e) { console.error('Print error:', e); printWindow.close() } }, 1000)
-      } else { setTimeout(waitForLoad, 100) }
-    }
-    printWindow.onload = waitForLoad
-    setTimeout(waitForLoad, 500)
-  } else { throw new Error('Unable to open print window. Please check your popup blocker.') }
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const printWindow = window.open(blobUrl, '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
+  if (!printWindow) {
+    URL.revokeObjectURL(blobUrl)
+    throw new Error('Unable to open print window. Please check your popup blocker.')
+  }
+  printWindow.addEventListener('load', () => URL.revokeObjectURL(blobUrl), { once: true })
 }
 
 export const openA4PrintWindow = (htmlContent: string): void => {
-  const printWindow = window.open('', '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
-  if (printWindow) {
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    const waitForLoad = () => {
-      if (printWindow.document.readyState === 'complete') {
-        setTimeout(() => { try { printWindow.print() } catch (e) { console.error('A4 Print error:', e); printWindow.close() } }, 1500)
-      } else { setTimeout(waitForLoad, 100) }
-    }
-    printWindow.onload = waitForLoad
-    setTimeout(waitForLoad, 500)
-  } else { throw new Error('Unable to open print window. Please check your popup blocker.') }
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const printWindow = window.open(blobUrl, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
+  if (!printWindow) {
+    URL.revokeObjectURL(blobUrl)
+    throw new Error('Unable to open print window. Please check your popup blocker.')
+  }
+  printWindow.addEventListener('load', () => URL.revokeObjectURL(blobUrl), { once: true })
 }

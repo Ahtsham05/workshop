@@ -12,3 +12,4 @@ desktop/out/
 desktop/node_modules/
 desktop/dist/
 desktop/.env.production
+desktop/server.env
