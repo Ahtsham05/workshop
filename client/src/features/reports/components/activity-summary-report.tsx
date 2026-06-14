@@ -56,6 +56,7 @@ const moduleColors: Record<string, string> = {
   Installments: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
   'Customer Payments': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
   'Supplier Payments': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  'My Wallet': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
 }
 
 const directionColors: Record<string, string> = {
@@ -79,6 +80,7 @@ const SECTION_ORDER = [
   'Bill Payments',
   'Installments',
   'Expenses',
+  'Wallet Expense',
   'Customer Cash Received',
   'Customer Cash Paid',
   'Supplier Cash Paid',
@@ -100,6 +102,7 @@ const getSectionKey = (entry: ActivitySummaryEntry): string => {
   if (entry.module === 'Supplier Payments') {
     return entry.subType === 'Cash Paid' ? 'Supplier Cash Paid' : 'Supplier Cash Received'
   }
+  if (entry.module === 'My Wallet') return entry.subType
   return entry.module
 }
 
@@ -154,6 +157,7 @@ const getSectionModuleColor = (section: string): string => {
   if (section.startsWith('Cash') || section.includes('Cash')) return moduleColors['Cash Management']
   if (section.startsWith('Customer')) return moduleColors['Customer Payments']
   if (section.startsWith('Supplier')) return moduleColors['Supplier Payments']
+  if (section.startsWith('Wallet')) return moduleColors['My Wallet']
   return moduleColors[section] || 'bg-muted text-muted-foreground'
 }
 

@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger } = require('../models');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
@@ -2059,6 +2059,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
     installmentPayments,
     customerPayments,
     supplierPayments,
+    walletExpenses,
   ] = await Promise.all([
     Invoice.find({
       ...scope,
@@ -2135,6 +2136,13 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
     })
       .select('transactionType transactionDate reference description debit credit balance paymentMethod supplier')
       .populate('supplier', 'name phone nameUrdu')
+      .lean(),
+    PersonalLedger.find({
+      ...scope,
+      ...dateMatch('transactionDate'),
+      transactionType: 'expense',
+    })
+      .select('transactionType transactionDate description category reference debit credit balance paymentMethod notes')
       .lean(),
   ]);
 
@@ -2465,6 +2473,27 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       balance: 0,
       description: entry.description || (isPaid ? 'Payment made to supplier' : 'Payment received from supplier'),
       details: entry.reference ? `Ref: ${entry.reference}` : '',
+      status: 'completed',
+    });
+  });
+
+  walletExpenses.forEach((entry) => {
+    const amount = entry.debit || 0;
+    entries.push({
+      id: String(entry._id),
+      date: entry.transactionDate,
+      module: 'My Wallet',
+      subType: 'Wallet Expense',
+      reference: entry.reference || '',
+      party: entry.category || 'My Wallet',
+      partyPhone: '',
+      paymentType: capitalize(entry.paymentMethod) || 'Cash',
+      direction: 'out',
+      totalAmount: amount,
+      paidAmount: amount,
+      balance: 0,
+      description: entry.description || 'Wallet expense',
+      details: [entry.category, entry.notes].filter(Boolean).join(' | '),
       status: 'completed',
     });
   });
