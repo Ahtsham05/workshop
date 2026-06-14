@@ -16,7 +16,6 @@ const expenseSchema = new mongoose.Schema({
   },
   expenseNumber: {
     type: String,
-    unique: true,
     sparse: true,
   },
   category: {
@@ -73,28 +72,81 @@ const expenseSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Add plugins
 expenseSchema.plugin(toJSON);
 expenseSchema.plugin(paginate);
 
 expenseSchema.index({ organizationId: 1, branchId: 1 });
+expenseSchema.index({ organizationId: 1, expenseNumber: 1 }, { unique: true, sparse: true });
 expenseSchema.index({ referenceId: 1, referenceModel: 1 });
 
-// Generate expense number with retry for race conditions
-expenseSchema.pre('save', async function(next) {
+async function getMaxExpenseSequence(organizationId, branchId) {
+  const orgId = new mongoose.Types.ObjectId(String(organizationId));
+  const branchObjId = new mongoose.Types.ObjectId(String(branchId));
+
+  const rows = await mongoose.models.Expense.aggregate([
+    {
+      $match: {
+        organizationId: orgId,
+        branchId: branchObjId,
+        expenseNumber: { $regex: /^EXP-\d+$/ },
+      },
+    },
+    {
+      $project: {
+        seq: {
+          $convert: {
+            input: { $substrBytes: ['$expenseNumber', 4, { $subtract: [{ $strLenBytes: '$expenseNumber' }, 4] }] },
+            to: 'int',
+            onError: 0,
+            onNull: 0,
+          },
+        },
+      },
+    },
+    { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+  ]);
+
+  return rows[0]?.maxSeq || 0;
+}
+
+expenseSchema.statics.generateNextExpenseNumber = async function generateNextExpenseNumber(organizationId, branchId) {
+  const seqId = `expense_${organizationId}_${branchId}`;
+  const sequences = mongoose.connection.db.collection('_sequences');
+
+  let doc = await sequences.findOne({ _id: seqId });
+  if (!doc) {
+    const maxExisting = await getMaxExpenseSequence(organizationId, branchId);
+    await sequences.updateOne(
+      { _id: seqId },
+      { $setOnInsert: { seq: maxExisting } },
+      { upsert: true },
+    );
+  }
+
+  const result = await sequences.findOneAndUpdate(
+    { _id: seqId },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after' },
+  );
+
+  const seq = Number(result?.seq);
+  if (!Number.isFinite(seq) || seq <= 0) {
+    return `EXP-${Date.now().toString().slice(-8)}`;
+  }
+
+  return `EXP-${String(seq).padStart(6, '0')}`;
+};
+
+expenseSchema.pre('save', async function (next) {
   if (this.isNew && !this.expenseNumber) {
-    const lastExpense = await mongoose.models.Expense.findOne({ expenseNumber: { $exists: true, $ne: null } })
-      .sort({ expenseNumber: -1 })
-      .select('expenseNumber')
-      .lean();
-    let nextNum = 1;
-    if (lastExpense && lastExpense.expenseNumber) {
-      const match = lastExpense.expenseNumber.match(/EXP-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
+    try {
+      this.expenseNumber = await this.constructor.generateNextExpenseNumber(
+        this.organizationId,
+        this.branchId,
+      );
+    } catch (err) {
+      return next(err);
     }
-    this.expenseNumber = `EXP-${String(nextNum).padStart(6, '0')}`;
   }
   next();
 });

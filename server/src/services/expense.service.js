@@ -38,7 +38,7 @@ const createExpense = async (expenseBody, options = {}) => {
       break;
     } catch (error) {
       if (error.code === 11000 && error.keyPattern && error.keyPattern.expenseNumber && attempt < maxRetries - 1) {
-        // Duplicate expenseNumber from race condition, retry
+        delete expenseBody.expenseNumber;
         continue;
       }
       throw error;
