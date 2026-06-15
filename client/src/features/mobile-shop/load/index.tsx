@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { store } from '@/stores/store'
@@ -106,6 +106,7 @@ import {
   preventEnterSubmit,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { getTimeoutErrorMessage, isRequestTimeoutError } from '@/lib/api-timeout'
 
 type PurchaseFormState = {
   walletId: string
@@ -557,15 +558,20 @@ function LoadManagementPage({
 
   const { data: customersData } = useGetAllCustomersQuery(undefined)
   const suppliersRedux = useSelector((state: RootState) => state.supplier.data)
-  const { data: purchasesData } = useGetLoadPurchasesQuery({ page: purchasePage, limit: purchaseLimit })
-  const { data: transactionsData } = useGetLoadTransactionsQuery({ page: transactionPage, limit: transactionLimit })
-  const { data: withdrawalsData } = useGetCashWithdrawalsQuery({ page: withdrawalPage, limit: withdrawalLimit })
+  const { data: purchasesData, refetch: refetchPurchases } = useGetLoadPurchasesQuery({ page: purchasePage, limit: purchaseLimit })
+  const { data: transactionsData, refetch: refetchTransactions } = useGetLoadTransactionsQuery({ page: transactionPage, limit: transactionLimit })
+  const { data: withdrawalsData, refetch: refetchWithdrawals } = useGetCashWithdrawalsQuery({ page: withdrawalPage, limit: withdrawalLimit })
 
   const customers = Array.isArray(customersData) ? customersData : []
   const suppliers = Array.isArray(suppliersRedux) ? suppliersRedux : []
   const purchases = purchasesData?.results ?? []
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
+
+  const handleSaveTimeout = useCallback(async (refetchList: () => unknown, action: string) => {
+    await refetchList()
+    toast.warning(getTimeoutErrorMessage(action))
+  }, [])
 
   useEffect(() => {
     if (!navCustomerId) return
@@ -883,6 +889,10 @@ function LoadManagementPage({
       setPurchaseForm(initialPurchaseForm)
       setIsPurchasePaidAmountManual(false)
     } catch (error: any) {
+      if (isRequestTimeoutError(error)) {
+        await handleSaveTimeout(refetchPurchases, 'save load purchase')
+        return
+      }
       toast.error(error?.data?.message || 'Failed to save load purchase')
     }
   }
@@ -915,6 +925,10 @@ function LoadManagementPage({
       setSaleForm(initialSaleForm)
       setIsSaleReceivedAmountManual(false)
     } catch (error: any) {
+      if (isRequestTimeoutError(error)) {
+        await handleSaveTimeout(refetchTransactions, 'save load sale')
+        return
+      }
       toast.error(error?.data?.message || 'Failed to save load transaction')
     }
   }
@@ -968,6 +982,10 @@ function LoadManagementPage({
       })
       setIsWithdrawalCashAmountManual(false)
     } catch (error: any) {
+      if (isRequestTimeoutError(error)) {
+        await handleSaveTimeout(refetchWithdrawals, 'save cash transaction')
+        return
+      }
       toast.error(error?.data?.message || 'Failed to save cash transaction')
     }
   }
@@ -1176,6 +1194,10 @@ function LoadManagementPage({
         el?.focus()
       }, 50)
     } catch (error: any) {
+      if (isRequestTimeoutError(error)) {
+        await handleSaveTimeout(refetchWithdrawals, 'save entries')
+        return
+      }
       toast.error(error?.data?.message || 'Failed to save entries')
     }
   }

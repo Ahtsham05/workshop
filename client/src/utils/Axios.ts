@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { createTimeoutSignal } from '@/lib/api-timeout';
+import { createTimeoutSignal, resolveRequestTimeoutMs } from '@/lib/api-timeout';
 import { cacheAxiosGetResponse, shouldUseOfflineFallback, tryOfflineAxiosFallback } from '@/lib/sync/offline-http';
 import { getElectronAPI, isElectronApp } from '@/lib/sync/electron';
 import summery from './summery';
@@ -71,7 +71,10 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
 // Axios request interceptor to add Authorization token
 Axios.interceptors.request.use(
   (config: CustomAxiosRequestConfig) => {
-    config.signal = createTimeoutSignal(config.signal as AbortSignal | undefined);
+    config.signal = createTimeoutSignal(
+      config.signal as AbortSignal | undefined,
+      resolveRequestTimeoutMs(config.url || '', (config.method || 'get').toUpperCase()),
+    );
 
     const accessToken = getAccessToken();
     if (accessToken) {

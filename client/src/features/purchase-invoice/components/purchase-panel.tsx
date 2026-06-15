@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
-import { useCreatePurchaseMutation, useUpdatePurchaseMutation } from '@/stores/purchase.api'
+import { useCreatePurchaseMutation, useUpdatePurchaseMutation, purchaseApi } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -49,6 +49,7 @@ import { useSync } from '@/lib/sync/use-sync'
 import { buildOfflinePurchasePayload } from '@/lib/sync/offline-purchase'
 import { getElectronAPI } from '@/lib/sync/electron'
 import { isApiUnreachable } from '@/lib/auth-cache'
+import { getTimeoutErrorMessage, isRequestTimeoutError } from '@/lib/api-timeout'
 import { usePermissions } from '@/context/permission-context'
 import {
   EntityCreateEmptyPrompt,
@@ -558,6 +559,11 @@ export default function PurchasePanel({
         }
       } catch (error: any) {
         console.error('Save error:', error)
+        if (isRequestTimeoutError(error)) {
+          dispatch(purchaseApi.util.invalidateTags(['Purchase']))
+          toast.warning(getTimeoutErrorMessage('save purchase'))
+          return
+        }
         toast.error(error?.data?.message || t('Failed to save purchase'))
       } finally {
         setSavingType(null)
@@ -575,6 +581,7 @@ export default function PurchasePanel({
       t,
       isElectron,
       online,
+      dispatch,
     ]
   )
 
