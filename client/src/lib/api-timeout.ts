@@ -34,7 +34,9 @@ export function resolveRequestTimeoutMs(
   return DEFAULT_API_TIMEOUT_MS
 }
 
-export function applyRequestTimeout<T extends string | FetchArgs>(args: T): T {
+export function applyRequestTimeout(args: string): string
+export function applyRequestTimeout(args: FetchArgs): FetchArgs
+export function applyRequestTimeout(args: string | FetchArgs): string | FetchArgs {
   if (typeof args === 'string') return args
 
   const method = (args.method || 'GET').toUpperCase()
