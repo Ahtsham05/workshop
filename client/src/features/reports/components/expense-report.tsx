@@ -35,7 +35,9 @@ import {
   ChevronsUpDown,
   Plus,
   X,
+  Search,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import {
   BarChart,
   Bar,
@@ -83,6 +85,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
     const [detailData, setDetailData] = useState<any[]>([])
     const [detailLoading, setDetailLoading] = useState(false)
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+    const [categorySearch, setCategorySearch] = useState('')
 
     useEffect(() => {
       if (refreshTrigger > 0) {
@@ -165,6 +168,10 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
 
     const categories = data?.categoryBreakdown || []
     const totalExpenses = data?.summary?.totalExpenses || 0
+    const categorySearchTerm = categorySearch.trim().toLowerCase()
+    const filteredCategories = categorySearchTerm
+      ? categories.filter((cat) => cat._id.toLowerCase().includes(categorySearchTerm))
+      : categories
 
     const trendData = Object.entries(
       (data?.data || []).reduce<Record<string, number>>((acc, row: any) => {
@@ -207,11 +214,30 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       </div>
     )
 
+    const categorySearchField = categories.length > 0 && (
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={categorySearch}
+          onChange={(e) => setCategorySearch(e.target.value)}
+          placeholder={t('search_categories')}
+          className="pl-9"
+        />
+      </div>
+    )
+
     const categoryCards = (
       <div className="space-y-4">
         {categoryTotalBar}
+        {categorySearchField}
+        {filteredCategories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+            <Receipt className="h-10 w-10 mb-2 opacity-30" />
+            <p>{t('no_results_found')}</p>
+          </div>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {categories.map((cat, idx) => {
+          {filteredCategories.map((cat, idx) => {
             const share = totalExpenses ? ((cat.totalAmount / totalExpenses) * 100).toFixed(1) : '0'
             const color = COLORS[idx % COLORS.length]
             return (
@@ -249,6 +275,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
           })}
 
         </div>
+        )}
       </div>
     )
 

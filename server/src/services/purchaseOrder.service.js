@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PurchaseOrder, Purchase } = require('../models');
+const { PurchaseOrder } = require('../models');
 const ApiError = require('../utils/ApiError');
 const purchaseService = require('./purchase.service');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
@@ -392,18 +392,7 @@ const receiveItems = async (orderId, body, ctx) => {
   const paymentType = body.paymentType || 'Cash';
   const walletType = body.walletType;
 
-  // Generate next purchase invoice number (matches the pattern used in
-  // purchase.controller.js — "INV-####").
-  const lastPurchaseQuery = await Purchase.findOne({})
-    .sort({ createdAt: -1 })
-    .select('invoiceNumber')
-    .lean();
-  let nextInvoiceSeq = 5001;
-  if (lastPurchaseQuery?.invoiceNumber) {
-    const m = String(lastPurchaseQuery.invoiceNumber).match(/(\d+)$/);
-    if (m) nextInvoiceSeq = parseInt(m[1], 10) + 1;
-  }
-  const invoiceNumber = `INV-${nextInvoiceSeq}`;
+  const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber();
 
   const purchaseBody = {
     organizationId: ctx.organizationId || order.organizationId,

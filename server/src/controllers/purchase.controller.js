@@ -7,25 +7,27 @@ const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createPurchase = catchAsync(async (req, res) => {
-  // Fetch the last purchase invoice (assuming 'purchase' model has 'invoiceNumber' field)
-  const lastPurchase = await purchaseService.queryPurchases({}, { limit: 1, page: 1, sortBy: 'invoiceNumber:desc' });
+  const MAX_RETRIES = 3;
+  let purchase;
 
-  // Get the last invoice number and increment it
-  const lastInvoiceNumber = lastPurchase?.results && lastPurchase?.results?.length > 0 ? parseInt(lastPurchase?.results[0]?.invoiceNumber.replace('INV-', '')) : 5000; // Default to 5000 if no previous purchases
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
+    const newPurchaseData = {
+      ...req.body,
+      invoiceNumber: await purchaseService.generateNextPurchaseInvoiceNumber(),
+      ...getBranchContext(req),
+    };
 
-  const newInvoiceNumber = `INV-${lastInvoiceNumber + 1}`; // Generate the new invoice number
+    try {
+      purchase = await purchaseService.createPurchase(newPurchaseData);
+      break;
+    } catch (err) {
+      if (err.code === 11000 && err.keyPattern?.invoiceNumber && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
 
-  // Prepare the data for the new purchase with the updated invoice number
-  const newPurchaseData = {
-    ...req.body,
-    invoiceNumber: newInvoiceNumber,
-    ...getBranchContext(req),
-  };
-
-  // Create the new purchase with the updated invoice number
-  const purchase = await purchaseService.createPurchase(newPurchaseData);
-
-  // Send the response with the created purchase
   res.status(httpStatus.CREATED).send(purchase);
 });
 

@@ -54,6 +54,34 @@ const resolvePurchaseLedgerPaymentMethod = (purchase) => {
   return type;
 };
 
+const DEFAULT_PURCHASE_INVOICE_SEQ = 5000;
+
+const parsePurchaseInvoiceSequence = (invoiceNumber) => {
+  const match = String(invoiceNumber || '').match(/(\d+)$/);
+  if (!match) return null;
+  const seq = parseInt(match[1], 10);
+  return Number.isFinite(seq) ? seq : null;
+};
+
+/**
+ * Generate the next purchase invoice number (format: INV-####).
+ * Scans existing numbers and uses the highest trailing numeric suffix,
+ * ignoring malformed values like INV-NaN.
+ */
+const generateNextPurchaseInvoiceNumber = async () => {
+  const purchases = await Purchase.find({}).select('invoiceNumber').lean();
+
+  let maxSeq = DEFAULT_PURCHASE_INVOICE_SEQ;
+  for (const purchase of purchases) {
+    const seq = parsePurchaseInvoiceSequence(purchase.invoiceNumber);
+    if (seq !== null) {
+      maxSeq = Math.max(maxSeq, seq);
+    }
+  }
+
+  return `INV-${maxSeq + 1}`;
+};
+
 const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, previousWalletType, previousPaidAmount) => {
   const paidAmount = Number(purchase.paidAmount || 0);
   const paymentType = String(purchase.paymentType || 'Cash');
@@ -563,6 +591,7 @@ const getPurchaseByDate = async (filter) => {
 
 module.exports = {
   createPurchase,
+  generateNextPurchaseInvoiceNumber,
   queryPurchases,
   getPurchaseById,
   updatePurchaseById,

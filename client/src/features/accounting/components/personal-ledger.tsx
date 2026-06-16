@@ -471,6 +471,7 @@ export function PersonalLedger() {
   const [totalResults, setTotalResults] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [startDate, setStartDate] = useState(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -736,6 +737,25 @@ export function PersonalLedger() {
     [expenseCategoryBreakdown],
   );
 
+  const categorySearchTerm = categorySearch.trim().toLowerCase();
+
+  const filteredIncomeCategoryBreakdown = useMemo(() => {
+    if (!categorySearchTerm) return incomeCategoryBreakdown;
+    return incomeCategoryBreakdown.filter((cat) =>
+      cat._id.toLowerCase().includes(categorySearchTerm),
+    );
+  }, [incomeCategoryBreakdown, categorySearchTerm]);
+
+  const filteredExpenseCategoryBreakdown = useMemo(() => {
+    if (!categorySearchTerm) return expenseCategoryBreakdown;
+    return expenseCategoryBreakdown.filter((cat) =>
+      cat._id.toLowerCase().includes(categorySearchTerm),
+    );
+  }, [expenseCategoryBreakdown, categorySearchTerm]);
+
+  const hasCategoryBreakdown =
+    incomeCategoryBreakdown.length > 0 || expenseCategoryBreakdown.length > 0;
+
   const openCategoryDetail = useCallback(
     (catName: string, flow: CategoryFlow, entriesSource?: LedgerEntry[]) => {
       const source = entriesSource ?? reportEntries;
@@ -878,7 +898,17 @@ export function PersonalLedger() {
     total: number,
     flow: CategoryFlow,
     accentColor: string,
-  ) => (
+  ) => {
+    if (items.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+          <Receipt className="h-10 w-10 mb-2 opacity-30" />
+          <p>{t('no_results_found')}</p>
+        </div>
+      );
+    }
+
+    return (
     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {items.map((cat, idx) => {
         const share = total ? ((cat.totalAmount / total) * 100).toFixed(1) : '0';
@@ -921,6 +951,7 @@ export function PersonalLedger() {
       })}
     </div>
   );
+  };
 
   return (
     <div className="space-y-4">
@@ -1060,6 +1091,18 @@ export function PersonalLedger() {
         </Card>
       </div>
 
+      {hasCategoryBreakdown && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={categorySearch}
+            onChange={(e) => setCategorySearch(e.target.value)}
+            placeholder={t('search_categories')}
+            className="pl-9"
+          />
+        </div>
+      )}
+
       {/* Income by category (Money In) */}
       {incomeCategoryBreakdown.length > 0 && (
         <Card>
@@ -1071,7 +1114,7 @@ export function PersonalLedger() {
           </CardHeader>
           <CardContent>
             {renderCategoryBreakdownCards(
-              incomeCategoryBreakdown,
+              filteredIncomeCategoryBreakdown,
               totalWalletIncome,
               'income',
               '#16a34a',
@@ -1091,7 +1134,7 @@ export function PersonalLedger() {
           </CardHeader>
           <CardContent>
             {renderCategoryBreakdownCards(
-              expenseCategoryBreakdown,
+              filteredExpenseCategoryBreakdown,
               totalWalletExpenses,
               'expense',
               '#dc2626',
