@@ -519,7 +519,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>Phone <span className="text-destructive">*</span></Label>
-                  <Input type="tel" placeholder="03XX-XXXXXXX" value={parent.phone} onChange={(e) => updateParent('phone', e.target.value)} />
+                  <Input fieldType='phone' placeholder="03xxxxxxxxx" value={parent.phone} onChange={(e) => updateParent('phone', e.target.value)} />
                 </div>
                 <div>
                   <Label>Email</Label>
@@ -527,7 +527,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                 </div>
                 <div>
                   <Label>CNIC</Label>
-                  <Input placeholder="XXXXX-XXXXXXX-X" value={parent.cnic} onChange={(e) => updateParent('cnic', e.target.value)} />
+                  <Input fieldType='cnic' placeholder="XXXXX-XXXXXXX-X" value={parent.cnic} onChange={(e) => updateParent('cnic', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

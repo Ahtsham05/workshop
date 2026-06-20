@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect } from 'react'
+import { Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,7 @@ import {
   parseBusinessDateTimeLocal,
   toBusinessDateTimeLocal,
 } from '@/lib/business-timezone'
+import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 type CatalogForm = {
   serviceName: string
@@ -107,6 +109,7 @@ export default function ServicesPage({
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([])
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [serviceSearch, setServiceSearch] = useState('')
+  const [invoiceSearch, setInvoiceSearch] = useState('')
 
   const [catalogPage, setCatalogPage] = useState(1)
   const [catalogLimit, setCatalogLimit] = useState(10)
@@ -119,7 +122,9 @@ export default function ServicesPage({
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: catalogData } = useGetServicesQuery({ page: catalogPage, limit: catalogLimit })
-  const { data: invoiceData } = useGetServiceInvoicesQuery({ page: invoicePage, limit: invoiceLimit })
+  const { data: invoiceData } = useGetServiceInvoicesQuery(
+    invoiceSearch.trim() ? { page: 1, limit: 1000 } : { page: invoicePage, limit: invoiceLimit },
+  )
   const { data: customersData } = useGetAllCustomersQuery(undefined)
 
   const customers = useMemo(
@@ -149,6 +154,18 @@ export default function ServicesPage({
 
   const services = catalogData?.results ?? []
   const invoices = invoiceData?.results ?? []
+
+  const filteredInvoices = useMemo(() => {
+    if (!invoiceSearch.trim()) return invoices
+    const lower = invoiceSearch.toLowerCase()
+    const digits = invoiceSearch.replace(/\D/g, '')
+    return invoices.filter(inv => {
+      if (inv.customerName?.toLowerCase().includes(lower)) return true
+      if (digits && inv.customerPhone?.replace(/\D/g, '').includes(digits)) return true
+      if (inv.invoiceNumber?.toLowerCase().includes(lower)) return true
+      return false
+    })
+  }, [invoices, invoiceSearch])
 
   // Memoized filtered active services for invoice creation
   const filteredServices = useMemo(() => {
@@ -602,7 +619,7 @@ export default function ServicesPage({
                   </div>
                   <div className='space-y-1.5'>
                     <Label>Customer Phone</Label>
-                    <Input
+                    <CustomerPhoneAutocomplete
                       value={invoiceForm.customerPhone}
                       onChange={(e) =>
                         setInvoiceForm((prev) => ({
@@ -612,6 +629,15 @@ export default function ServicesPage({
                         }))
                       }
                       placeholder='03xxxxxxxxx'
+                      searchServiceRecords
+                      onCustomerSelect={(c) =>
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          customerPhone: c.phone || prev.customerPhone,
+                          customerName: c.name || prev.customerName,
+                          customerId: '',
+                        }))
+                      }
                     />
                   </div>
                   <div className='space-y-1.5'>
@@ -792,8 +818,18 @@ export default function ServicesPage({
 
             {/* Invoices History */}
             <Card>
-              <CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
                 <CardTitle>Service Invoices History</CardTitle>
+                <div className='relative w-full sm:w-64'>
+                  <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+                  <Input
+                    placeholder='Search name or phone…'
+                    value={invoiceSearch}
+                    onChange={e => { setInvoiceSearch(e.target.value); setInvoicePage(1) }}
+                    className='pl-8 h-9'
+                    showVoiceInput={false}
+                  />
+                </div>
               </CardHeader>
               <CardContent className='space-y-3'>
                 <div className='rounded-md border overflow-x-auto'>
@@ -809,14 +845,14 @@ export default function ServicesPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {invoices.length === 0 && (
+                      {filteredInvoices.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={6} className='text-center py-8 text-muted-foreground'>
-                            No service invoices found
+                            {invoiceSearch.trim() ? 'No results found' : 'No service invoices found'}
                           </TableCell>
                         </TableRow>
                       )}
-                      {invoices.map((invoice) => (
+                      {filteredInvoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell className='font-medium'>{invoice.invoiceNumber}</TableCell>
                           <TableCell>{fmtDate(invoice.date)}</TableCell>
@@ -842,17 +878,19 @@ export default function ServicesPage({
                   </Table>
                 </div>
 
-                <SimplePagination
-                  currentPage={invoiceData?.page ?? invoicePage}
-                  totalPages={invoiceData?.totalPages ?? 1}
-                  totalResults={invoiceData?.totalResults ?? 0}
-                  limit={invoiceLimit}
-                  onLimitChange={(value: number) => {
-                    setInvoiceLimit(value)
-                    setInvoicePage(1)
-                  }}
-                  onPageChange={setInvoicePage}
-                />
+                {!invoiceSearch.trim() && (
+                  <SimplePagination
+                    currentPage={invoiceData?.page ?? invoicePage}
+                    totalPages={invoiceData?.totalPages ?? 1}
+                    totalResults={invoiceData?.totalResults ?? 0}
+                    limit={invoiceLimit}
+                    onLimitChange={(value: number) => {
+                      setInvoiceLimit(value)
+                      setInvoicePage(1)
+                    }}
+                    onPageChange={setInvoicePage}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

@@ -13,8 +13,15 @@ export const useVoiceInput = ({ onResult, onError, language: propLanguage }: Use
   const recognitionRef = useRef<any>(null);
   const { language: contextLanguage, t } = useLanguage();
   
-  // Use prop language if provided, otherwise fall back to context language
-  const currentLanguage = propLanguage || (contextLanguage === 'ur' ? 'ur-PK' : 'en-US');
+  // Map app language codes to Web Speech API locale codes
+  const SPEECH_LANGUAGE_CODES: Record<string, string> = {
+    en: 'en-US',
+    ur: 'ur-PK',
+    ar: 'ar-SA',
+    hi: 'hi-IN',
+  }
+  // Use prop language if provided, otherwise map from context language
+  const currentLanguage = propLanguage || SPEECH_LANGUAGE_CODES[contextLanguage] || 'en-US';
 
   // Initialize speech recognition only once
   useEffect(() => {

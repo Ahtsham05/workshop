@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Printer, Trash2, CheckCircle, PackageCheck, Plus, ShoppingCart, Package } from 'lucide-react'
+import { Printer, Trash2, CheckCircle, PackageCheck, Plus, Search, ShoppingCart, Package } from 'lucide-react'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
@@ -59,6 +59,7 @@ import {
   toBusinessDateTimeLocal,
 } from '@/lib/business-timezone'
 import { generateRepairReceiptHTML, openRepairPrintWindow } from './repair-print-utils'
+import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,7 @@ const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 export default function RepairPage() {
   const [form, setForm] = useState<RepairFormState>(makeInitialForm)
   const [activeTab, setActiveTab] = useState('all')
+  const [repairSearch, setRepairSearch] = useState('')
   const [repairPage, setRepairPage] = useState(1)
   const [repairLimit, setRepairLimit] = useState(10)
   const [printRepair, setPrintRepair] = useState<RepairJobRecord | null>(null)
@@ -422,10 +424,19 @@ export default function RepairPage() {
     openRepairPrintWindow(html)
   }
 
-  // ── Filter (server-side via status param; results are already filtered) ──
+  // ── Filter: server-side by status, client-side text search ──
   const allRepairs = data?.results ?? []
-  // For the "all" tab the server returns all statuses, we display as-is
-  const filtered = allRepairs
+  const filtered = useMemo(() => {
+    if (!repairSearch.trim()) return allRepairs
+    const lower = repairSearch.toLowerCase()
+    const digits = repairSearch.replace(/\D/g, '')
+    return allRepairs.filter(r => {
+      if (r.customerName?.toLowerCase().includes(lower)) return true
+      if (digits && r.phone?.replace(/\D/g, '').includes(digits)) return true
+      if (r.deviceModel?.toLowerCase().includes(lower)) return true
+      return false
+    })
+  }, [allRepairs, repairSearch])
 
   const tabCounts = {
     all: activeTab === 'all' ? (data?.totalResults ?? 0) : '…',
@@ -459,16 +470,24 @@ export default function RepairPage() {
                 </div>
                 <div className='space-y-1'>
                   <Label>Phone Number</Label>
-                  <Input
-                    placeholder='03xx-xxxxxxx'
+                  <CustomerPhoneAutocomplete
+                    placeholder='03xxxxxxxxx'
                     value={form.phone}
                     onChange={(e) => setField('phone', e.target.value)}
+                    onCustomerSelect={(c) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        phone: c.phone || prev.phone,
+                        customerName: c.name || prev.customerName,
+                      }))
+                    }
+                    searchRepairRecords
                     {...repairEnter.enterProps('repair-phone')}
                   />
                 </div>
               </div>
 
-              <div className='grid gap-3 sm:grid-cols-3'>
+              <div className='grid gap-3 md:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Device Model *</Label>
                   <Input
@@ -487,15 +506,16 @@ export default function RepairPage() {
                     {...repairEnter.enterProps('repair-color')}
                   />
                 </div>
-                <div className='space-y-1'>
-                  <Label>Serial / IMEI</Label>
-                  <Input
-                    placeholder='IMEI or serial'
-                    value={form.serialNumber}
-                    onChange={(e) => setField('serialNumber', e.target.value)}
-                    {...repairEnter.enterProps('repair-serial')}
-                  />
-                </div>
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Serial / IMEI</Label>
+                <Input
+                  placeholder='IMEI or serial'
+                  value={form.serialNumber}
+                  onChange={(e) => setField('serialNumber', e.target.value)}
+                  {...repairEnter.enterProps('repair-serial')}
+                />
               </div>
 
               <div className='space-y-1'>
@@ -602,8 +622,18 @@ export default function RepairPage() {
 
         {/* ── Repair Queue ── */}
         <Card className='flex flex-col'>
-          <CardHeader>
+          <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
             <CardTitle>Repair Queue</CardTitle>
+            <div className='relative w-full sm:w-64'>
+              <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+              <Input
+                placeholder='Search name, phone, device…'
+                value={repairSearch}
+                onChange={e => { setRepairSearch(e.target.value); setRepairPage(1) }}
+                className='pl-8 h-9'
+                showVoiceInput={false}
+              />
+            </div>
           </CardHeader>
           <CardContent className='flex-1 overflow-auto'>
             <Tabs value={activeTab} onValueChange={handleTabChange} className='mb-4'>
@@ -714,15 +744,17 @@ export default function RepairPage() {
                 })}
               </TableBody>
             </Table>
-            <SimplePagination
-              currentPage={repairPage}
-              totalPages={data?.totalPages ?? 1}
-              totalResults={data?.totalResults}
-              limit={repairLimit}
-              onPageChange={setRepairPage}
-              onLimitChange={(l) => { setRepairLimit(l); setRepairPage(1) }}
-              className='mt-3'
-            />
+            {!repairSearch.trim() && (
+              <SimplePagination
+                currentPage={repairPage}
+                totalPages={data?.totalPages ?? 1}
+                totalResults={data?.totalResults}
+                limit={repairLimit}
+                onPageChange={setRepairPage}
+                onLimitChange={(l) => { setRepairLimit(l); setRepairPage(1) }}
+                className='mt-3'
+              />
+            )}
           </CardContent>
         </Card>
       </div>

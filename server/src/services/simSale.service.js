@@ -264,6 +264,23 @@ const querySimSales = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
 
+  if (queryOptions.search) {
+    const search = String(queryOptions.search).trim();
+    const digits = search.replace(/\D/g, '');
+    const conditions = [];
+    if (digits.length >= 2) {
+      conditions.push({ customerMobile: { $regex: digits, $options: 'i' } });
+      conditions.push({ customerCNIC: { $regex: digits, $options: 'i' } });
+    }
+    if (search.length >= 2) {
+      conditions.push({ customerName: { $regex: search, $options: 'i' } });
+    }
+    if (conditions.length > 0) {
+      queryFilter.$or = conditions;
+    }
+    delete queryOptions.search;
+  }
+
   if (queryOptions.startDate || queryOptions.endDate) {
     queryFilter.date = {};
     if (queryOptions.startDate) {

@@ -26,6 +26,7 @@ const getSimSales = {
     walletType: Joi.string().trim(),
     productName: Joi.string(),
     customerName: Joi.string(),
+    search: Joi.string().trim().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),
     sortBy: Joi.string(),

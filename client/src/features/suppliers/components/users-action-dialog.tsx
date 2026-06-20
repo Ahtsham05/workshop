@@ -252,6 +252,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                     </FormLabel>
                     <FormControl>
                       <Input
+                        fieldType='phone'
                         placeholder={`${t('supplier_name')} ${t('phone')}`}
                         className='col-span-4'
                         autoComplete='off'
@@ -272,6 +273,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                     </FormLabel>
                     <FormControl>
                       <Input
+                        fieldType='phone'
                         placeholder={`${t('supplier_name')} ${t('whatsapp')}`}
                         className='col-span-4'
                         autoComplete='off'

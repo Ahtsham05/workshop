@@ -997,10 +997,11 @@ export const mobileShopApi = createApi({
     }),
 
     // ─── Sim Sales ───────────────────────────────────────────────────────────
-    getSimSales: builder.query<PaginatedResult<SimSaleRecord>, { page?: number; limit?: number } | void>({
+    getSimSales: builder.query<PaginatedResult<SimSaleRecord>, { page?: number; limit?: number; search?: string } | void>({
       query: (params) => {
         const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
         if ((params as any)?.page) p.set('page', String((params as any).page))
+        if ((params as any)?.search) p.set('search', String((params as any).search))
         return `/sim-sales?${p.toString()}`
       },
       providesTags: ['SimSales'],

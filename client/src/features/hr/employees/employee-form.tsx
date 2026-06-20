@@ -239,7 +239,7 @@ export default function EmployeeForm({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">{t('Phone')} *</Label>
-                  <Input id="phone" {...register('phone')} />
+                  <Input id="phone" fieldType='phone' {...register('phone')} />
                   {errors.phone && (
                     <p className="text-sm text-red-600">{errors.phone.message}</p>
                   )}
@@ -249,7 +249,7 @@ export default function EmployeeForm({
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cnic">{t('CNIC')}</Label>
-                  <Input id="cnic" {...register('cnic')} />
+                  <Input id="cnic" fieldType='cnic' {...register('cnic')} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dateOfBirth">{t('Date of Birth')}</Label>

@@ -16,7 +16,7 @@ const createSimSale = catchAsync(async (req, res) => {
 const getSimSales = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['walletType', 'productName', 'customerName']);
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page', 'startDate', 'endDate']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page', 'startDate', 'endDate', 'search']);
   const result = await simSaleService.querySimSales(filter, options);
   res.send(result);
 });

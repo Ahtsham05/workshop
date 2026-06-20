@@ -44,7 +44,7 @@ import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
@@ -61,6 +61,7 @@ import {
   MOBILE_FORM_KEYBOARD_HINT,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 type SimSaleFormState = {
   date: string
@@ -100,6 +101,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const dispatch = useDispatch()
   const [page, setPage] = useState(1)
   const limit = 10
+  const [simSearch, setSimSearch] = useState('')
 
   const [form, setForm] = useState<SimSaleFormState>(makeEmptyForm())
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -114,7 +116,9 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
   const { data: walletsData } = useGetWalletsQuery()
   const { data: customersData } = useGetAllCustomersQuery(undefined)
-  const { data: salesData, isLoading } = useGetSimSalesQuery({ page, limit })
+  const { data: salesData, isLoading } = useGetSimSalesQuery(
+    simSearch.trim() ? { page: 1, limit: 1000 } : { page, limit },
+  )
   const productsRedux = useSelector((s: RootState) => (s as any).product?.products ?? [])
 
   const [createSimSale, { isLoading: creating }] = useCreateSimSaleMutation()
@@ -126,6 +130,18 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const products = Array.isArray(productsRedux) ? productsRedux : []
   const sales = salesData?.results ?? []
   const totalPages = salesData?.totalPages ?? 1
+
+  const filteredSales = useMemo(() => {
+    if (!simSearch.trim()) return sales
+    const lower = simSearch.toLowerCase()
+    const digits = simSearch.replace(/\D/g, '')
+    return sales.filter(s => {
+      if (s.customerName?.toLowerCase().includes(lower)) return true
+      if (digits && s.customerMobile?.replace(/\D/g, '').includes(digits)) return true
+      if (digits && s.customerCNIC?.replace(/\D/g, '').includes(digits)) return true
+      return false
+    })
+  }, [sales, simSearch])
 
   useEffect(() => {
     if (!products.length) {
@@ -449,10 +465,20 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                 {/* Customer Mobile */}
                 <div className='space-y-2'>
                   <Label>Customer Mobile</Label>
-                  <Input
+                  <CustomerPhoneAutocomplete
                     placeholder='03xxxxxxxxx'
                     value={form.customerMobile}
                     onChange={e => handleChange('customerMobile', e.target.value)}
+                    onCustomerSelect={(c) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        customerMobile: c.phone || prev.customerMobile,
+                        customerName: c.name || prev.customerName,
+                        customerCNIC: c.cnic || prev.customerCNIC,
+                        customerLocation: c.address || prev.customerLocation,
+                      }))
+                    }
+                    searchSimSaleRecords
                     {...simEnter.enterProps('customer-mobile')}
                   />
                 </div>
@@ -460,10 +486,21 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                 {/* Customer CNIC */}
                 <div className='space-y-2'>
                   <Label>Customer CNIC</Label>
-                  <Input
+                  <CustomerPhoneAutocomplete
+                    fieldType='cnic'
                     placeholder='XXXXX-XXXXXXX-X'
                     value={form.customerCNIC}
                     onChange={e => handleChange('customerCNIC', e.target.value)}
+                    onCustomerSelect={(c) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        customerCNIC: c.cnic || prev.customerCNIC,
+                        customerMobile: c.phone || prev.customerMobile,
+                        customerName: c.name || prev.customerName,
+                        customerLocation: c.address || prev.customerLocation,
+                      }))
+                    }
+                    searchSimSaleRecords
                     {...simEnter.enterProps('customer-cnic')}
                   />
                 </div>
@@ -609,14 +646,26 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
         {/* History Table */}
         <Card>
-          <CardHeader>
+          <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
             <CardTitle>Sim Sale History</CardTitle>
+            <div className='relative w-full sm:w-72'>
+              <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+              <Input
+                placeholder='Search name, phone, CNIC…'
+                value={simSearch}
+                onChange={e => { setSimSearch(e.target.value); setPage(1) }}
+                className='pl-8 h-9'
+                showVoiceInput={false}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <p className='text-center text-muted-foreground'>Loading...</p>
-            ) : sales.length === 0 ? (
-              <p className='text-center text-muted-foreground'>No sim sales found</p>
+            ) : filteredSales.length === 0 ? (
+              <p className='text-center text-muted-foreground'>
+                {simSearch.trim() ? 'No results found' : 'No sim sales found'}
+              </p>
             ) : (
               <>
                 <div className='overflow-x-auto'>
@@ -639,13 +688,17 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sales.map(sale => (
+                      {filteredSales.map(sale => (
                         <TableRow key={sale.id}>
                           <TableCell className='font-medium'>#{sale.jobNumber}</TableCell>
                           <TableCell>{format(new Date(sale.date), 'dd-MM-yyyy')}</TableCell>
                           <TableCell>{sale.productName || '—'}</TableCell>
                           <TableCell>{sale.walletType || '—'}</TableCell>
-                          <TableCell>{sale.customerName || '—'}</TableCell>
+                          <TableCell>
+                            <div className='font-medium'>{sale.customerName || '—'}</div>
+                            {sale.customerMobile && <div className='text-xs text-muted-foreground'>{sale.customerMobile}</div>}
+                            {sale.customerCNIC && <div className='text-xs text-muted-foreground'>CNIC: {sale.customerCNIC}</div>}
+                          </TableCell>
                           <TableCell>{Number(sale.simAmount).toFixed(2)}</TableCell>
                           <TableCell>{Number(sale.loadAmount).toFixed(2)}</TableCell>
                           <TableCell>{Number(sale.purchaseAmount).toFixed(2)}</TableCell>
@@ -671,7 +724,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                     </TableBody>
                   </Table>
                 </div>
-                {totalPages > 1 && (
+                {!simSearch.trim() && totalPages > 1 && (
                   <div className='mt-4'>
                     <SimplePagination currentPage={page} totalPages={totalPages} limit={limit} onPageChange={setPage} />
                   </div>

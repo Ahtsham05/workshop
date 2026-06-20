@@ -249,6 +249,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                     </FormLabel>
                     <FormControl>
                       <Input
+                        fieldType='phone'
                         placeholder={t('phone')}
                         className='col-span-4'
                         autoComplete='off'
@@ -269,6 +270,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                     </FormLabel>
                     <FormControl>
                       <Input
+                        fieldType='phone'
                         placeholder={t('whatsapp')}
                         className='col-span-4'
                         autoComplete='off'

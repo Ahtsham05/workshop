@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
-import { getInputClasses, getVoiceInputLanguage } from '@/utils/keyboard-language-utils'
+import { getInputClasses } from '@/utils/keyboard-language-utils'
 import { cn } from '@/lib/utils'
 
 interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -14,7 +14,6 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
   ({ className, onValueChange, onChange, showVoiceInput = false, voiceInputSize = 'sm', ...props }, ref) => {
     const [inputValue, setInputValue] = useState(props.value?.toString() || '')
 
-    // Update internal state when props.value changes
     useEffect(() => {
       const newValue = props.value?.toString() || ''
       setInputValue(newValue)
@@ -23,56 +22,39 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value
       setInputValue(newValue)
-      
-      // Call the original onChange if provided
-      if (onChange) {
-        onChange(e)
-      }
-      
-      // Call onValueChange if provided
-      if (onValueChange) {
-        onValueChange(newValue)
-      }
+      onChange?.(e)
+      onValueChange?.(newValue)
     }, [onChange, onValueChange])
 
     const handleVoiceInput = useCallback((transcript: string) => {
       const newValue = inputValue + transcript
       setInputValue(newValue)
-      
-      // Create a synthetic event to maintain compatibility
       const syntheticEvent = {
         target: { value: newValue }
       } as React.ChangeEvent<HTMLInputElement>
-      
-      if (onChange) {
-        onChange(syntheticEvent)
-      }
-      
-      if (onValueChange) {
-        onValueChange(newValue)
-      }
+      onChange?.(syntheticEvent)
+      onValueChange?.(newValue)
     }, [inputValue, onChange, onValueChange])
 
-    // Get appropriate classes based on current input text
+    // Apply RTL/font classes based on the text content
     const smartClasses = getInputClasses(inputValue, className || '')
-    
-    // Get voice input language based on current text
-    const voiceLanguage = getVoiceInputLanguage(inputValue)
 
     if (showVoiceInput) {
       return (
         <div className="relative">
+          {/* showVoiceInput={false} prevents the base Input from adding its own mic button */}
           <Input
             {...props}
             ref={ref}
-            className={cn(smartClasses, showVoiceInput ? 'pr-10' : '')}
+            showVoiceInput={false}
+            className={cn(smartClasses, 'pr-10')}
             value={inputValue}
             onChange={handleChange}
           />
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+            {/* No language prop — VoiceInputButton reads language from settings context */}
             <VoiceInputButton
               onTranscript={handleVoiceInput}
-              language={voiceLanguage}
               size={voiceInputSize}
             />
           </div>
@@ -84,6 +66,7 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
       <Input
         {...props}
         ref={ref}
+        showVoiceInput={false}
         className={smartClasses}
         value={inputValue}
         onChange={handleChange}

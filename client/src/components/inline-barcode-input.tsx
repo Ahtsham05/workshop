@@ -99,6 +99,7 @@ export function InlineBarcodeInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder || t('enter_or_scan_barcode')}
           disabled={disabled}
+          showVoiceInput={false}
           className={cn(
             "pr-10 font-mono",
             isListening && "border-blue-500 ring-2 ring-blue-200",

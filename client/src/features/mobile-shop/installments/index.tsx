@@ -53,6 +53,7 @@ import {
   makeEnterChain,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -692,11 +693,36 @@ export default function InstallmentsPage() {
                 </div>
                 <div className='space-y-1'>
                   <Label>Phone Number</Label>
-                  <Input value={planForm.customerPhone} onChange={e => handlePlanFormChange('customerPhone', e.target.value)} placeholder='03XX-XXXXXXX' {...planEnter.enterProps('inst-customer-phone')} />
+                  <CustomerPhoneAutocomplete
+                    value={planForm.customerPhone}
+                    onChange={e => handlePlanFormChange('customerPhone', e.target.value)}
+                    placeholder='03xxxxxxxxx'
+                    onCustomerSelect={(c) => {
+                      if (c.phone) handlePlanFormChange('customerPhone', c.phone)
+                      handlePlanFormChange('customerName', c.name || planForm.customerName)
+                      if (c.cnic) handlePlanFormChange('customerCNIC', c.cnic)
+                      if (c.address) handlePlanFormChange('customerAddress', c.address)
+                    }}
+                    searchInstallmentRecords
+                    {...planEnter.enterProps('inst-customer-phone')}
+                  />
                 </div>
                 <div className='space-y-1'>
                   <Label>CNIC</Label>
-                  <Input value={planForm.customerCNIC} onChange={e => handlePlanFormChange('customerCNIC', e.target.value)} placeholder='XXXXX-XXXXXXX-X' {...planEnter.enterProps('inst-customer-cnic')} />
+                  <CustomerPhoneAutocomplete
+                    fieldType='cnic'
+                    value={planForm.customerCNIC}
+                    onChange={e => handlePlanFormChange('customerCNIC', e.target.value)}
+                    placeholder='XXXXX-XXXXXXX-X'
+                    onCustomerSelect={(c) => {
+                      if (c.cnic) handlePlanFormChange('customerCNIC', c.cnic)
+                      if (c.phone) handlePlanFormChange('customerPhone', c.phone)
+                      handlePlanFormChange('customerName', c.name || planForm.customerName)
+                      if (c.address) handlePlanFormChange('customerAddress', c.address)
+                    }}
+                    searchInstallmentRecords
+                    {...planEnter.enterProps('inst-customer-cnic')}
+                  />
                 </div>
                 <div className='space-y-1'>
                   <Label>Address</Label>
@@ -715,7 +741,7 @@ export default function InstallmentsPage() {
                 </div>
                 <div className='space-y-1'>
                   <Label>Guarantor Phone</Label>
-                  <Input value={planForm.guarantorPhone} onChange={e => handlePlanFormChange('guarantorPhone', e.target.value)} placeholder='03XX-XXXXXXX' {...planEnter.enterProps('inst-guarantor-phone')} />
+                  <Input fieldType='phone' value={planForm.guarantorPhone} onChange={e => handlePlanFormChange('guarantorPhone', e.target.value)} placeholder='03xxxxxxxxx' {...planEnter.enterProps('inst-guarantor-phone')} />
                 </div>
               </div>
             </div>

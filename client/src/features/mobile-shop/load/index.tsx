@@ -78,7 +78,7 @@ import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
@@ -107,6 +107,7 @@ import {
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
 import { getTimeoutErrorMessage, isRequestTimeoutError } from '@/lib/api-timeout'
+import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 type PurchaseFormState = {
   walletId: string
@@ -521,10 +522,13 @@ function LoadManagementPage({
   // Pagination state for each history table
   const [purchasePage, setPurchasePage] = useState(1)
   const [purchaseLimit, setPurchaseLimit] = useState(10)
+  const [purchaseSearch, setPurchaseSearch] = useState('')
   const [transactionPage, setTransactionPage] = useState(1)
   const [transactionLimit, setTransactionLimit] = useState(10)
+  const [salesSearch, setSalesSearch] = useState('')
   const [withdrawalPage, setWithdrawalPage] = useState(1)
   const [withdrawalLimit, setWithdrawalLimit] = useState(10)
+  const [withdrawalSearch, setWithdrawalSearch] = useState('')
 
   const [createLoadPurchase, { isLoading: isSavingPurchase }] = useCreateLoadPurchaseMutation()
   const [createLoadTransaction, { isLoading: isSavingSale }] = useCreateLoadTransactionMutation()
@@ -558,15 +562,54 @@ function LoadManagementPage({
 
   const { data: customersData } = useGetAllCustomersQuery(undefined)
   const suppliersRedux = useSelector((state: RootState) => state.supplier.data)
-  const { data: purchasesData, refetch: refetchPurchases } = useGetLoadPurchasesQuery({ page: purchasePage, limit: purchaseLimit })
-  const { data: transactionsData, refetch: refetchTransactions } = useGetLoadTransactionsQuery({ page: transactionPage, limit: transactionLimit })
-  const { data: withdrawalsData, refetch: refetchWithdrawals } = useGetCashWithdrawalsQuery({ page: withdrawalPage, limit: withdrawalLimit })
+  const { data: purchasesData, refetch: refetchPurchases } = useGetLoadPurchasesQuery(
+    purchaseSearch.trim() ? { page: 1, limit: 1000 } : { page: purchasePage, limit: purchaseLimit },
+  )
+  const { data: transactionsData, refetch: refetchTransactions } = useGetLoadTransactionsQuery(
+    salesSearch.trim() ? { page: 1, limit: 1000 } : { page: transactionPage, limit: transactionLimit },
+  )
+  const { data: withdrawalsData, refetch: refetchWithdrawals } = useGetCashWithdrawalsQuery(
+    withdrawalSearch.trim() ? { page: 1, limit: 1000 } : { page: withdrawalPage, limit: withdrawalLimit },
+  )
 
   const customers = Array.isArray(customersData) ? customersData : []
   const suppliers = Array.isArray(suppliersRedux) ? suppliersRedux : []
   const purchases = purchasesData?.results ?? []
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
+
+  const filteredPurchases = useMemo(() => {
+    if (!purchaseSearch.trim()) return purchases
+    const lower = purchaseSearch.toLowerCase()
+    return purchases.filter(p =>
+      p.supplierName?.toLowerCase().includes(lower) ||
+      p.walletType?.toLowerCase().includes(lower)
+    )
+  }, [purchases, purchaseSearch])
+
+  const filteredTransactions = useMemo(() => {
+    if (!salesSearch.trim()) return transactions
+    const lower = salesSearch.toLowerCase()
+    const digits = salesSearch.replace(/\D/g, '')
+    return transactions.filter(t => {
+      const name = (t.customerName?.trim() || 'Walk-in Customer').toLowerCase()
+      if (name.includes(lower)) return true
+      if (digits && t.mobileNumber?.replace(/\D/g, '').includes(digits)) return true
+      return false
+    })
+  }, [transactions, salesSearch])
+
+  const filteredWithdrawals = useMemo(() => {
+    if (!withdrawalSearch.trim()) return withdrawals
+    const lower = withdrawalSearch.toLowerCase()
+    const digits = withdrawalSearch.replace(/\D/g, '')
+    return withdrawals.filter(w => {
+      const name = (w.customerName?.trim() || '').toLowerCase()
+      if (name.includes(lower)) return true
+      if (digits && w.customerNumber?.replace(/\D/g, '').includes(digits)) return true
+      return false
+    })
+  }, [withdrawals, withdrawalSearch])
 
   const handleSaveTimeout = useCallback(async (refetchList: () => unknown, action: string) => {
     await refetchList()
@@ -1213,10 +1256,10 @@ function LoadManagementPage({
   }
 
   const toggleAllWithdrawals = () => {
-    if (selectedWithdrawalIds.size === withdrawals.length) {
+    if (selectedWithdrawalIds.size === filteredWithdrawals.length) {
       setSelectedWithdrawalIds(new Set())
     } else {
-      setSelectedWithdrawalIds(new Set(withdrawals.map(w => w.id)))
+      setSelectedWithdrawalIds(new Set(filteredWithdrawals.map(w => w.id)))
     }
   }
 
@@ -1655,10 +1698,22 @@ function LoadManagementPage({
             </Card>
 
             <Card className='min-w-0'>
-              <CardHeader><CardTitle>Recent Load Purchases</CardTitle></CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
+                <CardTitle>Recent Load Purchases</CardTitle>
+                <div className='relative w-full sm:w-56'>
+                  <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+                  <Input
+                    placeholder='Search supplier…'
+                    value={purchaseSearch}
+                    onChange={e => { setPurchaseSearch(e.target.value); setPurchasePage(1) }}
+                    className='pl-8 h-9'
+                    showVoiceInput={false}
+                  />
+                </div>
+              </CardHeader>
               <CardContent className='min-w-0'>
-                {purchases.length === 0 ? (
-                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No purchases yet.</p></div>
+                {filteredPurchases.length === 0 ? (
+                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>{purchaseSearch.trim() ? 'No results found' : 'No purchases yet.'}</p></div>
                 ) : (
                   <>
                   <Table>
@@ -1678,7 +1733,7 @@ function LoadManagementPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {purchases.map((p) => (
+                      {filteredPurchases.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className='text-sm'>{format(new Date(p.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell>{p.walletType}</TableCell>
@@ -1701,15 +1756,17 @@ function LoadManagementPage({
                       ))}
                     </TableBody>
                   </Table>
-                  <SimplePagination
-                    currentPage={purchasePage}
-                    totalPages={purchasesData?.totalPages ?? 1}
-                    totalResults={purchasesData?.totalResults}
-                    limit={purchaseLimit}
-                    onPageChange={setPurchasePage}
-                    onLimitChange={setPurchaseLimit}
-                    className='mt-3'
-                  />
+                  {!purchaseSearch.trim() && (
+                    <SimplePagination
+                      currentPage={purchasePage}
+                      totalPages={purchasesData?.totalPages ?? 1}
+                      totalResults={purchasesData?.totalResults}
+                      limit={purchaseLimit}
+                      onPageChange={setPurchasePage}
+                      onLimitChange={setPurchaseLimit}
+                      className='mt-3'
+                    />
+                  )}
                   </>
                 )}
               </CardContent>
@@ -1864,7 +1921,17 @@ function LoadManagementPage({
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='phone'>Customer Phone Number - Optional</Label>
-                      <Input id='phone' type='tel' placeholder='e.g., 03001234567 (if known)' value={saleForm.mobileNumber} onChange={(e) => handleSaleChange('mobileNumber', e.target.value)} {...saleEnter.enterProps('phone')} />
+                      <CustomerPhoneAutocomplete
+                        id='phone'
+                        placeholder='03xxxxxxxxx'
+                        value={saleForm.mobileNumber}
+                        onChange={(e) => handleSaleChange('mobileNumber', e.target.value)}
+                        onCustomerSelect={(c) => {
+                          handleSaleChange('mobileNumber', c.phone || saleForm.mobileNumber)
+                          handleSaleChange('customerName', c.name)
+                        }}
+                        {...saleEnter.enterProps('phone')}
+                      />
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='sale-date'>Date</Label>
@@ -1902,10 +1969,22 @@ function LoadManagementPage({
             </Card>
 
             <Card className='min-w-0'>
-              <CardHeader><CardTitle>Recent Load Sales</CardTitle></CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 flex-wrap'>
+                <CardTitle>Recent Load Sales</CardTitle>
+                <div className='relative w-full sm:w-64'>
+                  <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+                  <Input
+                    placeholder='Search name or phone…'
+                    value={salesSearch}
+                    onChange={e => { setSalesSearch(e.target.value); setTransactionPage(1) }}
+                    className='pl-8 h-9'
+                    showVoiceInput={false}
+                  />
+                </div>
+              </CardHeader>
               <CardContent className='min-w-0'>
-                {transactions.length === 0 ? (
-                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No sales yet.</p></div>
+                {filteredTransactions.length === 0 ? (
+                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>{salesSearch.trim() ? 'No results found' : 'No sales yet.'}</p></div>
                 ) : (
                   <>
                   <Table>
@@ -1925,7 +2004,7 @@ function LoadManagementPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.map((t) => (
+                      {filteredTransactions.map((t) => (
                         <TableRow key={t.id}>
                           <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell className='font-medium'>{t.walletType}</TableCell>
@@ -1950,15 +2029,17 @@ function LoadManagementPage({
                       ))}
                     </TableBody>
                   </Table>
-                  <SimplePagination
-                    currentPage={transactionPage}
-                    totalPages={transactionsData?.totalPages ?? 1}
-                    totalResults={transactionsData?.totalResults}
-                    limit={transactionLimit}
-                    onPageChange={setTransactionPage}
-                    onLimitChange={setTransactionLimit}
-                    className='mt-3'
-                  />
+                  {!salesSearch.trim() && (
+                    <SimplePagination
+                      currentPage={transactionPage}
+                      totalPages={transactionsData?.totalPages ?? 1}
+                      totalResults={transactionsData?.totalResults}
+                      limit={transactionLimit}
+                      onPageChange={setTransactionPage}
+                      onLimitChange={setTransactionLimit}
+                      className='mt-3'
+                    />
+                  )}
                   </>
                 )}
               </CardContent>
@@ -2309,7 +2390,17 @@ function LoadManagementPage({
                     </div>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-number'>Customer Account / Phone</Label>
-                      <Input id='customer-number' type='tel' placeholder='e.g., 03001234567' value={withdrawalForm.customerNumber} onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)} {...withdrawalEnter.enterProps('customer-number')} />
+                      <CustomerPhoneAutocomplete
+                        id='customer-number'
+                        placeholder='03xxxxxxxxx'
+                        value={withdrawalForm.customerNumber}
+                        onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)}
+                        onCustomerSelect={(c) => {
+                          handleWithdrawalChange('customerNumber', c.phone || withdrawalForm.customerNumber)
+                          handleWithdrawalChange('customerName', c.name)
+                        }}
+                        {...withdrawalEnter.enterProps('customer-number')}
+                      />
                     </div>
                     <CustomerAccountTypePicker
                       id='customer-account-type'
@@ -2443,24 +2534,36 @@ function LoadManagementPage({
 
             <Card className='min-w-0'>
               <CardHeader>
-                <div className='flex items-center justify-between'>
+                <div className='flex flex-wrap items-center justify-between gap-3'>
                   <CardTitle>Recent Cash Received &amp; Send</CardTitle>
-                  {selectedWithdrawalIds.size > 0 && (
-                    <Button
-                      variant='destructive'
-                      size='sm'
-                      disabled={isDeletingBatch}
-                      onClick={() => setBulkDeleteConfirm(true)}
-                    >
-                      <Trash2 className='h-4 w-4 mr-1' />
-                      {isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedWithdrawalIds.size})`}
-                    </Button>
-                  )}
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <div className='relative w-full sm:w-64'>
+                      <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none' />
+                      <Input
+                        placeholder='Search name or phone…'
+                        value={withdrawalSearch}
+                        onChange={e => { setWithdrawalSearch(e.target.value); setWithdrawalPage(1) }}
+                        className='pl-8 h-9'
+                        showVoiceInput={false}
+                      />
+                    </div>
+                    {selectedWithdrawalIds.size > 0 && (
+                      <Button
+                        variant='destructive'
+                        size='sm'
+                        disabled={isDeletingBatch}
+                        onClick={() => setBulkDeleteConfirm(true)}
+                      >
+                        <Trash2 className='h-4 w-4 mr-1' />
+                        {isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedWithdrawalIds.size})`}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className='min-w-0'>
-                {withdrawals.length === 0 ? (
-                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>No transactions yet.</p></div>
+                {filteredWithdrawals.length === 0 ? (
+                  <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>{withdrawalSearch.trim() ? 'No results found' : 'No transactions yet.'}</p></div>
                 ) : (
                   <>
                   <Table>
@@ -2468,7 +2571,7 @@ function LoadManagementPage({
                       <TableRow>
                         <TableHead className='w-10'>
                           <Checkbox
-                            checked={withdrawals.length > 0 && selectedWithdrawalIds.size === withdrawals.length}
+                            checked={filteredWithdrawals.length > 0 && selectedWithdrawalIds.size === filteredWithdrawals.length}
                             onCheckedChange={toggleAllWithdrawals}
                           />
                         </TableHead>
@@ -2487,7 +2590,7 @@ function LoadManagementPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {withdrawals.map((w) => (
+                      {filteredWithdrawals.map((w) => (
                         <TableRow key={w.id} className={selectedWithdrawalIds.has(w.id) ? 'bg-muted/50' : ''}>
                           <TableCell>
                             <Checkbox
@@ -2529,15 +2632,17 @@ function LoadManagementPage({
                       ))}
                     </TableBody>
                   </Table>
-                  <SimplePagination
-                    currentPage={withdrawalPage}
-                    totalPages={withdrawalsData?.totalPages ?? 1}
-                    totalResults={withdrawalsData?.totalResults}
-                    limit={withdrawalLimit}
-                    onPageChange={setWithdrawalPage}
-                    onLimitChange={setWithdrawalLimit}
-                    className='mt-3'
-                  />
+                  {!withdrawalSearch.trim() && (
+                    <SimplePagination
+                      currentPage={withdrawalPage}
+                      totalPages={withdrawalsData?.totalPages ?? 1}
+                      totalResults={withdrawalsData?.totalResults}
+                      limit={withdrawalLimit}
+                      onPageChange={setWithdrawalPage}
+                      onLimitChange={setWithdrawalLimit}
+                      className='mt-3'
+                    />
+                  )}
                   </>
                 )}
               </CardContent>
