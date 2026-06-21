@@ -54,6 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
@@ -62,12 +63,15 @@ import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { EntityFormSection } from '@/components/entity-form-section'
+import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   nameUrdu: z.string().optional(),
   description: z.string(),
   barcode: z.string().optional(),
+  trackImei: z.boolean().optional(),
+  imeis: z.array(z.string()).optional(),
   price: z.number().min(1, { message: 'Sale price is required.' }),
   cost: z.number().min(1, { message: 'Purchase price is required.' }),
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }),
@@ -111,6 +115,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [unitsOpen, setUnitsOpen] = useState(false)
+  const [imeiDraft, setImeiDraft] = useState('')
   
   const dispatch = useDispatch<AppDispatch>()
   const { categories } = useSelector((state: RootState) => state.category)
@@ -133,6 +138,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: currentRow?.nameUrdu || '',
         description: currentRow?.description || '',
         barcode: currentRow?.barcode || '',
+        trackImei: currentRow?.trackImei || false,
         price: currentRow?.price || 0,
         cost: currentRow?.cost || 0,
         stockQuantity: currentRow?.stockQuantity || 0,
@@ -146,6 +152,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: '',
         description: '',
         barcode: '',
+        trackImei: false,
+        imeis: [],
         stockQuantity: 0,
         price: 0,
         cost: 0,
@@ -164,6 +172,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: currentRow.nameUrdu || '',
         description: currentRow.description || '',
         barcode: currentRow.barcode || '',
+        trackImei: currentRow.trackImei || false,
         price: currentRow.price || 0,
         cost: currentRow.cost || 0,
         stockQuantity: currentRow.stockQuantity || 0,
@@ -178,6 +187,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: '',
         description: '',
         barcode: '',
+        trackImei: false,
         stockQuantity: 0,
         price: 0,
         cost: 0,
@@ -193,22 +203,41 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const productSessionKey = open ? (currentRow?.id ?? currentRow?._id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
 
+  const editingProductId = isEdit ? (currentRow?.id || currentRow?._id) : undefined
+  const { data: openingStockImeis } = useGetOpeningStockImeisQuery(
+    { productId: editingProductId },
+    { skip: !open || !isEdit || !editingProductId },
+  )
+  useEffect(() => {
+    if (!open || !isEdit || !openingStockImeis) return
+    form.setValue('imeis', openingStockImeis.map((d) => d.imei))
+  }, [open, isEdit, openingStockImeis, form])
+
   useEffect(() => {
     if (!open || isEdit || !defaultName?.trim()) return
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
   const onSubmit = async (values: productForm) => {
+    if (!isEdit && values.trackImei) {
+      const imeiCount = (values.imeis || []).length
+      if (imeiCount !== values.stockQuantity) {
+        toast.error(`Enter ${values.stockQuantity} IMEI number(s) — ${imeiCount} entered`)
+        return
+      }
+    }
     if (isEdit) {
       await dispatch(updateProduct({ ...values, _id: currentRow?.id || currentRow?._id })).then(() => {
         toast.success(t('product_updated_successfully'))
         setFetch?.((prev: any) => !prev)
+        dispatch(imeiApi.util.invalidateTags(['Imei']))
       })
     } else {
       try {
         const created = await dispatch(addProduct(values)).unwrap()
         toast.success(t('product_created_successfully'))
         setFetch?.((prev: any) => !prev)
+        dispatch(imeiApi.util.invalidateTags(['Imei']))
         onCreated?.(created)
       } catch {
         return
@@ -753,6 +782,95 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name='trackImei'
+                render={({ field }) => (
+                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                    <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
+                      Track IMEI
+                    </FormLabel>
+                    <FormControl>
+                      <div className='col-span-4 flex items-center gap-2'>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                        <span className='text-sm text-muted-foreground'>
+                          Track an IMEI/serial number for each unit of this product (mobile phones)
+                        </span>
+                      </div>
+                    </FormControl>
+                    <FormMessage className='col-span-4 col-start-3' />
+                  </FormItem>
+                )}
+              />
+              {form.watch('trackImei') && (form.watch('stockQuantity') > 0 || isEdit) && (
+                <FormField
+                  control={form.control}
+                  name='imeis'
+                  render={({ field }) => {
+                    const imeis = field.value || []
+                    const stockQuantity = form.watch('stockQuantity')
+                    const addImei = () => {
+                      const cleaned = imeiDraft.trim()
+                      if (!cleaned || imeis.includes(cleaned)) return
+                      field.onChange([...imeis, cleaned])
+                      setImeiDraft('')
+                    }
+                    return (
+                      <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                        <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
+                          IMEI Numbers
+                        </FormLabel>
+                        <FormControl>
+                          <div className='col-span-4 space-y-2'>
+                            <span className='text-xs font-medium text-amber-700'>
+                              {isEdit
+                                ? `${imeis.length} entered`
+                                : `${imeis.length}/${stockQuantity} entered`}
+                            </span>
+                            <div className='flex items-center gap-2'>
+                              <Input
+                                placeholder='Scan or type IMEI, press Enter'
+                                value={imeiDraft}
+                                showVoiceInput={false}
+                                onChange={(e) => setImeiDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ',') {
+                                    e.preventDefault()
+                                    addImei()
+                                  }
+                                }}
+                              />
+                              <Button type='button' size='sm' variant='outline' onClick={addImei}>
+                                <Plus className='h-3.5 w-3.5' />
+                              </Button>
+                            </div>
+                            {imeis.length > 0 && (
+                              <div className='flex flex-wrap gap-1.5'>
+                                {imeis.map((num: string) => (
+                                  <Badge key={num} variant='secondary' className='gap-1 pr-1'>
+                                    {num}
+                                    <button
+                                      type='button'
+                                      onClick={() => field.onChange(imeis.filter((n: string) => n !== num))}
+                                      className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
+                                    >
+                                      <X className='h-3 w-3' />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage className='col-span-4 col-start-3' />
+                      </FormItem>
+                    )
+                  }}
+                />
+              )}
               </EntityFormSection>
 
               <EntityFormSection title={t('product_photo_section_title')}>

@@ -95,6 +95,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
           quantity: number
           unitPrice: number
           subtotal: number
+          imeis?: string[]
         }>
       >()
       detailData.purchases.forEach((p) => {
@@ -108,6 +109,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            imeis: item.imeis,
           })
         })
       })
@@ -558,6 +560,11 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                                   >
                                     {reportEntityName(language, item.name, item.nameUrdu)}
                                   </span>
+                                  {item.imeis && item.imeis.length > 0 && (
+                                    <span className='block text-xs text-muted-foreground'>
+                                      IMEI: {item.imeis.join(', ')}
+                                    </span>
+                                  )}
                                 </TableCell>
                                 <TableCell />
                                 <TableCell />
@@ -685,6 +692,11 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                             )}
                           >
                             {reportEntityName(language, item.name, item.nameUrdu)}
+                            {item.imeis && item.imeis.length > 0 && (
+                              <div className='text-xs font-normal text-muted-foreground'>
+                                IMEI: {item.imeis.join(', ')}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className='text-right'>{item.quantity}</TableCell>
                           <TableCell className='text-right'>

@@ -65,6 +65,7 @@ export interface InvoiceItem {
   subtotal: number
   profit: number
   isManualEntry?: boolean
+  imeis?: string[]
 }
 
 export function createEmptyManualInvoiceItem(): InvoiceItem {
@@ -145,6 +146,7 @@ export interface Product {
   barcode?: string
   description?: string
   nameUrdu?: string
+  trackImei?: boolean
 }
 
 export interface Category {

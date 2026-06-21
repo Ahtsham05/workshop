@@ -19,7 +19,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X } from 'lucide-react'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
 import { Badge } from '@/components/ui/badge'
@@ -108,6 +109,30 @@ export default function PurchasePanel({
   const [aiScanOpen, setAiScanOpen] = useState(false)
   const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
   const [quickCreateProductIndex, setQuickCreateProductIndex] = useState<number | null>(null)
+  const [imeiDraftByProduct, setImeiDraftByProduct] = useState<Record<string, string>>({})
+
+  const addImeiToItem = useCallback((index: number, value: string) => {
+    const cleaned = value.trim()
+    if (!cleaned) return
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) => {
+        if (i !== index) return item
+        const existing = item.imeis || []
+        if (existing.includes(cleaned)) return item
+        return { ...item, imeis: [...existing, cleaned] }
+      }),
+    }))
+  }, [setPurchase])
+
+  const removeImeiFromItem = useCallback((index: number, value: string) => {
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, imeis: (item.imeis || []).filter((n) => n !== value) } : item,
+      ),
+    }))
+  }, [setPurchase])
 
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const purchasePriceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -436,6 +461,18 @@ export default function PurchasePanel({
         return
       }
 
+      // IMEI-tracked products must have exactly one IMEI per unit purchased
+      for (const item of validItems) {
+        if (!item.product.trackImei) continue
+        const imeiCount = (item.imeis || []).filter((n) => n.trim()).length
+        if (imeiCount !== item.quantity) {
+          toast.error(
+            `${item.product.name}: enter ${item.quantity} IMEI number(s) — ${imeiCount} entered`,
+          )
+          return
+        }
+      }
+
       setSavingType(printType)
 
       const totals = calculateTotals()
@@ -478,6 +515,7 @@ export default function PurchasePanel({
             priceAtPurchase: item.purchasePrice,
             sellingPriceAtPurchase: item.sellingPrice || 0,
             total: item.quantity * item.purchasePrice,
+            imeis: item.product.trackImei ? (item.imeis || []) : undefined,
           };
         }),
         totalAmount: totals.total,
@@ -712,11 +750,19 @@ export default function PurchasePanel({
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">
                 <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder={t('Search suppliers...')}
-                    value={supplierSearchQuery}
-                    onValueChange={setSupplierSearchQuery}
-                  />
+                  <div className="relative">
+                    <CommandInput
+                      placeholder={t('Search suppliers...')}
+                      value={supplierSearchQuery}
+                      onValueChange={setSupplierSearchQuery}
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <VoiceInputButton
+                        onTranscript={(text) => setSupplierSearchQuery(text)}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
                   {suppliersLoading ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
@@ -1210,6 +1256,7 @@ export default function PurchasePanel({
                             ref={(el) => { purchasePriceInputRefs.current[productId] = el }}
                             type="text"
                             inputMode="decimal"
+                            showVoiceInput={false}
                             value={item.purchasePrice > 0 ? item.purchasePrice : ''}
                             onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
                             onKeyDown={handlePurchasePriceKeyDown}
@@ -1230,6 +1277,7 @@ export default function PurchasePanel({
                           <Input
                             type="text"
                             inputMode="decimal"
+                            showVoiceInput={false}
                             value={(item.sellingPrice ?? 0) > 0 ? item.sellingPrice : ''}
                             onChange={(e) => updateSellingPrice(productId, parseFloat(e.target.value) || 0)}
                             onFocus={(e) => e.target.select()}
@@ -1245,6 +1293,63 @@ export default function PurchasePanel({
                         <p className='font-bold text-sm'>Rs{(item.quantity * item.purchasePrice).toFixed(2)}</p>
                       </div>
                     </div>
+
+                    {/* Row 3: IMEI numbers (only for products that require IMEI tracking) */}
+                    {item.product.trackImei && (
+                      <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
+                        <div className='flex items-center justify-between'>
+                          <span className='text-xs font-medium text-amber-700'>
+                            IMEI Numbers ({(item.imeis || []).length}/{item.quantity})
+                          </span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <Input
+                            placeholder='Scan or type IMEI, press Enter'
+                            value={imeiDraftByProduct[productId] || ''}
+                            showVoiceInput={false}
+                            onChange={(e) =>
+                              setImeiDraftByProduct((prev) => ({ ...prev, [productId]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault()
+                                addImeiToItem(index, imeiDraftByProduct[productId] || '')
+                                setImeiDraftByProduct((prev) => ({ ...prev, [productId]: '' }))
+                              }
+                            }}
+                            className='h-8 text-sm flex-1'
+                          />
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            className='h-8'
+                            onClick={() => {
+                              addImeiToItem(index, imeiDraftByProduct[productId] || '')
+                              setImeiDraftByProduct((prev) => ({ ...prev, [productId]: '' }))
+                            }}
+                          >
+                            <Plus className='h-3.5 w-3.5' />
+                          </Button>
+                        </div>
+                        {(item.imeis || []).length > 0 && (
+                          <div className='flex flex-wrap gap-1.5'>
+                            {(item.imeis || []).map((num) => (
+                              <Badge key={num} variant='secondary' className='gap-1 pr-1'>
+                                {num}
+                                <button
+                                  type='button'
+                                  onClick={() => removeImeiFromItem(index, num)}
+                                  className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
+                                >
+                                  <X className='h-3 w-3' />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })

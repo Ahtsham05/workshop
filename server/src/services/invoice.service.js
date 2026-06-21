@@ -9,6 +9,7 @@ const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
+const imeiService = require('./imei.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -263,10 +264,20 @@ const createInvoice = async (invoiceBody, userId) => {
       cost: item.cost || product.cost,
       subtotal: item.quantity * item.unitPrice,
       profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
-      isManualEntry: item.isManualEntry || false
+      isManualEntry: item.isManualEntry || false,
+      imeis: item.imeis || [],
     };
 
     validatedItems.push(validatedItem);
+  }
+
+  // Make sure every selected IMEI is still in stock before committing the sale
+  if (!isQuotation) {
+    await imeiService.validateImeisAvailable({
+      items: validatedItems,
+      organizationId: invoiceBody.organizationId,
+      branchId: invoiceBody.branchId,
+    });
   }
 
   // Create invoice
@@ -369,6 +380,17 @@ const createInvoice = async (invoiceBody, userId) => {
       );
       console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
     }
+
+    await imeiService.markImeisSoldForInvoice({
+      invoiceId: invoice._id,
+      items: validatedItems,
+      customerId: invoice.customerId,
+      customerName: invoice.customerName || invoice.walkInCustomerName || '',
+      saleDate: invoice.invoiceDate || new Date(),
+      updatedBy: userId,
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+    });
   }
 
   // Populate references conditionally
@@ -546,6 +568,8 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           { new: true }
         );
       }
+      // Put back any IMEIs sold on this invoice — they'll be re-marked sold below for whatever's still selected
+      await imeiService.releaseImeisForInvoice(invoice._id);
     }
 
     // Validate new items and stock
@@ -585,10 +609,19 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         cost: item.cost || product.cost,
         subtotal: item.quantity * item.unitPrice,
         profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
-        isManualEntry: item.isManualEntry || false
+        isManualEntry: item.isManualEntry || false,
+        imeis: item.imeis || [],
       };
 
       validatedItems.push(validatedItem);
+    }
+
+    if (!willRemainQuotation) {
+      await imeiService.validateImeisAvailable({
+        items: validatedItems,
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+      });
     }
 
     updateBody.items = validatedItems;
@@ -602,6 +635,17 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           { new: true }
         );
       }
+
+      await imeiService.markImeisSoldForInvoice({
+        invoiceId: invoice._id,
+        items: validatedItems,
+        customerId: updateBody.customerId !== undefined ? updateBody.customerId : invoice.customerId,
+        customerName: (updateBody.customerName ?? invoice.customerName) || (updateBody.walkInCustomerName ?? invoice.walkInCustomerName) || '',
+        saleDate: invoice.invoiceDate || new Date(),
+        updatedBy: userId,
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+      });
     }
   }
 
@@ -763,6 +807,7 @@ const deleteInvoiceById = async (invoiceId) => {
         { new: true }
       );
     }
+    await imeiService.releaseImeisForInvoice(invoice._id);
   }
 
   // Delete related customer ledger entries

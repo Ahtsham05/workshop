@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Product } = require('../models');
 const ApiError = require('../utils/ApiError');
+const imeiService = require('./imei.service');
 
 /**
  * Create a product
@@ -8,8 +9,24 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Product>}
  */
 const createProduct = async (productBody) => {
-  const product = new Product(productBody); // Create a new instance of the Product model
-  return product.save(); // Save the product instance
+  const { imeis, ...productFields } = productBody;
+  const product = new Product(productFields); // Create a new instance of the Product model
+  await product.save(); // Save the product instance
+
+  if (product.trackImei && imeis && imeis.length > 0) {
+    await imeiService.syncImeisForPurchaseItem({
+      purchaseId: null,
+      productId: product._id,
+      productName: product.name,
+      imeis,
+      purchasePrice: product.cost,
+      organizationId: product.organizationId,
+      branchId: product.branchId,
+      createdBy: product.createdBy,
+    });
+  }
+
+  return product;
 };
 
 /**
@@ -48,8 +65,23 @@ const updateProductById = async (productId, updateBody) => {
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
-  Object.assign(product, updateBody);
+  const { imeis, ...updateFields } = updateBody;
+  Object.assign(product, updateFields);
   await product.save();
+
+  if (product.trackImei && imeis) {
+    await imeiService.syncImeisForPurchaseItem({
+      purchaseId: null,
+      productId: product._id,
+      productName: product.name,
+      imeis,
+      purchasePrice: product.cost,
+      organizationId: product.organizationId,
+      branchId: product.branchId,
+      createdBy: product.createdBy,
+    });
+  }
+
   return product;
 };
 

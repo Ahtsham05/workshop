@@ -28,7 +28,7 @@ const createProduct = catchAsync(async (req, res) => {
   }
   
   try {
-    const product = await productService.createProduct({ ...productData, ...getBranchContext(req) });
+    const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id });
     res.status(httpStatus.CREATED).send(product);
   } catch (error) {
     // Handle MongoDB duplicate key errors

@@ -26,6 +26,7 @@ export interface PrintInvoiceData {
     unit?: string
     unitPrice: number
     subtotal: number
+    imeis?: string[]
   }>
   customerId?: string | { name: string; id: string; _id?: string }
   customerName?: string
@@ -154,13 +155,17 @@ export const formatCurrency = (amount: number): string => {
   return `Rs${amount.toFixed(2)}`
 }
 
-/** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). */
+/** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). Appends IMEI(s) sold, if any. */
 function formatPrintItemCell(
-  item: { name: string; nameUrdu?: string | null },
+  item: { name: string; nameUrdu?: string | null; imeis?: string[] },
   lang: InvoiceLanguage,
 ): string {
   const text = lang === 'ur' ? item.nameUrdu?.trim() || item.name : item.name
-  return escapeHtml(text)
+  let html = escapeHtml(text)
+  if (item.imeis && item.imeis.length > 0) {
+    html += `<br><span style="font-size:10px;color:#666;">IMEI: ${item.imeis.map((n) => escapeHtml(n)).join(', ')}</span>`
+  }
+  return html
 }
 
 /** Single-line customer display for print. Walk-in: stored name as entered. */

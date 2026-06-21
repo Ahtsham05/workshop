@@ -46,6 +46,7 @@ export interface PurchaseItem {
   purchasePrice: number; // price we bought it at (cost)
   sellingPrice?: number; // price we will sell it at (retail)
   isManualEntry?: boolean; // flag for manual product selection
+  imeis?: string[]; // IMEI/serial numbers received, when product.trackImei is true
 }
 
 // Supplier Interface
@@ -630,6 +631,7 @@ const PurchaseInvoicePage = () => {
       stockQuantity: item.stockQuantity,
       purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
       sellingPrice: item.sellingPriceAtPurchase || item.product?.price || 0,
+      imeis: item.imeis || [],
     }));
     
     console.log('Transformed items:', transformedItems);

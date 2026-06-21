@@ -312,7 +312,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
-          subtotal: item.subtotal
+          subtotal: item.subtotal,
+          imeis: item.imeis,
         })),
         customerId: invoice.customerId,
         customerName: customerName,
@@ -985,7 +986,12 @@ function InvoiceDetails({
                           className="w-8 h-8 rounded object-cover"
                         />
                       )}
-                      <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
+                      <div>
+                        <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
+                        {item.imeis && item.imeis.length > 0 && (
+                          <p className='text-xs text-muted-foreground'>IMEI: {item.imeis.join(', ')}</p>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">

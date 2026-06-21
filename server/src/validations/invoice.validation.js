@@ -17,7 +17,8 @@ const invoiceItem = Joi.object({
   cost: Joi.number().min(0).required(),
   subtotal: Joi.number().min(0).required(),
   profit: Joi.number().required(),
-  isManualEntry: Joi.boolean().optional()
+  isManualEntry: Joi.boolean().optional(),
+  imeis: Joi.array().items(Joi.string().trim()).optional(),
 });
 
 const splitPayment = Joi.object({

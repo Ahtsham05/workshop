@@ -29,6 +29,7 @@ import { restaurantApi } from './restaurant.api';
 import { whatsappApi } from './whatsapp.api';
 import { whatsappCloudApi } from './whatsappCloud.api';
 import { cashRegisterApi } from './cashRegister.api';
+import { imeiApi } from './imei.api';
 
 export const store = configureStore({
   reducer: {
@@ -62,6 +63,7 @@ export const store = configureStore({
     [whatsappApi.reducerPath]: whatsappApi.reducer,
     [whatsappCloudApi.reducerPath]: whatsappCloudApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
+    [imeiApi.reducerPath]: imeiApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -89,6 +91,7 @@ export const store = configureStore({
       whatsappApi.middleware,
       whatsappCloudApi.middleware,
       cashRegisterApi.middleware,
+      imeiApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

@@ -14,6 +14,7 @@ const createPurchase = {
         priceAtPurchase: Joi.number().required(),
         sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number().required(),
+        imeis: Joi.array().items(Joi.string().trim()).optional(),
       })
     ).required(),
     totalAmount: Joi.number().required(),
@@ -65,6 +66,7 @@ const updatePurchase = {
         priceAtPurchase: Joi.number(),
         sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number(),
+        imeis: Joi.array().items(Joi.string().trim()).optional(),
       })
     ),
     totalAmount: Joi.number(),

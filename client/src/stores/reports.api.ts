@@ -59,6 +59,7 @@ export interface SalesInvoiceItem {
   quantity: number
   unitPrice: number
   subtotal: number
+  imeis?: string[]
 }
 
 export interface SalesInvoiceDetail {
@@ -104,6 +105,7 @@ export interface PurchaseInvoiceItem {
   unit?: string
   unitPrice: number
   subtotal: number
+  imeis?: string[]
 }
 
 export interface PurchaseInvoiceDetail {

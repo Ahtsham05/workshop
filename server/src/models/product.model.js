@@ -67,6 +67,7 @@ const ProductSchema = new mongoose.Schema({
             },
         },
     ],
+    trackImei: { type: Boolean, default: false }, // Track IMEI/serial number per unit (e.g. mobile phones)
     sku: { type: String },  // SKU for inventory management
     category: { type: String }, // Keep for backward compatibility
     categories: [{ // New multi-category support

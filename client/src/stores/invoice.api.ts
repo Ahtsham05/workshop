@@ -1,6 +1,19 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { imeiApi } from './imei.api'
+
+/** Invoice mutations live in a separate RTK Query slice from imeiApi, so a sale's
+ *  effect on IMEI stock status doesn't auto-invalidate the IMEI picker's cache.
+ *  Force that refresh explicitly whenever an invoice is created/updated/deleted. */
+const invalidateImeiCache = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(imeiApi.util.invalidateTags(['Imei']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -51,6 +64,7 @@ export const invoiceApi = createApi({
         body: invoiceData,
       }),
       invalidatesTags: ['Invoice'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Get all invoices
@@ -76,6 +90,7 @@ export const invoiceApi = createApi({
         body: patch,
       }),
       invalidatesTags: ( { id }) => [{ type: 'Invoice', id }, 'Invoice'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Delete invoice
@@ -85,6 +100,7 @@ export const invoiceApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Invoice'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Finalize invoice

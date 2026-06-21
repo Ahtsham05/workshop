@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X } from 'lucide-react'
+import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice, createEmptyManualInvoiceItem } from '../index'
@@ -71,6 +72,86 @@ import { QuotationConvertDialog } from './quotation-convert-dialog'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
+
+/** Picks IMEI/serial numbers to sell from in-stock inventory, for products with trackImei enabled. */
+function ImeiPicker({
+  productId,
+  quantity,
+  selected,
+  onChange,
+}: {
+  productId: string
+  quantity: number
+  selected: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [debounced, setDebounced] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search), 250)
+    return () => clearTimeout(t)
+  }, [search])
+  const { data: available = [], isFetching } = useGetAvailableImeisQuery(
+    { productId, search: debounced },
+    { skip: !productId },
+  )
+  const remaining = available.filter((d) => !selected.includes(d.imei))
+
+  return (
+    <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
+      <div className='flex items-center justify-between'>
+        <span className='text-xs font-medium text-amber-700'>
+          IMEI Numbers ({selected.length}/{quantity})
+        </span>
+      </div>
+      <div className='relative'>
+        <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground' />
+        <Input
+          placeholder='Search in-stock IMEI…'
+          value={search}
+          showVoiceInput={false}
+          onChange={(e) => setSearch(e.target.value)}
+          className='h-8 text-sm pl-8'
+        />
+      </div>
+      {isFetching ? (
+        <p className='text-xs text-muted-foreground'>Loading…</p>
+      ) : remaining.length > 0 ? (
+        <div className='flex flex-wrap gap-1.5 max-h-28 overflow-y-auto'>
+          {remaining.map((d) => (
+            <button
+              key={d.id}
+              type='button'
+              disabled={selected.length >= quantity}
+              onClick={() => onChange([...selected, d.imei])}
+              className='text-xs px-2 py-1 rounded-md border bg-background hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed'
+            >
+              {d.imei}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className='text-xs text-muted-foreground'>No in-stock IMEI found{debounced ? ' for this search' : ''}.</p>
+      )}
+      {selected.length > 0 && (
+        <div className='flex flex-wrap gap-1.5'>
+          {selected.map((num) => (
+            <Badge key={num} variant='secondary' className='gap-1 pr-1'>
+              {num}
+              <button
+                type='button'
+                onClick={() => onChange(selected.filter((n) => n !== num))}
+                className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
+              >
+                <X className='h-3 w-3' />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface InvoicePanelProps {
   invoice: Invoice
@@ -205,7 +286,8 @@ export function InvoicePanel({
           nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          subtotal: item.quantity * item.unitPrice
+          subtotal: item.quantity * item.unitPrice,
+          imeis: item.imeis,
         })),
         customerId: invoiceData.customerId,
         customerName: invoice.customerName || invoiceData.customerName,
@@ -293,7 +375,8 @@ export function InvoicePanel({
           nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          subtotal: item.quantity * item.unitPrice
+          subtotal: item.quantity * item.unitPrice,
+          imeis: item.imeis,
         })),
         customerId: invoiceData.customerId,
         customerName: invoice.customerName || invoiceData.customerName,
@@ -724,6 +807,17 @@ export function InvoicePanel({
         return
       }
 
+      // IMEI-tracked products must have exactly one IMEI selected per unit sold
+      for (const item of validItems) {
+        const product = products.find((p: any) => (p._id || p.id) === item.productId)
+        if (!product?.trackImei) continue
+        const imeiCount = (item.imeis || []).length
+        if (imeiCount !== item.quantity) {
+          toast.error(`${item.name}: select ${item.quantity} IMEI number(s) — ${imeiCount} selected`)
+          return
+        }
+      }
+
       const invoiceData = {
         items: validItems.map(item => ({
           productId: item.productId,
@@ -738,7 +832,8 @@ export function InvoicePanel({
           cost: item.cost,
           subtotal: item.subtotal,
           profit: item.profit,
-          isManualEntry: item.isManualEntry || false
+          isManualEntry: item.isManualEntry || false,
+          imeis: item.imeis || [],
         })),
         customerId: invoice.customerId,
         customerName: invoice.customerName,
@@ -998,7 +1093,7 @@ export function InvoicePanel({
             </div>
           )}
           
-          <div className={`grid gap-4 ${editingInvoice ? 'grid-cols-2' : 'grid-cols-2'}`}>
+          <div className='grid gap-4 grid-cols-1 sm:grid-cols-2'>
             <div>
               <Label htmlFor="customer" className='mb-2'>
                 {t('customer')} <span className="text-red-500">*</span>
@@ -1732,6 +1827,7 @@ export function InvoicePanel({
                             ref={(el) => { priceInputRefs.current[item.id] = el }}
                             type="text"
                             inputMode="decimal"
+                            showVoiceInput={false}
                             value={item.unitPrice > 0 ? item.unitPrice : ''}
                             onKeyDown={handlePriceKeyDown}
                             onChange={(e) => {
@@ -1815,6 +1911,23 @@ export function InvoicePanel({
                         </div>
                       </div>
                     )}
+                    {(() => {
+                      const product = products.find((p: any) => (p._id || p.id) === item.productId)
+                      if (!product?.trackImei) return null
+                      return (
+                        <ImeiPicker
+                          productId={item.productId}
+                          quantity={item.quantity}
+                          selected={item.imeis || []}
+                          onChange={(next) => {
+                            setInvoice((prev) => ({
+                              ...prev,
+                              items: prev.items.map((it) => (it.id === item.id ? { ...it, imeis: next } : it)),
+                            }))
+                          }}
+                        />
+                      )
+                    })()}
                   </div>
                 )
               })
@@ -1832,6 +1945,7 @@ export function InvoicePanel({
             <Input
               type="text"
               inputMode="decimal"
+              showVoiceInput={false}
               value={discountInput}
               onChange={(e) => handleDiscountChange(e.target.value)}
               placeholder="0.00"
@@ -1954,6 +2068,7 @@ export function InvoicePanel({
                     <Input
                       type="text"
                       inputMode="decimal"
+                      showVoiceInput={false}
                       value={paidAmountInput}
                       onChange={(e) => handlePaidAmountChange(e.target.value)}
                       placeholder="0.00"
@@ -1973,6 +2088,7 @@ export function InvoicePanel({
                       <Input
                         type="text"
                         inputMode="decimal"
+                        showVoiceInput={false}
                         value={cashReceivedInput}
                         onChange={(e) => setCashReceivedInput(e.target.value)}
                         placeholder={invoice.total.toFixed(2)}

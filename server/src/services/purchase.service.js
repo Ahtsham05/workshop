@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Purchase, Product, SupplierLedger, Organization } = require('../models');
+const { Purchase, Product, Supplier, SupplierLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { resolvePurchaseLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
@@ -8,6 +8,7 @@ const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
+const imeiService = require('./imei.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
 /** Post (or re-post) double-entry journal entries for a purchase. Fire-and-forget. */
@@ -200,6 +201,8 @@ const createPurchase = async (purchaseBody) => {
   };
   const purchase = await Purchase.create(normalizedBody);
 
+  const supplierDoc = purchase.supplier ? await Supplier.findById(purchase.supplier).select('name') : null;
+
   // Now, update the stock quantity of each product in the purchase
   for (const item of purchase.items) {
     const product = await Product.findById(item.product);
@@ -225,6 +228,23 @@ const createPurchase = async (purchaseBody) => {
 
       // Save the updated product
       await product.save();
+
+      // Track per-unit IMEI/serial numbers for products that require it (mobile phones)
+      if (product.trackImei && item.imeis && item.imeis.length > 0) {
+        await imeiService.syncImeisForPurchaseItem({
+          purchaseId: purchase._id,
+          productId: product._id,
+          productName: product.name,
+          imeis: item.imeis,
+          purchasePrice: item.priceAtPurchase,
+          supplierId: purchase.supplier || null,
+          supplierName: supplierDoc?.name || '',
+          purchaseDate: purchase.purchaseDate,
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
+          createdBy: purchase.createdBy,
+        });
+      }
     }
   }
 
@@ -333,6 +353,8 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalPaymentType = purchase.paymentType;
   const originalWalletType = purchase.walletType || null;
   const businessType = await getOrganizationBusinessType(purchase.organizationId);
+  const supplierIdForUpdate = updateBody.supplier || originalSupplier;
+  const supplierDocForUpdate = supplierIdForUpdate ? await Supplier.findById(supplierIdForUpdate).select('name') : null;
 
   if (updateBody.paymentType === 'Wallet' && businessType !== 'mobile_shop') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Wallet payment is only available for mobile shop businesses');
@@ -374,6 +396,22 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
 
         // Save the product with updated stock, cost, and selling price
         await product.save();
+
+        if (product.trackImei) {
+          await imeiService.syncImeisForPurchaseItem({
+            purchaseId: purchase._id,
+            productId: product._id,
+            productName: product.name,
+            imeis: updatedItem.imeis || [],
+            purchasePrice: updatedItem.priceAtPurchase,
+            supplierId: supplierIdForUpdate || null,
+            supplierName: supplierDocForUpdate?.name || '',
+            purchaseDate: purchase.purchaseDate,
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
+            createdBy: purchase.createdBy,
+          });
+        }
       }
     } else {
       // NEW ITEM - Add the full quantity to stock (wasn't in original purchase)
@@ -401,6 +439,22 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
 
         // Save the product with updated stock, cost, and selling price
         await product.save();
+
+        if (product.trackImei && updatedItem.imeis && updatedItem.imeis.length > 0) {
+          await imeiService.syncImeisForPurchaseItem({
+            purchaseId: purchase._id,
+            productId: product._id,
+            productName: product.name,
+            imeis: updatedItem.imeis,
+            purchasePrice: updatedItem.priceAtPurchase,
+            supplierId: supplierIdForUpdate || null,
+            supplierName: supplierDocForUpdate?.name || '',
+            purchaseDate: purchase.purchaseDate,
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
+            createdBy: purchase.createdBy,
+          });
+        }
       }
     }
   }
@@ -409,17 +463,30 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   for (const originalItem of purchase.items) {
     const originalProductId = getPurchaseProductId(originalItem);
     const stillExists = updateBody.items?.find((item) => item.product.toString() === originalProductId);
-    
+
     if (!stillExists) {
       // REMOVED ITEM - Subtract the quantity from stock
       const product = await Product.findById(originalItem.product);
-      
+
       if (product) {
         // Subtract the quantity since this item was removed
         product.stockQuantity -= Number(originalItem.stockQuantity || originalItem.quantity || 0);
-        
+
         // Save the product with updated stock
         await product.save();
+
+        if (product.trackImei) {
+          await imeiService.syncImeisForPurchaseItem({
+            purchaseId: purchase._id,
+            productId: product._id,
+            productName: product.name,
+            imeis: [],
+            purchasePrice: originalItem.priceAtPurchase,
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
+            createdBy: purchase.createdBy,
+          });
+        }
       }
     }
   }
@@ -541,6 +608,9 @@ const deletePurchaseById = async (purchaseId) => {
       await product.save();
     }
   }
+
+  // Drop any still-unsold IMEI/serial records tied to this purchase
+  await imeiService.releaseImeisForPurchase(purchase._id);
 
   // Delete related supplier ledger entries
   if (purchase.supplier) {

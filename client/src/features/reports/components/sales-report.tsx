@@ -60,6 +60,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         quantity: number
         unitPrice: number
         subtotal: number
+        imeis?: string[]
       }>>()
       detailData.invoices.forEach((inv) => {
         const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
@@ -72,6 +73,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            imeis: item.imeis,
           })
         })
       })
@@ -403,6 +405,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               )}
                             >
                               {reportEntityName(language, row.productName, row.productNameUrdu)}
+                              {row.imeis && row.imeis.length > 0 && (
+                                <div className='text-xs font-normal text-muted-foreground'>
+                                  IMEI: {row.imeis.join(', ')}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className='text-right text-sm'>{row.quantity}</TableCell>
                             <TableCell className='text-right text-sm'>
@@ -556,6 +563,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 >
                                   {reportEntityName(language, item.name, item.nameUrdu)}
                                 </span>
+                                {item.imeis && item.imeis.length > 0 && (
+                                  <span className='block text-xs text-muted-foreground'>
+                                    IMEI: {item.imeis.join(', ')}
+                                  </span>
+                                )}
                               </TableCell>
                               {/* Phone */}
                               <TableCell />
@@ -678,6 +690,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             )}
                           >
                             {reportEntityName(language, item.name, item.nameUrdu)}
+                            {item.imeis && item.imeis.length > 0 && (
+                              <div className='text-xs font-normal text-muted-foreground'>
+                                IMEI: {item.imeis.join(', ')}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className='text-right'>{item.quantity}</TableCell>
                           <TableCell className='text-right'>{formatCurrency(item.unitPrice)}</TableCell>

@@ -36,7 +36,8 @@ const invoiceItemSchema = new mongoose.Schema({
     cost: { type: Number, required: true, min: 0 },
     subtotal: { type: Number, required: true, min: 0 },
     profit: { type: Number, required: true },
-    isManualEntry: { type: Boolean, default: false }
+    isManualEntry: { type: Boolean, default: false },
+    imeis: [{ type: String, trim: true }], // IMEI/serial numbers sold for this line item, when product.trackImei is true
 }, { _id: false });
 
 const InvoiceSchema = new mongoose.Schema({

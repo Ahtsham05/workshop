@@ -40,6 +40,7 @@ const PurchaseSchema = new mongoose.Schema({
       priceAtPurchase: { type: Number, required: true }, // Purchase price of the product
       sellingPriceAtPurchase: { type: Number, min: 0 }, // Selling price set at purchase time
       total: { type: Number, required: true }, // quantity * priceAtPurchase
+      imeis: [{ type: String, trim: true }], // IMEI/serial numbers received for this line item, when product.trackImei is true
     },
   ],
   purchaseDate: { type: Date, default: Date.now },

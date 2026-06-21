@@ -1,6 +1,18 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { imeiApi } from './imei.api'
+
+/** Purchase mutations live in a separate RTK Query slice from imeiApi, so receiving/editing
+ *  stock doesn't auto-invalidate the IMEI picker's cache. Force that refresh explicitly. */
+const invalidateImeiCache = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(imeiApi.util.invalidateTags(['Imei']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -49,6 +61,7 @@ export const purchaseApi = createApi({
         body: purchaseData,
       }),
       invalidatesTags: ['Purchase'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Get all purchases
@@ -74,6 +87,7 @@ export const purchaseApi = createApi({
         body: data,
       }),
       invalidatesTags: ({ id }) => [{ type: 'Purchase', id }, 'Purchase'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Delete purchase
@@ -83,6 +97,7 @@ export const purchaseApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Purchase'],
+      onQueryStarted: invalidateImeiCache,
     }),
 
     // Get purchase statistics
