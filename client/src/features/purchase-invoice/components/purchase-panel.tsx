@@ -1015,11 +1015,19 @@ export default function PurchasePanel({
                             </PopoverTrigger>
                             <PopoverContent className="w-[400px] p-0" align="start">
                               <Command shouldFilter={false}>
-                                <CommandInput
-                                  placeholder={t('Search products...')}
-                                  value={productSearchQuery}
-                                  onValueChange={setProductSearchQuery}
-                                />
+                                <div className="relative">
+                                  <CommandInput
+                                    placeholder={t('Search products...')}
+                                    value={productSearchQuery}
+                                    onValueChange={setProductSearchQuery}
+                                  />
+                                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                    <VoiceInputButton
+                                      onTranscript={(text) => setProductSearchQuery(text)}
+                                      size="sm"
+                                    />
+                                  </div>
+                                </div>
                                 <CommandList className="max-h-64 overflow-y-auto">
                                   {productsLoading && products.length === 0 ? (
                                     <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">

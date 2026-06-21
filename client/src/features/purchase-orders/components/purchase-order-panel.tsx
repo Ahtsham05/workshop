@@ -49,6 +49,7 @@ import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoi
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 
 export interface OrderItem {
   product: Product
@@ -573,11 +574,19 @@ export default function PurchaseOrderPanel({
               </PopoverTrigger>
               <PopoverContent className='w-[400px] p-0' align='start'>
                 <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder='Search suppliers...'
-                    value={supplierSearchQuery}
-                    onValueChange={setSupplierSearchQuery}
-                  />
+                  <div className='relative'>
+                    <CommandInput
+                      placeholder='Search suppliers...'
+                      value={supplierSearchQuery}
+                      onValueChange={setSupplierSearchQuery}
+                    />
+                    <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+                      <VoiceInputButton
+                        onTranscript={(text) => setSupplierSearchQuery(text)}
+                        size='sm'
+                      />
+                    </div>
+                  </div>
                   <CommandList className='max-h-[280px] overflow-y-auto'>
                     {filteredSuppliers.length === 0 ? (
                       <p className='py-6 text-center text-sm text-muted-foreground'>No suppliers found</p>
@@ -687,11 +696,19 @@ export default function PurchaseOrderPanel({
                           </PopoverTrigger>
                           <PopoverContent className='w-[400px] p-0' align='start'>
                             <Command shouldFilter={false}>
-                              <CommandInput
-                                placeholder='Search name or barcode...'
-                                value={productSearchQuery}
-                                onValueChange={setProductSearchQuery}
-                              />
+                              <div className='relative'>
+                                <CommandInput
+                                  placeholder='Search name or barcode...'
+                                  value={productSearchQuery}
+                                  onValueChange={setProductSearchQuery}
+                                />
+                                <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+                                  <VoiceInputButton
+                                    onTranscript={(text) => setProductSearchQuery(text)}
+                                    size='sm'
+                                  />
+                                </div>
+                              </div>
                               <CommandList className='max-h-64 overflow-y-auto'>
                                 {productsLoading && products.length === 0 ? (
                                   <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
@@ -824,6 +841,7 @@ export default function PurchaseOrderPanel({
                           }}
                           type='text'
                           inputMode='decimal'
+                          showVoiceInput={false}
                           value={item.expectedPrice > 0 ? item.expectedPrice : ''}
                           onChange={(e) =>
                             updateExpectedPrice(productId, parseFloat(e.target.value) || 0)
@@ -844,6 +862,7 @@ export default function PurchaseOrderPanel({
                         <Input
                           type='text'
                           inputMode='decimal'
+                          showVoiceInput={false}
                           value={(item.expectedSellingPrice ?? 0) > 0 ? item.expectedSellingPrice : ''}
                           onChange={(e) =>
                             updateSellingPrice(productId, parseFloat(e.target.value) || 0)
