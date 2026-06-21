@@ -12,7 +12,10 @@ type View = 'list' | 'form'
 
 export default function PurchaseOrdersPage() {
   const navigate = useNavigate()
-  const search = useSearch({ strict: false }) as { prefillItems?: { productId: string; quantity: number }[] }
+  const search = useSearch({ strict: false }) as {
+    prefillItems?: { productId: string; quantity: number }[]
+    supplierId?: string
+  }
   const hasPrefill = Boolean(search.prefillItems && search.prefillItems.length > 0)
 
   const [view, setView] = useState<View>(hasPrefill ? 'form' : 'list')
@@ -52,6 +55,7 @@ export default function PurchaseOrdersPage() {
             onSaved={handleBackToList}
             editing={editing}
             prefillItems={hasPrefill ? search.prefillItems : undefined}
+            prefillSupplierId={hasPrefill ? search.supplierId : undefined}
           />
         )}
 

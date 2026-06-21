@@ -168,6 +168,24 @@ async function startApplication() {
         } catch (schedulerError) {
           logger.warn('Sales insights scheduler skipped:', schedulerError.message);
         }
+        try {
+          const { startPurchaseSuggestionsScheduler } = require('./jobs/purchaseSuggestionsScheduler');
+          startPurchaseSuggestionsScheduler();
+        } catch (schedulerError) {
+          logger.warn('Purchase suggestions scheduler skipped:', schedulerError.message);
+        }
+        try {
+          const { startSupplierScoringScheduler } = require('./jobs/supplierScoringScheduler');
+          startSupplierScoringScheduler();
+        } catch (schedulerError) {
+          logger.warn('Supplier scoring scheduler skipped:', schedulerError.message);
+        }
+        try {
+          const { startSeasonalityScheduler } = require('./jobs/seasonalityScheduler');
+          startSeasonalityScheduler();
+        } catch (schedulerError) {
+          logger.warn('Seasonality scheduler skipped:', schedulerError.message);
+        }
         resolve(server);
       });
       server.on('error', reject);

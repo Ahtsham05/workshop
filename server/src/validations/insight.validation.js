@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const getInsights = {
   query: Joi.object().keys({
-    category: Joi.string().valid('sales', 'inventory', 'profit', 'customer', 'alert'),
+    category: Joi.string().valid('sales', 'inventory', 'profit', 'customer', 'alert', 'supply_chain'),
     type: Joi.string(),
     priority: Joi.string().valid('high', 'medium', 'low'),
     sortBy: Joi.string(),

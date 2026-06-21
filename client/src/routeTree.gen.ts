@@ -17,6 +17,7 @@ import { Route as OrderQrTokenImport } from './routes/order.$qrToken'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authenticated/purchase-suggestions'
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
@@ -178,6 +179,13 @@ const AuthenticatedReportsRoute = AuthenticatedReportsImport.update({
   path: '/reports',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedPurchaseSuggestionsRoute =
+  AuthenticatedPurchaseSuggestionsImport.update({
+    id: '/purchase-suggestions',
+    path: '/purchase-suggestions',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedInsightsRoute = AuthenticatedInsightsImport.update({
   id: '/insights',
@@ -1156,6 +1164,13 @@ declare module '@tanstack/react-router' {
       path: '/insights'
       fullPath: '/insights'
       preLoaderRoute: typeof AuthenticatedInsightsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/purchase-suggestions': {
+      id: '/_authenticated/purchase-suggestions'
+      path: '/purchase-suggestions'
+      fullPath: '/purchase-suggestions'
+      preLoaderRoute: typeof AuthenticatedPurchaseSuggestionsImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/reports': {
@@ -2138,6 +2153,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
+  AuthenticatedPurchaseSuggestionsRoute: typeof AuthenticatedPurchaseSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
@@ -2203,6 +2219,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
+  AuthenticatedPurchaseSuggestionsRoute: AuthenticatedPurchaseSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
@@ -2292,6 +2309,7 @@ export interface FileRoutesByFullPath {
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
@@ -2423,6 +2441,7 @@ export interface FileRoutesByTo {
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
@@ -2555,6 +2574,7 @@ export interface FileRoutesById {
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
+  '/_authenticated/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
@@ -2690,6 +2710,7 @@ export interface FileRouteTypes {
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/purchase-suggestions'
     | '/reports'
     | '/school'
     | '/voice-demo'
@@ -2820,6 +2841,7 @@ export interface FileRouteTypes {
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/purchase-suggestions'
     | '/reports'
     | '/voice-demo'
     | '/order/$qrToken'
@@ -2950,6 +2972,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/insights'
+    | '/_authenticated/purchase-suggestions'
     | '/_authenticated/reports'
     | '/_authenticated/school'
     | '/_authenticated/voice-demo'
@@ -3131,6 +3154,7 @@ export const routeTree = rootRoute
         "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/insights",
+        "/_authenticated/purchase-suggestions",
         "/_authenticated/reports",
         "/_authenticated/school",
         "/_authenticated/voice-demo",
@@ -3258,6 +3282,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/insights": {
       "filePath": "_authenticated/insights.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/purchase-suggestions": {
+      "filePath": "_authenticated/purchase-suggestions.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/reports": {

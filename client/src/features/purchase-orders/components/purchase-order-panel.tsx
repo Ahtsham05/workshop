@@ -171,6 +171,8 @@ interface Props {
   products: Product[]
   productsLoading?: boolean
   onRegisterAddProduct?: (fn: (product: Product, quantity?: number) => void) => void
+  /** Auto-select this supplier (e.g. the AI-recommended supplier) once suppliers load. */
+  prefillSupplierId?: string
 }
 
 export default function PurchaseOrderPanel({
@@ -180,6 +182,7 @@ export default function PurchaseOrderPanel({
   products,
   productsLoading = false,
   onRegisterAddProduct,
+  prefillSupplierId,
 }: Props) {
   const [draft, setDraft] = useState<PurchaseOrderDraft>(() => buildInitialDraft(editing))
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
@@ -194,6 +197,7 @@ export default function PurchaseOrderPanel({
   const expectedDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   const autoOpenDoneRef = useRef(false)
+  const prefillSupplierAppliedRef = useRef(false)
 
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
   const suppliers = normalizeSuppliersList(suppliersData)
@@ -492,6 +496,17 @@ export default function PurchaseOrderPanel({
     setSupplierSearchQuery('')
     focusField(orderDateRef.current)
   }, [])
+
+  // Auto-select the AI-recommended supplier passed in from the Purchase Suggestions page,
+  // once suppliers have loaded. Runs at most once per mount; never overrides an existing order.
+  useEffect(() => {
+    if (!prefillSupplierId || editing || prefillSupplierAppliedRef.current) return
+    if (suppliers.length === 0) return
+    const match = suppliers.find((s) => s._id === prefillSupplierId || (s as { id?: string }).id === prefillSupplierId)
+    if (!match) return
+    selectSupplier(match)
+    prefillSupplierAppliedRef.current = true
+  }, [prefillSupplierId, editing, suppliers, selectSupplier])
 
   const supplierId = draft.supplier._id
 

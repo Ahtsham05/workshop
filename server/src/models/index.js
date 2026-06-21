@@ -40,6 +40,8 @@ module.exports.CashRegisterState = require('./cashRegisterState.model');
 module.exports.CashRegisterSnapshot = require('./cashRegisterSnapshot.model');
 module.exports.SalesReturn = require('./salesReturn.model');
 module.exports.PurchaseReturn = require('./purchaseReturn.model');
+module.exports.SeasonalFactor = require('./seasonalFactor.model');
+module.exports.InventoryTransfer = require('./inventoryTransfer.model');
 
 // Utility Bill Models
 module.exports.UtilityCompany = require('./utilityCompany.model');

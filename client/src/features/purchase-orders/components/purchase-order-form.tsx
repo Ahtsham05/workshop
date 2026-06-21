@@ -28,9 +28,11 @@ interface Props {
   editing?: PurchaseOrder | null
   /** Pre-add these products (e.g. from a "Create Purchase Order" reorder suggestion) once products load. */
   prefillItems?: { productId: string; quantity: number }[]
+  /** Auto-select this supplier (e.g. the AI-recommended supplier) once suppliers load. */
+  prefillSupplierId?: string
 }
 
-export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillItems }: Props) {
+export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillItems, prefillSupplierId }: Props) {
   const dispatch = useDispatch<AppDispatch>()
   const addProductRef = useRef<(product: Product, quantity?: number) => void>(() => {})
   const prefillAppliedRef = useRef(false)
@@ -196,6 +198,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
             editing={editing}
             products={products}
             productsLoading={loading}
+            prefillSupplierId={prefillSupplierId}
             onRegisterAddProduct={(fn) => {
               addProductRef.current = fn
             }}

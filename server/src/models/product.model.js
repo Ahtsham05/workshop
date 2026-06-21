@@ -79,6 +79,13 @@ const ProductSchema = new mongoose.Schema({
         }
     }],
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' }, // Reference to supplier
+    /**
+     * Dates (one per calendar day, deduped) on which this product was found at zero stock.
+     * Pruned to a trailing 90-day window by the daily purchase-suggestions job — feeds the
+     * dynamic safety-stock formula in services/purchaseSuggestions.service.js. Starts empty;
+     * builds up real history going forward rather than guessing at past stockouts.
+     */
+    stockoutHistory: [{ type: Date }],
     image: {
         url: { type: String }, // Cloudinary URL
         publicId: { type: String } // Cloudinary public ID for deletion

@@ -43,6 +43,20 @@ const SupplierSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AccountHead',
   },
+  /**
+   * Cached performance metrics refreshed weekly by jobs/supplierScoringScheduler.js
+   * (see services/supplierScoring.service.js for the live computation). Cached here so
+   * supplier list/detail views don't need to re-run aggregations on every request.
+   */
+  performance: {
+    avgLeadTimeDays: { type: Number, default: null },
+    onTimeDeliveryRate: { type: Number, default: null }, // 0-1
+    cancellationRate: { type: Number, default: null }, // 0-1
+    returnRate: { type: Number, default: null }, // 0-1
+    ordersCount: { type: Number, default: 0 },
+    overallScore: { type: Number, default: null }, // 0-100, weighted composite (see supplierScoring.service.js)
+    lastScoredAt: { type: Date, default: null },
+  },
 }, {
   timestamps: true,
 });

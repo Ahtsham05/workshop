@@ -26,9 +26,14 @@ const INSIGHT_TYPES = [
   // store-wide / cross-cutting alerts
   'sales_drop',
   'high_growth_product',
+  // supply chain — purchase suggestions engine (see services/purchaseSuggestions.service.js)
+  'demand_trend',
+  'supplier_recommendation',
+  'transfer_suggestion',
+  'seasonal_demand',
 ];
 
-const INSIGHT_CATEGORIES = ['sales', 'inventory', 'profit', 'customer', 'alert'];
+const INSIGHT_CATEGORIES = ['sales', 'inventory', 'profit', 'customer', 'alert', 'supply_chain'];
 
 const insightSchema = new mongoose.Schema(
   {
