@@ -611,7 +611,10 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
       confidence: s.dailyDemand > 0 ? 'high' : 'low',
       title: `Purchase ${s.suggestedOrderQty} unit(s) of ${s.name}`,
       description: s.reason,
-      meta: s,
+      // The Insights UI (client/src/features/insights) was built against the older
+      // salesInsights.service.js field names for this same insight type — keep those
+      // aliases so it keeps working, while still exposing the richer field names too.
+      meta: { ...s, stock: s.currentStock, suggestedReorderQty: s.suggestedOrderQty, dailySalesRate: s.dailyDemand },
     });
     if (s.recommendedSupplier) {
       docs.push({
@@ -640,6 +643,9 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
 
   if (deadStock.length > 0) {
     const tiedUp = deadStock.reduce((s, d) => s + d.stockValue, 0);
+    // The Insights UI computes "tied up" as stock * cost per product (older field shape) —
+    // back-fill a `cost` so that still renders correctly instead of NaN/Rs0.
+    const deadStockWithCost = deadStock.map((d) => ({ ...d, cost: d.stock > 0 ? round2(d.stockValue / d.stock) : 0 }));
     docs.push({
       type: 'dead_stock',
       category: 'inventory',
@@ -647,7 +653,7 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
       confidence: 'high',
       title: `${deadStock.length} product(s) are dead stock`,
       description: `These products are tying up about Rs${round2(tiedUp)} in unsold stock.`,
-      meta: { products: deadStock.slice(0, 10), tiedUpCapital: round2(tiedUp) },
+      meta: { products: deadStockWithCost.slice(0, 10), tiedUpCapital: round2(tiedUp) },
     });
   }
 
