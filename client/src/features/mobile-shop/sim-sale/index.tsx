@@ -479,6 +479,10 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       }))
                     }
                     searchSimSaleRecords
+                    searchRepairRecords
+                    searchInstallmentRecords
+                    searchServiceRecords
+                    searchLoadSaleRecords
                     {...simEnter.enterProps('customer-mobile')}
                   />
                 </div>
@@ -501,6 +505,10 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       }))
                     }
                     searchSimSaleRecords
+                    searchRepairRecords
+                    searchInstallmentRecords
+                    searchServiceRecords
+                    searchLoadSaleRecords
                     {...simEnter.enterProps('customer-cnic')}
                   />
                 </div>

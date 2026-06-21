@@ -704,6 +704,10 @@ export default function InstallmentsPage() {
                       if (c.address) handlePlanFormChange('customerAddress', c.address)
                     }}
                     searchInstallmentRecords
+                    searchSimSaleRecords
+                    searchRepairRecords
+                    searchServiceRecords
+                    searchLoadSaleRecords
                     {...planEnter.enterProps('inst-customer-phone')}
                   />
                 </div>
@@ -721,6 +725,10 @@ export default function InstallmentsPage() {
                       if (c.address) handlePlanFormChange('customerAddress', c.address)
                     }}
                     searchInstallmentRecords
+                    searchSimSaleRecords
+                    searchRepairRecords
+                    searchServiceRecords
+                    searchLoadSaleRecords
                     {...planEnter.enterProps('inst-customer-cnic')}
                   />
                 </div>

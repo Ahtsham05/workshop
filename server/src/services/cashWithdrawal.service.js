@@ -464,6 +464,7 @@ const createCashWithdrawalsBatch = async (body) => {
         cashAmount: Number(entry.cashAmount ?? entry.amount),
         customerName: entry.customerName || undefined,
         customerNumber: entry.customerNumber || undefined,
+        customerCNIC: entry.customerCNIC || undefined,
         customerAccountType: entry.customerAccountType || undefined,
         extraCharge: Number(entry.extraCharge || 0),
         notes: entry.notes || undefined,

@@ -26,11 +26,14 @@ interface Props {
   onBack: () => void
   onSaved: () => void
   editing?: PurchaseOrder | null
+  /** Pre-add these products (e.g. from a "Create Purchase Order" reorder suggestion) once products load. */
+  prefillItems?: { productId: string; quantity: number }[]
 }
 
-export default function PurchaseOrderForm({ onBack, onSaved, editing }: Props) {
+export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillItems }: Props) {
   const dispatch = useDispatch<AppDispatch>()
   const addProductRef = useRef<(product: Product, quantity?: number) => void>(() => {})
+  const prefillAppliedRef = useRef(false)
 
   const [products, setProducts] = useState<Product[]>([])
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([])
@@ -104,6 +107,27 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing }: Props) {
     addProductRef.current(product, quantity)
     setSearchTerm('')
   }, [])
+
+  // Apply reorder-suggestion prefill once: when products have loaded and the panel has
+  // registered its add-product function. Runs at most once per mount (editing existing
+  // orders never carries prefillItems, so there's no conflict with that flow).
+  useEffect(() => {
+    if (!prefillItems || prefillItems.length === 0) return
+    if (prefillAppliedRef.current || loading || products.length === 0) return
+
+    let addedCount = 0
+    for (const { productId, quantity } of prefillItems) {
+      const product = products.find((p) => (p.id || (p as { _id?: string })._id) === productId)
+      if (product) {
+        addProductRef.current(product, quantity)
+        addedCount += 1
+      }
+    }
+    prefillAppliedRef.current = true
+    if (addedCount > 0) {
+      toast.success(`Added ${addedCount} product(s) from reorder suggestions`)
+    }
+  }, [prefillItems, loading, products])
 
   const handleBarcodeSearch = useCallback(
     (barcode: string) => {

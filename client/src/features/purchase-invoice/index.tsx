@@ -109,7 +109,11 @@ const getInitialShowProductCatalog = (): boolean => {
 const PurchaseInvoicePage = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { supplierId?: string };
+  const search = useSearch({ strict: false }) as {
+    supplierId?: string;
+    prefillItems?: { productId: string; quantity: number }[];
+  };
+  const prefillAppliedRef = useRef(false);
   const suppliersData = useSelector((state: RootState) => state.supplier.data);
   const { t } = useLanguage();
   const { hasPermission } = usePermissions();
@@ -490,6 +494,31 @@ const PurchaseInvoicePage = () => {
       return { ...prev, items: [...prev.items, newItem] };
     });
   }, []);
+
+  // Apply reorder-suggestion prefill once: when products have loaded, drop the default
+  // empty manual placeholder row and add each prefilled product with its suggested quantity.
+  useEffect(() => {
+    if (!search.prefillItems || search.prefillItems.length === 0) return;
+    if (prefillAppliedRef.current || loading || products.length === 0) return;
+    prefillAppliedRef.current = true;
+
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.filter((item) => item.product.id || (item.product as any)._id),
+    }));
+
+    let addedCount = 0;
+    for (const { productId, quantity } of search.prefillItems) {
+      const product = products.find((p) => (p.id || (p as any)._id) === productId);
+      if (product) {
+        addToPurchase(product, quantity);
+        addedCount += 1;
+      }
+    }
+    if (addedCount > 0) {
+      toast.success(`Added ${addedCount} product(s) from reorder suggestions`);
+    }
+  }, [search.prefillItems, loading, products, addToPurchase]);
 
   // Remove item from purchase
   const removeFromPurchase = useCallback((productId: string) => {

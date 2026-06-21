@@ -31,7 +31,7 @@ import {
   IconClock,
   IconFileImport,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -55,6 +55,13 @@ export const sidebarData: SidebarData = {
           title: 'Dashboard',
           url: '/',
           icon: IconLayoutDashboard,
+          permission: 'viewDashboard',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'AI Sales Insights',
+          url: '/insights',
+          icon: Sparkles,
           permission: 'viewDashboard',
           excludeBusinessTypes: ['school', 'restaurant'],
         },

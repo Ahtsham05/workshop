@@ -482,6 +482,10 @@ export default function RepairPage() {
                       }))
                     }
                     searchRepairRecords
+                    searchSimSaleRecords
+                    searchInstallmentRecords
+                    searchServiceRecords
+                    searchLoadSaleRecords
                     {...repairEnter.enterProps('repair-phone')}
                   />
                 </div>

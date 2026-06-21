@@ -151,6 +151,7 @@ type WithdrawalFormState = {
   customerId: string
   customerName: string
   customerNumber: string
+  customerCNIC: string
   customerAccountType: string
   commissionRate: string
   extraCharge: string
@@ -233,6 +234,7 @@ const initialWithdrawalForm: WithdrawalFormState = {
   customerId: '',
   customerName: '',
   customerNumber: '',
+  customerCNIC: '',
   customerAccountType: 'other',
   commissionRate: '0',
   extraCharge: '0',
@@ -995,6 +997,7 @@ function LoadManagementPage({
         customerId: withdrawalForm.customerId || undefined,
         customerName: withdrawalForm.customerName.trim() || undefined,
         customerNumber: withdrawalForm.customerNumber.trim() || undefined,
+        customerCNIC: withdrawalForm.customerCNIC.trim() || undefined,
         customerAccountType: withdrawalForm.customerAccountType || undefined,
         commissionRate: Number(withdrawalForm.commissionRate),
         extraCharge: Number(withdrawalForm.extraCharge),
@@ -1017,6 +1020,7 @@ function LoadManagementPage({
         customerId: '',
         customerName: '',
         customerNumber: '',
+        customerCNIC: '',
         customerAccountType: 'other',
         commissionRate: prevCommission,
         extraCharge: '0',
@@ -1085,6 +1089,7 @@ function LoadManagementPage({
           'withdrawal-customer',
           'customer-name',
           'customer-number',
+          'customer-cnic',
           'customer-account-type',
           'withdrawal-cash-amount',
           'withdrawal-commission',
@@ -1393,6 +1398,7 @@ function LoadManagementPage({
       customerId: w.customerId?.id || w.customerId?._id || w.customerId || '',
       customerName: w.customerName || '',
       customerNumber: w.customerNumber || '',
+      customerCNIC: w.customerCNIC || '',
       customerAccountType: w.customerAccountType || 'other',
       commissionRate: String(w.commissionRate || 0),
       extraCharge: String(w.extraCharge || 0),
@@ -1422,6 +1428,7 @@ function LoadManagementPage({
           customerId: withdrawalForm.customerId || undefined,
           customerName: withdrawalForm.customerName.trim() || undefined,
           customerNumber: withdrawalForm.customerNumber.trim() || undefined,
+          customerCNIC: withdrawalForm.customerCNIC.trim() || undefined,
           customerAccountType: withdrawalForm.customerAccountType || undefined,
           commissionRate: Number(withdrawalForm.commissionRate),
           extraCharge: Number(withdrawalForm.extraCharge),
@@ -1928,8 +1935,13 @@ function LoadManagementPage({
                         onChange={(e) => handleSaleChange('mobileNumber', e.target.value)}
                         onCustomerSelect={(c) => {
                           handleSaleChange('mobileNumber', c.phone || saleForm.mobileNumber)
-                          handleSaleChange('customerName', c.name)
+                          handleSaleChange('customerName', c.name || saleForm.customerName)
                         }}
+                        searchLoadSaleRecords
+                        searchSimSaleRecords
+                        searchRepairRecords
+                        searchInstallmentRecords
+                        searchServiceRecords
                         {...saleEnter.enterProps('phone')}
                       />
                     </div>
@@ -2383,7 +2395,7 @@ function LoadManagementPage({
                     <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
                   </div>
 
-                  <div className='grid gap-4 md:grid-cols-3'>
+                  <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-name'>Customer Name - Optional</Label>
                       <Input id='customer-name' placeholder='e.g., Ahmed Khan' value={withdrawalForm.customerName} onChange={(e) => handleWithdrawalChange('customerName', e.target.value)} {...withdrawalEnter.enterProps('customer-name')} />
@@ -2397,9 +2409,36 @@ function LoadManagementPage({
                         onChange={(e) => handleWithdrawalChange('customerNumber', e.target.value)}
                         onCustomerSelect={(c) => {
                           handleWithdrawalChange('customerNumber', c.phone || withdrawalForm.customerNumber)
-                          handleWithdrawalChange('customerName', c.name)
+                          handleWithdrawalChange('customerName', c.name || withdrawalForm.customerName)
+                          if (c.cnic) handleWithdrawalChange('customerCNIC', c.cnic)
                         }}
+                        searchSimSaleRecords
+                        searchRepairRecords
+                        searchInstallmentRecords
+                        searchServiceRecords
+                        searchLoadSaleRecords
                         {...withdrawalEnter.enterProps('customer-number')}
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='customer-cnic'>Customer CNIC - Optional</Label>
+                      <CustomerPhoneAutocomplete
+                        id='customer-cnic'
+                        fieldType='cnic'
+                        placeholder='XXXXX-XXXXXXX-X'
+                        value={withdrawalForm.customerCNIC}
+                        onChange={(e) => handleWithdrawalChange('customerCNIC', e.target.value)}
+                        onCustomerSelect={(c) => {
+                          if (c.cnic) handleWithdrawalChange('customerCNIC', c.cnic)
+                          if (c.phone) handleWithdrawalChange('customerNumber', c.phone)
+                          handleWithdrawalChange('customerName', c.name || withdrawalForm.customerName)
+                        }}
+                        searchSimSaleRecords
+                        searchRepairRecords
+                        searchInstallmentRecords
+                        searchServiceRecords
+                        searchLoadSaleRecords
+                        {...withdrawalEnter.enterProps('customer-cnic')}
                       />
                     </div>
                     <CustomerAccountTypePicker
@@ -2606,7 +2645,10 @@ function LoadManagementPage({
                           </TableCell>
                           <TableCell className='font-medium'>{w.walletType}</TableCell>
                           <TableCell>{w.customerName?.trim() ? w.customerName : 'Walk-in Customer'}</TableCell>
-                          <TableCell>{w.customerNumber || '-'}</TableCell>
+                          <TableCell>
+                            <div>{w.customerNumber || '-'}</div>
+                            {w.customerCNIC && <div className='text-xs text-muted-foreground'>CNIC: {w.customerCNIC}</div>}
+                          </TableCell>
                           <TableCell>
                             {resolveAccountTypeLabel(w.customerAccountType, customerAccountTypes)}
                           </TableCell>

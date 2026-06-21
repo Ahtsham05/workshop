@@ -162,6 +162,12 @@ async function startApplication() {
         } catch (schedulerError) {
           logger.warn('Payroll scheduler skipped:', schedulerError.message);
         }
+        try {
+          const { startSalesInsightsScheduler } = require('./jobs/salesInsightsScheduler');
+          startSalesInsightsScheduler();
+        } catch (schedulerError) {
+          logger.warn('Sales insights scheduler skipped:', schedulerError.message);
+        }
         resolve(server);
       });
       server.on('error', reject);

@@ -5,6 +5,7 @@ import {
   useGetSimSalesQuery,
   useGetInstallmentPlansQuery,
   useGetServiceInvoicesQuery,
+  useGetLoadTransactionsQuery,
 } from '@/stores/mobile-shop.api'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -39,6 +40,8 @@ interface CustomerPhoneAutocompleteProps extends Omit<React.ComponentProps<'inpu
   searchInstallmentRecords?: boolean
   /** Also search service invoice records */
   searchServiceRecords?: boolean
+  /** Also search load (mobile load) sale records */
+  searchLoadSaleRecords?: boolean
 }
 
 const ALL_RECORDS_LIMIT = 1000
@@ -58,6 +61,7 @@ export function CustomerPhoneAutocomplete({
   searchSimSaleRecords,
   searchInstallmentRecords,
   searchServiceRecords,
+  searchLoadSaleRecords,
   className,
   ...inputProps
 }: CustomerPhoneAutocompleteProps) {
@@ -92,23 +96,38 @@ export function CustomerPhoneAutocomplete({
     { page: 1, limit: ALL_RECORDS_LIMIT },
     { skip: !searchServiceRecords },
   )
+  const { data: loadSaleData } = useGetLoadTransactionsQuery(
+    { page: 1, limit: ALL_RECORDS_LIMIT },
+    { skip: !searchLoadSaleRecords },
+  )
 
-  // Merge all data sources into a deduplicated CustomerSuggestion list
+  // Merge all data sources into a deduplicated CustomerSuggestion list.
+  // Records never get a phone/CNIC number stuffed into `name` — if a source has no real
+  // name on file, the entry keeps name: '' until/unless another source for the same
+  // phone or CNIC supplies one (e.g. they have a name in Sim Sale but not in Repair).
   const allSuggestions = useMemo<CustomerSuggestion[]>(() => {
-    const seen = new Set<string>()
-    const results: CustomerSuggestion[] = []
+    const byKey = new Map<string, CustomerSuggestion>()
 
-    const add = (s: CustomerSuggestion) => {
-      if (!s.name) return
-      // Deduplicate: prefer phone, then CNIC, then name
-      const key = s.phone
-        ? s.phone.replace(/\D/g, '')
-        : s.cnic
-          ? s.cnic.replace(/\D/g, '')
-          : s.name.trim().toLowerCase()
-      if (!key || seen.has(key)) return
-      seen.add(key)
-      results.push(s)
+    const add = (s: { name?: string; phone?: string; cnic?: string; address?: string; whatsapp?: string; email?: string; _id?: string; id?: string }) => {
+      const name = s.name?.trim() || ''
+      const phone = s.phone?.trim() || ''
+      const cnic = s.cnic?.trim() || ''
+      // Nothing to key on — skip (no phone, no cnic, and no name to fall back to)
+      const key = phone ? `p:${phone.replace(/\D/g, '')}` : cnic ? `c:${cnic.replace(/\D/g, '')}` : name ? `n:${name.toLowerCase()}` : ''
+      if (!key) return
+
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, { name, phone, cnic, address: s.address, whatsapp: s.whatsapp, email: s.email, _id: s._id, id: s.id })
+        return
+      }
+      // Backfill whichever fields the earlier source was missing — first real value wins per field.
+      if (!existing.name && name) existing.name = name
+      if (!existing.phone && phone) existing.phone = phone
+      if (!existing.cnic && cnic) existing.cnic = cnic
+      if (!existing.address && s.address) existing.address = s.address
+      if (!existing.whatsapp && s.whatsapp) existing.whatsapp = s.whatsapp
+      if (!existing.email && s.email) existing.email = s.email
     }
 
     // 1. Saved customers
@@ -118,7 +137,7 @@ export function CustomerPhoneAutocomplete({
     // 2. Repair job records
     if (repairData?.results) {
       repairData.results.forEach(r => {
-        if (r.customerName) add({ name: r.customerName, phone: r.phone })
+        if (r.customerName || r.phone) add({ name: r.customerName, phone: r.phone })
       })
     }
 
@@ -127,7 +146,7 @@ export function CustomerPhoneAutocomplete({
       simSaleData.results.forEach(s => {
         if (s.customerMobile || s.customerName) {
           add({
-            name: s.customerName || s.customerMobile || '',
+            name: s.customerName,
             phone: s.customerMobile,
             cnic: s.customerCNIC,
             address: s.customerLocation,
@@ -139,7 +158,7 @@ export function CustomerPhoneAutocomplete({
     // 4. Installment plan records
     if (installmentData?.results) {
       installmentData.results.forEach(i => {
-        if (i.customerName) {
+        if (i.customerName || i.customerPhone) {
           add({
             name: i.customerName,
             phone: i.customerPhone,
@@ -153,12 +172,19 @@ export function CustomerPhoneAutocomplete({
     // 5. Service invoice records
     if (serviceData?.results) {
       serviceData.results.forEach(s => {
-        if (s.customerName) add({ name: s.customerName, phone: s.customerPhone })
+        if (s.customerName || s.customerPhone) add({ name: s.customerName, phone: s.customerPhone })
       })
     }
 
-    return results
-  }, [allCustomersRaw, repairData, simSaleData, installmentData, serviceData])
+    // 6. Load sale records
+    if (loadSaleData?.results) {
+      loadSaleData.results.forEach(t => {
+        if (t.customerName || t.mobileNumber) add({ name: t.customerName, phone: t.mobileNumber === 'N/A' ? undefined : t.mobileNumber })
+      })
+    }
+
+    return Array.from(byKey.values()).filter((c) => c.name || c.phone || c.cnic)
+  }, [allCustomersRaw, repairData, simSaleData, installmentData, serviceData, loadSaleData])
 
   // Filter by what the user has typed
   const suggestions = useMemo<CustomerSuggestion[]>(() => {
@@ -238,7 +264,11 @@ export function CustomerPhoneAutocomplete({
             'max-h-64 overflow-y-auto',
           )}
         >
-          {suggestions.map((customer, idx) => (
+          {suggestions.map((customer, idx) => {
+            // Display-only fallback when no real name is on file anywhere — never written back as `name`.
+            const displayLabel = customer.name || customer.phone || customer.cnic || 'Unknown'
+            const avatarLetter = (customer.name || customer.phone || customer.cnic || '?').charAt(0)
+            return (
             <button
               key={customer._id || customer.id || idx}
               type='button'
@@ -249,12 +279,15 @@ export function CustomerPhoneAutocomplete({
               }}
             >
               <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold uppercase select-none'>
-                {customer.name.charAt(0)}
+                {avatarLetter}
               </div>
               <div className='min-w-0 flex-1'>
-                <p className='text-sm font-medium truncate'>{customer.name}</p>
+                <p className='text-sm font-medium truncate'>
+                  {displayLabel}
+                  {!customer.name && <span className='ml-1.5 text-xs font-normal text-muted-foreground'>(no name on file)</span>}
+                </p>
                 <div className='flex flex-wrap gap-x-3 gap-y-0.5'>
-                  {customer.phone && (
+                  {customer.name && customer.phone && (
                     <p className='text-xs text-muted-foreground'>{customer.phone}</p>
                   )}
                   {customer.cnic && (
@@ -266,7 +299,8 @@ export function CustomerPhoneAutocomplete({
                 </div>
               </div>
             </button>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

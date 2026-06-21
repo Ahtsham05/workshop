@@ -29,6 +29,7 @@ const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
 const simSaleRoute = require('./simSale.route');
 const imeiRoute = require('./imei.route');
+const insightRoute = require('./insight.route');
 const cashWithdrawalRoute = require('./cashWithdrawal.route');
 const repairJobRoute = require('./repairJob.route');
 const serviceRoute = require('./service.route');
@@ -226,6 +227,10 @@ const defaultRoutes = [
   {
     path: '/imeis',
     route: imeiRoute,
+  },
+  {
+    path: '/insights',
+    route: insightRoute,
   },
   {
     path: '/cash-withdrawals',

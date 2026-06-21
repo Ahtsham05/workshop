@@ -83,6 +83,7 @@ export interface CashWithdrawalRecord {
   customerId?: string
   customerName?: string
   customerNumber?: string
+  customerCNIC?: string
   customerAccountType?: string
   commissionRate: number
   extraCharge: number
@@ -100,6 +101,7 @@ export interface CreateCashWithdrawalInput {
   customerId?: string
   customerName?: string
   customerNumber?: string
+  customerCNIC?: string
   customerAccountType?: string
   commissionRate: number
   extraCharge: number
@@ -111,6 +113,7 @@ export interface CashWithdrawalBatchEntry {
   amount: number
   customerName?: string
   customerNumber?: string
+  customerCNIC?: string
   customerAccountType?: string
   extraCharge?: number
   notes?: string

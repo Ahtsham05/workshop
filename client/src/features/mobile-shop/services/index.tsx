@@ -630,6 +630,10 @@ export default function ServicesPage({
                       }
                       placeholder='03xxxxxxxxx'
                       searchServiceRecords
+                      searchSimSaleRecords
+                      searchRepairRecords
+                      searchInstallmentRecords
+                      searchLoadSaleRecords
                       onCustomerSelect={(c) =>
                         setInvoiceForm((prev) => ({
                           ...prev,

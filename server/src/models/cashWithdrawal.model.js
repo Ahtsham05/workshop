@@ -54,6 +54,11 @@ const cashWithdrawalSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    customerCNIC: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     customerAccountType: {
       type: String,
       trim: true,
