@@ -208,7 +208,20 @@ const getCashInHandSummary = async (filter = {}) => {
     ...filter,
     paymentMethod: 'cash',
   };
-  return getSummary(cashOnlyFilter);
+  const summary = await getSummary(cashOnlyFilter);
+
+  // Physical cash can only ever be counted in whole rupees (the smallest PKR
+  // denomination is the Rs 1 coin), but the ledger carries exact paisa from
+  // invoice/tax math. Left unrounded, "Cash in Hand" / Track Cash's "Expected"
+  // would show a phantom +/- Re 1 variance against a physical count even when
+  // the drawer is perfectly correct. Round only here, at the cash-only summary
+  // used to represent "what should physically be in the drawer" — the general
+  // ledger (getSummary for other payment methods) keeps full paisa precision.
+  return {
+    ...summary,
+    openingBalance: Math.round(summary.openingBalance),
+    closingBalance: Math.round(summary.closingBalance),
+  };
 };
 
 const getOpeningBalance = async (filter = {}) => {
