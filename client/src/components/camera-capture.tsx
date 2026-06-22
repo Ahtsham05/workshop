@@ -2,10 +2,13 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { Camera, X, RotateCcw, Loader2 } from 'lucide-react'
-import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+
+const FULLSCREEN_DIALOG_CLASS =
+  '!fixed !inset-0 !top-0 !left-0 z-[200] flex h-[100dvh] w-[100vw] !max-w-none !translate-x-0 !translate-y-0 flex-col gap-0 rounded-none border-0 bg-black p-0 shadow-lg sm:!max-w-none [&>button]:hidden'
 
 interface CameraCaptureProps {
   onCapture: (file: File) => void
@@ -264,15 +267,6 @@ export default function CameraCapture({
   }, [isOpen, facingMode, startCamera])
 
   useEffect(() => {
-    if (!isOpen) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [isOpen, handleClose])
-
-  useEffect(() => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
@@ -312,112 +306,109 @@ export default function CameraCapture({
     <>
       {triggerElement}
 
-      {isOpen && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className='fixed inset-0 z-[200] flex flex-col bg-black'
-              role='dialog'
-              aria-modal='true'
-              aria-labelledby='camera-capture-title'
-            >
-              <h2 id='camera-capture-title' className='sr-only'>
-                {t('take_photo') || 'Take Photo'}
-              </h2>
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) handleClose()
+        }}
+      >
+        <DialogContent className={FULLSCREEN_DIALOG_CLASS}>
+          <DialogTitle className='sr-only'>
+            {t('take_photo') || 'Take Photo'}
+          </DialogTitle>
 
-              <div className='relative flex-1 overflow-hidden bg-black'>
-                {error ? (
-                  <div className='flex h-full items-center justify-center p-6'>
-                    <div className='w-full max-w-sm space-y-4 text-center'>
-                      <div className='rounded-lg bg-red-950/50 p-4 text-red-200'>
-                        <p className='mb-2 text-sm font-medium'>Camera Error</p>
-                        <p className='text-sm'>{error}</p>
-                      </div>
-                      <Button
-                        type='button'
-                        onClick={() => void startCamera()}
-                        variant='outline'
-                        className='w-full'
-                      >
-                        <Camera className='mr-2 h-4 w-4' />
-                        {t('retry') || 'Try Again'}
-                      </Button>
+          <div className='relative flex-1 overflow-hidden bg-black'>
+            {error ? (
+              <div className='flex h-full items-center justify-center p-6'>
+                <div className='w-full max-w-sm space-y-4 text-center'>
+                  <div className='rounded-lg bg-red-950/50 p-4 text-red-200'>
+                    <p className='mb-2 text-sm font-medium'>Camera Error</p>
+                    <p className='text-sm'>{error}</p>
+                  </div>
+                  <Button
+                    type='button'
+                    onClick={() => void startCamera()}
+                    variant='outline'
+                    className='w-full'
+                  >
+                    <Camera className='mr-2 h-4 w-4' />
+                    {t('retry') || 'Try Again'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <video
+                  ref={setVideoNode}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cn(
+                    'h-full w-full object-cover',
+                    videoReady ? 'opacity-100' : 'opacity-0'
+                  )}
+                />
+
+                <canvas ref={canvasRef} className='hidden' />
+
+                {isLoading ? (
+                  <div className='absolute inset-0 flex items-center justify-center bg-black'>
+                    <div className='space-y-3 text-center text-white'>
+                      <Loader2 className='mx-auto h-8 w-8 animate-spin' />
+                      <p className='text-sm'>Starting camera...</p>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <video
-                      ref={setVideoNode}
-                      autoPlay
-                      playsInline
-                      muted
-                      className={cn(
-                        'h-full w-full object-cover',
-                        videoReady ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
-
-                    <canvas ref={canvasRef} className='hidden' />
-
-                    {isLoading ? (
-                      <div className='absolute inset-0 flex items-center justify-center bg-black'>
-                        <div className='space-y-3 text-center text-white'>
-                          <Loader2 className='mx-auto h-8 w-8 animate-spin' />
-                          <p className='text-sm'>Starting camera...</p>
-                        </div>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-
-                <button
-                  type='button'
-                  onClick={handleClose}
-                  aria-label={t('cancel') || 'Close'}
-                  className='absolute top-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
-                >
-                  <X className='h-5 w-5' />
-                </button>
-
-                {!error && videoReady ? (
-                  <button
-                    type='button'
-                    onClick={switchCamera}
-                    disabled={isLoading}
-                    aria-label={t('switch_camera') || 'Switch camera'}
-                    className='absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
-                  >
-                    <RotateCcw className='h-5 w-5' />
-                  </button>
                 ) : null}
-              </div>
+              </>
+            )}
 
-              {!error ? (
-                <div className='flex items-center justify-center gap-10 bg-black px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]'>
-                  <button
-                    type='button'
-                    onClick={handleClose}
-                    className='text-sm font-medium text-white/80'
-                  >
-                    {t('cancel') || 'Cancel'}
-                  </button>
+            <button
+              type='button'
+              onClick={handleClose}
+              aria-label={t('cancel') || 'Close'}
+              className='absolute top-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
+            >
+              <X className='h-5 w-5' />
+            </button>
 
-                  <button
-                    type='button'
-                    onClick={capturePhoto}
-                    disabled={isLoading || !videoReady}
-                    aria-label={t('capture') || 'Capture'}
-                    className='flex h-18 w-18 items-center justify-center rounded-full border-4 border-white bg-white/20 disabled:opacity-40'
-                  >
-                    <span className='h-14 w-14 rounded-full bg-white' />
-                  </button>
+            {!error && videoReady ? (
+              <button
+                type='button'
+                onClick={switchCamera}
+                disabled={isLoading}
+                aria-label={t('switch_camera') || 'Switch camera'}
+                className='absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
+              >
+                <RotateCcw className='h-5 w-5' />
+              </button>
+            ) : null}
+          </div>
 
-                  <span className='w-[3ch]' aria-hidden='true' />
-                </div>
-              ) : null}
-            </div>,
-            document.body
-          )
-        : null}
+          {!error ? (
+            <div className='flex items-center justify-center gap-10 bg-black px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]'>
+              <button
+                type='button'
+                onClick={handleClose}
+                className='text-sm font-medium text-white/80'
+              >
+                {t('cancel') || 'Cancel'}
+              </button>
+
+              <button
+                type='button'
+                onClick={capturePhoto}
+                disabled={isLoading || !videoReady}
+                aria-label={t('capture') || 'Capture'}
+                className='flex h-18 w-18 items-center justify-center rounded-full border-4 border-white bg-white/20 disabled:opacity-40'
+              >
+                <span className='h-14 w-14 rounded-full bg-white' />
+              </button>
+
+              <span className='w-[3ch]' aria-hidden='true' />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

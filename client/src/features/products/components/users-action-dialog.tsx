@@ -304,21 +304,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='name'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('product_name')} *
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('product_name')} *</FormLabel>
                     <FormControl>
                       <SmartInput
                         placeholder={t('product_name')}
                         autoComplete='off'
                         showVoiceInput={true}
                         voiceInputSize="sm"
-                        className='col-span-4 min-h-11 text-base'
+                        className='min-h-11 text-base'
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -326,23 +324,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='nameUrdu'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                      {t('name_in_urdu')}
-                    </FormLabel>
-                    <div className='col-span-4 space-y-1'>
-                      <FormControl>
-                        <Input
-                          dir='rtl'
-                          placeholder={t('name_in_urdu_placeholder')}
-                          autoComplete='off'
-                          className='text-right'
-                          {...field}
-                        />
-                      </FormControl>
-                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
-                      <FormMessage />
-                    </div>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        dir='rtl'
+                        placeholder={t('name_in_urdu_placeholder')}
+                        autoComplete='off'
+                        className='text-right'
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -350,21 +344,18 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='description'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('description')}
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('description')}</FormLabel>
                     <FormControl>
-                      <SmartInput 
+                      <SmartInput
                         placeholder={t('description')}
                         autoComplete='off'
                         showVoiceInput={true}
                         voiceInputSize="sm"
-                        className="col-span-4"
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -372,12 +363,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='categories'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className={`col-span-2 items-start mt-3 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                      {t('categories')}
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('categories')}</FormLabel>
                     <FormControl>
-                      <div className='col-span-4 space-y-2'>
+                      <div className='space-y-2'>
                         {/* Category Selection Dropdown */}
                         <Popover open={categoriesOpen} onOpenChange={setCategoriesOpen}>
                           <PopoverTrigger asChild>
@@ -503,95 +492,86 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         </Popover>
                       </div>
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
               </EntityFormSection>
 
               <EntityFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
-              <FormField
-                control={form.control}
-                name='price'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('price')} *
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('price')}
-                        className='col-span-4'
-                        type='number'
-                        {...field}
-                        onChange={(e) => {
-                          setNumericValue('price', e.target.value)
-                          // field.onChange(e)
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='cost'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('cost')} *
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('cost')}
-                        className='col-span-4'
-                        type='number'
-                        {...field}
-                        onChange={(e) => {
-                          setNumericValue('cost', e.target.value)
-                          // field.onChange(e)
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='stockQuantity'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('stock_quantity')} *
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('stock_quantity')}
-                        className='col-span-4'
-                        type='number'
-                        {...field}
-                        onChange={(e) => {
-                          setNumericValue('stockQuantity', e.target.value)
-                          // field.onChange(e)
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='unit'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('unit')}
-                    </FormLabel>
-                    <FormControl>
-                      <div className='col-span-4'>
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='price'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('price')} *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('price')}
+                          type='number'
+                          {...field}
+                          onChange={(e) => {
+                            setNumericValue('price', e.target.value)
+                            // field.onChange(e)
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='cost'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('cost')} *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('cost')}
+                          type='number'
+                          {...field}
+                          onChange={(e) => {
+                            setNumericValue('cost', e.target.value)
+                            // field.onChange(e)
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='stockQuantity'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('stock_quantity')} *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('stock_quantity')}
+                          type='number'
+                          {...field}
+                          onChange={(e) => {
+                            setNumericValue('stockQuantity', e.target.value)
+                            // field.onChange(e)
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='unit'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('unit')}</FormLabel>
+                      <FormControl>
                         <Popover open={unitsOpen} onOpenChange={setUnitsOpen}>
                           <PopoverTrigger asChild>
                             <Button
@@ -639,12 +619,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             </Command>
                           </PopoverContent>
                         </Popover>
-                      </div>
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               {showConversionRules && (
                 <FormField
                   control={form.control}
@@ -660,12 +640,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     }
 
                     return (
-                      <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                        <FormLabel className='col-span-2 md:text-right pt-2'>
-                          Conversion Rules
-                        </FormLabel>
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>Conversion Rules</FormLabel>
                         <FormControl>
-                          <div className='col-span-4 space-y-3'>
+                          <div className='space-y-3'>
                             <div className='rounded-md border p-3 bg-muted/20 text-sm text-muted-foreground'>
                               Stock is stored in <span className='font-medium text-foreground'>{getAllUnits().find((unit) => unit.value === baseUnit)?.label || baseUnit}</span>. Add rules like bag to pcs = 50.
                             </div>
@@ -730,7 +708,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             </Button>
                           </div>
                         </FormControl>
-                        <FormMessage className='col-span-4 col-start-3' />
+                        <FormMessage />
                       </FormItem>
                     )
                   }}
@@ -742,12 +720,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='barcode'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right items-start mt-3'>
-                      {t('barcode')}
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('barcode')}</FormLabel>
                     <FormControl>
-                      <div className='col-span-4 space-y-2'>
+                      <div className='space-y-2'>
                         <div className="flex gap-2">
                           <InlineBarcodeInput
                             onBarcodeEntered={(barcode) => {
@@ -758,9 +734,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             onChange={field.onChange}
                             className="flex-1"
                           />
-                          <Button 
-                            type="button" 
-                            variant="outline" 
+                          <Button
+                            type="button"
+                            variant="outline"
                             size="sm"
                             onClick={generateBarcode}
                             className="whitespace-nowrap"
@@ -783,7 +759,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         </div>
                       </div>
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -791,12 +767,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 control={form.control}
                 name='trackImei'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
-                      Track IMEI
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>Track IMEI</FormLabel>
                     <FormControl>
-                      <div className='col-span-4 flex items-center gap-2'>
+                      <div className='flex items-center gap-2'>
                         <Checkbox
                           checked={field.value}
                           onCheckedChange={field.onChange}
@@ -806,7 +780,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         </span>
                       </div>
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -815,27 +789,23 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   control={form.control}
                   name='warrantyMonths'
                   render={({ field }) => (
-                    <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                      <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
-                        Warranty (months)
-                      </FormLabel>
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>Warranty (months)</FormLabel>
                       <FormControl>
-                        <div className='col-span-4'>
-                          <Input
-                            type='number'
-                            min={0}
-                            step={1}
-                            showVoiceInput={false}
-                            placeholder='e.g. 12'
-                            value={field.value ?? 0}
-                            onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          />
-                          <p className='mt-1 text-xs text-muted-foreground'>
-                            Applied automatically to every IMEI sold for this product. Set 0 for no warranty.
-                          </p>
-                        </div>
+                        <Input
+                          type='number'
+                          min={0}
+                          step={1}
+                          showVoiceInput={false}
+                          placeholder='e.g. 12'
+                          value={field.value ?? 0}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        />
                       </FormControl>
-                      <FormMessage className='col-span-4 col-start-3' />
+                      <p className='text-xs text-muted-foreground'>
+                        Applied automatically to every IMEI sold for this product. Set 0 for no warranty.
+                      </p>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -854,12 +824,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                       setImeiDraft('')
                     }
                     return (
-                      <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
-                        <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
-                          IMEI Numbers
-                        </FormLabel>
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>IMEI Numbers</FormLabel>
                         <FormControl>
-                          <div className='col-span-4 space-y-2'>
+                          <div className='space-y-2'>
                             <span className='text-xs font-medium text-amber-700'>
                               {isEdit
                                 ? `${imeis.length} entered`
@@ -900,7 +868,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             )}
                           </div>
                         </FormControl>
-                        <FormMessage className='col-span-4 col-start-3' />
+                        <FormMessage />
                       </FormItem>
                     )
                   }}

@@ -180,21 +180,19 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 control={form.control}
                 name='name'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('supplier_name')}
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('supplier_name')}</FormLabel>
                     <FormControl>
                       <SmartInput
                         placeholder={t('supplier_name')}
                         showVoiceInput={true}
                         voiceInputSize="sm"
                         autoComplete='off'
-                        className='col-span-4 min-h-11 text-base'
+                        className='min-h-11 text-base'
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -202,128 +200,113 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 control={form.control}
                 name='nameUrdu'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-start space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                      {t('name_in_urdu')}
-                    </FormLabel>
-                    <div className='col-span-4 space-y-1'>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        dir='rtl'
+                        placeholder={t('name_in_urdu_placeholder')}
+                        autoComplete='off'
+                        className='text-right'
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='phone'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('phone')}</FormLabel>
                       <FormControl>
                         <Input
-                          dir='rtl'
-                          placeholder={t('name_in_urdu_placeholder')}
+                          fieldType='phone'
+                          placeholder={`${t('supplier_name')} ${t('phone')}`}
                           autoComplete='off'
-                          className='text-right'
                           {...field}
                         />
                       </FormControl>
-                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
                       <FormMessage />
-                    </div>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='email'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('email')}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={`${t('supplier_name')} ${t('email')}`}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='phone'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('phone')}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        fieldType='phone'
-                        placeholder={`${t('supplier_name')} ${t('phone')}`}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='whatsapp'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('whatsapp')}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        fieldType='phone'
-                        placeholder={`${t('supplier_name')} ${t('whatsapp')}`}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='balance'
-                render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('balance')}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        type='number'
-                        placeholder={t('balance')}
-                        className='col-span-4'
-                        autoComplete='off'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
-                  </FormItem>
-                )}
-              />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='whatsapp'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('whatsapp')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          fieldType='phone'
+                          placeholder={`${t('supplier_name')} ${t('whatsapp')}`}
+                          autoComplete='off'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='email'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('email')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={`${t('supplier_name')} ${t('email')}`}
+                          autoComplete='off'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='balance'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('balance')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          placeholder={t('balance')}
+                          autoComplete='off'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name='address'
                 render={({ field }) => (
-                  <FormItem className='grid grid-cols-6 items-center space-y-0 gap-x-4 gap-y-1'>
-                    <FormLabel className='col-span-2 md:text-right'>
-                      {t('address')}
-                    </FormLabel>
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('address')}</FormLabel>
                     <FormControl>
                       <SmartInput
                         placeholder={`${t('supplier_name')} ${t('address')}`}
                         showVoiceInput={true}
                         voiceInputSize="sm"
                         autoComplete='off'
-                        className='col-span-4'
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage className='col-span-4 col-start-3' />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -333,51 +316,39 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 title={t('supplier_dialog_section_photos_title')}
                 description={t('supplier_dialog_section_photos_desc')}
               >
-                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
-                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                    {t('profile_picture')}
-                  </FormLabel>
-                  <div className='col-span-4'>
-                    <ImageUpload
-                      uploadSlug='suppliers/upload-image'
-                      previewAlt={t('profile_picture')}
-                      currentImageUrl={form.watch('picture')?.url}
-                      onImageUpload={(img) => form.setValue('picture', img)}
-                      onImageRemove={() => form.setValue('picture', undefined)}
-                      layout='comfortable'
-                    />
-                  </div>
-                </FormItem>
-                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
-                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                    {t('id_card_front')}
-                  </FormLabel>
-                  <div className='col-span-4'>
-                    <ImageUpload
-                      uploadSlug='suppliers/upload-image'
-                      previewAlt={t('id_card_front')}
-                      currentImageUrl={form.watch('idCardFront')?.url}
-                      onImageUpload={(img) => form.setValue('idCardFront', img)}
-                      onImageRemove={() => form.setValue('idCardFront', undefined)}
-                      layout='comfortable'
-                    />
-                  </div>
-                </FormItem>
-                <FormItem className='grid grid-cols-6 items-start gap-x-4 gap-y-1 space-y-0'>
-                  <FormLabel className={`col-span-2 pt-2 ${isRTL ? 'text-right' : 'md:text-right'}`}>
-                    {t('id_card_back')}
-                  </FormLabel>
-                  <div className='col-span-4'>
-                    <ImageUpload
-                      uploadSlug='suppliers/upload-image'
-                      previewAlt={t('id_card_back')}
-                      currentImageUrl={form.watch('idCardBack')?.url}
-                      onImageUpload={(img) => form.setValue('idCardBack', img)}
-                      onImageRemove={() => form.setValue('idCardBack', undefined)}
-                      layout='comfortable'
-                    />
-                  </div>
-                </FormItem>
+                <div className='space-y-1.5'>
+                  <FormLabel>{t('profile_picture')}</FormLabel>
+                  <ImageUpload
+                    uploadSlug='suppliers/upload-image'
+                    previewAlt={t('profile_picture')}
+                    currentImageUrl={form.watch('picture')?.url}
+                    onImageUpload={(img) => form.setValue('picture', img)}
+                    onImageRemove={() => form.setValue('picture', undefined)}
+                    layout='comfortable'
+                  />
+                </div>
+                <div className='space-y-1.5'>
+                  <FormLabel>{t('id_card_front')}</FormLabel>
+                  <ImageUpload
+                    uploadSlug='suppliers/upload-image'
+                    previewAlt={t('id_card_front')}
+                    currentImageUrl={form.watch('idCardFront')?.url}
+                    onImageUpload={(img) => form.setValue('idCardFront', img)}
+                    onImageRemove={() => form.setValue('idCardFront', undefined)}
+                    layout='comfortable'
+                  />
+                </div>
+                <div className='space-y-1.5'>
+                  <FormLabel>{t('id_card_back')}</FormLabel>
+                  <ImageUpload
+                    uploadSlug='suppliers/upload-image'
+                    previewAlt={t('id_card_back')}
+                    currentImageUrl={form.watch('idCardBack')?.url}
+                    onImageUpload={(img) => form.setValue('idCardBack', img)}
+                    onImageRemove={() => form.setValue('idCardBack', undefined)}
+                    layout='comfortable'
+                  />
+                </div>
               </EntityFormSection>
             </form>
           </Form>
