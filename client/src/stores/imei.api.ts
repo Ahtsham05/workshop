@@ -95,7 +95,7 @@ export const imeiApi = createApi({
     }),
     // Searchable, paginated IMEI list — powers the IMEI Tracking page
     getImeis: builder.query<ImeiListResponse, GetImeisParams | void>({
-      query: (params = {}) => {
+      query: (params: GetImeisParams = {}) => {
         const p = new URLSearchParams()
         Object.entries(params).forEach(([key, value]) => {
           if (value !== undefined && value !== null && value !== '') p.set(key, String(value))

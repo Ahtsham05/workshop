@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { RootState } from '@/stores/store'
@@ -33,8 +32,6 @@ import {
   Edit2,
   Trash2,
   Wallet,
-  ArrowDownLeft,
-  ArrowUpRight,
 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import {
@@ -73,7 +70,6 @@ type WalletRecord = {
 }
 
 export default function WalletPage() {
-  const navigate = useNavigate()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = isMobileShopBusiness(org?.businessType ?? user?.businessType)
@@ -163,27 +159,6 @@ export default function WalletPage() {
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to delete wallet')
     }
-  }
-
-  const navigateWithWallet = (
-    wallet: WalletRecord,
-    search: { tab?: 'purchase' | 'sell'; action?: 'withdrawal' | 'deposit' },
-    to: '/mobile-shop/load' | '/mobile-shop/cash-management',
-  ) => {
-    const walletId = resolveWalletId(wallet)
-    const walletType = wallet.type?.trim()
-    if (!walletId && !walletType) {
-      toast.error('Wallet id is missing')
-      return
-    }
-    navigate({
-      to,
-      search: {
-        walletId: walletId || undefined,
-        walletType: walletType || undefined,
-        ...search,
-      },
-    })
   }
 
   return (
@@ -366,33 +341,6 @@ export default function WalletPage() {
                         </TableCell>
                         <TableCell>
                           <div className='flex flex-wrap items-center justify-end gap-1'>
-                            {isMobileShop && !loadWallet && (
-                              <>
-                                <Button
-                                  size='sm'
-                                  type='button'
-                                  className='h-8 bg-purple-600 hover:bg-purple-700'
-                                  onClick={() =>
-                                    navigateWithWallet(wallet, { action: 'deposit' }, '/mobile-shop/cash-management')
-                                  }
-                                >
-                                  <ArrowDownLeft className='h-3.5 w-3.5 mr-1' />
-                                  Send
-                                </Button>
-                                <Button
-                                  size='sm'
-                                  type='button'
-                                  variant='outline'
-                                  className='h-8 border-orange-300 text-orange-700 hover:bg-orange-50'
-                                  onClick={() =>
-                                    navigateWithWallet(wallet, { action: 'withdrawal' }, '/mobile-shop/cash-management')
-                                  }
-                                >
-                                  <ArrowUpRight className='h-3.5 w-3.5 mr-1' />
-                                  Received
-                                </Button>
-                              </>
-                            )}
                             <Button
                               size='sm'
                               variant='outline'

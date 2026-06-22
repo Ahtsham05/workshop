@@ -232,9 +232,10 @@ export default function CashBookPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Payment</TableHead>
+                <TableHead>Description</TableHead>
                 <TableHead className='text-red-600'>Debit (Expense)</TableHead>
                 <TableHead className='text-green-600'>Credit (Income)</TableHead>
-                <TableHead>Description</TableHead>
+                <TableHead className='text-right'>Balance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -243,13 +244,14 @@ export default function CashBookPage() {
                   <TableCell>{formatBusinessDateTime(entry.date)}</TableCell>
                   <TableCell>{entry.source ? entry.source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-'}</TableCell>
                   <TableCell className='capitalize'>{entry.paymentMethod}</TableCell>
+                  <TableCell>{entry.description || 'No description'}</TableCell>
                   <TableCell className='text-red-600'>
                     {entry.type === 'expense' ? `Rs ${entry.amount.toLocaleString()}` : '-'}
                   </TableCell>
                   <TableCell className='text-green-600'>
                     {entry.type === 'income' ? `Rs ${entry.amount.toLocaleString()}` : '-'}
                   </TableCell>
-                  <TableCell>{entry.description || 'No description'}</TableCell>
+                  <TableCell className='text-right font-medium'>Rs {entry.balance.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

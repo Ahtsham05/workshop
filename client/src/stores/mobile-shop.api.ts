@@ -378,6 +378,8 @@ export interface CashBookEntryRecord {
   paymentMethod: string
   description?: string
   date: string
+  /** Running cash balance immediately after this entry, walked in true chronological order. */
+  balance: number
 }
 
 export interface CashBookSummary {

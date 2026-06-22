@@ -92,31 +92,6 @@ const deleteEmployeeLedgerPaymentCashBook = async (entry, employeeName = '') => 
   return deleted;
 };
 
-const queryEntries = async (filter, options) => {
-  const queryFilter = { ...filter };
-  const queryOptions = { ...options };
-
-  if (queryOptions.search) {
-    queryFilter.$or = [
-      { description: { $regex: queryOptions.search, $options: 'i' } },
-      { notes: { $regex: queryOptions.search, $options: 'i' } },
-      { source: { $regex: queryOptions.search, $options: 'i' } },
-    ];
-    delete queryOptions.search;
-  }
-
-  applyBusinessDateRange(queryOptions);
-  if (queryOptions.date) {
-    queryFilter.date = queryOptions.date;
-    delete queryOptions.date;
-  }
-
-  return CashBookEntry.paginate(queryFilter, {
-    ...queryOptions,
-    sortBy: queryOptions.sortBy || 'date:desc',
-  });
-};
-
 const getSummary = async (filter = {}) => {
   const baseMatch = {};
 
@@ -200,6 +175,69 @@ const getSummary = async (filter = {}) => {
     totalIncome: period.totalIncome,
     totalExpense: period.totalExpense,
     closingBalance,
+  };
+};
+
+const queryEntries = async (filter, options) => {
+  const queryFilter = { ...filter };
+  const queryOptions = { ...options };
+
+  if (queryOptions.search) {
+    queryFilter.$or = [
+      { description: { $regex: queryOptions.search, $options: 'i' } },
+      { notes: { $regex: queryOptions.search, $options: 'i' } },
+      { source: { $regex: queryOptions.search, $options: 'i' } },
+    ];
+    delete queryOptions.search;
+  }
+
+  // Keep the raw dates for the opening-balance lookup below — applyBusinessDateRange
+  // converts/deletes them from queryOptions in place.
+  const { startDate, endDate } = queryOptions;
+  applyBusinessDateRange(queryOptions);
+  if (queryOptions.date) {
+    queryFilter.date = queryOptions.date;
+    delete queryOptions.date;
+  }
+
+  // The manual opening-balance pseudo-entry is a baseline, not a real transaction —
+  // exclude it from the walk below so it isn't counted twice (once via openingBalance,
+  // once as a normal entry), unless the caller explicitly asked to filter by source.
+  if (!queryFilter.source) {
+    queryFilter.source = { $ne: 'opening_balance' };
+  }
+
+  const sortBy = queryOptions.sortBy || 'date:desc';
+  const limit = Math.max(1, Number(queryOptions.limit) || 10);
+  const page = Math.max(1, Number(queryOptions.page) || 1);
+
+  // A running balance only makes sense walked in true chronological order across every
+  // matching entry — not just the requested page — so the balance shown for any row is
+  // what it actually was at that moment, regardless of which page or sort direction the
+  // caller asked for.
+  const [docs, { openingBalance }] = await Promise.all([
+    CashBookEntry.find(queryFilter).sort({ date: 1, _id: 1 }),
+    getSummary({ ...filter, startDate, endDate }),
+  ]);
+
+  let runningBalance = openingBalance;
+  const chronological = docs.map((doc) => {
+    const json = doc.toJSON();
+    runningBalance += json.type === 'income' ? json.amount : -json.amount;
+    return { ...json, balance: runningBalance };
+  });
+
+  const ordered = sortBy === 'date:asc' ? chronological : chronological.slice().reverse();
+  const totalResults = ordered.length;
+  const totalPages = Math.max(1, Math.ceil(totalResults / limit));
+  const start = (page - 1) * limit;
+
+  return {
+    results: ordered.slice(start, start + limit),
+    page,
+    limit,
+    totalPages,
+    totalResults,
   };
 };
 
