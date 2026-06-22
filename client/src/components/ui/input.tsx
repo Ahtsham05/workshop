@@ -131,8 +131,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     )
 
     if (shouldShowVoice) {
+      // Padding utilities in `className` (e.g. pl-9 for a left icon) are meant for the
+      // <input> itself — applying them to this wrapper too double-pads the input, pushing
+      // its text away from a caller's absolutely-positioned icon. Only forward sizing/layout
+      // classes (width, flex) to the wrapper; the input above already got the full className.
+      const wrapperClassName = className
+        ?.split(' ')
+        .filter((c) => !/^p[xytrbl]?-/.test(c))
+        .join(' ')
+
       return (
-        <div className={cn('relative', className)}>
+        <div className={cn('relative', wrapperClassName)}>
           {inputEl}
           <div className='absolute right-2 top-1/2 -translate-y-1/2 z-10'>
             <VoiceInputButton onTranscript={handleVoiceTranscript} size='sm' />

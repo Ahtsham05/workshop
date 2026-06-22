@@ -71,6 +71,7 @@ const formSchema = z.object({
   description: z.string(),
   barcode: z.string().optional(),
   trackImei: z.boolean().optional(),
+  warrantyMonths: z.number().min(0).optional(),
   imeis: z.array(z.string()).optional(),
   price: z.number().min(1, { message: 'Sale price is required.' }),
   cost: z.number().min(1, { message: 'Purchase price is required.' }),
@@ -139,6 +140,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: currentRow?.description || '',
         barcode: currentRow?.barcode || '',
         trackImei: currentRow?.trackImei || false,
+        warrantyMonths: currentRow?.warrantyMonths || 0,
         price: currentRow?.price || 0,
         cost: currentRow?.cost || 0,
         stockQuantity: currentRow?.stockQuantity || 0,
@@ -153,6 +155,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: '',
         barcode: '',
         trackImei: false,
+        warrantyMonths: 0,
         imeis: [],
         stockQuantity: 0,
         price: 0,
@@ -173,6 +176,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: currentRow.description || '',
         barcode: currentRow.barcode || '',
         trackImei: currentRow.trackImei || false,
+        warrantyMonths: currentRow.warrantyMonths || 0,
         price: currentRow.price || 0,
         cost: currentRow.cost || 0,
         stockQuantity: currentRow.stockQuantity || 0,
@@ -188,6 +192,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: '',
         barcode: '',
         trackImei: false,
+        warrantyMonths: 0,
         stockQuantity: 0,
         price: 0,
         cost: 0,
@@ -805,6 +810,36 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              {form.watch('trackImei') && (
+                <FormField
+                  control={form.control}
+                  name='warrantyMonths'
+                  render={({ field }) => (
+                    <FormItem className='grid grid-cols-6 space-y-0 gap-x-4 gap-y-1'>
+                      <FormLabel className='col-span-2 md:text-right items-start mt-0.5'>
+                        Warranty (months)
+                      </FormLabel>
+                      <FormControl>
+                        <div className='col-span-4'>
+                          <Input
+                            type='number'
+                            min={0}
+                            step={1}
+                            showVoiceInput={false}
+                            placeholder='e.g. 12'
+                            value={field.value ?? 0}
+                            onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                          />
+                          <p className='mt-1 text-xs text-muted-foreground'>
+                            Applied automatically to every IMEI sold for this product. Set 0 for no warranty.
+                          </p>
+                        </div>
+                      </FormControl>
+                      <FormMessage className='col-span-4 col-start-3' />
+                    </FormItem>
+                  )}
+                />
+              )}
               {form.watch('trackImei') && (form.watch('stockQuantity') > 0 || isEdit) && (
                 <FormField
                   control={form.control}

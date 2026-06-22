@@ -66,8 +66,14 @@ const updateProductById = async (productId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
   const { imeis, ...updateFields } = updateBody;
+  const nameChanged = Object.prototype.hasOwnProperty.call(updateFields, 'name') && updateFields.name !== product.name;
   Object.assign(product, updateFields);
   await product.save();
+
+  // Keep the IMEI tracking page's denormalized product name in sync on rename.
+  if (nameChanged) {
+    await imeiService.renameProductOnImeis({ productId: product._id, productName: product.name });
+  }
 
   if (product.trackImei && imeis) {
     await imeiService.syncImeisForPurchaseItem({
@@ -95,6 +101,9 @@ const deleteProductById = async (productId) => {
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
+  // Drop unsold IMEIs so the tracking page doesn't keep listing a deleted product;
+  // sold/returned/lost/stolen ones are kept — they're real sale/audit history.
+  await imeiService.deleteInStockImeisForProduct(product._id);
   await product.deleteOne();
   return product;
 };

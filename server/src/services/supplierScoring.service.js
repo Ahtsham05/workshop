@@ -94,6 +94,31 @@ const computeSupplierMetrics = async ({ organizationId, supplierId, since = days
   };
 };
 
+/**
+ * computeSupplierMetrics is org+supplier scoped — it has nothing to do with branch — but
+ * callers ask for it once per branch (purchaseSuggestions.service's computeBranchProductMetrics)
+ * and once per candidate product (scoreSuppliersForProduct). On a multi-branch org with shared
+ * suppliers, a single purchase-suggestions page load can fan this out into dozens of duplicate
+ * PurchaseOrder/Purchase/PurchaseReturn queries for the *same* supplier, saturating the Mongo
+ * connection pool and stalling unrelated requests too. Single-flight + short TTL cache fixes that.
+ */
+const SUPPLIER_METRICS_CACHE_TTL_MS = 30 * 1000;
+const supplierMetricsCache = new Map(); // `${organizationId}:${supplierId}` -> { promise, expiresAt }
+
+const computeSupplierMetricsCached = ({ organizationId, supplierId, since }) => {
+  const key = `${organizationId}:${supplierId}`;
+  const cached = supplierMetricsCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+  const promise = computeSupplierMetrics({ organizationId, supplierId, since }).catch((err) => {
+    supplierMetricsCache.delete(key);
+    throw err;
+  });
+  supplierMetricsCache.set(key, { promise, expiresAt: Date.now() + SUPPLIER_METRICS_CACHE_TTL_MS });
+  return promise;
+};
+
 /** Average price paid per supplier for a specific product, from actual receiving records. */
 const computeSupplierPricesForProduct = async ({ organizationId, productId, since = daysAgo(PERFORMANCE_LOOKBACK_DAYS) }) => {
   const orgId = toObjectId(organizationId);
@@ -146,7 +171,7 @@ const scoreSuppliersForProduct = async ({ organizationId, productId }) => {
     .lean();
 
   const metrics = await Promise.all(
-    candidateSupplierIds.map((supplierId) => computeSupplierMetrics({ organizationId, supplierId })),
+    candidateSupplierIds.map((supplierId) => computeSupplierMetricsCached({ organizationId, supplierId })),
   );
   const metricsBySupplier = new Map(metrics.map((m) => [m.supplierId, m]));
 
@@ -272,6 +297,7 @@ const refreshSupplierPerformanceForAllOrganizations = async () => {
 module.exports = {
   SCORE_WEIGHTS,
   computeSupplierMetrics,
+  computeSupplierMetricsCached,
   computeSupplierPricesForProduct,
   scoreSuppliersForProduct,
   buildSupplierRecommendationReason,

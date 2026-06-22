@@ -62,6 +62,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/mobile-shop/services', businessTypes: ['mobile_shop'], anyPermission: ['viewServices'] },
   { prefix: '/mobile-shop/bill-payments', businessTypes: ['mobile_shop'], anyPermission: ['viewBillPayments'] },
   { prefix: '/mobile-shop/installments', businessTypes: ['mobile_shop'], anyPermission: ['viewInstallments'] },
+  { prefix: '/mobile-shop/imei-tracking', businessTypes: ['mobile_shop'], anyPermission: ['viewImeiTracking'] },
   { prefix: '/mobile-shop/cash-book', anyPermission: ['viewCashBook'] },
   { prefix: '/cash-book', anyPermission: ['viewCashBook'] },
 

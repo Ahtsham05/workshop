@@ -154,17 +154,25 @@ function groupBySupplier(suggestions: PurchaseSuggestion[]): SupplierGroup[] {
 
 export default function PurchaseSuggestionsPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabKey>('purchase')
+  const [activeTab, setActiveTabState] = useState<TabKey>('purchase')
+  const setActiveTab = (tab: TabKey) => {
+    setActiveTabState(tab)
+    if (tab === 'transfers') setTransfersTabOpened(true)
+  }
   const [horizonDays, setHorizonDays] = useState<HorizonDays>(30)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  // Branch names are only needed to label the Transfers tab's cards — defer that
+  // request until the user actually opens the tab instead of firing it on every load.
+  const [transfersTabOpened, setTransfersTabOpened] = useState(false)
 
   const purchaseSuggestions = useGetPurchaseSuggestionsQuery({ horizonDays })
   const stockoutPredictions = useGetStockoutPredictionsQuery()
   const deadStock = useGetDeadStockQuery()
   const demandTrends = useGetDemandTrendsQuery()
   const transferSuggestions = useGetTransferSuggestionsQuery()
-  const branches = useGetBranchesQuery({ page: 1, limit: 100 })
+  const branches = useGetBranchesQuery({ page: 1, limit: 100 }, { skip: !transfersTabOpened })
 
   const monthStart = useMemo(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(), [])
   const today = useMemo(() => new Date().toISOString(), [])
@@ -332,8 +340,8 @@ export default function PurchaseSuggestionsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
-        <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-          <TabsList className='flex-wrap'>
+        <div className='flex flex-col gap-3'>
+          <TabsList className='h-auto w-full flex-wrap justify-start gap-1'>
             {TABS.map((tab) => (
               <TabsTrigger key={tab.key} value={tab.key} className='gap-1.5'>
                 <tab.icon className='h-3.5 w-3.5' />
@@ -346,8 +354,8 @@ export default function PurchaseSuggestionsPage() {
               </TabsTrigger>
             ))}
           </TabsList>
-          <div className='flex items-center gap-2'>
-            <div className='relative flex h-9 w-48 items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50'>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+            <div className='relative flex h-9 w-full items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:w-48'>
               <Search className='pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground' />
               <input
                 value={search}
@@ -367,7 +375,7 @@ export default function PurchaseSuggestionsPage() {
             </div>
             {activeTab === 'purchase' && (
               <Select value={String(horizonDays)} onValueChange={(v) => setHorizonDays(Number(v) as HorizonDays)}>
-                <SelectTrigger className='w-36'>
+                <SelectTrigger className='w-full sm:w-36'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

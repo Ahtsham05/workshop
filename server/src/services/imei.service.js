@@ -1,12 +1,20 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Imei } = require('../models');
+const { Imei, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 const normalizeImei = (value) => String(value || '').trim();
 
+const historyEntry = (status, { note = '', byUserId = null, byUserName = '' } = {}) => ({
+  status,
+  note,
+  at: new Date(),
+  byUserId,
+  byUserName,
+});
+
 const createImei = async (body) => {
-  return Imei.create(body);
+  return Imei.create({ ...body, history: [historyEntry(body.status || 'in_stock', { byUserId: body.createdBy })] });
 };
 
 /** Used by the purchase form: returns in-stock + sold IMEIs already linked to this purchase+product, so the UI can show/edit them. */
@@ -89,6 +97,7 @@ const syncImeisForPurchaseItem = async ({
       purchaseDate,
       status: 'in_stock',
       createdBy,
+      history: [historyEntry('in_stock', { byUserId: createdBy, note: purchaseId ? 'Received via purchase' : 'Added as opening stock' })],
     })),
   );
 };
@@ -96,6 +105,20 @@ const syncImeisForPurchaseItem = async ({
 /** Used when a purchase is deleted: drop any still-unsold IMEIs that were created for it. */
 const releaseImeisForPurchase = async (purchaseId) => {
   await Imei.deleteMany({ purchaseId, status: 'in_stock' });
+};
+
+/** Keeps the IMEI tracking page in sync when a product is renamed. */
+const renameProductOnImeis = async ({ productId, productName }) => {
+  await Imei.updateMany({ productId }, { $set: { productName } });
+};
+
+/**
+ * Used when a product is deleted: drop its still-unsold IMEIs (no sale history to lose).
+ * Sold/returned/lost/stolen/scrapped IMEIs are kept — they're real historical records
+ * (customer, sale price, audit trail) and must outlive the product they were sold from.
+ */
+const deleteInStockImeisForProduct = async (productId) => {
+  await Imei.deleteMany({ productId, status: 'in_stock' });
 };
 
 /** Pre-flight check before creating/updating an invoice — ensures every selected IMEI is actually available. */
@@ -120,9 +143,18 @@ const validateImeisAvailable = async ({ items, organizationId, branchId }) => {
 
 /** Marks the chosen IMEIs as sold and attaches sale/customer info, for every item on an invoice. */
 const markImeisSoldForInvoice = async ({ invoiceId, items, customerId, customerName, customerPhone, customerCNIC, saleDate, updatedBy, organizationId, branchId }) => {
+  const effectiveSaleDate = saleDate || new Date();
+
   for (const item of items) {
     if (!item.imeis || item.imeis.length === 0) continue;
     const numbers = item.imeis.map(normalizeImei).filter(Boolean);
+
+    const product = await Product.findById(item.productId).select('warrantyMonths');
+    const warrantyMonths = product?.warrantyMonths || 0;
+    const warrantyEndDate = warrantyMonths > 0
+      ? new Date(new Date(effectiveSaleDate).setMonth(new Date(effectiveSaleDate).getMonth() + warrantyMonths))
+      : null;
+
     await Imei.updateMany(
       { organizationId, branchId, productId: item.productId, imei: { $in: numbers }, status: 'in_stock' },
       {
@@ -134,9 +166,13 @@ const markImeisSoldForInvoice = async ({ invoiceId, items, customerId, customerN
           customerName: customerName || '',
           customerPhone: customerPhone || '',
           customerCNIC: customerCNIC || '',
-          saleDate: saleDate || new Date(),
+          saleDate: effectiveSaleDate,
+          warrantyMonths,
+          warrantyStartDate: warrantyMonths > 0 ? effectiveSaleDate : null,
+          warrantyEndDate,
           updatedBy,
         },
+        $push: { history: historyEntry('sold', { byUserId: updatedBy, note: customerName ? `Sold to ${customerName}` : 'Sold' }) },
       },
     );
   }
@@ -156,14 +192,47 @@ const releaseImeisForInvoice = async (invoiceId) => {
         customerPhone: '',
         customerCNIC: '',
         saleDate: null,
+        warrantyMonths: 0,
+        warrantyStartDate: null,
+        warrantyEndDate: null,
       },
+      $push: { history: historyEntry('in_stock', { note: 'Invoice reverted' }) },
     },
   );
+};
+
+/** Marks a device as lost or stolen, recording who reported it and why. */
+const markImeiLostOrStolen = async (id, { status, reason, updatedBy }) => {
+  if (!['lost', 'stolen'].includes(status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Status must be lost or stolen');
+  }
+  const record = await Imei.findById(id);
+  if (!record) throw new ApiError(httpStatus.NOT_FOUND, 'IMEI record not found');
+
+  record.status = status;
+  record.lostStolenAt = new Date();
+  record.lostStolenReason = reason || '';
+  record.updatedBy = updatedBy;
+  record.history.push(historyEntry(status, { byUserId: updatedBy, note: reason || '' }));
+  await record.save();
+  return record;
 };
 
 const queryImeis = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
+
+  if (typeof queryFilter.status === 'string' && queryFilter.status.includes(',')) {
+    queryFilter.status = { $in: queryFilter.status.split(',').map((s) => s.trim()).filter(Boolean) };
+  }
+
+  if (queryOptions.warrantyStatus === 'expiring_soon') {
+    const now = new Date();
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    queryFilter.status = 'sold';
+    queryFilter.warrantyEndDate = { $gte: now, $lte: in30Days };
+    delete queryOptions.warrantyStatus;
+  }
 
   if (queryOptions.search) {
     const search = String(queryOptions.search).trim();
@@ -204,7 +273,16 @@ const getImeiByNumber = async (imei, organizationId, branchId) => {
 const updateImei = async (id, updateBody) => {
   const record = await Imei.findById(id);
   if (!record) throw new ApiError(httpStatus.NOT_FOUND, 'IMEI record not found');
-  Object.assign(record, updateBody);
+
+  const { status, updatedBy, notes, ...rest } = updateBody;
+  Object.assign(record, rest, { updatedBy });
+  if (notes !== undefined) record.notes = notes;
+
+  if (status && status !== record.status) {
+    record.status = status;
+    record.history.push(historyEntry(status, { byUserId: updatedBy, note: notes || '' }));
+  }
+
   await record.save();
   return record;
 };
@@ -216,13 +294,24 @@ const deleteImei = async (id) => {
 };
 
 const getImeiStats = async (organizationId, branchId) => {
-  const stats = await Imei.aggregate([
-    { $match: { organizationId: new mongoose.Types.ObjectId(organizationId), branchId: new mongoose.Types.ObjectId(branchId) } },
-    { $group: { _id: '$status', count: { $sum: 1 } } },
-  ]);
-  const result = { in_stock: 0, sold: 0, returned: 0, scrapped: 0 };
+  const match = { organizationId: new mongoose.Types.ObjectId(organizationId), branchId: new mongoose.Types.ObjectId(branchId) };
+
+  const stats = await Imei.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]);
+  const result = { in_stock: 0, sold: 0, returned: 0, scrapped: 0, lost: 0, stolen: 0 };
   stats.forEach((s) => { if (s._id in result) result[s._id] = s.count; });
   result.total = Object.values(result).reduce((a, b) => a + b, 0);
+
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [warrantyActive, warrantyExpiringSoon, warrantyExpired] = await Promise.all([
+    Imei.countDocuments({ ...match, status: 'sold', warrantyEndDate: { $gt: in30Days } }),
+    Imei.countDocuments({ ...match, status: 'sold', warrantyEndDate: { $gte: now, $lte: in30Days } }),
+    Imei.countDocuments({ ...match, status: 'sold', warrantyEndDate: { $lt: now } }),
+  ]);
+  result.warrantyActive = warrantyActive;
+  result.warrantyExpiringSoon = warrantyExpiringSoon;
+  result.warrantyExpired = warrantyExpired;
+
   return result;
 };
 
@@ -239,7 +328,10 @@ module.exports = {
   getOpeningStockImeisForProduct,
   syncImeisForPurchaseItem,
   releaseImeisForPurchase,
+  renameProductOnImeis,
+  deleteInStockImeisForProduct,
   validateImeisAvailable,
   markImeisSoldForInvoice,
   releaseImeisForInvoice,
+  markImeiLostOrStolen,
 };

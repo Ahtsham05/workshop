@@ -88,6 +88,7 @@ import { Route as AuthenticatedMobileShopServicesImport } from './routes/_authen
 import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
 import { Route as AuthenticatedMobileShopLoadImport } from './routes/_authenticated/mobile-shop/load'
 import { Route as AuthenticatedMobileShopInstallmentsImport } from './routes/_authenticated/mobile-shop/installments'
+import { Route as AuthenticatedMobileShopImeiTrackingImport } from './routes/_authenticated/mobile-shop/imei-tracking'
 import { Route as AuthenticatedMobileShopCashManagementImport } from './routes/_authenticated/mobile-shop/cash-management'
 import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
 import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
@@ -653,6 +654,13 @@ const AuthenticatedMobileShopInstallmentsRoute =
   AuthenticatedMobileShopInstallmentsImport.update({
     id: '/mobile-shop/installments',
     path: '/mobile-shop/installments',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopImeiTrackingRoute =
+  AuthenticatedMobileShopImeiTrackingImport.update({
+    id: '/mobile-shop/imei-tracking',
+    path: '/mobile-shop/imei-tracking',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1227,6 +1235,13 @@ declare module '@tanstack/react-router' {
       path: '/mobile-shop/cash-management'
       fullPath: '/mobile-shop/cash-management'
       preLoaderRoute: typeof AuthenticatedMobileShopCashManagementImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/imei-tracking': {
+      id: '/_authenticated/mobile-shop/imei-tracking'
+      path: '/mobile-shop/imei-tracking'
+      fullPath: '/mobile-shop/imei-tracking'
+      preLoaderRoute: typeof AuthenticatedMobileShopImeiTrackingImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-shop/installments': {
@@ -2161,6 +2176,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileShopBillPaymentsRoute: typeof AuthenticatedMobileShopBillPaymentsRoute
   AuthenticatedMobileShopCashBookRoute: typeof AuthenticatedMobileShopCashBookRoute
   AuthenticatedMobileShopCashManagementRoute: typeof AuthenticatedMobileShopCashManagementRoute
+  AuthenticatedMobileShopImeiTrackingRoute: typeof AuthenticatedMobileShopImeiTrackingRoute
   AuthenticatedMobileShopInstallmentsRoute: typeof AuthenticatedMobileShopInstallmentsRoute
   AuthenticatedMobileShopLoadRoute: typeof AuthenticatedMobileShopLoadRoute
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
@@ -2229,6 +2245,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileShopCashBookRoute: AuthenticatedMobileShopCashBookRoute,
   AuthenticatedMobileShopCashManagementRoute:
     AuthenticatedMobileShopCashManagementRoute,
+  AuthenticatedMobileShopImeiTrackingRoute:
+    AuthenticatedMobileShopImeiTrackingRoute,
   AuthenticatedMobileShopInstallmentsRoute:
     AuthenticatedMobileShopInstallmentsRoute,
   AuthenticatedMobileShopLoadRoute: AuthenticatedMobileShopLoadRoute,
@@ -2318,6 +2336,7 @@ export interface FileRoutesByFullPath {
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
+  '/mobile-shop/imei-tracking': typeof AuthenticatedMobileShopImeiTrackingRoute
   '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -2449,6 +2468,7 @@ export interface FileRoutesByTo {
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
+  '/mobile-shop/imei-tracking': typeof AuthenticatedMobileShopImeiTrackingRoute
   '/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -2583,6 +2603,7 @@ export interface FileRoutesById {
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/_authenticated/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
+  '/_authenticated/mobile-shop/imei-tracking': typeof AuthenticatedMobileShopImeiTrackingRoute
   '/_authenticated/mobile-shop/installments': typeof AuthenticatedMobileShopInstallmentsRoute
   '/_authenticated/mobile-shop/load': typeof AuthenticatedMobileShopLoadRoute
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
@@ -2719,6 +2740,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/cash-management'
+    | '/mobile-shop/imei-tracking'
     | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
@@ -2849,6 +2871,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/cash-management'
+    | '/mobile-shop/imei-tracking'
     | '/mobile-shop/installments'
     | '/mobile-shop/load'
     | '/mobile-shop/repair'
@@ -2981,6 +3004,7 @@ export interface FileRouteTypes {
     | '/_authenticated/mobile-shop/bill-payments'
     | '/_authenticated/mobile-shop/cash-book'
     | '/_authenticated/mobile-shop/cash-management'
+    | '/_authenticated/mobile-shop/imei-tracking'
     | '/_authenticated/mobile-shop/installments'
     | '/_authenticated/mobile-shop/load'
     | '/_authenticated/mobile-shop/repair'
@@ -3162,6 +3186,7 @@ export const routeTree = rootRoute
         "/_authenticated/mobile-shop/bill-payments",
         "/_authenticated/mobile-shop/cash-book",
         "/_authenticated/mobile-shop/cash-management",
+        "/_authenticated/mobile-shop/imei-tracking",
         "/_authenticated/mobile-shop/installments",
         "/_authenticated/mobile-shop/load",
         "/_authenticated/mobile-shop/repair",
@@ -3360,6 +3385,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/cash-management": {
       "filePath": "_authenticated/mobile-shop/cash-management.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/imei-tracking": {
+      "filePath": "_authenticated/mobile-shop/imei-tracking.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/mobile-shop/installments": {

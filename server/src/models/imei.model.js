@@ -72,7 +72,7 @@ const imeiSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['in_stock', 'sold', 'returned', 'scrapped'],
+      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen'],
       default: 'in_stock',
       index: true,
     },
@@ -128,6 +128,39 @@ const imeiSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+    },
+    warrantyMonths: {
+      type: Number,
+      default: 0,
+    },
+    warrantyStartDate: {
+      type: Date,
+      default: null,
+    },
+    warrantyEndDate: {
+      type: Date,
+      default: null,
+    },
+    lostStolenAt: {
+      type: Date,
+      default: null,
+    },
+    lostStolenReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    history: {
+      type: [
+        {
+          status: { type: String, required: true },
+          note: { type: String, trim: true, default: '' },
+          at: { type: Date, default: Date.now },
+          byUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+          byUserName: { type: String, trim: true, default: '' },
+        },
+      ],
+      default: [],
     },
     notes: {
       type: String,

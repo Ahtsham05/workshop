@@ -111,6 +111,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewInstallments', 'manageInstallments'],
   },
   {
+    id: 'imei_tracking',
+    label: 'Mobile Shop — IMEI Tracking',
+    permissions: ['viewImeiTracking', 'manageImeiTracking'],
+  },
+  {
     id: 'reports',
     label: 'Reports',
     permissions: [
@@ -235,6 +240,7 @@ const PERMISSION_TAB_GROUPS = {
     'services',
     'bill_payments',
     'installments',
+    'imei_tracking',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments'],

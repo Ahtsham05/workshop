@@ -7,7 +7,7 @@ const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter')
 const getImeis = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['productId', 'status']);
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'warrantyStatus']);
   const result = await imeiService.queryImeis(filter, options);
   res.send(result);
 });
@@ -43,10 +43,32 @@ const deleteImei = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const getImei = catchAsync(async (req, res) => {
+  const record = await imeiService.getImeiById(req.params.imeiId);
+  res.send(record);
+});
+
+const getStats = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const stats = await imeiService.getImeiStats(organizationId, branchId);
+  res.send(stats);
+});
+
+const markLostOrStolen = catchAsync(async (req, res) => {
+  const record = await imeiService.markImeiLostOrStolen(req.params.imeiId, {
+    ...req.body,
+    updatedBy: req.user.id,
+  });
+  res.send(record);
+});
+
 module.exports = {
   getImeis,
   getAvailableImeis,
   getOpeningStockImeis,
+  getImei,
+  getStats,
   updateImei,
   deleteImei,
+  markLostOrStolen,
 };

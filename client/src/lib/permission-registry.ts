@@ -19,6 +19,7 @@ export type PermissionKey =
   | 'viewServices' | 'manageServices'
   | 'viewBillPayments' | 'manageBillPayments'
   | 'viewInstallments' | 'manageInstallments'
+  | 'viewImeiTracking' | 'manageImeiTracking'
   | 'viewReports' | 'viewSalesReports' | 'viewPurchaseReports' | 'viewInventoryReports'
   | 'viewCustomerReports' | 'viewSupplierReports' | 'viewProductReports'
   | 'viewExpenseReports' | 'viewSimSaleReports' | 'viewProfitLossReports'
@@ -68,6 +69,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'services', label: 'Mobile Shop — Services', permissions: ['viewServices', 'manageServices'] },
   { id: 'bill_payments', label: 'Mobile Shop — Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
   { id: 'installments', label: 'Mobile Shop — Installments', permissions: ['viewInstallments', 'manageInstallments'] },
+  { id: 'imei_tracking', label: 'Mobile Shop — IMEI Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   {
     id: 'reports',
     label: 'Reports',
@@ -103,7 +105,7 @@ export const PERMISSION_TAB_GROUPS = {
     'customers', 'suppliers', 'categories', 'accounting', 'cash', 'accounts_system',
   ],
   mobile_shop: [
-    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments',
+    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'imei_tracking',
   ],
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',

@@ -31,6 +31,7 @@ const createProduct = {
     description: Joi.string().allow('').optional(),
     barcode: Joi.string().allow('').optional(),
     trackImei: Joi.boolean().optional(),
+    warrantyMonths: Joi.number().integer().min(0).optional(),
     imeis: Joi.array().items(Joi.string().trim()).optional(),
     image: Joi.object().keys({
       url: Joi.string(),
@@ -79,6 +80,7 @@ const updateProduct = {
     description: Joi.string().allow(''),
     barcode: Joi.string().allow(''),
     trackImei: Joi.boolean().optional(),
+    warrantyMonths: Joi.number().integer().min(0).optional(),
     imeis: Joi.array().items(Joi.string().trim()).optional(),
     cost: Joi.number(),
     stockQuantity: Joi.number(),

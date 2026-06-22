@@ -8,11 +8,14 @@ const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 
 const ApiError = require('../utils/ApiError');
 
-const calculateProfit = ({ amount, commissionRate = 0, extraCharge = 0 }) => {
-  const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
-  const totalProfit = commissionProfit + Number(extraCharge || 0);
-  return totalProfit;
-};
+/**
+ * Selling load to a customer doesn't earn a wholesale commission — only *buying* load
+ * from a supplier does (see loadPurchase.service.js, where commission is the discount
+ * the supplier gives). commissionRate is kept on the sale record only for reference
+ * (e.g. it mirrors the wallet's default rate); it must not affect profit here. Extra
+ * charges are the only real profit on a sale — a manual fee actually charged to the customer.
+ */
+const calculateProfit = ({ extraCharge = 0 }) => Number(extraCharge || 0);
 
 const sanitizeCustomerId = (value) => {
   if (value === null || value === undefined || value === '') {
@@ -197,11 +200,7 @@ const createLoadTransaction = async (transactionBody) => {
     customerName: linkedCustomer ? linkedCustomer.name : (transactionBody.customerName || ''),
     receivedAmount,
     paymentWalletType: transactionBody.paymentWalletType || '',
-    profit: calculateProfit({
-      amount: transactionBody.amount,
-      commissionRate: transactionBody.commissionRate,
-      extraCharge: transactionBody.extraCharge,
-    }),
+    profit: calculateProfit({ extraCharge: transactionBody.extraCharge }),
   });
 
   await walletService.adjustWalletBalance({
@@ -287,11 +286,7 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
     amount: transaction.amount,
     receivedAmount: transaction.receivedAmount,
   });
-  transaction.profit = calculateProfit({
-    amount: transaction.amount,
-    commissionRate: transaction.commissionRate,
-    extraCharge: transaction.extraCharge,
-  });
+  transaction.profit = calculateProfit({ extraCharge: transaction.extraCharge });
   await transaction.save();
 
   // Apply new wallet deduction

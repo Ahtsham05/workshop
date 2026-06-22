@@ -64,7 +64,7 @@ module.exports = {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       heartbeatFrequencyMS: 10000,  // ping Atlas every 10s to keep connections alive
-      maxPoolSize: 10,
+      maxPoolSize: 20, // headroom for concurrent aggregation-heavy endpoints (purchase suggestions, dashboard stats) — was 10, too easy to saturate and stall unrelated requests
       minPoolSize: 2,               // keep 2 connections warm to avoid cold reconnects
       retryWrites: true,
       retryReads: true,

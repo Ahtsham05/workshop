@@ -31,7 +31,7 @@ import {
   IconClock,
   IconFileImport,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -830,6 +830,13 @@ export const sidebarData: SidebarData = {
           url: '/mobile-shop/installments',
           icon: IconCreditCard,
           permission: 'viewInstallments',
+          businessTypes: ['mobile_shop'],
+        },
+        {
+          title: 'IMEI Tracking',
+          url: '/mobile-shop/imei-tracking',
+          icon: ShieldCheck,
+          permission: 'viewImeiTracking',
           businessTypes: ['mobile_shop'],
         },
 

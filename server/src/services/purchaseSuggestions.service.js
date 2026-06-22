@@ -272,7 +272,7 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
   const supplierIds = [...new Set(products.filter((p) => p.supplier).map((p) => String(p.supplier)))];
   const supplierMetrics = new Map(
     await Promise.all(
-      supplierIds.map(async (supplierId) => [supplierId, await supplierScoringService.computeSupplierMetrics({ organizationId: orgId, supplierId })]),
+      supplierIds.map(async (supplierId) => [supplierId, await supplierScoringService.computeSupplierMetricsCached({ organizationId: orgId, supplierId })]),
     ),
   );
 
@@ -347,6 +347,43 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
       daysSinceLastSale,
     };
   });
+};
+
+/**
+ * computeBranchProductMetrics is the single most expensive call in this file (it runs
+ * sales/PO aggregations across every product in a branch). The dashboard page fires up to
+ * 5 independent requests on load (suggestions, stockouts, demand trends, dead stock,
+ * transfers) that each need this same branch's metrics — without caching, that's 5x the
+ * Mongo aggregation work for data that hasn't changed in the last few seconds.
+ *
+ * This is a short-TTL, single-flight cache: concurrent callers for the same org+branch
+ * share one in-flight computation, and the result stays warm for METRICS_CACHE_TTL_MS so
+ * a burst of page-load requests only computes once.
+ */
+const METRICS_CACHE_TTL_MS = 20 * 1000;
+const metricsCache = new Map(); // `${organizationId}:${branchId}` -> { promise, expiresAt }
+
+const computeBranchProductMetricsCached = ({ organizationId, branchId }) => {
+  const key = `${organizationId}:${branchId}`;
+  const cached = metricsCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+  const promise = computeBranchProductMetrics({ organizationId, branchId }).catch((err) => {
+    metricsCache.delete(key);
+    throw err;
+  });
+  metricsCache.set(key, { promise, expiresAt: Date.now() + METRICS_CACHE_TTL_MS });
+  return promise;
+};
+
+/** Drops cached metrics for a branch so the next read recomputes — call after anything that changes the underlying data (manual refresh, stock-affecting writes). */
+const invalidateBranchMetricsCache = ({ organizationId, branchId = null }) => {
+  for (const key of metricsCache.keys()) {
+    if (branchId ? key === `${organizationId}:${branchId}` : key.startsWith(`${organizationId}:`)) {
+      metricsCache.delete(key);
+    }
+  }
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -439,7 +476,7 @@ const getPurchaseSuggestions = async ({ organizationId, branchId, horizonDays = 
   const branchIds = [...new Set([...activeBranches.map((b) => String(b._id)), String(branchId)])];
 
   const allBranchMetrics = await Promise.all(
-    branchIds.map((id) => computeBranchProductMetrics({ organizationId: orgId, branchId: id })),
+    branchIds.map((id) => computeBranchProductMetricsCached({ organizationId: orgId, branchId: id })),
   );
   const { transfers, coveredQtyByProductId } = buildTransferSuggestions(allBranchMetrics);
 
@@ -522,14 +559,14 @@ const getTransferSuggestions = async ({ organizationId }) => {
   const orgId = toObjectId(organizationId);
   const branches = await Branch.find({ organizationId: orgId, isActive: true }).select('_id').lean();
   const allBranchMetrics = await Promise.all(
-    branches.map((b) => computeBranchProductMetrics({ organizationId: orgId, branchId: b._id })),
+    branches.map((b) => computeBranchProductMetricsCached({ organizationId: orgId, branchId: b._id })),
   );
   const { transfers } = buildTransferSuggestions(allBranchMetrics);
   return transfers;
 };
 
 const getStockoutPredictions = async ({ organizationId, branchId }) => {
-  const metrics = await computeBranchProductMetrics({ organizationId, branchId });
+  const metrics = await computeBranchProductMetricsCached({ organizationId, branchId });
   return metrics
     .filter((p) => p.dailyDemand > 0 && p.daysRemaining <= CONFIG.STOCK_OUT_RISK_DAYS && hasEnoughDemandSignal(p))
     .map((p) => ({
@@ -547,7 +584,7 @@ const getStockoutPredictions = async ({ organizationId, branchId }) => {
 };
 
 const getDemandTrends = async ({ organizationId, branchId }) => {
-  const metrics = await computeBranchProductMetrics({ organizationId, branchId });
+  const metrics = await computeBranchProductMetricsCached({ organizationId, branchId });
   return metrics
     .filter((p) => p.trend.label !== 'stable')
     .map((p) => ({
@@ -560,7 +597,7 @@ const getDemandTrends = async ({ organizationId, branchId }) => {
 };
 
 const getDeadStock = async ({ organizationId, branchId }) => {
-  const metrics = await computeBranchProductMetrics({ organizationId, branchId });
+  const metrics = await computeBranchProductMetricsCached({ organizationId, branchId });
   const deadStockCutoff = daysAgo(CONFIG.DEAD_STOCK_WINDOW_DAYS);
 
   return metrics
@@ -664,6 +701,7 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
 
 /** Recomputes and replaces the supply-chain Insight docs for one branch (daily job entry point). */
 const runPurchaseSuggestionsForBranch = async ({ organizationId, branchId }) => {
+  invalidateBranchMetricsCache({ organizationId, branchId });
   const docs = await buildInsightDocs({ organizationId, branchId });
   await Insight.deleteMany({
     organizationId: toObjectId(organizationId),
