@@ -22,6 +22,13 @@ import {
   useDeleteExpenseCategoryMutation,
   type ExpenseCategory,
 } from '@/stores/expenseCategory.api'
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import {
   Dialog,
   DialogContent,
@@ -67,6 +74,14 @@ export function ExpenseForm({
   const { data: categories = [], refetch } = useGetExpenseCategoriesQuery({
     transactionType: 'business_expense',
   })
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // Expenses are always money-out — show wallet balances so the user can avoid overdrawing.
+  const mergedPaymentMethods = buildMergedPaymentOptions(
+    paymentMethods.map((m) => ({ value: m, label: t(m) })),
+    wallets,
+    true,
+  )
   const [createCategory] = useCreateExpenseCategoryMutation()
   const [updateCategory] = useUpdateExpenseCategoryMutation()
   const [deleteCategoryMut] = useDeleteExpenseCategoryMutation()
@@ -83,6 +98,7 @@ export function ExpenseForm({
     description: expense?.description || '',
     amount: expense?.amount || '',
     paymentMethod: expense?.paymentMethod || 'Cash',
+    walletType: expense?.walletType || '',
     date: expense?.date ? new Date(expense.date) : new Date(),
     vendor: expense?.vendor || '',
     reference: expense?.reference || '',
@@ -102,6 +118,8 @@ export function ExpenseForm({
     if (!formData.description) newErrors.description = t('Description is required')
     if (!formData.amount || Number(formData.amount) <= 0)
       newErrors.amount = t('Amount must be greater than 0')
+    if (formData.paymentMethod === 'Wallet' && !formData.walletType)
+      newErrors.walletType = t('Please select a wallet')
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -199,6 +217,7 @@ export function ExpenseForm({
         description: formData.description,
         amount: Number(formData.amount),
         paymentMethod: formData.paymentMethod,
+        walletType: formData.paymentMethod === 'Wallet' ? formData.walletType : undefined,
         date: formData.date.toISOString(),
         vendor: formData.vendor || undefined,
         reference: formData.reference || undefined,
@@ -361,19 +380,37 @@ export function ExpenseForm({
               {errors.amount && <p className="text-sm text-red-500">{errors.amount}</p>}
             </div>
 
-            {/* Payment Method */}
+            {/* Payment Method — expenses are always money-out, so wallet balances are shown */}
             <div className="space-y-2">
               <Label>{t('Payment Method')}</Label>
-              <Select value={formData.paymentMethod} onValueChange={(v) => handleChange('paymentMethod', v)}>
-                <SelectTrigger className="w-full">
+              <Select
+                value={
+                  formData.paymentMethod === 'Wallet' && formData.walletType
+                    ? toWalletOptionValue(formData.walletType)
+                    : formData.paymentMethod
+                }
+                onValueChange={(v) => {
+                  if (isWalletOptionValue(v)) {
+                    setFormData((prev) => ({ ...prev, paymentMethod: 'Wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                  } else {
+                    setFormData((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
+                  }
+                  if (errors.walletType) setErrors((prev) => ({ ...prev, walletType: '' }))
+                }}
+              >
+                <SelectTrigger className={cn('w-full', errors.walletType && 'border-red-500')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {paymentMethods.map((m) => (
-                    <SelectItem key={m} value={m}>{t(m)}</SelectItem>
+                  {mergedPaymentMethods.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {wallets.length === 0 && (
+                <p className="text-xs text-muted-foreground">{t('No wallets configured. Add one from the Wallet page.')}</p>
+              )}
+              {errors.walletType && <p className="text-sm text-red-500">{errors.walletType}</p>}
             </div>
 
             {/* Date */}

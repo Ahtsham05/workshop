@@ -34,8 +34,13 @@ const expenseSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Cash', 'Bank Transfer', 'Card', 'Cheque'],
+    enum: ['Cash', 'Bank Transfer', 'Card', 'Cheque', 'Wallet'],
     default: 'Cash',
+  },
+  // Wallet name when paymentMethod === 'Wallet'
+  walletType: {
+    type: String,
+    trim: true,
   },
   date: {
     type: Date,

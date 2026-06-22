@@ -10,6 +10,7 @@ const {
   Organization,
   Customer,
   Supplier,
+  Wallet,
 } = require('../models');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
@@ -22,6 +23,7 @@ const ACCOUNT_CODES = {
   WALLET_JAZZCASH: '1104',
   WALLET_EASYPAISA: '1105',
   INVENTORY: '1106',
+  WALLET_GROUP: '1150',
   ACCOUNTS_PAYABLE: '2101',
   CUSTOMER_ADVANCE: '2102',
   TAX_PAYABLE: '2105',
@@ -75,6 +77,7 @@ const buildSchoolTree = (base) => [
       { code: '1203', name: 'Building', isGroup: false, level: 2 },
       { code: '1204', name: 'Vehicles', isGroup: false, level: 2 },
     ]},
+    { code: '1150', name: 'Wallets (Bank & Cash)', level: 1, children: [] },
   ]},
   // ── LIABILITIES ──
   { code: '2000', name: 'Liabilities', rootType: 'LIABILITY', balanceType: 'CREDIT', level: 0, ...base, children: [
@@ -161,6 +164,7 @@ const buildRetailTree = (base) => [
       { code: '1203', name: 'Building', isGroup: false, level: 2 },
       { code: '1204', name: 'Vehicles', isGroup: false, level: 2 },
     ]},
+    { code: '1150', name: 'Wallets (Bank & Cash)', level: 1, children: [] },
   ]},
   // ── LIABILITIES ──
   { code: '2000', name: 'Liabilities', rootType: 'LIABILITY', balanceType: 'CREDIT', level: 0, ...base, children: [
@@ -1574,6 +1578,86 @@ const getSupplierPayableAccount = async (scope, supplierId) => {
 };
 
 /**
+ * Ensure the "Wallets (Bank & Cash)" group account exists, creating it lazily
+ * under Assets for organizations whose chart was seeded before this group
+ * existed (upgrade path — mirrors syncMobileShopAccounts).
+ */
+const ensureWalletGroupAccount = async (scope) => {
+  const filter = getTenantFilter(scope);
+  const existing = await findHead(scope, ACCOUNT_CODES.WALLET_GROUP);
+  if (existing) return existing;
+
+  const assetsRoot = await AccountHead.findOne({ ...filter, code: '1000' });
+  if (!assetsRoot) return null;
+
+  return AccountHead.create({
+    ...filter,
+    code: ACCOUNT_CODES.WALLET_GROUP,
+    name: 'Wallets (Bank & Cash)',
+    rootType: assetsRoot.rootType,
+    balanceType: assetsRoot.balanceType,
+    parentId: assetsRoot._id,
+    level: 1,
+    isGroup: true,
+    isSystem: true,
+    createdBy: scope.createdBy,
+  });
+};
+
+/**
+ * Ensure a generic bank/cash wallet has a dedicated ledger account nested
+ * under the Wallets group, so its transactions post real double-entry lines
+ * instead of collapsing into the generic Cash account. Works for ANY business
+ * type. JazzCash/EasyPaisa wallets keep using their stable system codes
+ * (1104/1105) and don't need one of these. Idempotent — reuses
+ * wallet.accountHeadId once created.
+ */
+const ensureWalletAccount = async (scope, wallet) => {
+  if (!wallet) return null;
+  const name = String(wallet.type || '').trim().toLowerCase();
+  if (name.includes('jazz') || name.includes('easy')) return null;
+
+  await ensureSeeded(scope);
+  const filter = getTenantFilter(scope);
+
+  if (wallet.accountHeadId) {
+    const existing = await AccountHead.findOne({ _id: wallet.accountHeadId, ...filter });
+    if (existing) return existing;
+  }
+
+  const group = await ensureWalletGroupAccount(scope);
+  if (!group) return null;
+
+  const childCount = await AccountHead.countDocuments({ ...filter, parentId: group._id });
+  const head = await AccountHead.create({
+    ...filter,
+    code: `${ACCOUNT_CODES.WALLET_GROUP}-${String(childCount + 1).padStart(4, '0')}`,
+    name: wallet.type,
+    rootType: group.rootType,
+    balanceType: group.balanceType,
+    parentId: group._id,
+    level: (group.level || 1) + 1,
+    isGroup: false,
+    isSystem: false,
+    openingBalance: wallet.balance || 0,
+    currentBalance: wallet.balance || 0,
+    createdBy: scope.createdBy,
+  });
+
+  await Wallet.findByIdAndUpdate(wallet._id, { accountHeadId: head._id });
+  return head;
+};
+
+/** Resolve the ledger account for a named wallet (by type), creating it on first use. */
+const getWalletAccount = async (scope, walletTypeName) => {
+  const name = String(walletTypeName || '').trim();
+  if (!name) return null;
+  const wallet = await Wallet.findOne({ ...getTenantFilter(scope), type: name });
+  if (!wallet) return null;
+  return ensureWalletAccount(scope, wallet);
+};
+
+/**
  * Resolve a payment method (+ optional wallet type) to a Cash/Bank/Wallet
  * account head. Understands the many payment-method spellings used across the
  * app (cash, bank, bank transfer, card, cheque, jazzcash, easypaisa, wallet…).
@@ -1583,9 +1667,15 @@ const resolvePaymentAccount = async (scope, paymentMethod, walletType) => {
   const wt = String(walletType || '').trim().toLowerCase();
   const combined = `${pm} ${wt}`;
 
-  // Mobile wallets
+  // Mobile wallets (stable system accounts)
   if (combined.includes('jazz')) return findAccount(scope, ACCOUNT_CODES.WALLET_JAZZCASH);
   if (combined.includes('easy')) return findAccount(scope, ACCOUNT_CODES.WALLET_EASYPAISA);
+
+  // Generic named wallet (bank account / cash-in-hand wallet, any business type)
+  if (wt) {
+    const walletAccount = await getWalletAccount(scope, walletType);
+    if (walletAccount) return walletAccount;
+  }
 
   // Bank-like methods
   if (['bank', 'bank_transfer', 'bank transfer', 'card', 'cheque', 'check', 'online'].includes(pm)) {
@@ -1595,7 +1685,6 @@ const resolvePaymentAccount = async (scope, paymentMethod, walletType) => {
     if (bankAccount) return AccountHead.findById(bankAccount.accountHeadId);
   }
 
-  // Generic wallet without a recognised provider → fall back to cash
   // Default: Cash in Hand
   return findAccount(scope, ACCOUNT_CODES.CASH);
 };
@@ -1976,6 +2065,10 @@ module.exports = {
   ensureSupplierAccount,
   getCustomerReceivableAccount,
   getSupplierPayableAccount,
+  // Wallet ledger accounts
+  ensureWalletAccount,
+  getWalletAccount,
+  resolvePaymentAccount,
   // Auto-post (retail / general)
   postSaleInvoice,
   postSaleCogs,

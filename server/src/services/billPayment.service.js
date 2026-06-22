@@ -3,6 +3,7 @@ const httpStatus = require('http-status');
 const { BillPayment } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const walletEntryService = require('./walletEntry.service');
 const {
   parseBusinessDateBoundary,
   parseBusinessDateTime,
@@ -88,7 +89,14 @@ const applyBillPaymentFinancials = (billPayment) => {
   return billPayment;
 };
 
-const syncBillCashEntry = async (billPayment) => {
+/** Amount actually owed to the utility company once this bill is marked paid, else 0. */
+const computeBillUtilityAmount = (billPayment) =>
+  billPayment.status === 'paid' ? Number(billPayment.actualBillAmount || billPayment.billAmount || 0) : 0;
+
+const syncBillCashEntry = async (billPayment, previous = null) => {
+  const isWalletPayment = billPayment.paymentMethod === 'wallet' && billPayment.walletType;
+  const utilityAmount = computeBillUtilityAmount(billPayment);
+
   const commonFields = {
     organizationId: billPayment.organizationId,
     branchId: billPayment.branchId,
@@ -99,48 +107,85 @@ const syncBillCashEntry = async (billPayment) => {
     createdBy: billPayment.createdBy,
   };
 
-  // INCOME: total collected from customer (bill amount + service charge)
-  // Created as soon as bill is recorded — customer pays at the counter immediately
-  const incomeEntry = cashBookService.upsertReferenceEntry({
-    ...commonFields,
-    type: 'income',
-    amount: billPayment.totalReceived,
-    date: billPayment.createdAt,
-    description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
-  });
-
-  // EXPENSE: bill amount paid to utility company — only when bill is actually paid
-  let expenseEntry;
-  if (billPayment.status === 'paid') {
-    const utilityAmount = Number(billPayment.actualBillAmount || billPayment.billAmount);
-    const lateSuffix = billPayment.paidAfterDueDate && billPayment.latePaymentLoss > 0
-      ? ' (includes late payment surcharge)'
-      : '';
-    expenseEntry = cashBookService.upsertReferenceEntry({
-      ...commonFields,
-      type: 'expense',
-      amount: utilityAmount,
-      date: billPayment.paymentDate || billPayment.createdAt,
-      description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})${lateSuffix}`,
-    });
+  if (isWalletPayment) {
+    await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
   } else {
-    // Remove expense entry if bill reverted from paid
-    expenseEntry = cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment')
-      .then(() => null);
-    // Re-create only income after deleting all
-    return expenseEntry.then(() =>
-      cashBookService.upsertReferenceEntry({
+    // INCOME: total collected from customer (bill amount + service charge)
+    // Created as soon as bill is recorded — customer pays at the counter immediately
+    const incomeEntry = cashBookService.upsertReferenceEntry({
+      ...commonFields,
+      type: 'income',
+      amount: billPayment.totalReceived,
+      date: billPayment.createdAt,
+      description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+    });
+
+    // EXPENSE: bill amount paid to utility company — only when bill is actually paid.
+    // CashBook entries aren't leg-scoped, so reverting from paid means wiping both
+    // entries first, then re-creating just the income leg.
+    if (utilityAmount > 0) {
+      const lateSuffix = billPayment.paidAfterDueDate && billPayment.latePaymentLoss > 0
+        ? ' (includes late payment surcharge)'
+        : '';
+      await Promise.all([
+        incomeEntry,
+        cashBookService.upsertReferenceEntry({
+          ...commonFields,
+          type: 'expense',
+          amount: utilityAmount,
+          date: billPayment.paymentDate || billPayment.createdAt,
+          description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})${lateSuffix}`,
+        }),
+      ]);
+    } else {
+      await incomeEntry;
+      await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
+      await cashBookService.upsertReferenceEntry({
         ...commonFields,
         type: 'income',
         amount: billPayment.totalReceived,
         date: billPayment.createdAt,
         description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
-      })
-    );
+      });
+    }
   }
 
-  const [income, expense] = await Promise.all([incomeEntry, expenseEntry]);
-  return { income, expense };
+  // Wallet ledger: both legs share the same wallet (paymentMethod/walletType).
+  await walletEntryService.syncWalletPayment({
+    organizationId: billPayment.organizationId,
+    branchId: billPayment.branchId,
+    referenceId: billPayment._id,
+    referenceModel: 'BillPayment',
+    direction: 'in',
+    amount: billPayment.totalReceived,
+    paymentMethod: billPayment.paymentMethod,
+    walletType: billPayment.walletType,
+    previousPaymentMethod: previous?.paymentMethod,
+    previousWalletType: previous?.walletType,
+    previousAmount: previous?.totalReceived,
+    description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+    date: billPayment.createdAt,
+    createdBy: billPayment.createdBy,
+    updatedBy: billPayment.updatedBy,
+  });
+
+  await walletEntryService.syncWalletPayment({
+    organizationId: billPayment.organizationId,
+    branchId: billPayment.branchId,
+    referenceId: billPayment._id,
+    referenceModel: 'BillPayment',
+    direction: 'out',
+    amount: utilityAmount,
+    paymentMethod: billPayment.paymentMethod,
+    walletType: billPayment.walletType,
+    previousPaymentMethod: previous?.paymentMethod,
+    previousWalletType: previous?.walletType,
+    previousAmount: previous?.utilityAmount,
+    description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
+    date: billPayment.paymentDate || billPayment.createdAt,
+    createdBy: billPayment.createdBy,
+    updatedBy: billPayment.updatedBy,
+  });
 };
 
 const createBillPayment = async (body) => {
@@ -159,7 +204,7 @@ const createBillPayment = async (body) => {
 };
 
 const createBillPaymentsBatch = async (body) => {
-  const { companyId, companyName, billType, serviceCharge, dueDate, paymentDate, paymentMethod, bills, organizationId, branchId, createdBy } = body;
+  const { companyId, companyName, billType, serviceCharge, dueDate, paymentDate, paymentMethod, walletType, bills, organizationId, branchId, createdBy } = body;
   const results = [];
   for (const bill of bills) {
     const singleBody = {
@@ -173,6 +218,7 @@ const createBillPaymentsBatch = async (body) => {
       dueDate,
       paymentDate: null,
       paymentMethod,
+      walletType,
       status: 'pending',
       billAmount: Number(bill.billAmount),
       customerName: bill.customerName || 'Walk-in',
@@ -242,6 +288,13 @@ const getBillPaymentById = async (id) => {
 
 const updateBillPaymentById = async (id, updateBody, userId) => {
   const billPayment = await getBillPaymentById(id);
+  const previous = {
+    paymentMethod: billPayment.paymentMethod,
+    walletType: billPayment.walletType,
+    totalReceived: billPayment.totalReceived,
+    utilityAmount: computeBillUtilityAmount(billPayment),
+  };
+
   Object.assign(billPayment, updateBody, { updatedBy: userId });
 
   if (updateBody.dueDate) {
@@ -257,13 +310,36 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
 
   applyBillPaymentFinancials(billPayment);
   await billPayment.save();
-  await syncBillCashEntry(billPayment);
+  await syncBillCashEntry(billPayment, previous);
   return billPayment;
 };
 
 const deleteBillPaymentById = async (id) => {
   const billPayment = await getBillPaymentById(id);
   await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
+  const userId = billPayment.updatedBy || billPayment.createdBy;
+  await walletEntryService.reverseWalletPayment({
+    organizationId: billPayment.organizationId,
+    branchId: billPayment.branchId,
+    referenceId: billPayment._id,
+    referenceModel: 'BillPayment',
+    direction: 'in',
+    amount: billPayment.totalReceived,
+    paymentMethod: billPayment.paymentMethod,
+    walletType: billPayment.walletType,
+    userId,
+  });
+  await walletEntryService.reverseWalletPayment({
+    organizationId: billPayment.organizationId,
+    branchId: billPayment.branchId,
+    referenceId: billPayment._id,
+    referenceModel: 'BillPayment',
+    direction: 'out',
+    amount: computeBillUtilityAmount(billPayment),
+    paymentMethod: billPayment.paymentMethod,
+    walletType: billPayment.walletType,
+    userId,
+  });
   await billPayment.deleteOne();
   return billPayment;
 };

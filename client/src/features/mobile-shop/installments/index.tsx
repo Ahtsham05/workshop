@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import {
   CreditCard, Search, Plus, Trash2, Pencil, ChevronRight, X,
   CheckCircle2, AlertCircle, Clock, Ban, Users, Wallet, CalendarClock,
-  Package, ChevronDown, Check,
+  Package, ChevronDown, Check, UserCheck, Banknote, Save, Repeat,
 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -42,18 +42,26 @@ import {
   useGetInstallmentPaymentsQuery,
   useDeleteInstallmentPaymentMutation,
   useGetInstallmentSummaryQuery,
+  useGetWalletsQuery,
   type InstallmentPlanRecord,
   type InstallmentPaymentRecord,
 } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import {
   MOBILE_FORM_KEYBOARD_HINT,
   makeEnterChain,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
+import { VoiceInputButton } from '@/components/ui/voice-input-button'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,14 +79,16 @@ type PlanFormState = {
   totalInstallments: string
   installmentFrequency: 'weekly' | 'biweekly' | 'monthly'
   installmentAmount: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
   startDate: string
   notes: string
 }
 
 type PaymentFormState = {
   amount: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
   date: string
   notes: string
 }
@@ -98,6 +108,7 @@ const initialPlanForm = (): PlanFormState => ({
   installmentFrequency: 'monthly',
   installmentAmount: '',
   paymentMethod: 'cash',
+  walletType: '',
   startDate: format(new Date(), 'yyyy-MM-dd'),
   notes: '',
 })
@@ -105,6 +116,7 @@ const initialPlanForm = (): PlanFormState => ({
 const initialPaymentForm = (): PaymentFormState => ({
   amount: '',
   paymentMethod: 'cash',
+  walletType: '',
   date: format(new Date(), 'yyyy-MM-dd'),
   notes: '',
 })
@@ -168,6 +180,17 @@ export default function InstallmentsPage() {
   const [paymentPlanOutstanding, setPaymentPlanOutstanding] = useState(0)
   const [paymentPlanInstallmentAmount, setPaymentPlanInstallmentAmount] = useState(0)
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm)
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // Collecting a down payment / installment from the customer is money-in — hide wallet balances.
+  const installmentPaymentMethodOptions = buildMergedPaymentOptions(
+    [
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank', label: 'Bank' },
+    ],
+    wallets,
+    false,
+  )
   const [deletePaymentInfo, setDeletePaymentInfo] = useState<{ planId: string; paymentId: string } | null>(null)
 
   const planFormRef = useRef<HTMLFormElement>(null)
@@ -307,6 +330,7 @@ export default function InstallmentsPage() {
       installmentFrequency: plan.installmentFrequency || 'monthly',
       installmentAmount: String(plan.installmentAmount),
       paymentMethod: 'cash',
+      walletType: '',
       startDate: format(new Date(plan.startDate), 'yyyy-MM-dd'),
       notes: plan.notes || '',
     })
@@ -419,6 +443,7 @@ export default function InstallmentsPage() {
           installmentFrequency: planForm.installmentFrequency,
           installmentAmount: Number(planForm.installmentAmount),
           paymentMethod: planForm.paymentMethod,
+          walletType: planForm.paymentMethod === 'wallet' ? planForm.walletType : undefined,
           startDate: planForm.startDate ? new Date(planForm.startDate).toISOString() : new Date().toISOString(),
           notes: planForm.notes.trim() || undefined,
         }).unwrap()
@@ -440,6 +465,7 @@ export default function InstallmentsPage() {
         planId: paymentPlanId,
         amount: Number(paymentForm.amount),
         paymentMethod: paymentForm.paymentMethod,
+        walletType: paymentForm.paymentMethod === 'wallet' ? paymentForm.walletType : undefined,
         date: paymentForm.date ? new Date(paymentForm.date).toISOString() : new Date().toISOString(),
         notes: paymentForm.notes.trim() || undefined,
       }).unwrap()
@@ -679,13 +705,19 @@ export default function InstallmentsPage() {
       <Dialog open={planDialogOpen} onOpenChange={open => { if (!open) { setPlanDialogOpen(false); setEditingPlan(null) } }}>
         <DialogContent className='w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto'>
           <DialogHeader>
-            <DialogTitle>{editingPlan ? 'Edit Installment Plan' : 'New Installment Plan'}</DialogTitle>
+            <DialogTitle className='flex items-center gap-2'>
+              <CreditCard className='h-5 w-5 text-primary' />
+              {editingPlan ? 'Edit Installment Plan' : 'New Installment Plan'}
+            </DialogTitle>
           </DialogHeader>
-          <form ref={planFormRef} onSubmit={handlePlanSubmit} className='space-y-5'>
+          <form ref={planFormRef} onSubmit={handlePlanSubmit} className='space-y-4'>
 
             {/* Customer Info */}
-            <div>
-              <h4 className='text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3'>Customer Information</h4>
+            <div className='rounded-lg border bg-card p-4 space-y-3'>
+              <h4 className='flex items-center gap-2 text-sm font-semibold text-foreground'>
+                <Users className='h-4 w-4 text-primary' />
+                Customer Information
+              </h4>
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Customer Name *</Label>
@@ -740,8 +772,12 @@ export default function InstallmentsPage() {
             </div>
 
             {/* Guarantor */}
-            <div>
-              <h4 className='text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3'>Guarantor (Optional)</h4>
+            <div className='rounded-lg border border-dashed bg-muted/30 p-4 space-y-3'>
+              <h4 className='flex items-center gap-2 text-sm font-semibold text-foreground'>
+                <UserCheck className='h-4 w-4 text-muted-foreground' />
+                Guarantor
+                <span className='text-xs font-normal text-muted-foreground'>(Optional)</span>
+              </h4>
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1'>
                   <Label>Guarantor Name</Label>
@@ -755,8 +791,11 @@ export default function InstallmentsPage() {
             </div>
 
             {/* Sale Details */}
-            <div>
-              <h4 className='text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3'>Sale Details</h4>
+            <div className='rounded-lg border bg-card p-4 space-y-3'>
+              <h4 className='flex items-center gap-2 text-sm font-semibold text-foreground'>
+                <Package className='h-4 w-4 text-primary' />
+                Sale Details
+              </h4>
               <div className='space-y-3'>
 
                 {/* Product picker */}
@@ -789,42 +828,52 @@ export default function InstallmentsPage() {
                     </PopoverTrigger>
                   <PopoverContent className='w-[var(--radix-popover-trigger-width)] max-w-[90vw] p-0' align='start'>
                       <Command>
-                        <CommandInput
-                          placeholder='Search by name, barcode, SKU...'
-                          value={productSearch}
-                          onValueChange={setProductSearch}
-                        />
-                        <CommandEmpty>No products found.</CommandEmpty>
-                        <CommandGroup className='max-h-72 overflow-auto'>
-                          {filteredProducts.map((p: any) => {
-                            const price = p.salePrice ?? p.sellingPrice ?? p.price ?? 0
-                            const isSelected = selectedProduct?.id === p.id || selectedProduct?._id === p._id
-                            return (
-                              <CommandItem
-                                key={p._id || p.id}
-                                value={p.name}
-                                onSelect={() => handleSelectProduct(p)}
-                                className='flex items-center gap-3 cursor-pointer'
-                              >
-                                {p.image?.url ? (
-                                  <img src={p.image.url} alt={p.name} className='h-9 w-9 rounded object-cover flex-shrink-0' />
-                                ) : (
-                                  <div className='flex h-9 w-9 items-center justify-center rounded bg-muted flex-shrink-0'>
-                                    <Package className='h-4 w-4 text-muted-foreground' />
+                        <div className='relative'>
+                          <CommandInput
+                            placeholder='Search by name, barcode, SKU...'
+                            value={productSearch}
+                            onValueChange={setProductSearch}
+                            className='pr-9'
+                          />
+                          <div className='absolute right-2 top-1/2 z-10 -translate-y-1/2'>
+                            <VoiceInputButton onTranscript={(t) => setProductSearch(t)} size='sm' />
+                          </div>
+                        </div>
+                        <CommandList className='max-h-72 overflow-y-auto'>
+                          <CommandEmpty>No products found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredProducts.map((p: any) => {
+                              const price = p.salePrice ?? p.sellingPrice ?? p.price ?? 0
+                              const productId = String(p._id || p.id || '')
+                              const selectedId = selectedProduct ? String(selectedProduct._id || selectedProduct.id || '') : ''
+                              const isSelected = Boolean(productId) && productId === selectedId
+                              return (
+                                <CommandItem
+                                  key={p._id || p.id}
+                                  value={p.name}
+                                  onSelect={() => handleSelectProduct(p)}
+                                  className='flex items-center gap-3 cursor-pointer'
+                                >
+                                  {p.image?.url ? (
+                                    <img src={p.image.url} alt={p.name} className='h-9 w-9 rounded object-cover flex-shrink-0' />
+                                  ) : (
+                                    <div className='flex h-9 w-9 items-center justify-center rounded bg-muted flex-shrink-0'>
+                                      <Package className='h-4 w-4 text-muted-foreground' />
+                                    </div>
+                                  )}
+                                  <div className='flex-1 min-w-0'>
+                                    <p className='truncate font-medium'>{p.name}</p>
+                                    <p className='text-xs text-muted-foreground'>
+                                      {p.barcode ? `Barcode: ${p.barcode} · ` : ''}
+                                      Stock: {p.stockQuantity ?? 0} · Price: Rs {price.toLocaleString()}
+                                    </p>
                                   </div>
-                                )}
-                                <div className='flex-1 min-w-0'>
-                                  <p className='truncate font-medium'>{p.name}</p>
-                                  <p className='text-xs text-muted-foreground'>
-                                    {p.barcode ? `Barcode: ${p.barcode} · ` : ''}
-                                    Stock: {p.stockQuantity ?? 0} · Price: Rs {price.toLocaleString()}
-                                  </p>
-                                </div>
-                                {isSelected && <Check className='h-4 w-4 text-primary flex-shrink-0' />}
-                              </CommandItem>
-                            )
-                          })}
-                        </CommandGroup>
+                                  {isSelected && <Check className='h-4 w-4 text-primary flex-shrink-0' />}
+                                </CommandItem>
+                              )
+                            })}
+                          </CommandGroup>
+                        </CommandList>
                       </Command>
                     </PopoverContent>
                   </Popover>
@@ -840,83 +889,108 @@ export default function InstallmentsPage() {
                     {...planEnter.enterProps('inst-item-description')}
                   />
                 </div>
-                <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
-                  <div className='space-y-1'>
-                    <Label>Quantity *</Label>
-                    <Input type='number' min='1' step='1' value={planForm.quantity} onChange={e => handlePlanFormChange('quantity', e.target.value)} placeholder='1' disabled={!!editingPlan} {...planEnter.enterProps('inst-quantity')} />
-                    {selectedProduct && !editingPlan && (
-                      <p className='text-xs text-muted-foreground'>In stock: {selectedProduct.stockQuantity ?? 0}</p>
-                    )}
-                  </div>
-                  <div className='space-y-1'>
-                    <Label>Total Sale Price (Rs) *</Label>
-                    <Input type='number' min='0' step='0.01' value={planForm.totalAmount} onChange={e => handlePlanFormChange('totalAmount', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-total')} />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label>Down Payment (Rs)</Label>
-                    <Input type='number' min='0' step='0.01' value={planForm.downPayment} onChange={e => handlePlanFormChange('downPayment', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-down')} />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label>Remaining</Label>
-                    <Input
-                      readOnly
-                      value={`Rs ${Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)).toLocaleString()}`}
-                      className='bg-muted'
-                    />
-                  </div>
-                </div>
-                <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-                  <div className='space-y-1'>
-                    <Label className='min-h-5 inline-flex items-center'>No. of Installments *</Label>
-                    <Input type='number' min='1' step='1' value={planForm.totalInstallments} onChange={e => handlePlanFormChange('totalInstallments', e.target.value)} placeholder='e.g. 12' {...planEnter.enterProps('inst-installments')} />
-                  </div>
-                  <div className='space-y-1'>
-                    <Label className='min-h-5 inline-flex items-center'>Installment Amount *</Label>
-                    <Input
-                      type='number' min='0' step='0.01'
-                      value={planForm.installmentAmount}
-                      onChange={e => handlePlanFormChange('installmentAmount', e.target.value)}
-                      placeholder={calculatedInstallmentAmount || '0'}
-                      {...planEnter.enterProps('inst-installment-amount')}
-                    />
-                    {calculatedInstallmentAmount && planForm.installmentAmount !== calculatedInstallmentAmount && (
-                      <button type='button' className='text-xs text-blue-600 hover:underline' onClick={() => handlePlanFormChange('installmentAmount', calculatedInstallmentAmount)}>
-                        Auto: Rs {Number(calculatedInstallmentAmount).toLocaleString()}
-                      </button>
-                    )}
-                  </div>
-                  <div className='space-y-1'>
-                    <Label className='min-h-5 inline-flex items-center'>Start Date</Label>
-                    <Input type='date' value={planForm.startDate} onChange={e => handlePlanFormChange('startDate', e.target.value)} {...planEnter.enterProps('inst-start-date')} />
+                {/* Pricing */}
+                <div className='rounded-lg border bg-muted/30 p-3 space-y-3'>
+                  <h5 className='flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground'>
+                    <Banknote className='h-3.5 w-3.5' />
+                    Pricing
+                  </h5>
+                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Quantity *</Label>
+                      <Input type='number' min='1' step='1' value={planForm.quantity} onChange={e => handlePlanFormChange('quantity', e.target.value)} placeholder='1' disabled={!!editingPlan} {...planEnter.enterProps('inst-quantity')} />
+                      {selectedProduct && !editingPlan && (
+                        <p className='text-xs text-muted-foreground'>In stock: {selectedProduct.stockQuantity ?? 0}</p>
+                      )}
+                    </div>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Total Sale Price (Rs) *</Label>
+                      <Input type='number' min='0' step='0.01' value={planForm.totalAmount} onChange={e => handlePlanFormChange('totalAmount', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-total')} />
+                    </div>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Down Payment (Rs)</Label>
+                      <Input type='number' min='0' step='0.01' value={planForm.downPayment} onChange={e => handlePlanFormChange('downPayment', e.target.value)} placeholder='0' {...planEnter.enterProps('inst-down')} />
+                    </div>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Remaining</Label>
+                      <Input
+                        readOnly
+                        showVoiceInput={false}
+                        value={`Rs ${Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)).toLocaleString()}`}
+                        className='bg-muted font-medium'
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className='grid gap-3 sm:grid-cols-2'>
-                  <div className='space-y-1'>
-                    <Label>Installment Frequency</Label>
-                    <Select value={planForm.installmentFrequency} onValueChange={v => handlePlanFormChange('installmentFrequency', v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='weekly'>Weekly (7 days)</SelectItem>
-                        <SelectItem value='biweekly'>Every 15 days</SelectItem>
-                        <SelectItem value='monthly'>Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+
+                {/* Schedule */}
+                <div className='rounded-lg border bg-muted/30 p-3 space-y-3'>
+                  <h5 className='flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground'>
+                    <Repeat className='h-3.5 w-3.5' />
+                    Installment Schedule
+                  </h5>
+                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>No. of Installments *</Label>
+                      <Input type='number' min='1' step='1' value={planForm.totalInstallments} onChange={e => handlePlanFormChange('totalInstallments', e.target.value)} placeholder='e.g. 12' {...planEnter.enterProps('inst-installments')} />
+                    </div>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Installment Amount *</Label>
+                      <Input
+                        type='number' min='0' step='0.01'
+                        value={planForm.installmentAmount}
+                        onChange={e => handlePlanFormChange('installmentAmount', e.target.value)}
+                        placeholder={calculatedInstallmentAmount || '0'}
+                        {...planEnter.enterProps('inst-installment-amount')}
+                      />
+                      {calculatedInstallmentAmount && planForm.installmentAmount !== calculatedInstallmentAmount && (
+                        <button type='button' className='text-xs text-blue-600 hover:underline' onClick={() => handlePlanFormChange('installmentAmount', calculatedInstallmentAmount)}>
+                          Auto: Rs {Number(calculatedInstallmentAmount).toLocaleString()}
+                        </button>
+                      )}
+                    </div>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Start Date</Label>
+                      <Input type='date' value={planForm.startDate} onChange={e => handlePlanFormChange('startDate', e.target.value)} {...planEnter.enterProps('inst-start-date')} />
+                    </div>
                   </div>
-                  {!editingPlan && (
-                    <div className='space-y-1'>
-                      <Label>Down Payment Method</Label>
-                      <Select value={planForm.paymentMethod} onValueChange={v => handlePlanFormChange('paymentMethod', v)}>
+                  <div className='grid gap-3 sm:grid-cols-2'>
+                    <div className='flex flex-col space-y-1'>
+                      <Label className='flex min-h-10 items-end'>Installment Frequency</Label>
+                      <Select value={planForm.installmentFrequency} onValueChange={v => handlePlanFormChange('installmentFrequency', v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value='cash'>Cash</SelectItem>
-                          <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                          <SelectItem value='easypaisa'>Easypaisa</SelectItem>
-                          <SelectItem value='bank'>Bank</SelectItem>
+                          <SelectItem value='weekly'>Weekly (7 days)</SelectItem>
+                          <SelectItem value='biweekly'>Every 15 days</SelectItem>
+                          <SelectItem value='monthly'>Monthly</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
+                    {!editingPlan && (
+                      <div className='flex flex-col space-y-1'>
+                        <Label className='flex min-h-10 items-end'>Down Payment Method</Label>
+                        <Select
+                          value={planForm.paymentMethod === 'wallet' && planForm.walletType ? toWalletOptionValue(planForm.walletType) : planForm.paymentMethod}
+                          onValueChange={(v) => {
+                            if (isWalletOptionValue(v)) {
+                              setPlanForm((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                            } else {
+                              setPlanForm((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
+                            }
+                          }}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {installmentPaymentMethodOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className='space-y-1'>
                   <Label>Notes</Label>
                   <Textarea value={planForm.notes} onChange={e => handlePlanFormChange('notes', e.target.value)} placeholder='Any additional notes...' rows={2} {...planEnter.enterProps('inst-notes')} />
@@ -926,23 +1000,54 @@ export default function InstallmentsPage() {
 
             {/* Summary preview */}
             {!editingPlan && planForm.totalAmount && planForm.totalInstallments && (
-              <div className='rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm space-y-1'>
-                <p className='font-semibold text-blue-700'>Plan Summary</p>
-                <div className='grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-blue-900'>
-                  <span>Total Amount:</span><span className='font-medium'>{fmt(Number(planForm.totalAmount) || 0)}</span>
-                  <span>Down Payment:</span><span className='font-medium'>{fmt(Number(planForm.downPayment) || 0)}</span>
-                  <span>Remaining:</span><span className='font-medium'>{fmt(Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)))}</span>
-                  <span>Per Installment:</span><span className='font-medium'>{fmt(Number(planForm.installmentAmount) || 0)}</span>
-                  <span>Frequency:</span><span className='font-medium'>{planForm.installmentFrequency === 'biweekly' ? 'Every 15 days' : planForm.installmentFrequency === 'weekly' ? 'Weekly' : 'Monthly'}</span>
-                  <span>Duration:</span><span className='font-medium'>{planForm.totalInstallments} installments</span>
+              <div className='rounded-lg bg-blue-50 border border-blue-200 p-4 dark:bg-blue-950/30 dark:border-blue-900'>
+                <p className='flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300'>
+                  <CheckCircle2 className='h-4 w-4' />
+                  Plan Summary
+                </p>
+                <div className='mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3'>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Total Amount</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{fmt(Number(planForm.totalAmount) || 0)}</p>
+                  </div>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Down Payment</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{fmt(Number(planForm.downPayment) || 0)}</p>
+                  </div>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Remaining</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{fmt(Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)))}</p>
+                  </div>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Per Installment</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{fmt(Number(planForm.installmentAmount) || 0)}</p>
+                  </div>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Frequency</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{planForm.installmentFrequency === 'biweekly' ? 'Every 15 days' : planForm.installmentFrequency === 'weekly' ? 'Weekly' : 'Monthly'}</p>
+                  </div>
+                  <div>
+                    <p className='text-blue-700/70 dark:text-blue-300/70'>Duration</p>
+                    <p className='font-semibold text-blue-900 dark:text-blue-100'>{planForm.totalInstallments} installments</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            <DialogFooter>
-              <Button type='button' variant='outline' onClick={() => setPlanDialogOpen(false)}>Cancel</Button>
+            <DialogFooter className='gap-2 sm:gap-2'>
+              <Button type='button' variant='outline' onClick={() => setPlanDialogOpen(false)}>
+                <X className='h-4 w-4 mr-2' />
+                Cancel
+              </Button>
               <Button type='submit' disabled={isCreating || isUpdating}>
-                {(isCreating || isUpdating) ? 'Saving...' : editingPlan ? 'Update Plan' : 'Create Plan'}
+                {(isCreating || isUpdating) ? (
+                  'Saving...'
+                ) : (
+                  <>
+                    <Save className='h-4 w-4 mr-2' />
+                    {editingPlan ? 'Update Plan' : 'Create Plan'}
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -967,13 +1072,21 @@ export default function InstallmentsPage() {
               </div>
               <div className='space-y-1'>
                 <Label>Payment Method</Label>
-                <Select value={paymentForm.paymentMethod} onValueChange={v => setPaymentForm(p => ({ ...p, paymentMethod: v as any }))}>
+                <Select
+                  value={paymentForm.paymentMethod === 'wallet' && paymentForm.walletType ? toWalletOptionValue(paymentForm.walletType) : paymentForm.paymentMethod}
+                  onValueChange={(v) => {
+                    if (isWalletOptionValue(v)) {
+                      setPaymentForm((p) => ({ ...p, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                    } else {
+                      setPaymentForm((p) => ({ ...p, paymentMethod: v, walletType: '' }))
+                    }
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='cash'>Cash</SelectItem>
-                    <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                    <SelectItem value='easypaisa'>Easypaisa</SelectItem>
-                    <SelectItem value='bank'>Bank</SelectItem>
+                    {installmentPaymentMethodOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

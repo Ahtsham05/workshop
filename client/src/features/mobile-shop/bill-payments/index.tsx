@@ -65,11 +65,18 @@ import {
   useGetUtilityCompaniesQuery,
   useGetBillPaymentReceiptQuery,
   useGetBillDueSummaryQuery,
+  useGetWalletsQuery,
   BILL_TYPES,
   type BillPaymentRecord,
   // type CreateBillPaymentInput,
   type CreateBillPaymentsBatchInput,
 } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { openBillReceiptPrintWindow } from './bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
 import { formatBusinessDate, getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
@@ -89,7 +96,8 @@ type BatchFormState = {
   serviceCharge: string
   dueDate: string
   paymentDate: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
+  paymentMethod: string
+  walletType: string
   bills: BillRow[]
 }
 
@@ -165,6 +173,7 @@ const makeInitialBatchForm = (): BatchFormState => ({
   dueDate: getBusinessToday(),
   paymentDate: '',
   paymentMethod: 'cash',
+  walletType: '',
   bills: [makeEmptyBillRow()],
 })
 
@@ -559,6 +568,17 @@ export default function BillPaymentsPage() {
   const [filterStatus, setFilterStatus] = useState<string>(initialFilters.filterStatus)
   const [filterBillType, setFilterBillType] = useState<string>('all')
   const [form, setForm] = useState<BatchFormState>(makeInitialBatchForm())
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // Collecting a bill payment at the counter is money-in — hide wallet balances.
+  const billPaymentMethodOptions = buildMergedPaymentOptions(
+    [
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank', label: 'Bank Transfer' },
+    ],
+    wallets,
+    false,
+  )
 
   // Due date filter state
   const [dueDatePreset, setDueDatePreset] = useState<DatePreset>(initialFilters.dueDatePreset)
@@ -706,7 +726,8 @@ export default function BillPaymentsPage() {
       billType: form.billType as CreateBillPaymentsBatchInput['billType'],
       serviceCharge: svcCharge,
       dueDate: form.dueDate,
-      paymentMethod: form.paymentMethod,
+      paymentMethod: form.paymentMethod as CreateBillPaymentsBatchInput['paymentMethod'],
+      walletType: form.paymentMethod === 'wallet' ? form.walletType : undefined,
       bills: validBills.map((b) => ({
         billAmount: parseFloat(b.billAmount),
         customerName: b.customerName || undefined,
@@ -1011,18 +1032,22 @@ export default function BillPaymentsPage() {
               <div>
                 <Label>Payment Method *</Label>
                 <Select
-                  value={form.paymentMethod}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, paymentMethod: v as BatchFormState['paymentMethod'] }))
-                  }
+                  value={form.paymentMethod === 'wallet' && form.walletType ? toWalletOptionValue(form.walletType) : form.paymentMethod}
+                  onValueChange={(v) => {
+                    if (isWalletOptionValue(v)) {
+                      setForm((f) => ({ ...f, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                    } else {
+                      setForm((f) => ({ ...f, paymentMethod: v, walletType: '' }))
+                    }
+                  }}
                 >
                   <SelectTrigger {...billHeaderEnter.enterProps('bill-payment-method')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='cash'>Cash</SelectItem>
-                    <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                    <SelectItem value='easypaisa'>Easypaisa</SelectItem>
+                    {billPaymentMethodOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

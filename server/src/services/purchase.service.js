@@ -187,9 +187,6 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, p
  */
 const createPurchase = async (purchaseBody) => {
   const businessType = await getOrganizationBusinessType(purchaseBody.organizationId);
-  if (purchaseBody.paymentType === 'Wallet' && businessType !== 'mobile_shop') {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Wallet payment is only available for mobile shop businesses');
-  }
 
   // First, create the purchase
   const normalizedBody = {
@@ -355,10 +352,6 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const businessType = await getOrganizationBusinessType(purchase.organizationId);
   const supplierIdForUpdate = updateBody.supplier || originalSupplier;
   const supplierDocForUpdate = supplierIdForUpdate ? await Supplier.findById(supplierIdForUpdate).select('name') : null;
-
-  if (updateBody.paymentType === 'Wallet' && businessType !== 'mobile_shop') {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Wallet payment is only available for mobile shop businesses');
-  }
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {

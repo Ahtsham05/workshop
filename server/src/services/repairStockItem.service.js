@@ -4,6 +4,7 @@ const { RepairStockItem } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { parseBusinessDateTime, applyBusinessDateRange } = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
+const walletEntryService = require('./walletEntry.service');
 
 const normalizeStockEntryDates = (body) => {
   const next = { ...body };
@@ -22,8 +23,9 @@ const normalizeStockEntryDates = (body) => {
  */
 const createPurchaseEntry = async (body) => {
   const entry = await RepairStockItem.create({ ...normalizeStockEntryDates(body), type: 'purchase' });
+  const isWalletPayment = entry.paymentMethod === 'wallet' && entry.walletType;
 
-  if (entry.amount > 0) {
+  if (entry.amount > 0 && !isWalletPayment) {
     await cashBookService.upsertReferenceEntry({
       organizationId: entry.organizationId,
       branchId: entry.branchId,
@@ -38,6 +40,20 @@ const createPurchaseEntry = async (body) => {
       createdBy: entry.createdBy,
     });
   }
+
+  await walletEntryService.syncWalletPayment({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    referenceId: entry._id,
+    referenceModel: 'RepairStockItem',
+    direction: 'out',
+    amount: entry.amount,
+    paymentMethod: entry.paymentMethod,
+    walletType: entry.walletType,
+    description: `Repair Stock: ${entry.description}`,
+    date: entry.date,
+    createdBy: entry.createdBy,
+  });
 
   return entry;
 };
@@ -114,6 +130,17 @@ const deleteEntry = async (id) => {
   const entry = await getEntryById(id);
   if (entry.type === 'purchase') {
     await cashBookService.deleteEntriesByReference(entry._id, 'RepairStockItem');
+    await walletEntryService.reverseWalletPayment({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      referenceId: entry._id,
+      referenceModel: 'RepairStockItem',
+      direction: 'out',
+      amount: entry.amount,
+      paymentMethod: entry.paymentMethod,
+      walletType: entry.walletType,
+      userId: entry.updatedBy || entry.createdBy,
+    });
   }
   await entry.deleteOne();
   return entry;

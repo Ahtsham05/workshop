@@ -89,9 +89,16 @@ const billPaymentSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'jazzcash', 'easypaisa'],
+      // 'jazzcash'/'easypaisa' kept for backward compatibility with existing records;
+      // new records use 'wallet' + walletType to reference an actual created wallet.
+      enum: ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'],
       required: true,
       default: 'cash',
+    },
+    // Wallet name when paymentMethod === 'wallet'
+    walletType: {
+      type: String,
+      trim: true,
     },
     notes: {
       type: String,

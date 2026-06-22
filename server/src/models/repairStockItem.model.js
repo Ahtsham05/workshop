@@ -40,8 +40,15 @@ const repairStockItemSchema = new mongoose.Schema(
     // Only relevant for purchase entries
     paymentMethod: {
       type: String,
-      enum: ['cash', 'jazzcash', 'easypaisa', 'bank'],
+      // 'jazzcash'/'easypaisa' kept for backward compatibility with existing records;
+      // new records use 'wallet' + walletType to reference an actual created wallet.
+      enum: ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'],
       default: 'cash',
+    },
+    // Wallet name when paymentMethod === 'wallet'
+    walletType: {
+      type: String,
+      trim: true,
     },
     notes: {
       type: String,

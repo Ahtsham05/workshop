@@ -5,7 +5,8 @@ const createPurchase = {
   body: Joi.object().keys({
     description: Joi.string().required(),
     amount: Joi.number().min(0).required(),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+    paymentMethod: Joi.string().valid('cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'),
+    walletType: Joi.string().allow(''),
     notes: Joi.string().allow(''),
     date: Joi.date(),
   }),

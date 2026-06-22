@@ -197,7 +197,11 @@ const createLoadTransaction = async (transactionBody) => {
     customerName: linkedCustomer ? linkedCustomer.name : (transactionBody.customerName || ''),
     receivedAmount,
     paymentWalletType: transactionBody.paymentWalletType || '',
-    profit: 0,
+    profit: calculateProfit({
+      amount: transactionBody.amount,
+      commissionRate: transactionBody.commissionRate,
+      extraCharge: transactionBody.extraCharge,
+    }),
   });
 
   await walletService.adjustWalletBalance({
@@ -283,7 +287,11 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
     amount: transaction.amount,
     receivedAmount: transaction.receivedAmount,
   });
-  transaction.profit = 0;
+  transaction.profit = calculateProfit({
+    amount: transaction.amount,
+    commissionRate: transaction.commissionRate,
+    extraCharge: transaction.extraCharge,
+  });
   await transaction.save();
 
   // Apply new wallet deduction

@@ -1,6 +1,8 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
+const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
+
 const createBillPayment = {
   body: Joi.object().keys({
     customerName: Joi.string().required(),
@@ -13,7 +15,8 @@ const createBillPayment = {
     dueDate: Joi.date().required(),
     paymentDate: Joi.date(),
     status: Joi.string().valid('pending', 'paid', 'overdue'),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa').required(),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS).required(),
+    walletType: Joi.string().allow(''),
     notes: Joi.string().allow(''),
   }),
 };
@@ -23,7 +26,7 @@ const getBillPayments = {
     billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other'),
     companyId: Joi.string().custom(objectId),
     status: Joi.string().valid('pending', 'paid', 'overdue'),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa'),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
     search: Joi.string(),
     startDate: Joi.date(),
     endDate: Joi.date(),
@@ -53,7 +56,8 @@ const updateBillPayment = {
       actualBillAmount: Joi.number().min(0.01),
       paymentDate: Joi.date(),
       status: Joi.string().valid('pending', 'paid', 'overdue'),
-      paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa'),
+      paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
+      walletType: Joi.string().allow(''),
       notes: Joi.string().allow(''),
     })
     .min(1),
@@ -96,7 +100,8 @@ const createBillPaymentsBatch = {
     serviceCharge: Joi.number().min(0).required(),
     dueDate: Joi.date().required(),
     paymentDate: Joi.date(),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa').required(),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS).required(),
+    walletType: Joi.string().allow(''),
     bills: Joi.array()
       .items(
         Joi.object().keys({

@@ -243,7 +243,7 @@ export default function ReportsPage() {
             {isMobileShop && canAccess('load') && (
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
-            {isMobileShop && canAccess('wallet') && (
+            {canAccess('wallet') && (
               <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>Wallets</TabsTrigger>
             )}
             {isMobileShop && canAccess('repair') && (
@@ -332,13 +332,11 @@ export default function ReportsPage() {
           </TabsContent>
         )}
 
-        {isMobileShop && (
-          <TabsContent value='my-wallet' className='mt-6'>
-            {canAccess('wallet')
-              ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-              : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
-          </TabsContent>
-        )}
+        <TabsContent value='my-wallet' className='mt-6'>
+          {canAccess('wallet')
+            ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+            : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
+        </TabsContent>
 
         {isMobileShop && (
           <TabsContent value='repair' className='mt-6'>

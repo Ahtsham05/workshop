@@ -180,6 +180,14 @@ export const sidebarData: SidebarData = {
           permission: 'viewCashRegister',
           excludeBusinessTypes: ['school', 'restaurant'],
         },
+        {
+          title: 'Wallet',
+          url: '/mobile-shop/wallet',
+          icon: WalletCards,
+          permission: 'viewWallet',
+          excludeBusinessTypes: ['school', 'restaurant'],
+          requiredFeature: 'wallet',
+        },
         // {
         //   title: 'Chats',
         //   url: '/chats',
@@ -771,14 +779,6 @@ export const sidebarData: SidebarData = {
     {
       title: 'Mobile Shop',
       items: [
-        {
-          title: 'Wallet',
-          url: '/mobile-shop/wallet',
-          icon: WalletCards,
-          permission: 'viewWallet',
-          businessTypes: ['mobile_shop'],
-          requiredFeature: 'wallet',
-        },
         {
           title: 'Load Management',
           url: '/mobile-shop/load',

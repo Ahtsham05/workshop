@@ -1,6 +1,8 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
+const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
+
 const createInstallmentPlan = {
   body: Joi.object().keys({
     customerName:      Joi.string().required(),
@@ -19,7 +21,8 @@ const createInstallmentPlan = {
     installmentAmount: Joi.number().min(0).required(),
     startDate:         Joi.date(),
     nextDueDate:       Joi.date(),
-    paymentMethod:     Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+    paymentMethod:     Joi.string().valid(...PAYMENT_METHODS),
+    walletType:        Joi.string().allow(''),
     notes:             Joi.string().allow(''),
   }),
 };
@@ -66,7 +69,8 @@ const recordPayment = {
   params: Joi.object().keys({ planId: Joi.string().custom(objectId).required() }),
   body: Joi.object().keys({
     amount:        Joi.number().min(0.01).required(),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
+    walletType:    Joi.string().allow(''),
     date:          Joi.date(),
     notes:         Joi.string().allow(''),
   }),

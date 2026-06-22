@@ -134,7 +134,8 @@ export interface RepairStockEntry {
   description: string
   amount: number
   repairJobRef?: string
-  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod?: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   notes?: string
   date: string
   createdAt?: string
@@ -143,7 +144,8 @@ export interface RepairStockEntry {
 export interface CreateRepairStockPurchaseInput {
   description: string
   amount: number
-  paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod?: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   notes?: string
   date?: string
 }
@@ -175,7 +177,8 @@ export interface RepairJobRecord {
   charges: number
   advanceAmount: number
   cost?: number
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   technician?: string
   date: string
   completedAt?: string
@@ -265,7 +268,8 @@ export interface BillPaymentRecord {
   dueDate: string
   paymentDate?: string
   status: 'pending' | 'paid' | 'overdue'
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
+  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   notes?: string
   createdAt?: string
 }
@@ -282,7 +286,8 @@ export interface CreateBillPaymentInput {
   paymentDate?: string
   status?: 'pending' | 'paid' | 'overdue'
   actualBillAmount?: number
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
+  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   notes?: string
 }
 
@@ -293,7 +298,8 @@ export interface CreateBillPaymentsBatchInput {
   serviceCharge: number
   dueDate: string
   paymentDate?: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa'
+  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   bills: { billAmount: number; customerName?: string; referenceNumber?: string }[]
 }
 
@@ -437,7 +443,8 @@ export interface InstallmentPaymentRecord {
   installmentPlanId: string
   amount: number
   paymentNumber: number
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  walletType?: string
   isDownPayment: boolean
   date: string
   notes?: string
@@ -960,7 +967,7 @@ export const mobileShopApi = createApi({
       query: (id) => `/installments/${id}`,
       providesTags: ['Installments'],
     }),
-    createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string }>({
+    createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string; walletType?: string }>({
       query: (body) => ({ url: '/installments', method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
     }),
@@ -974,7 +981,7 @@ export const mobileShopApi = createApi({
     }),
     recordInstallmentPayment: builder.mutation<
       { payment: InstallmentPaymentRecord; plan: InstallmentPlanRecord },
-      { planId: string; amount: number; paymentMethod?: string; date?: string; notes?: string }
+      { planId: string; amount: number; paymentMethod?: string; walletType?: string; date?: string; notes?: string }
     >({
       query: ({ planId, ...body }) => ({ url: `/installments/${planId}/payments`, method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { InstallmentPlan, InstallmentPayment, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const walletEntryService = require('./walletEntry.service');
 
 // Convert scope filter (string IDs) to ObjectIds for aggregate $match
 const toAggregateScope = (scope) => {
@@ -95,31 +96,51 @@ const createInstallmentPlan = async (body) => {
     throw error;
   }
 
-  // Record down payment in cash book if > 0
+  // Record down payment if > 0
   if (downPayment > 0) {
-    await cashBookService.createEntry({
-      organizationId: plan.organizationId,
-      branchId: plan.branchId,
-      type: 'income',
-      source: 'installment',
-      amount: downPayment,
-      paymentMethod: body.paymentMethod || 'cash',
-      referenceId: plan._id,
-      referenceModel: 'InstallmentPlan',
-      description: `Installment down payment – ${plan.customerName} (${plan.itemDescription})`,
-      date: startDate,
-      createdBy: plan.createdBy,
-    });
+    const paymentMethod = body.paymentMethod || 'cash';
+    const isWalletPayment = paymentMethod === 'wallet' && body.walletType;
 
     // Record down payment entry
-    await InstallmentPayment.create({
+    const downPaymentEntry = await InstallmentPayment.create({
       organizationId: plan.organizationId,
       branchId: plan.branchId,
       installmentPlanId: plan._id,
       amount: downPayment,
       paymentNumber: 0,
-      paymentMethod: body.paymentMethod || 'cash',
+      paymentMethod,
+      walletType: body.walletType,
       isDownPayment: true,
+      date: startDate,
+      createdBy: plan.createdBy,
+    });
+
+    if (!isWalletPayment) {
+      await cashBookService.createEntry({
+        organizationId: plan.organizationId,
+        branchId: plan.branchId,
+        type: 'income',
+        source: 'installment',
+        amount: downPayment,
+        paymentMethod,
+        referenceId: plan._id,
+        referenceModel: 'InstallmentPlan',
+        description: `Installment down payment – ${plan.customerName} (${plan.itemDescription})`,
+        date: startDate,
+        createdBy: plan.createdBy,
+      });
+    }
+
+    await walletEntryService.syncWalletPayment({
+      organizationId: plan.organizationId,
+      branchId: plan.branchId,
+      referenceId: downPaymentEntry._id,
+      referenceModel: 'InstallmentPayment',
+      direction: 'in',
+      amount: downPayment,
+      paymentMethod,
+      walletType: body.walletType,
+      description: `Installment down payment – ${plan.customerName} (${plan.itemDescription})`,
       date: startDate,
       createdBy: plan.createdBy,
     });
@@ -199,6 +220,21 @@ const deleteInstallmentPlan = async (planId) => {
       { new: true }
     );
   }
+  const payments = await InstallmentPayment.find({ installmentPlanId: plan._id });
+  for (const payment of payments) {
+    // eslint-disable-next-line no-await-in-loop
+    await walletEntryService.reverseWalletPayment({
+      organizationId: payment.organizationId,
+      branchId: payment.branchId,
+      referenceId: payment._id,
+      referenceModel: 'InstallmentPayment',
+      direction: 'in',
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      walletType: payment.walletType,
+      userId: plan.updatedBy || plan.createdBy,
+    });
+  }
   await InstallmentPayment.deleteMany({ installmentPlanId: plan._id });
   await cashBookService.deleteEntriesByReference(plan._id, 'InstallmentPlan');
   await cashBookService.deleteEntriesByReference(plan._id, 'InstallmentPayment');
@@ -223,13 +259,17 @@ const recordPayment = async (planId, paymentBody, userId) => {
   const paymentNumber = plan.paidInstallments + 1;
   const paymentDate = paymentBody.date ? new Date(paymentBody.date) : new Date();
 
+  const paymentMethod = paymentBody.paymentMethod || 'cash';
+  const isWalletPayment = paymentMethod === 'wallet' && paymentBody.walletType;
+
   const payment = await InstallmentPayment.create({
     organizationId: plan.organizationId,
     branchId: plan.branchId,
     installmentPlanId: plan._id,
     amount,
     paymentNumber,
-    paymentMethod: paymentBody.paymentMethod || 'cash',
+    paymentMethod,
+    walletType: paymentBody.walletType,
     isDownPayment: false,
     date: paymentDate,
     notes: paymentBody.notes || '',
@@ -251,16 +291,32 @@ const recordPayment = async (planId, paymentBody, userId) => {
   plan.updatedBy = userId;
   await plan.save();
 
-  // Cash book income entry
-  await cashBookService.createEntry({
+  if (!isWalletPayment) {
+    // Cash book income entry
+    await cashBookService.createEntry({
+      organizationId: plan.organizationId,
+      branchId: plan.branchId,
+      type: 'income',
+      source: 'installment',
+      amount,
+      paymentMethod,
+      referenceId: payment._id,
+      referenceModel: 'InstallmentPayment',
+      description: `Installment #${paymentNumber} – ${plan.customerName} (${plan.itemDescription})`,
+      date: paymentDate,
+      createdBy: userId,
+    });
+  }
+
+  await walletEntryService.syncWalletPayment({
     organizationId: plan.organizationId,
     branchId: plan.branchId,
-    type: 'income',
-    source: 'installment',
-    amount,
-    paymentMethod: paymentBody.paymentMethod || 'cash',
     referenceId: payment._id,
     referenceModel: 'InstallmentPayment',
+    direction: 'in',
+    amount,
+    paymentMethod,
+    walletType: paymentBody.walletType,
     description: `Installment #${paymentNumber} – ${plan.customerName} (${plan.itemDescription})`,
     date: paymentDate,
     createdBy: userId,
@@ -293,6 +349,17 @@ const deletePayment = async (planId, paymentId, userId) => {
   await plan.save();
 
   await cashBookService.deleteEntriesByReference(payment._id, 'InstallmentPayment');
+  await walletEntryService.reverseWalletPayment({
+    organizationId: payment.organizationId,
+    branchId: payment.branchId,
+    referenceId: payment._id,
+    referenceModel: 'InstallmentPayment',
+    direction: 'in',
+    amount: payment.amount,
+    paymentMethod: payment.paymentMethod,
+    walletType: payment.walletType,
+    userId,
+  });
   await payment.deleteOne();
   return payment;
 };

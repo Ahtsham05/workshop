@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale } = require('../models');
 const ApiError = require('../utils/ApiError');
+const accountsSystemService = require('./accountsSystem.service');
 
 const getWalletFilter = ({ organizationId, branchId, type }) => ({
   organizationId,
@@ -20,6 +21,9 @@ const ensureWallet = async ({ organizationId, branchId, type, userId }) => {
       createdBy: userId,
       updatedBy: userId,
     });
+    accountsSystemService
+      .ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet)
+      .catch(() => {});
   }
 
   return wallet;
@@ -73,6 +77,14 @@ const createOrUpdateWallet = async ({
   }
 
   await wallet.save();
+
+  // Give the wallet a dedicated ledger account so its transactions post real
+  // double-entry journal lines. Fire-and-forget: accounting must never block
+  // wallet management.
+  accountsSystemService
+    .ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet)
+    .catch(() => {});
+
   return wallet;
 };
 

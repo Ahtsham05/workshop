@@ -3,6 +3,7 @@ const { RepairJob } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { parseBusinessDateTime, applyBusinessDateRange } = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
+const walletEntryService = require('./walletEntry.service');
 
 const normalizeRepairJobDates = (body) => {
   const next = { ...body };
@@ -15,30 +16,50 @@ const normalizeRepairJobDates = (body) => {
   return next;
 };
 
-const syncRepairCashEntry = async (repairJob) => {
-  // Use total charges when delivered/completed, otherwise use advance amount received
+// Use total charges when delivered/completed, otherwise use advance amount received
+const computeRepairCashAmount = (repairJob) => {
   const isSettled = repairJob.status === 'delivered' || repairJob.status === 'completed';
-  const cashAmount = isSettled
-    ? Number(repairJob.charges || 0)
-    : Number(repairJob.advanceAmount || 0);
+  return isSettled ? Number(repairJob.charges || 0) : Number(repairJob.advanceAmount || 0);
+};
 
-  if (cashAmount <= 0) {
+const syncRepairCashEntry = async (repairJob, previous = null) => {
+  const cashAmount = computeRepairCashAmount(repairJob);
+  const isWalletPayment = repairJob.paymentMethod === 'wallet' && repairJob.walletType;
+
+  if (!isWalletPayment && cashAmount > 0) {
+    await cashBookService.upsertReferenceEntry({
+      organizationId: repairJob.organizationId,
+      branchId: repairJob.branchId,
+      type: 'income',
+      source: 'repair',
+      amount: cashAmount,
+      paymentMethod: repairJob.paymentMethod,
+      referenceId: repairJob._id,
+      referenceModel: 'RepairJob',
+      description: `Repair: ${repairJob.deviceModel} (${repairJob.customerName})`,
+      date: repairJob.date,
+      createdBy: repairJob.createdBy,
+    });
+  } else {
     await cashBookService.deleteEntriesByReference(repairJob._id, 'RepairJob');
-    return null;
   }
 
-  return cashBookService.upsertReferenceEntry({
+  await walletEntryService.syncWalletPayment({
     organizationId: repairJob.organizationId,
     branchId: repairJob.branchId,
-    type: 'income',
-    source: 'repair',
-    amount: cashAmount,
-    paymentMethod: repairJob.paymentMethod,
     referenceId: repairJob._id,
     referenceModel: 'RepairJob',
+    direction: 'in',
+    amount: cashAmount,
+    paymentMethod: repairJob.paymentMethod,
+    walletType: repairJob.walletType,
+    previousPaymentMethod: previous?.paymentMethod,
+    previousWalletType: previous?.walletType,
+    previousAmount: previous?.cashAmount,
     description: `Repair: ${repairJob.deviceModel} (${repairJob.customerName})`,
     date: repairJob.date,
     createdBy: repairJob.createdBy,
+    updatedBy: repairJob.updatedBy,
   });
 };
 
@@ -75,6 +96,12 @@ const getRepairJobById = async (repairJobId) => {
 
 const updateRepairJobById = async (repairJobId, updateBody, userId) => {
   const repairJob = await getRepairJobById(repairJobId);
+  const previous = {
+    paymentMethod: repairJob.paymentMethod,
+    walletType: repairJob.walletType,
+    cashAmount: computeRepairCashAmount(repairJob),
+  };
+
   Object.assign(repairJob, normalizeRepairJobDates(updateBody), { updatedBy: userId });
 
   if (repairJob.status === 'completed' && !repairJob.completedAt) {
@@ -85,13 +112,24 @@ const updateRepairJobById = async (repairJobId, updateBody, userId) => {
   }
 
   await repairJob.save();
-  await syncRepairCashEntry(repairJob);
+  await syncRepairCashEntry(repairJob, previous);
   return repairJob;
 };
 
 const deleteRepairJobById = async (repairJobId) => {
   const repairJob = await getRepairJobById(repairJobId);
   await cashBookService.deleteEntriesByReference(repairJob._id, 'RepairJob');
+  await walletEntryService.reverseWalletPayment({
+    organizationId: repairJob.organizationId,
+    branchId: repairJob.branchId,
+    referenceId: repairJob._id,
+    referenceModel: 'RepairJob',
+    direction: 'in',
+    amount: computeRepairCashAmount(repairJob),
+    paymentMethod: repairJob.paymentMethod,
+    walletType: repairJob.walletType,
+    userId: repairJob.updatedBy || repairJob.createdBy,
+  });
   await repairJob.deleteOne();
   return repairJob;
 };

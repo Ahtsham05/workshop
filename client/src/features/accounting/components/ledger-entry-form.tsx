@@ -18,12 +18,14 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
-import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api';
-import { isMobileShopBusiness } from '@/lib/business-types';
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options';
 import { useDispatch } from 'react-redux';
 import { mobileShopApi } from '@/stores/mobile-shop.api';
 
@@ -50,10 +52,7 @@ export function LedgerEntryForm({
 }: LedgerEntryFormProps) {
   const { t } = useLanguage();
   const dispatch = useDispatch<AppDispatch>();
-  const user = useSelector((state: RootState) => state.auth.data?.user);
-  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
-  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType);
-  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !isMobileShop });
+  const { data: walletsData } = useGetWalletsQuery();
   const wallets = walletsData?.results?.filter((wallet) => wallet.isActive) ?? [];
   const [loading, setLoading] = useState(false);
   const [date, setDate] = useState<Date>(editingEntry ? new Date(editingEntry.transactionDate) : new Date());
@@ -108,14 +107,21 @@ export function LedgerEntryForm({
     { value: 'opening_balance', label: t('Opening Balance') },
   ];
 
-  const paymentMethods = [
-    { value: 'Cash', label: t('Cash') },
-    { value: 'Bank Transfer', label: t('Bank Transfer') },
-    { value: 'Cheque', label: t('Cheque') },
-    { value: 'Card', label: t('Card') },
-    { value: 'Credit', label: t('Credit') },
-    ...(isMobileShop ? [{ value: 'Wallet', label: t('Wallet') || 'Wallet' }] : []),
-  ];
+  // Paying a supplier (Cash Paid) is money-out — show wallet balances there.
+  // Receiving from a customer / recording a purchase is money-in — hide balances.
+  const showWalletBalance = ledgerType === 'supplier' && formData.transactionType === 'payment_made';
+
+  const mergedPaymentMethods = buildMergedPaymentOptions(
+    [
+      { value: 'Cash', label: t('Cash') },
+      { value: 'Bank Transfer', label: t('Bank Transfer') },
+      { value: 'Cheque', label: t('Cheque') },
+      { value: 'Card', label: t('Card') },
+      { value: 'Credit', label: t('Credit') },
+    ],
+    wallets,
+    showWalletBalance,
+  );
 
   const transactionTypes = ledgerType === 'customer' ? customerTransactionTypes : supplierTransactionTypes;
 
@@ -335,52 +341,33 @@ export function LedgerEntryForm({
             <div className="space-y-2">
               <Label htmlFor="paymentMethod">{t('Payment Method')}</Label>
               <Select
-                value={formData.paymentMethod}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, paymentMethod: value, walletType: value === 'Wallet' ? formData.walletType : '' })
+                value={
+                  formData.paymentMethod === 'Wallet' && formData.walletType
+                    ? toWalletOptionValue(formData.walletType)
+                    : formData.paymentMethod
                 }
+                onValueChange={(value) => {
+                  if (isWalletOptionValue(value)) {
+                    setFormData({ ...formData, paymentMethod: 'Wallet', walletType: getWalletTypeFromOptionValue(value) });
+                  } else {
+                    setFormData({ ...formData, paymentMethod: value, walletType: '' });
+                  }
+                }}
               >
                 <SelectTrigger className='w-full'>
                   <SelectValue placeholder={t('Select method')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {paymentMethods.map((method) => (
+                  {mergedPaymentMethods.map((method) => (
                     <SelectItem key={method.value} value={method.value}>
                       {method.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {errors.walletType && <p className="text-sm text-red-600">{errors.walletType}</p>}
             </div>
           </div>
-
-          {isMobileShop && formData.paymentMethod === 'Wallet' && (
-            <div className="space-y-2">
-              <Label htmlFor="walletType">{t('Select Wallet')} *</Label>
-              <Select
-                value={formData.walletType}
-                onValueChange={(value) => setFormData({ ...formData, walletType: value })}
-              >
-                <SelectTrigger className='w-full'>
-                  <SelectValue placeholder={t('Select wallet')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {wallets.map((wallet) => (
-                    <SelectItem key={wallet.id} value={wallet.type}>
-                      {wallet.type} (Rs{Number(wallet.balance || 0).toFixed(2)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.walletType && <p className="text-sm text-red-600">{errors.walletType}</p>}
-              {formData.walletType && (
-                <p className="text-xs text-muted-foreground">
-                  {t('Current wallet balance')}: Rs
-                  {Number(wallets.find((wallet) => wallet.type === formData.walletType)?.balance || 0).toFixed(2)}
-                </p>
-              )}
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

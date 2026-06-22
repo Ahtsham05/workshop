@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const { Expense } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const walletService = require('./wallet.service');
+const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
 
 /** Post (or re-post) the double-entry journal entry for an expense. Fire-and-forget. */
@@ -14,12 +16,123 @@ const postExpenseToAccounts = (expense) => {
       {
         amount: expense.amount,
         paymentMethod: expense.paymentMethod,
+        walletType: expense.walletType,
         expenseId: expense._id,
         description: expense.description || expense.category || 'Expense',
         date: expense.date,
       }
     )
     .catch(() => {});
+};
+
+/**
+ * Keep the cash book / wallet ledger and wallet balance in sync with an
+ * expense's payment method. Mirrors the same pattern invoice.service.js uses
+ * for invoice wallet payments: wallet-paid expenses live in the Wallet module
+ * only (not the cash book), and the wallet balance is debited/reversed as the
+ * expense is created, edited, or deleted.
+ */
+const syncExpenseCashAndWalletEntries = async (expense, previousPaymentMethod, previousWalletType, previousAmount) => {
+  const amount = Number(expense.amount || 0);
+  const isWalletPayment = expense.paymentMethod === 'Wallet' && expense.walletType;
+
+  if (!isWalletPayment) {
+    await cashBookService.upsertReferenceEntry({
+      organizationId: expense.organizationId,
+      branchId: expense.branchId,
+      type: 'expense',
+      source: 'expense',
+      amount,
+      paymentMethod: expense.paymentMethod,
+      referenceId: expense._id,
+      referenceModel: 'Expense',
+      description: expense.description,
+      date: expense.date,
+      createdBy: expense.createdBy,
+    });
+  } else {
+    await cashBookService.deleteEntriesByReference(expense._id, 'Expense');
+  }
+
+  if (isWalletPayment && amount > 0) {
+    await walletEntryService.upsertReferenceEntry({
+      organizationId: expense.organizationId,
+      branchId: expense.branchId,
+      walletType: expense.walletType.trim(),
+      type: 'out',
+      amount,
+      referenceId: expense._id,
+      referenceModel: 'Expense',
+      description: `Wallet payment for expense: ${expense.description || expense.category || ''}`.trim(),
+      date: expense.date,
+      createdBy: expense.createdBy,
+    });
+  } else {
+    await walletEntryService.deleteEntriesByReference(expense._id, 'Expense');
+  }
+
+  const prevIsWalletPayment = previousPaymentMethod === 'Wallet' && previousWalletType;
+  const prevAmt = Number(previousAmount || 0);
+
+  if (isWalletPayment) {
+    const walletTypeName = expense.walletType.trim();
+    if (prevIsWalletPayment) {
+      const prevWalletName = previousWalletType.trim();
+      if (prevWalletName !== walletTypeName) {
+        // Wallet changed — refund the old wallet, debit the new one
+        if (prevAmt > 0) {
+          await walletService.adjustWalletBalance({
+            organizationId: expense.organizationId,
+            branchId: expense.branchId,
+            type: prevWalletName,
+            amount: prevAmt,
+            operation: 'add',
+            userId: expense.updatedBy || expense.createdBy,
+          });
+        }
+        await walletService.adjustWalletBalance({
+          organizationId: expense.organizationId,
+          branchId: expense.branchId,
+          type: walletTypeName,
+          amount,
+          operation: 'deduct',
+          userId: expense.updatedBy || expense.createdBy,
+        });
+      } else {
+        // Same wallet, amount may have changed — adjust the delta
+        const delta = amount - prevAmt;
+        if (delta !== 0) {
+          await walletService.adjustWalletBalance({
+            organizationId: expense.organizationId,
+            branchId: expense.branchId,
+            type: walletTypeName,
+            amount: Math.abs(delta),
+            operation: delta > 0 ? 'deduct' : 'add',
+            userId: expense.updatedBy || expense.createdBy,
+          });
+        }
+      }
+    } else if (amount > 0) {
+      await walletService.adjustWalletBalance({
+        organizationId: expense.organizationId,
+        branchId: expense.branchId,
+        type: walletTypeName,
+        amount,
+        operation: 'deduct',
+        userId: expense.updatedBy || expense.createdBy,
+      });
+    }
+  } else if (prevIsWalletPayment && prevAmt > 0) {
+    // Payment method changed away from wallet — refund the old wallet
+    await walletService.adjustWalletBalance({
+      organizationId: expense.organizationId,
+      branchId: expense.branchId,
+      type: previousWalletType.trim(),
+      amount: prevAmt,
+      operation: 'add',
+      userId: expense.updatedBy || expense.createdBy,
+    });
+  }
 };
 
 /**
@@ -48,19 +161,7 @@ const createExpense = async (expenseBody, options = {}) => {
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create expense after retries');
   }
   if (!options.skipCashBookSync) {
-    await cashBookService.upsertReferenceEntry({
-      organizationId: expense.organizationId,
-      branchId: expense.branchId,
-      type: 'expense',
-      source: 'expense',
-      amount: expense.amount,
-      paymentMethod: expense.paymentMethod,
-      referenceId: expense._id,
-      referenceModel: 'Expense',
-      description: expense.description,
-      date: expense.date,
-      createdBy: expense.createdBy,
-    });
+    await syncExpenseCashAndWalletEntries(expense, null, null, 0);
   }
   postExpenseToAccounts(expense);
 
@@ -129,22 +230,14 @@ const updateExpenseById = async (expenseId, updateBody) => {
   if (!expense) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
   }
+  const originalPaymentMethod = expense.paymentMethod;
+  const originalWalletType = expense.walletType || null;
+  const originalAmount = expense.amount;
+
   Object.assign(expense, updateBody);
   await expense.save();
 
-  await cashBookService.upsertReferenceEntry({
-    organizationId: expense.organizationId,
-    branchId: expense.branchId,
-    type: 'expense',
-    source: 'expense',
-    amount: expense.amount,
-    paymentMethod: expense.paymentMethod,
-    referenceId: expense._id,
-    referenceModel: 'Expense',
-    description: expense.description,
-    date: expense.date,
-    createdBy: expense.createdBy,
-  });
+  await syncExpenseCashAndWalletEntries(expense, originalPaymentMethod, originalWalletType, originalAmount);
   postExpenseToAccounts(expense);
 
   return expense;
@@ -161,6 +254,7 @@ const deleteExpenseById = async (expenseId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
   }
   await cashBookService.deleteEntriesByReference(expense._id, 'Expense');
+  await walletEntryService.deleteEntriesByReference(expense._id, 'Expense');
   accountsSystemService
     .removePostingsForReference(
       { organizationId: expense.organizationId, branchId: expense.branchId },
@@ -168,6 +262,22 @@ const deleteExpenseById = async (expenseId) => {
       expense._id
     )
     .catch(() => {});
+
+  if (expense.paymentMethod === 'Wallet' && expense.walletType && Number(expense.amount || 0) > 0) {
+    try {
+      await walletService.adjustWalletBalance({
+        organizationId: expense.organizationId,
+        branchId: expense.branchId,
+        type: expense.walletType.trim(),
+        amount: Number(expense.amount),
+        operation: 'add',
+        userId: expense.updatedBy || expense.createdBy,
+      });
+    } catch (err) {
+      console.error('Failed to reverse wallet balance on expense delete:', err);
+    }
+  }
+
   await expense.deleteOne();
   return expense;
 };

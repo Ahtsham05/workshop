@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,12 +31,18 @@ import { useCreatePurchaseMutation, useUpdatePurchaseMutation, purchaseApi } fro
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import { createEmptyPurchaseManualItem, type Purchase, type PurchaseItem, type Supplier } from '../index'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
-import { isMobileShopBusiness, isWholesaleRetailBusiness } from '@/lib/business-types'
+import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
@@ -156,10 +162,22 @@ export default function PurchasePanel({
   const suppliers: Supplier[] = normalizeSuppliersList(suppliersData)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
-  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
-  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !isMobileShop })
+  const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  // Paying a supplier is a money-out action — show wallet balances so the user can avoid overdrawing.
+  const purchasePaymentMethodOptions = useMemo(
+    () =>
+      buildMergedPaymentOptions(
+        [
+          { value: 'Cash', label: t('cash') },
+          { value: 'Credit', label: t('credit') },
+        ],
+        wallets,
+        true,
+      ),
+    [wallets, t],
+  )
 
   // Filter suppliers by name, Urdu name, or phone
   const filteredSuppliers = suppliers.filter((supplier) =>
@@ -855,22 +873,28 @@ export default function PurchasePanel({
             <div>
               <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
               <Select
-                value={purchase.paymentType || 'Cash'}
+                value={
+                  purchase.paymentType === 'Wallet' && purchase.walletType
+                    ? toWalletOptionValue(purchase.walletType)
+                    : purchase.paymentType || 'Cash'
+                }
                 onOpenChange={setPaymentTypeSelectOpen}
-                onValueChange={(value: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet') => {
+                onValueChange={(value: string) => {
+                  const isWallet = isWalletOptionValue(value)
+                  const nextPaymentType = isWallet ? 'Wallet' : (value as 'Cash' | 'Credit')
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
-                    const switchingCashToCredit = prev.paymentType === 'Cash' && value === 'Credit'
-                    const switchingCashToWallet = prev.paymentType === 'Cash' && value === 'Wallet'
-                    const nextPaid = value === 'Cash'
+                    const switchingCashToCredit = prev.paymentType === 'Cash' && nextPaymentType === 'Credit'
+                    const switchingCashToWallet = prev.paymentType === 'Cash' && nextPaymentType === 'Wallet'
+                    const nextPaid = nextPaymentType === 'Cash'
                       ? currentTotal
                       : (switchingCashToCredit || switchingCashToWallet)
                         ? 0
                         : (prev.paidAmount || 0)
                     return {
                       ...prev,
-                      paymentType: value,
-                      walletType: value === 'Wallet' ? prev.walletType : undefined,
+                      paymentType: nextPaymentType,
+                      walletType: isWallet ? getWalletTypeFromOptionValue(value) : undefined,
                       paidAmount: nextPaid,
                       balance: resolvePurchaseInvoiceBalance(currentTotal, nextPaid),
                     }
@@ -889,11 +913,18 @@ export default function PurchasePanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='Cash'>{t('cash')}</SelectItem>
-                  <SelectItem value='Credit'>{t('credit')}</SelectItem>
-                  {isMobileShop && <SelectItem value='Wallet'>{t('wallet') || 'Wallet'}</SelectItem>}
+                  {purchasePaymentMethodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {wallets.length === 0 && (
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  {t('No wallets configured. Add one from the Wallet page.') || 'No wallets configured. Add one from the Wallet page.'}
+                </p>
+              )}
             </div>
 
             <div>
@@ -915,35 +946,6 @@ export default function PurchasePanel({
                 className="w-full"
               />
             </div>
-
-            {isMobileShop && purchase.paymentType === 'Wallet' && (
-              <div>
-                <Label className="mb-2 block">{t('Select Wallet') || 'Select Wallet'}</Label>
-                {wallets.length > 0 ? (
-                  <Select
-                    value={purchase.walletType || ''}
-                    onValueChange={(value) => {
-                      setPurchase((prev) => ({ ...prev, walletType: value }))
-                    }}
-                  >
-                    <SelectTrigger className='w-full'>
-                      <SelectValue placeholder={t('Select wallet') || 'Select wallet...'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {wallets.map((wallet) => (
-                        <SelectItem key={wallet.id} value={wallet.type}>
-                          {wallet.type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className='text-xs text-muted-foreground'>
-                    {t('No wallets configured. Add wallets in Mobile Shop -> Wallet.') || 'No wallets configured. Add wallets in Mobile Shop -> Wallet.'}
-                  </p>
-                )}
-              </div>
-            )}
         </CardContent>
       </Card>
 

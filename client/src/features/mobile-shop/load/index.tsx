@@ -17,6 +17,12 @@ import {
   WalletSelectionGrid,
   type WalletSelectionAction,
 } from '@/features/mobile-shop/components/wallet-selection-grid'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
   CustomerAccountTypePicker,
@@ -701,7 +707,32 @@ function LoadManagementPage({
 
   const canEditPurchasePaidAmount = Boolean(purchaseForm.savedSupplierId)
   const canEditSaleReceivedAmount = Boolean(saleForm.customerId)
-  const selectedSalePaymentWallet = wallets.find((w) => w.type === saleForm.paymentWalletType)
+
+  // Buying load is money-out (show wallet balances); selling load is money-in (hide them).
+  const purchasePaymentMethodOptions = useMemo(
+    () =>
+      buildMergedPaymentOptions(
+        [
+          { value: 'cash', label: 'Cash' },
+          { value: 'bank', label: 'Bank Transfer' },
+        ],
+        wallets,
+        true,
+      ),
+    [wallets],
+  )
+  const salePaymentMethodOptions = useMemo(
+    () =>
+      buildMergedPaymentOptions(
+        [
+          { value: 'cash', label: 'Cash' },
+          { value: 'bank', label: 'Bank Transfer' },
+        ],
+        wallets,
+        false,
+      ),
+    [wallets],
+  )
 
   const withdrawalProfit = useMemo(() => {
     const amount = Number(withdrawalForm.amount) || 0
@@ -1618,32 +1649,31 @@ function LoadManagementPage({
 
                   <div className='space-y-2 md:max-w-xs'>
                     <Label htmlFor='purchase-payment-method'>Payment Method</Label>
-                    <Select value={purchaseForm.paymentMethod} onValueChange={(v) => handlePurchaseChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
+                    {/* Buying load is money-out — wallet balances are shown so you don't overdraw. */}
+                    <Select
+                      value={
+                        purchaseForm.paymentMethod === 'wallet' && purchaseForm.paymentWalletType
+                          ? toWalletOptionValue(purchaseForm.paymentWalletType)
+                          : purchaseForm.paymentMethod
+                      }
+                      onValueChange={(v) => {
+                        if (isWalletOptionValue(v)) {
+                          handlePurchaseChange('paymentMethod', 'wallet')
+                          handlePurchaseChange('paymentWalletType', getWalletTypeFromOptionValue(v))
+                        } else {
+                          handlePurchaseChange('paymentMethod', v as 'cash' | 'bank')
+                          handlePurchaseChange('paymentWalletType', '')
+                        }
+                      }}
+                    >
                       <SelectTrigger id='purchase-payment-method' {...purchaseEnter.enterProps('purchase-payment-method')}><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='cash'>Cash</SelectItem>
-                        <SelectItem value='bank'>Bank Transfer</SelectItem>
-                        <SelectItem value='wallet'>Wallet</SelectItem>
+                        {purchasePaymentMethodOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {purchaseForm.paymentMethod === 'wallet' && (
-                    <div className='space-y-2 md:max-w-xs'>
-                      <Label htmlFor='purchase-payment-wallet'>Payment Wallet</Label>
-                      <Select value={purchaseForm.paymentWalletType || '__none__'} onValueChange={(v) => handlePurchaseChange('paymentWalletType', v === '__none__' ? '' : v)}>
-                        <SelectTrigger id='purchase-payment-wallet'><SelectValue placeholder='Select wallet...' /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='__none__'>-- None --</SelectItem>
-                          {wallets.filter((w) => w.isActive).map((wallet) => (
-                            <SelectItem key={wallet.id} value={wallet.type}>
-                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
@@ -1891,39 +1921,31 @@ function LoadManagementPage({
 
                   <div className='space-y-2 md:max-w-xs'>
                     <Label htmlFor='sale-payment-method'>Payment Method</Label>
-                    <Select value={saleForm.paymentMethod} onValueChange={(v) => handleSaleChange('paymentMethod', v as 'cash' | 'bank' | 'wallet')}>
+                    {/* Selling load is money-in — wallet balances are hidden here. */}
+                    <Select
+                      value={
+                        saleForm.paymentMethod === 'wallet' && saleForm.paymentWalletType
+                          ? toWalletOptionValue(saleForm.paymentWalletType)
+                          : saleForm.paymentMethod
+                      }
+                      onValueChange={(v) => {
+                        if (isWalletOptionValue(v)) {
+                          handleSaleChange('paymentMethod', 'wallet')
+                          handleSaleChange('paymentWalletType', getWalletTypeFromOptionValue(v))
+                        } else {
+                          handleSaleChange('paymentMethod', v as 'cash' | 'bank')
+                          handleSaleChange('paymentWalletType', '')
+                        }
+                      }}
+                    >
                       <SelectTrigger id='sale-payment-method' {...saleEnter.enterProps('sale-payment-method')}><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='cash'>Cash</SelectItem>
-                        <SelectItem value='bank'>Bank Transfer</SelectItem>
-                        <SelectItem value='wallet'>Wallet</SelectItem>
+                        {salePaymentMethodOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {saleForm.paymentMethod === 'wallet' && (
-                    <div className='space-y-2 md:max-w-xs'>
-                      <Label htmlFor='sale-payment-wallet'>
-                        Payment Wallet
-                        {selectedSalePaymentWallet && (
-                          <span className='ml-2 text-xs text-muted-foreground'>
-                            Balance: {Number(selectedSalePaymentWallet.balance ?? 0).toFixed(2)}
-                          </span>
-                        )}
-                      </Label>
-                      <Select value={saleForm.paymentWalletType || '__none__'} onValueChange={(v) => handleSaleChange('paymentWalletType', v === '__none__' ? '' : v)}>
-                        <SelectTrigger id='sale-payment-wallet'><SelectValue placeholder='Select wallet...' /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='__none__'>-- None --</SelectItem>
-                          {wallets.filter((w) => w.isActive).map((wallet) => (
-                            <SelectItem key={wallet.id} value={wallet.type}>
-                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>

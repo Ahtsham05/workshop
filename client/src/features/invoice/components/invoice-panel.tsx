@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X } from 'lucide-react'
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Invoice, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
@@ -59,6 +59,12 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { usePermissions } from '@/context/permission-context'
@@ -206,6 +212,20 @@ export function InvoicePanel({
   const canCreateProduct = hasPermission('createProducts' as never)
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
   const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
+  // Sale invoices receive cash — never show wallet balances in the dropdown (money-in form).
+  const paymentMethodOptions = useMemo(
+    () =>
+      buildMergedPaymentOptions(
+        [
+          { value: 'cash', label: t('cash') || 'Cash' },
+          { value: 'bank', label: t('bank_transfer') || 'Bank Transfer' },
+          { value: 'card', label: t('card') || 'Card' },
+        ],
+        wallets,
+        false,
+      ),
+    [wallets, t],
+  )
   const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
@@ -2015,48 +2035,34 @@ export function InvoicePanel({
                 <div>
                   <Label className='mb-2 block'>{t('payment_method') || 'Payment Method'}</Label>
                   <Select
-                    value={invoice.paymentMethod || 'cash'}
-                    onValueChange={(val: 'cash' | 'wallet' | 'bank' | 'card') =>
-                      setInvoice(prev => ({ ...prev, paymentMethod: val, walletType: val !== 'wallet' ? undefined : prev.walletType }))
+                    value={
+                      invoice.paymentMethod === 'wallet' && invoice.walletType
+                        ? toWalletOptionValue(invoice.walletType)
+                        : invoice.paymentMethod || 'cash'
                     }
+                    onValueChange={(val: string) => {
+                      if (isWalletOptionValue(val)) {
+                        setInvoice(prev => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(val) }))
+                      } else {
+                        setInvoice(prev => ({ ...prev, paymentMethod: val as 'cash' | 'bank' | 'card', walletType: undefined }))
+                      }
+                    }}
                   >
                     <SelectTrigger className='w-full'>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">{t('cash') || 'Cash'}</SelectItem>
-                      <SelectItem value="wallet">{t('wallet') || 'Wallet'}</SelectItem>
-                      <SelectItem value="bank">{t('bank_transfer') || 'Bank Transfer'}</SelectItem>
-                      <SelectItem value="card">{t('card') || 'Card'}</SelectItem>
+                      {paymentMethodOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {wallets.length === 0 && (
+                    <p className='mt-1 text-xs text-muted-foreground'>{t('no_wallets_configured') || 'No wallets configured. Add one from the Wallet page.'}</p>
+                  )}
                 </div>
-
-                {/* Wallet selector — shown when payment method is wallet */}
-                {invoice.paymentMethod === 'wallet' && (
-                  <div>
-                    <Label className='mb-2 block'>{t('select_wallet') || 'Select Wallet'}</Label>
-                    {wallets.length > 0 ? (
-                      <Select
-                        value={invoice.walletType || ''}
-                        onValueChange={(val) => setInvoice(prev => ({ ...prev, walletType: val }))}
-                      >
-                        <SelectTrigger className='w-full'>
-                          <SelectValue placeholder={t('select_wallet') || 'Select wallet...'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {wallets.map(w => (
-                            <SelectItem key={w.id} value={w.type}>
-                              {w.type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className='text-xs text-muted-foreground'>{t('no_wallets_configured') || 'No wallets configured. Add wallets in Mobile Shop → Wallet.'}</p>
-                    )}
-                  </div>
-                )}
               </div>
             )}
 

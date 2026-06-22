@@ -61,6 +61,10 @@ const buildInvoiceMatch = ({ organizationId, branchId, startDate, endDate }) => 
   return match;
 };
 
+// `type` ('cash'/'credit'/'pending'/'quotation') only says whether the sale was
+// settled immediately — it says nothing about *how*. A direct sale can still be
+// paid into a wallet, so we also need `paymentMethod` to keep wallet receipts
+// out of the cash-in-hand figure.
 const calculateSalesCash = (invoices) => {
   return invoices.reduce((sum, invoice) => {
     if (invoice.splitPayment && invoice.splitPayment.length > 0) {
@@ -72,7 +76,8 @@ const calculateSalesCash = (invoices) => {
       );
     }
 
-    if (invoice.type === 'cash') {
+    const isCashPayment = String(invoice.paymentMethod || 'cash').toLowerCase() === 'cash';
+    if (invoice.type === 'cash' && isCashPayment) {
       return sum + Number(invoice.paidAmount || invoice.total || 0);
     }
 
@@ -118,7 +123,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     salesReturns,
     inventoryAgg,
   ] = await Promise.all([
-    Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment'),
+    Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment paymentMethod'),
     LoadTransaction.find(datedTxMatch).select('amount profit paymentMethod walletType'),
     LoadPurchase.find(datedTxMatch).select('amount profit paymentMethod walletType'),
     RepairJob.find(datedTxMatch).select('charges cost paymentMethod status'),

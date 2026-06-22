@@ -47,9 +47,16 @@ import {
   useCreateRepairStockUsageMutation,
   useDeleteRepairStockEntryMutation,
   useGetRepairStockSummaryQuery,
+  useGetWalletsQuery,
   type RepairJobRecord,
   type RepairStockEntry,
 } from '@/stores/mobile-shop.api'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { type RootState } from '@/stores/store'
@@ -74,7 +81,8 @@ type RepairFormState = {
   technician: string
   charges: string
   advanceAmount: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
   date: string
 }
 
@@ -84,20 +92,23 @@ type CompleteDialogState = {
   charges: string
   advanceAmount: string
   cost: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
 }
 
 type DeliverDialogState = {
   open: boolean
   repair: RepairJobRecord | null
   receivedNow: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
 }
 
 type StockFormState = {
   description: string
   amount: string
-  paymentMethod: 'cash' | 'jazzcash' | 'easypaisa' | 'bank'
+  paymentMethod: string
+  walletType: string
   notes: string
   date: string
 }
@@ -116,6 +127,7 @@ const makeInitialForm = (): RepairFormState => ({
   charges: '0',
   advanceAmount: '0',
   paymentMethod: 'cash',
+  walletType: '',
   date: toBusinessDateTimeLocal(),
 })
 
@@ -144,12 +156,14 @@ export default function RepairPage() {
     advanceAmount: '0',
     cost: '0',
     paymentMethod: 'cash',
+    walletType: '',
   })
   const [deliverDialog, setDeliverDialog] = useState<DeliverDialogState>({
     open: false,
     repair: null,
     receivedNow: '0',
     paymentMethod: 'cash',
+    walletType: '',
   })
 
   // ── Stock state ──
@@ -157,6 +171,7 @@ export default function RepairPage() {
     description: '',
     amount: '0',
     paymentMethod: 'cash',
+    walletType: '',
     notes: '',
     date: toBusinessDateTimeLocal(),
   })
@@ -167,6 +182,16 @@ export default function RepairPage() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  const baseRepairPaymentMethods = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'bank', label: 'Bank Transfer' },
+  ]
+  // Collecting from the customer is money-in — hide wallet balances.
+  const repairPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, false)
+  // Buying repair parts/stock is money-out — show wallet balances.
+  const stockPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, true)
 
   const { data } = useGetRepairJobsQuery({
     page: repairPage,
@@ -269,6 +294,7 @@ export default function RepairPage() {
       advanceAmount: String(repair.advanceAmount ?? 0),
       cost: String(repair.cost ?? 0),
       paymentMethod: repair.paymentMethod ?? 'cash',
+      walletType: repair.walletType ?? '',
     })
   }
 
@@ -287,7 +313,14 @@ export default function RepairPage() {
     try {
       const updated = await updateRepairJob({
         id: completeDialog.repair.id,
-        body: { charges, advanceAmount, cost, paymentMethod: completeDialog.paymentMethod, status: 'completed' },
+        body: {
+          charges,
+          advanceAmount,
+          cost,
+          paymentMethod: completeDialog.paymentMethod as RepairJobRecord['paymentMethod'],
+          walletType: completeDialog.paymentMethod === 'wallet' ? completeDialog.walletType : undefined,
+          status: 'completed',
+        },
       }).unwrap()
 
       // Auto-create a stock credit entry for the repair cost
@@ -301,7 +334,7 @@ export default function RepairPage() {
       }
 
       toast.success('Job marked as completed')
-      setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash' })
+      setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
       setPrintRepair(updated as unknown as RepairJobRecord)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to update charges')
@@ -316,6 +349,7 @@ export default function RepairPage() {
       repair,
       receivedNow: String(Math.max(0, remaining)),
       paymentMethod: repair.paymentMethod ?? 'cash',
+      walletType: repair.walletType ?? '',
     })
   }
 
@@ -333,12 +367,13 @@ export default function RepairPage() {
         id: deliverDialog.repair.id,
         body: {
           advanceAmount: newAdvance,
-          paymentMethod: deliverDialog.paymentMethod,
+          paymentMethod: deliverDialog.paymentMethod as RepairJobRecord['paymentMethod'],
+          walletType: deliverDialog.paymentMethod === 'wallet' ? deliverDialog.walletType : undefined,
           status: 'delivered',
         },
       }).unwrap()
       toast.success('Device delivered & payment recorded')
-      setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash' })
+      setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })
       setPrintRepair(updated as unknown as RepairJobRecord)
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to update delivery')
@@ -370,12 +405,13 @@ export default function RepairPage() {
       await createRepairStockPurchase({
         description: stockForm.description.trim(),
         amount: amt,
-        paymentMethod: stockForm.paymentMethod,
+        paymentMethod: stockForm.paymentMethod as RepairStockEntry['paymentMethod'],
+        walletType: stockForm.paymentMethod === 'wallet' ? stockForm.walletType : undefined,
         notes: stockForm.notes.trim() || undefined,
         date: stockForm.date ? parseBusinessDateTimeLocal(stockForm.date) : parseBusinessDateTimeLocal(toBusinessDateTimeLocal()),
       }).unwrap()
       toast.success('Stock purchased & cashbook updated')
-      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', notes: '', date: toBusinessDateTimeLocal() })
+      setStockForm({ description: '', amount: '0', paymentMethod: 'cash', walletType: '', notes: '', date: toBusinessDateTimeLocal() })
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to save stock')
     }
@@ -582,17 +618,22 @@ export default function RepairPage() {
                 <div className='space-y-1'>
                   <Label>Payment Method</Label>
                   <Select
-                    value={form.paymentMethod}
-                    onValueChange={(v) => setField('paymentMethod', v as RepairFormState['paymentMethod'])}
+                    value={form.paymentMethod === 'wallet' && form.walletType ? toWalletOptionValue(form.walletType) : form.paymentMethod}
+                    onValueChange={(v) => {
+                      if (isWalletOptionValue(v)) {
+                        setForm((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                      } else {
+                        setForm((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
+                      }
+                    }}
                   >
                     <SelectTrigger {...repairEnter.enterProps('repair-payment-method')}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='cash'>Cash</SelectItem>
-                      <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                      <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                      <SelectItem value='bank'>Bank</SelectItem>
+                      {repairPaymentMethodOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -800,15 +841,20 @@ export default function RepairPage() {
                 <div className='space-y-1'>
                   <Label>Payment Method</Label>
                   <Select
-                    value={stockForm.paymentMethod}
-                    onValueChange={(v) => setStockForm((p) => ({ ...p, paymentMethod: v as StockFormState['paymentMethod'] }))}
+                    value={stockForm.paymentMethod === 'wallet' && stockForm.walletType ? toWalletOptionValue(stockForm.walletType) : stockForm.paymentMethod}
+                    onValueChange={(v) => {
+                      if (isWalletOptionValue(v)) {
+                        setStockForm((p) => ({ ...p, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                      } else {
+                        setStockForm((p) => ({ ...p, paymentMethod: v, walletType: '' }))
+                      }
+                    }}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='cash'>Cash</SelectItem>
-                      <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                      <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                      <SelectItem value='bank'>Bank</SelectItem>
+                      {stockPaymentMethodOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -992,7 +1038,7 @@ export default function RepairPage() {
       <Dialog
         open={deliverDialog.open}
         onOpenChange={(open) =>
-          !open && setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash' })
+          !open && setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })
         }
       >
         <DialogContent className='max-w-md'>
@@ -1040,17 +1086,20 @@ export default function RepairPage() {
                   <div className='space-y-1'>
                     <Label>Payment Method</Label>
                     <Select
-                      value={deliverDialog.paymentMethod}
-                      onValueChange={(v) =>
-                        setDeliverDialog((prev) => ({ ...prev, paymentMethod: v as RepairFormState['paymentMethod'] }))
-                      }
+                      value={deliverDialog.paymentMethod === 'wallet' && deliverDialog.walletType ? toWalletOptionValue(deliverDialog.walletType) : deliverDialog.paymentMethod}
+                      onValueChange={(v) => {
+                        if (isWalletOptionValue(v)) {
+                          setDeliverDialog((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                        } else {
+                          setDeliverDialog((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
+                        }
+                      }}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='cash'>Cash</SelectItem>
-                        <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                        <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                        <SelectItem value='bank'>Bank</SelectItem>
+                        {repairPaymentMethodOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1073,7 +1122,7 @@ export default function RepairPage() {
           <DialogFooter>
             <Button
               variant='outline'
-              onClick={() => setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash' })}
+              onClick={() => setDeliverDialog({ open: false, repair: null, receivedNow: '0', paymentMethod: 'cash', walletType: '' })}
             >
               Cancel
             </Button>
@@ -1088,7 +1137,7 @@ export default function RepairPage() {
       <Dialog
         open={completeDialog.open}
         onOpenChange={(open) =>
-          !open && setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash' })
+          !open && setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
         }
       >
         <DialogContent className='max-w-md'>
@@ -1152,19 +1201,22 @@ export default function RepairPage() {
                 <div className='space-y-1'>
                   <Label>Payment Method</Label>
                   <Select
-                    value={completeDialog.paymentMethod}
-                    onValueChange={(v) =>
-                      setCompleteDialog((prev) => ({ ...prev, paymentMethod: v as RepairFormState['paymentMethod'] }))
-                    }
+                    value={completeDialog.paymentMethod === 'wallet' && completeDialog.walletType ? toWalletOptionValue(completeDialog.walletType) : completeDialog.paymentMethod}
+                    onValueChange={(v) => {
+                      if (isWalletOptionValue(v)) {
+                        setCompleteDialog((prev) => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) }))
+                      } else {
+                        setCompleteDialog((prev) => ({ ...prev, paymentMethod: v, walletType: '' }))
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='cash'>Cash</SelectItem>
-                      <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                      <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                      <SelectItem value='bank'>Bank</SelectItem>
+                      {repairPaymentMethodOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1200,7 +1252,7 @@ export default function RepairPage() {
             <Button
               variant='outline'
               onClick={() =>
-                setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash' })
+                setCompleteDialog({ open: false, repair: null, charges: '0', advanceAmount: '0', cost: '0', paymentMethod: 'cash', walletType: '' })
               }
             >
               Cancel

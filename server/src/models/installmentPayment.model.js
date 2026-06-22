@@ -8,7 +8,10 @@ const installmentPaymentSchema = new mongoose.Schema(
     installmentPlanId: { type: mongoose.Schema.Types.ObjectId, ref: 'InstallmentPlan', required: true, index: true },
     amount:            { type: Number, required: true, min: 0 },
     paymentNumber:     { type: Number, required: true, min: 0 },
-    paymentMethod:     { type: String, enum: ['cash', 'jazzcash', 'easypaisa', 'bank'], default: 'cash' },
+    // 'jazzcash'/'easypaisa' kept for backward compatibility with existing records;
+    // new records use 'wallet' + walletType to reference an actual created wallet.
+    paymentMethod:     { type: String, enum: ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'], default: 'cash' },
+    walletType:        { type: String, trim: true },
     isDownPayment:     { type: Boolean, default: false },
     date:              { type: Date, default: Date.now, index: true },
     notes:             { type: String, trim: true },

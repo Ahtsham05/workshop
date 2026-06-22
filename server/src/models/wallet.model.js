@@ -29,6 +29,13 @@ const walletSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Dedicated chart-of-accounts ledger account for this wallet, auto-created
+    // so wallet transactions (sales, expenses, purchases) post real double-entry
+    // journal lines instead of collapsing into the generic Cash account.
+    accountHeadId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AccountHead',
+    },
     commissionRate: {
       type: Number,
       default: 0,

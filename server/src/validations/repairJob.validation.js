@@ -1,6 +1,8 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
+const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
+
 const createRepairJob = {
   body: Joi.object().keys({
     customerName: Joi.string().required(),
@@ -11,7 +13,8 @@ const createRepairJob = {
     charges: Joi.number().min(0),
     advanceAmount: Joi.number().min(0),
     cost: Joi.number().min(0),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
+    walletType: Joi.string().allow(''),
     technician: Joi.string().allow(''),
     serialNumber: Joi.string().allow(''),
     color: Joi.string().allow(''),
@@ -24,7 +27,7 @@ const getRepairJobs = {
   query: Joi.object().keys({
     status: Joi.string().valid('pending', 'in_progress', 'completed', 'delivered'),
     technician: Joi.string(),
-    paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+    paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
     startDate: Joi.date(),
     endDate: Joi.date(),
     sortBy: Joi.string(),
@@ -47,7 +50,8 @@ const updateRepairJob = {
       charges: Joi.number().min(0),
       advanceAmount: Joi.number().min(0),
       cost: Joi.number().min(0),
-      paymentMethod: Joi.string().valid('cash', 'jazzcash', 'easypaisa', 'bank'),
+      paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
+      walletType: Joi.string().allow(''),
       technician: Joi.string().allow(''),
       serialNumber: Joi.string().allow(''),
       color: Joi.string().allow(''),

@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
+import { RootState } from '@/stores/store'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { isMobileShopBusiness } from '@/lib/business-types'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -70,6 +74,9 @@ type WalletRecord = {
 
 export default function WalletPage() {
   const navigate = useNavigate()
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const isMobileShop = isMobileShopBusiness(org?.businessType ?? user?.businessType)
   const { data, isLoading } = useGetWalletsQuery()
   const [upsertWallet, { isLoading: isSaving }] = useUpsertWalletMutation()
   const [deleteWallet, { isLoading: isDeleting }] = useDeleteWalletMutation()
@@ -182,7 +189,11 @@ export default function WalletPage() {
   return (
     <MobilePageShell
       title='Wallet Management'
-      description={`Create and manage your wallets (JazzCash, EasyPaisa, Bank Account, SIM Card, etc.) · ${MOBILE_FORM_KEYBOARD_HINT}`}
+      description={
+        isMobileShop
+          ? `Create and manage your wallets (JazzCash, EasyPaisa, Bank Account, SIM Card, etc.) · ${MOBILE_FORM_KEYBOARD_HINT}`
+          : `Create and manage your bank accounts and cash-in-hand wallets · ${MOBILE_FORM_KEYBOARD_HINT}`
+      }
     >
       <div className='grid gap-6 lg:grid-cols-[1fr_2fr]'>
         <Card>
@@ -217,52 +228,56 @@ export default function WalletPage() {
                   {...walletEnter.enterProps('balance')}
                 />
               </div>
-              <div className='space-y-2'>
-                <Label htmlFor='commission-rate'>Load Sale Commission (%) - Optional</Label>
-                <Input
-                  id='commission-rate'
-                  min='0'
-                  max='100'
-                  step='0.01'
-                  type='number'
-                  placeholder='e.g., 2.4'
-                  value={commissionRate}
-                  onChange={(event) => setCommissionRate(event.target.value)}
-                  {...walletEnter.enterProps('commission-rate')}
-                />
-                <p className='text-xs text-muted-foreground'>Auto-filled when selling load</p>
-              </div>
-              <div className='border rounded-lg p-3 space-y-3 bg-muted/30'>
-                <p className='text-sm font-medium text-muted-foreground'>{CASH_WALLET_RATES_SECTION}</p>
-                <div className='space-y-2'>
-                  <Label htmlFor='withdrawal-rate'>{CASH_RECEIVED_COMMISSION_LABEL}</Label>
-                  <Input
-                    id='withdrawal-rate'
-                    min='0'
-                    max='100'
-                    step='0.01'
-                    type='number'
-                    placeholder='e.g., 2'
-                    value={withdrawalCommissionRate}
-                    onChange={(event) => setWithdrawalCommissionRate(event.target.value)}
-                    {...walletEnter.enterProps('withdrawal-rate')}
-                  />
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='deposit-rate'>{CASH_SEND_COMMISSION_LABEL}</Label>
-                  <Input
-                    id='deposit-rate'
-                    min='0'
-                    max='100'
-                    step='0.01'
-                    type='number'
-                    placeholder='e.g., 1'
-                    value={depositCommissionRate}
-                    onChange={(event) => setDepositCommissionRate(event.target.value)}
-                    {...walletEnter.enterProps('deposit-rate')}
-                  />
-                </div>
-              </div>
+              {isMobileShop && (
+                <>
+                  <div className='space-y-2'>
+                    <Label htmlFor='commission-rate'>Load Sale Commission (%) - Optional</Label>
+                    <Input
+                      id='commission-rate'
+                      min='0'
+                      max='100'
+                      step='0.01'
+                      type='number'
+                      placeholder='e.g., 2.4'
+                      value={commissionRate}
+                      onChange={(event) => setCommissionRate(event.target.value)}
+                      {...walletEnter.enterProps('commission-rate')}
+                    />
+                    <p className='text-xs text-muted-foreground'>Auto-filled when selling load</p>
+                  </div>
+                  <div className='border rounded-lg p-3 space-y-3 bg-muted/30'>
+                    <p className='text-sm font-medium text-muted-foreground'>{CASH_WALLET_RATES_SECTION}</p>
+                    <div className='space-y-2'>
+                      <Label htmlFor='withdrawal-rate'>{CASH_RECEIVED_COMMISSION_LABEL}</Label>
+                      <Input
+                        id='withdrawal-rate'
+                        min='0'
+                        max='100'
+                        step='0.01'
+                        type='number'
+                        placeholder='e.g., 2'
+                        value={withdrawalCommissionRate}
+                        onChange={(event) => setWithdrawalCommissionRate(event.target.value)}
+                        {...walletEnter.enterProps('withdrawal-rate')}
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='deposit-rate'>{CASH_SEND_COMMISSION_LABEL}</Label>
+                      <Input
+                        id='deposit-rate'
+                        min='0'
+                        max='100'
+                        step='0.01'
+                        type='number'
+                        placeholder='e.g., 1'
+                        value={depositCommissionRate}
+                        onChange={(event) => setDepositCommissionRate(event.target.value)}
+                        {...walletEnter.enterProps('deposit-rate')}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               <div className='flex gap-2'>
                 <Button className='flex-1' disabled={isSaving} type='submit'>
                   {isSaving ? 'Saving...' : editingId ? 'Update Wallet' : 'Create Wallet'}
@@ -296,11 +311,15 @@ export default function WalletPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Wallet Name</TableHead>
-                    <TableHead>Type</TableHead>
+                    {isMobileShop && <TableHead>Type</TableHead>}
                     <TableHead>Balance</TableHead>
-                    <TableHead>Load Sale %</TableHead>
-                    <TableHead>Received %</TableHead>
-                    <TableHead>Send %</TableHead>
+                    {isMobileShop && (
+                      <>
+                        <TableHead>Load Sale %</TableHead>
+                        <TableHead>Received %</TableHead>
+                        <TableHead>Send %</TableHead>
+                      </>
+                    )}
                     <TableHead>Updated</TableHead>
                     <TableHead className='text-right'>Actions</TableHead>
                   </TableRow>
@@ -313,35 +332,41 @@ export default function WalletPage() {
                         <TableCell className='font-medium max-w-[200px]'>
                           <span className='line-clamp-2'>{wallet.type}</span>
                         </TableCell>
-                        <TableCell>
-                          <span
-                            className={
-                              loadWallet
-                                ? 'text-xs font-medium text-blue-700'
-                                : 'text-xs font-medium text-orange-700'
-                            }
-                          >
-                            {loadWallet ? 'Load' : 'Cash'}
-                          </span>
-                        </TableCell>
+                        {isMobileShop && (
+                          <TableCell>
+                            <span
+                              className={
+                                loadWallet
+                                  ? 'text-xs font-medium text-blue-700'
+                                  : 'text-xs font-medium text-orange-700'
+                              }
+                            >
+                              {loadWallet ? 'Load' : 'Cash'}
+                            </span>
+                          </TableCell>
+                        )}
                         <TableCell className='text-green-600 font-semibold whitespace-nowrap'>
                           Rs {formatWalletBalance(wallet.balance)}
                         </TableCell>
-                        <TableCell className='text-blue-600 whitespace-nowrap'>
-                          {Number(wallet.commissionRate ?? 0).toFixed(2)}%
-                        </TableCell>
-                        <TableCell className='text-orange-600 whitespace-nowrap'>
-                          {Number(wallet.withdrawalCommissionRate ?? 0).toFixed(2)}%
-                        </TableCell>
-                        <TableCell className='text-purple-600 whitespace-nowrap'>
-                          {Number(wallet.depositCommissionRate ?? 0).toFixed(2)}%
-                        </TableCell>
+                        {isMobileShop && (
+                          <>
+                            <TableCell className='text-blue-600 whitespace-nowrap'>
+                              {Number(wallet.commissionRate ?? 0).toFixed(2)}%
+                            </TableCell>
+                            <TableCell className='text-orange-600 whitespace-nowrap'>
+                              {Number(wallet.withdrawalCommissionRate ?? 0).toFixed(2)}%
+                            </TableCell>
+                            <TableCell className='text-purple-600 whitespace-nowrap'>
+                              {Number(wallet.depositCommissionRate ?? 0).toFixed(2)}%
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell className='text-sm text-muted-foreground whitespace-nowrap'>
                           {formatWalletDate(wallet.updatedAt)}
                         </TableCell>
                         <TableCell>
                           <div className='flex flex-wrap items-center justify-end gap-1'>
-                            {!loadWallet && (
+                            {isMobileShop && !loadWallet && (
                               <>
                                 <Button
                                   size='sm'
