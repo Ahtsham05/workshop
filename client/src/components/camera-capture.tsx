@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
 import { Camera, X, RotateCcw, Loader2 } from 'lucide-react'
-import { useLanguage } from '@/context/language-context'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/language-context'
+import { Button } from '@/components/ui/button'
 
 interface CameraCaptureProps {
   onCapture: (file: File) => void
@@ -12,13 +13,19 @@ interface CameraCaptureProps {
   disabled?: boolean
 }
 
-export default function CameraCapture({ onCapture, trigger, disabled }: CameraCaptureProps) {
+export default function CameraCapture({
+  onCapture,
+  trigger,
+  disabled,
+}: CameraCaptureProps) {
   const { t } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>(
+    'environment'
+  )
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -44,7 +51,10 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
     video.srcObject = mediaStream
 
     await new Promise<void>((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => reject(new Error('Video loading timeout')), 10000)
+      const timeoutId = window.setTimeout(
+        () => reject(new Error('Video loading timeout')),
+        10000
+      )
 
       const onReady = () => {
         window.clearTimeout(timeoutId)
@@ -89,7 +99,9 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error(t('camera_access_failed') || 'Camera not supported in this browser')
+        throw new Error(
+          t('camera_access_failed') || 'Camera not supported in this browser'
+        )
       }
 
       const constraints = [
@@ -134,7 +146,9 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
         streamRef.current = null
       }
 
-      let errorMessage = t('camera_access_failed') || 'Failed to access camera. Please check permissions.'
+      let errorMessage =
+        t('camera_access_failed') ||
+        'Failed to access camera. Please check permissions.'
 
       if (err instanceof Error) {
         switch (err.name) {
@@ -162,14 +176,20 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
   const setVideoNode = useCallback(
     (node: HTMLVideoElement | null) => {
       videoRef.current = node
-      if (node && streamRef.current && isOpen && !videoReady && !startingRef.current) {
+      if (
+        node &&
+        streamRef.current &&
+        isOpen &&
+        !videoReady &&
+        !startingRef.current
+      ) {
         void attachStreamToVideo(node).catch(() => {
           setError('Failed to start camera preview. Please try again.')
           setIsLoading(false)
         })
       }
     },
-    [attachStreamToVideo, isOpen, videoReady],
+    [attachStreamToVideo, isOpen, videoReady]
   )
 
   const handleOpen = useCallback(
@@ -180,7 +200,7 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
       setIsOpen(true)
       setError(null)
     },
-    [disabled],
+    [disabled]
   )
 
   const handleClose = useCallback(() => {
@@ -227,7 +247,7 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
         }
       },
       'image/jpeg',
-      0.9,
+      0.9
     )
   }, [handleClose, onCapture])
 
@@ -260,144 +280,144 @@ export default function CameraCapture({ onCapture, trigger, disabled }: CameraCa
     }
   }, [])
 
-  const triggerElement = React.isValidElement(trigger)
-    ? React.cloneElement(
-        trigger as React.ReactElement<{
-          onClick?: React.MouseEventHandler
-          disabled?: boolean
-          type?: 'button' | 'submit' | 'reset'
-        }>,
-        {
-          type: 'button',
-          onClick: (e: React.MouseEvent) => {
-            const originalOnClick = (
-              trigger as React.ReactElement<{ onClick?: React.MouseEventHandler }>
-            ).props.onClick
-            originalOnClick?.(e)
-            handleOpen(e)
-          },
-          disabled: disabled || (trigger as React.ReactElement<{ disabled?: boolean }>).props.disabled,
+  const triggerElement = React.isValidElement(trigger) ? (
+    React.cloneElement(
+      trigger as React.ReactElement<{
+        onClick?: React.MouseEventHandler
+        disabled?: boolean
+        type?: 'button' | 'submit' | 'reset'
+      }>,
+      {
+        type: 'button',
+        onClick: (e: React.MouseEvent) => {
+          const originalOnClick = (
+            trigger as React.ReactElement<{ onClick?: React.MouseEventHandler }>
+          ).props.onClick
+          originalOnClick?.(e)
+          handleOpen(e)
         },
-      )
-    : (
-        <button type="button" onClick={handleOpen} disabled={disabled}>
-          {trigger}
-        </button>
-      )
+        disabled:
+          disabled ||
+          (trigger as React.ReactElement<{ disabled?: boolean }>).props
+            .disabled,
+      }
+    )
+  ) : (
+    <button type='button' onClick={handleOpen} disabled={disabled}>
+      {trigger}
+    </button>
+  )
 
   return (
     <>
       {triggerElement}
 
-      {isOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="camera-capture-title"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            aria-label={t('cancel') || 'Close'}
-            onClick={handleClose}
-          />
-
-          <div
-            className={cn(
-              'bg-background relative z-10 grid w-full max-w-md gap-4 rounded-lg border p-6 shadow-lg',
-            )}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col gap-2 text-center sm:text-left">
-              <h2 id="camera-capture-title" className="text-lg leading-none font-semibold">
+      {isOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className='fixed inset-0 z-[200] flex flex-col bg-black'
+              role='dialog'
+              aria-modal='true'
+              aria-labelledby='camera-capture-title'
+            >
+              <h2 id='camera-capture-title' className='sr-only'>
                 {t('take_photo') || 'Take Photo'}
               </h2>
-            </div>
 
-            <div className="space-y-4">
-              {error ? (
-                <div className="space-y-4 text-center">
-                  <div className="rounded-lg bg-red-50 p-4 text-red-600">
-                    <p className="mb-2 text-sm font-medium">Camera Error</p>
-                    <p className="text-sm">{error}</p>
-                  </div>
-                  <Button type="button" onClick={() => void startCamera()} variant="outline" className="w-full">
-                    <Camera className="mr-2 h-4 w-4" />
-                    {t('retry') || 'Try Again'}
-                  </Button>
-                </div>
-              ) : (
-                <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-gray-900">
-                  <video
-                    ref={setVideoNode}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={cn(
-                      'h-full w-full object-cover',
-                      videoReady ? 'opacity-100' : 'opacity-0',
-                    )}
-                  />
-
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  {isLoading ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                      <div className="space-y-3 text-center text-white">
-                        <Loader2 className="mx-auto h-8 w-8 animate-spin" />
-                        <p className="text-sm">Starting camera...</p>
+              <div className='relative flex-1 overflow-hidden bg-black'>
+                {error ? (
+                  <div className='flex h-full items-center justify-center p-6'>
+                    <div className='w-full max-w-sm space-y-4 text-center'>
+                      <div className='rounded-lg bg-red-950/50 p-4 text-red-200'>
+                        <p className='mb-2 text-sm font-medium'>Camera Error</p>
+                        <p className='text-sm'>{error}</p>
                       </div>
+                      <Button
+                        type='button'
+                        onClick={() => void startCamera()}
+                        variant='outline'
+                        className='w-full'
+                      >
+                        <Camera className='mr-2 h-4 w-4' />
+                        {t('retry') || 'Try Again'}
+                      </Button>
                     </div>
-                  ) : null}
+                  </div>
+                ) : (
+                  <>
+                    <video
+                      ref={setVideoNode}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={cn(
+                        'h-full w-full object-cover',
+                        videoReady ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
 
-                  {videoReady ? (
-                    <div className="pointer-events-none absolute top-2 left-2 rounded bg-green-600 px-2 py-1 text-xs text-white">
-                      {facingMode === 'environment' ? 'Back camera' : 'Front camera'}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
+                    <canvas ref={canvasRef} className='hidden' />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Button
-                type="button"
-                onClick={switchCamera}
-                variant="outline"
-                size="sm"
-                disabled={!!error || isLoading}
-                className="w-full sm:w-auto"
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                {t('switch_camera') || 'Switch'}
-              </Button>
+                    {isLoading ? (
+                      <div className='absolute inset-0 flex items-center justify-center bg-black'>
+                        <div className='space-y-3 text-center text-white'>
+                          <Loader2 className='mx-auto h-8 w-8 animate-spin' />
+                          <p className='text-sm'>Starting camera...</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                )}
 
-              <div className="flex w-full gap-2 sm:w-auto">
-                <Button
-                  type="button"
+                <button
+                  type='button'
                   onClick={handleClose}
-                  variant="outline"
-                  className="flex-1 sm:min-w-[7rem]"
+                  aria-label={t('cancel') || 'Close'}
+                  className='absolute top-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
                 >
-                  <X className="mr-2 h-4 w-4" />
-                  {t('cancel') || 'Cancel'}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={capturePhoto}
-                  disabled={!!error || isLoading || !videoReady}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 sm:min-w-[7rem]"
-                >
-                  <Camera className="mr-2 h-4 w-4" />
-                  {t('capture') || 'Capture'}
-                </Button>
+                  <X className='h-5 w-5' />
+                </button>
+
+                {!error && videoReady ? (
+                  <button
+                    type='button'
+                    onClick={switchCamera}
+                    disabled={isLoading}
+                    aria-label={t('switch_camera') || 'Switch camera'}
+                    className='absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm'
+                  >
+                    <RotateCcw className='h-5 w-5' />
+                  </button>
+                ) : null}
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+
+              {!error ? (
+                <div className='flex items-center justify-center gap-10 bg-black px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]'>
+                  <button
+                    type='button'
+                    onClick={handleClose}
+                    className='text-sm font-medium text-white/80'
+                  >
+                    {t('cancel') || 'Cancel'}
+                  </button>
+
+                  <button
+                    type='button'
+                    onClick={capturePhoto}
+                    disabled={isLoading || !videoReady}
+                    aria-label={t('capture') || 'Capture'}
+                    className='flex h-18 w-18 items-center justify-center rounded-full border-4 border-white bg-white/20 disabled:opacity-40'
+                  >
+                    <span className='h-14 w-14 rounded-full bg-white' />
+                  </button>
+
+                  <span className='w-[3ch]' aria-hidden='true' />
+                </div>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </>
   )
 }
