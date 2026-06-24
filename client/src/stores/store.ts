@@ -35,6 +35,7 @@ import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
 import { productAttributeApi } from './productAttribute.api';
 import { productVariantApi } from './productVariant.api';
 import { inventoryApi } from './inventory.api';
+import { batchApi } from './batch.api';
 
 export const store = configureStore({
   reducer: {
@@ -74,6 +75,7 @@ export const store = configureStore({
     [productAttributeApi.reducerPath]: productAttributeApi.reducer,
     [productVariantApi.reducerPath]: productVariantApi.reducer,
     [inventoryApi.reducerPath]: inventoryApi.reducer,
+    [batchApi.reducerPath]: batchApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -107,6 +109,7 @@ export const store = configureStore({
       productAttributeApi.middleware,
       productVariantApi.middleware,
       inventoryApi.middleware,
+      batchApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;
