@@ -4,6 +4,10 @@ const userRoute = require('./user.route');
 const roleRoute = require('./role.route');
 const productRoute = require('./product.route');
 const categoryRoute = require('./category.route');
+const productAttributeRoute = require('./productAttribute.route');
+const productVariantRoute = require('./productVariant.route');
+const inventoryRoute = require('./inventory.route');
+const batchRoute = require('./batch.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 const customerRoute = require('./customer.route');
@@ -124,6 +128,24 @@ const defaultRoutes = [
   {
     path: '/categories',
     route: categoryRoute,
+  },
+  {
+    path: '/product-attributes',
+    route: productAttributeRoute,
+  },
+  {
+    // productVariantRoute defines its own full paths (/products/:productId/variants,
+    // /product-variants/:variantId), so it must mount at root.
+    path: '/',
+    route: productVariantRoute,
+  },
+  {
+    path: '/inventory',
+    route: inventoryRoute,
+  },
+  {
+    path: '/batches',
+    route: batchRoute,
   },
   {
     path: '/translate',
