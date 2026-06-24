@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
@@ -70,6 +71,7 @@ const formSchema = z.object({
   nameUrdu: z.string().optional(),
   description: z.string(),
   barcode: z.string().optional(),
+  hasVariants: z.boolean().optional(),
   trackImei: z.boolean().optional(),
   warrantyMonths: z.number().min(0).optional(),
   imeis: z.array(z.string()).optional(),
@@ -139,6 +141,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: currentRow?.nameUrdu || '',
         description: currentRow?.description || '',
         barcode: currentRow?.barcode || '',
+        hasVariants: currentRow?.hasVariants || false,
         trackImei: currentRow?.trackImei || false,
         warrantyMonths: currentRow?.warrantyMonths || 0,
         price: currentRow?.price || 0,
@@ -154,6 +157,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: '',
         description: '',
         barcode: '',
+        hasVariants: false,
         trackImei: false,
         warrantyMonths: 0,
         imeis: [],
@@ -175,6 +179,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: currentRow.nameUrdu || '',
         description: currentRow.description || '',
         barcode: currentRow.barcode || '',
+        hasVariants: currentRow.hasVariants || false,
         trackImei: currentRow.trackImei || false,
         warrantyMonths: currentRow.warrantyMonths || 0,
         price: currentRow.price || 0,
@@ -191,6 +196,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: '',
         description: '',
         barcode: '',
+        hasVariants: false,
         trackImei: false,
         warrantyMonths: 0,
         stockQuantity: 0,
@@ -715,6 +721,31 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 />
               )}
               </EntityFormSection>
+
+              <EntityFormSection
+                title='Variants'
+                description='Sell this product in multiple options (e.g. size, color, pack size) instead of a single price and stock count.'
+              >
+                <FormField
+                  control={form.control}
+                  name='hasVariants'
+                  render={({ field }) => (
+                    <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border border-border/60 p-3'>
+                      <div className='space-y-0.5'>
+                        <FormLabel>This product has variants</FormLabel>
+                        <p className='text-xs text-muted-foreground'>
+                          The price, cost, and stock quantity above stay as-is and are only
+                          used as a fallback — each variant gets its own price, cost, and stock.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </EntityFormSection>
+
               <EntityFormSection title='Barcode & scanning'>
               <FormField
                 control={form.control}
