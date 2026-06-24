@@ -65,6 +65,8 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { EntityFormSection } from '@/components/entity-form-section'
 import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
+import { ProductVariantsSection } from './variants/product-variants-section'
+import type { VariantDraftRow } from './variants/generate-variant-combinations'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -117,6 +119,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
   const [imeiDraft, setImeiDraft] = useState('')
   
@@ -209,6 +212,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       })
     }
     setImageRemoved(false)
+    setDraftVariants([])
   }, [open, currentRow, isEdit, form])
 
   const productSessionKey = open ? (currentRow?.id ?? currentRow?._id ?? 'new') : null
@@ -287,6 +291,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       onOpenChange={(state) => {
         form.reset()
         setImageRemoved(false) // Reset image removed flag when dialog opens/closes
+        setDraftVariants([])
         onOpenChange(state)
       }}
     >
@@ -744,6 +749,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     </FormItem>
                   )}
                 />
+                {form.watch('hasVariants') && (
+                  <ProductVariantsSection
+                    draftVariants={draftVariants}
+                    onDraftVariantsChange={setDraftVariants}
+                  />
+                )}
               </EntityFormSection>
 
               <EntityFormSection title='Barcode & scanning'>
