@@ -66,7 +66,9 @@ import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-engl
 import { EntityFormSection } from '@/components/entity-form-section'
 import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
 import { ProductVariantsSection } from './variants/product-variants-section'
+import { VariantInventoryTable } from './variants/variant-inventory-table'
 import type { VariantDraftRow } from './variants/generate-variant-combinations'
+import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -124,6 +126,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [imeiDraft, setImeiDraft] = useState('')
   
   const dispatch = useDispatch<AppDispatch>()
+  const [createProductVariant] = useCreateProductVariantMutation()
   const { categories } = useSelector((state: RootState) => state.category)
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
@@ -233,6 +236,36 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
+  // Creates the new ProductVariant + Inventory rows for any draft variants generated in
+  // this session. Runs after the product itself is saved, since the variant-create
+  // endpoint needs a real productId. Failures here are reported but don't roll back the
+  // product save — the product is already valid and usable without variants.
+  const createPendingVariants = async (productId: string) => {
+    if (draftVariants.length === 0) return
+    let failures = 0
+    for (const row of draftVariants) {
+      try {
+        await createProductVariant({
+          productId,
+          data: {
+            sku: row.sku || undefined,
+            attributes: row.attributes,
+            price: row.price,
+            cost: row.cost,
+            quantity: row.quantity,
+          },
+        }).unwrap()
+      } catch {
+        failures++
+      }
+    }
+    if (failures > 0) {
+      toast.error(`${failures} of ${draftVariants.length} variant(s) failed to save — edit the product to retry.`)
+    } else {
+      toast.success(`${draftVariants.length} variant(s) saved.`)
+    }
+  }
+
   const onSubmit = async (values: productForm) => {
     if (!isEdit && values.trackImei) {
       const imeiCount = (values.imeis || []).length
@@ -242,8 +275,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       }
     }
     if (isEdit) {
-      await dispatch(updateProduct({ ...values, _id: currentRow?.id || currentRow?._id })).then(() => {
+      const productId = currentRow?.id || currentRow?._id
+      await dispatch(updateProduct({ ...values, _id: productId })).then(async () => {
         toast.success(t('product_updated_successfully'))
+        if (values.hasVariants && draftVariants.length > 0) {
+          await createPendingVariants(productId)
+        }
         setFetch?.((prev: any) => !prev)
         dispatch(imeiApi.util.invalidateTags(['Imei']))
       })
@@ -251,6 +288,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       try {
         const created = await dispatch(addProduct(values)).unwrap()
         toast.success(t('product_created_successfully'))
+        if (values.hasVariants && draftVariants.length > 0) {
+          await createPendingVariants(created?.id || created?._id)
+        }
         setFetch?.((prev: any) => !prev)
         dispatch(imeiApi.util.invalidateTags(['Imei']))
         onCreated?.(created)
@@ -750,10 +790,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   )}
                 />
                 {form.watch('hasVariants') && (
-                  <ProductVariantsSection
-                    draftVariants={draftVariants}
-                    onDraftVariantsChange={setDraftVariants}
-                  />
+                  <>
+                    {isEdit && editingProductId && (
+                      <VariantInventoryTable productId={editingProductId} />
+                    )}
+                    <ProductVariantsSection
+                      draftVariants={draftVariants}
+                      onDraftVariantsChange={setDraftVariants}
+                    />
+                  </>
                 )}
               </EntityFormSection>
 
