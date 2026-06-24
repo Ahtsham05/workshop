@@ -39,6 +39,7 @@ const createProduct = {
     }).optional(),
     unit: Joi.string().allow('').optional(),
     unitConversions: Joi.array().items(unitConversionSchema).optional(),
+    hasVariants: Joi.boolean().optional(),
   }),
 };
 
@@ -103,6 +104,7 @@ const updateProduct = {
     }).optional(),
     unit: Joi.string().allow(''),
     unitConversions: Joi.array().items(unitConversionSchema),
+    hasVariants: Joi.boolean().optional(),
   }),
 };
 
