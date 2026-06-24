@@ -4,7 +4,11 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Plus, X } from 'lucide-react'
-import { useGetAllProductAttributesQuery } from '@/stores/productAttribute.api'
+import toast from 'react-hot-toast'
+import {
+  useGetAllProductAttributesQuery,
+  useCreateProductAttributeMutation,
+} from '@/stores/productAttribute.api'
 import type { SelectedAttribute } from './generate-variant-combinations'
 
 interface Props {
@@ -15,7 +19,25 @@ interface Props {
 /** Pick which attributes (Size, Color, ...) apply to this product, and which values of each to use. */
 export function VariantAttributeSelector({ selected, onChange }: Props) {
   const { data: attributes = [], isLoading } = useGetAllProductAttributesQuery()
+  const [createProductAttribute, { isLoading: isCreatingAttribute }] = useCreateProductAttributeMutation()
   const [valueDraft, setValueDraft] = useState<Record<string, string>>({})
+  const [newAttributeName, setNewAttributeName] = useState('')
+
+  const addNewAttribute = async () => {
+    const name = newAttributeName.trim()
+    if (!name) return
+    if (attributes.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(`"${name}" already exists`)
+      return
+    }
+    try {
+      const created = await createProductAttribute({ name, values: [] }).unwrap()
+      setNewAttributeName('')
+      onChange([...selected, { name: created.name, values: [] }])
+    } catch {
+      toast.error(`Failed to create attribute "${name}"`)
+    }
+  }
 
   const isAttributeSelected = (name: string) => selected.some((a) => a.name === name)
 
@@ -52,18 +74,49 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
     return <p className='text-sm text-muted-foreground'>Loading attributes…</p>
   }
 
+  const newAttributeRow = (
+    <div className='flex items-center gap-2'>
+      <Input
+        placeholder='New attribute name, e.g. Size'
+        value={newAttributeName}
+        showVoiceInput={false}
+        onChange={(e) => setNewAttributeName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            addNewAttribute()
+          }
+        }}
+        className='h-8 max-w-xs'
+      />
+      <Button
+        type='button'
+        size='sm'
+        variant='outline'
+        disabled={isCreatingAttribute || !newAttributeName.trim()}
+        onClick={addNewAttribute}
+      >
+        <Plus className='mr-1 h-3.5 w-3.5' />
+        Add attribute
+      </Button>
+    </div>
+  )
+
   if (attributes.length === 0) {
     return (
-      <p className='text-sm text-muted-foreground'>
-        No attributes defined yet for your organization (e.g. Size, Color). Create one from
-        Settings to start building variants.
-      </p>
+      <div className='space-y-2'>
+        <p className='text-sm text-muted-foreground'>
+          No attributes defined yet for your organization. Create one below to start building
+          variants (e.g. "Size", then add values like S/M/L once it's created).
+        </p>
+        {newAttributeRow}
+      </div>
     )
   }
 
   return (
     <div className='space-y-3'>
-      <div className='flex flex-wrap gap-2'>
+      <div className='flex flex-wrap items-center gap-2'>
         {attributes.map((attr) => (
           <Badge
             key={attr.id || attr._id}
@@ -75,6 +128,7 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
           </Badge>
         ))}
       </div>
+      {newAttributeRow}
 
       {selected.map((attr) => {
         const definition = attributes.find((a) => a.name === attr.name)
