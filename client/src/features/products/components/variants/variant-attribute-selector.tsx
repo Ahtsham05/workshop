@@ -3,11 +3,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   useGetAllProductAttributesQuery,
   useCreateProductAttributeMutation,
+  useUpdateProductAttributeMutation,
+  useDeleteProductAttributeMutation,
+  type ProductAttribute,
 } from '@/stores/productAttribute.api'
 import type { SelectedAttribute } from './generate-variant-combinations'
 
@@ -20,8 +24,11 @@ interface Props {
 export function VariantAttributeSelector({ selected, onChange }: Props) {
   const { data: attributes = [], isLoading } = useGetAllProductAttributesQuery()
   const [createProductAttribute, { isLoading: isCreatingAttribute }] = useCreateProductAttributeMutation()
+  const [updateProductAttribute] = useUpdateProductAttributeMutation()
+  const [deleteProductAttribute] = useDeleteProductAttributeMutation()
   const [valueDraft, setValueDraft] = useState<Record<string, string>>({})
   const [newAttributeName, setNewAttributeName] = useState('')
+  const [attributePendingDelete, setAttributePendingDelete] = useState<ProductAttribute | null>(null)
 
   const addNewAttribute = async () => {
     const name = newAttributeName.trim()
@@ -36,6 +43,31 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
       onChange([...selected, { name: created.name, values: [] }])
     } catch {
       toast.error(`Failed to create attribute "${name}"`)
+    }
+  }
+
+  const confirmDeleteAttribute = async () => {
+    if (!attributePendingDelete) return
+    const id = attributePendingDelete._id || attributePendingDelete.id || ''
+    try {
+      await deleteProductAttribute(id).unwrap()
+      onChange(selected.filter((a) => a.name !== attributePendingDelete.name))
+      toast.success(`Deleted "${attributePendingDelete.name}"`)
+    } catch {
+      toast.error(`Failed to delete "${attributePendingDelete.name}"`)
+    } finally {
+      setAttributePendingDelete(null)
+    }
+  }
+
+  /** Persists a value onto the attribute's master list so it's remembered for future products. */
+  const removeMasterValue = async (definition: ProductAttribute, value: string) => {
+    const id = definition._id || definition.id || ''
+    try {
+      await updateProductAttribute({ attributeId: id, data: { values: definition.values.filter((v) => v !== value) } }).unwrap()
+      onChange(selected.map((a) => (a.name === definition.name ? { ...a, values: a.values.filter((v) => v !== value) } : a)))
+    } catch {
+      toast.error(`Failed to remove "${value}"`)
     }
   }
 
@@ -59,15 +91,27 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
     )
   }
 
-  const addCustomValue = (attrName: string) => {
+  const addCustomValue = async (attrName: string) => {
     const value = (valueDraft[attrName] || '').trim()
     if (!value) return
     const attr = selected.find((a) => a.name === attrName)
     if (attr?.values.includes(value)) return
+
     onChange(
       selected.map((a) => (a.name === attrName ? { ...a, values: [...a.values, value] } : a))
     )
     setValueDraft((prev) => ({ ...prev, [attrName]: '' }))
+
+    // Persist onto the attribute's master list so it's remembered for future products too.
+    const definition = attributes.find((a) => a.name === attrName)
+    if (definition && !definition.values.includes(value)) {
+      const id = definition._id || definition.id || ''
+      try {
+        await updateProductAttribute({ attributeId: id, data: { values: [...definition.values, value] } }).unwrap()
+      } catch {
+        toast.error(`"${value}" was added to this product but couldn't be saved for future use`)
+      }
+    }
   }
 
   if (isLoading) {
@@ -121,10 +165,21 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
           <Badge
             key={attr.id || attr._id}
             variant={isAttributeSelected(attr.name) ? 'default' : 'outline'}
-            className='cursor-pointer select-none px-3 py-1.5'
+            className='cursor-pointer select-none gap-1.5 px-3 py-1.5'
             onClick={() => toggleAttribute(attr.name)}
           >
             {attr.name}
+            <button
+              type='button'
+              title={`Delete "${attr.name}"`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setAttributePendingDelete(attr)
+              }}
+              className='rounded-full p-0.5 hover:bg-black/10'
+            >
+              <Trash2 className='h-3 w-3' />
+            </button>
           </Badge>
         ))}
       </div>
@@ -136,15 +191,25 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
         return (
           <div key={attr.name} className='rounded-lg border border-border/60 p-3'>
             <p className='mb-2 text-sm font-medium'>{attr.name} values</p>
-            <div className='mb-2 flex flex-wrap gap-2'>
+            <div className='mb-2 flex flex-wrap gap-3'>
               {availableValues.map((value) => (
-                <label key={value} className='flex items-center gap-1.5 text-sm'>
-                  <Checkbox
-                    checked={attr.values.includes(value)}
-                    onCheckedChange={() => toggleValue(attr.name, value)}
-                  />
-                  {value}
-                </label>
+                <div key={value} className='flex items-center gap-1.5 text-sm'>
+                  <label className='flex items-center gap-1.5'>
+                    <Checkbox
+                      checked={attr.values.includes(value)}
+                      onCheckedChange={() => toggleValue(attr.name, value)}
+                    />
+                    {value}
+                  </label>
+                  <button
+                    type='button'
+                    title={`Remove "${value}" from ${attr.name}`}
+                    onClick={() => definition && removeMasterValue(definition, value)}
+                    className='rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20'
+                  >
+                    <X className='h-3 w-3' />
+                  </button>
+                </div>
               ))}
             </div>
             <div className='flex items-center gap-2'>
@@ -180,6 +245,16 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
           </div>
         )
       })}
+
+      <ConfirmDialog
+        open={!!attributePendingDelete}
+        onOpenChange={(open) => !open && setAttributePendingDelete(null)}
+        title='Delete attribute?'
+        desc={`This removes "${attributePendingDelete?.name}" for your whole organization, not just this product. Existing variants that already use it keep their values — only future selection is affected.`}
+        destructive
+        confirmText='Delete'
+        handleConfirm={confirmDeleteAttribute}
+      />
     </div>
   )
 }

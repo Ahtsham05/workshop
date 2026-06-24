@@ -49,10 +49,25 @@ export const productAttributeApi = createApi({
       query: (body) => ({ url: '', method: 'POST', body }),
       invalidatesTags: [{ type: 'ProductAttribute', id: 'LIST' }],
     }),
+
+    updateProductAttribute: builder.mutation<
+      ProductAttribute,
+      { attributeId: string; data: Partial<ProductAttribute> }
+    >({
+      query: ({ attributeId, data }) => ({ url: `/${attributeId}`, method: 'PATCH', body: data }),
+      invalidatesTags: [{ type: 'ProductAttribute', id: 'LIST' }],
+    }),
+
+    deleteProductAttribute: builder.mutation<void, string>({
+      query: (attributeId) => ({ url: `/${attributeId}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'ProductAttribute', id: 'LIST' }],
+    }),
   }),
 })
 
 export const {
   useGetAllProductAttributesQuery,
   useCreateProductAttributeMutation,
+  useUpdateProductAttributeMutation,
+  useDeleteProductAttributeMutation,
 } = productAttributeApi
