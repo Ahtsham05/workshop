@@ -32,6 +32,9 @@ import { cashRegisterApi } from './cashRegister.api';
 import { imeiApi } from './imei.api';
 import { insightApi } from './insight.api';
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
+import { productAttributeApi } from './productAttribute.api';
+import { productVariantApi } from './productVariant.api';
+import { inventoryApi } from './inventory.api';
 
 export const store = configureStore({
   reducer: {
@@ -68,6 +71,9 @@ export const store = configureStore({
     [imeiApi.reducerPath]: imeiApi.reducer,
     [insightApi.reducerPath]: insightApi.reducer,
     [purchaseSuggestionsApi.reducerPath]: purchaseSuggestionsApi.reducer,
+    [productAttributeApi.reducerPath]: productAttributeApi.reducer,
+    [productVariantApi.reducerPath]: productVariantApi.reducer,
+    [inventoryApi.reducerPath]: inventoryApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -98,6 +104,9 @@ export const store = configureStore({
       imeiApi.middleware,
       insightApi.middleware,
       purchaseSuggestionsApi.middleware,
+      productAttributeApi.middleware,
+      productVariantApi.middleware,
+      inventoryApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;
