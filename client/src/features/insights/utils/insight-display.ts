@@ -14,6 +14,9 @@ import {
   PieChart,
   Rocket,
   Sparkles,
+  Building2,
+  Link2,
+  UserMinus,
   type LucideIcon,
 } from 'lucide-react'
 import type { Insight, InsightPriority } from '@/stores/insight.api'
@@ -35,6 +38,10 @@ export const TYPE_ICON: Record<string, LucideIcon> = {
   customer_contribution: PieChart,
   sales_drop: TrendingDown,
   high_growth_product: Rocket,
+  branch_top_performer: Building2,
+  branch_underperformer: Building2,
+  frequently_bought_together: Link2,
+  at_risk_customer: UserMinus,
 }
 
 export const getTypeIcon = (type: string): LucideIcon => TYPE_ICON[type] || Sparkles

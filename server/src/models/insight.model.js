@@ -31,9 +31,15 @@ const INSIGHT_TYPES = [
   'supplier_recommendation',
   'transfer_suggestion',
   'seasonal_demand',
+  // cross-branch comparison — organization-wide, not tied to a single branch
+  'branch_top_performer',
+  'branch_underperformer',
+  // additional sales/customer depth
+  'frequently_bought_together',
+  'at_risk_customer',
 ];
 
-const INSIGHT_CATEGORIES = ['sales', 'inventory', 'profit', 'customer', 'alert', 'supply_chain'];
+const INSIGHT_CATEGORIES = ['sales', 'inventory', 'profit', 'customer', 'alert', 'supply_chain', 'branch_comparison'];
 
 const insightSchema = new mongoose.Schema(
   {
@@ -43,10 +49,10 @@ const insightSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    /** Optional — left unset for organization-wide insights like branch comparisons. */
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
-      required: true,
       index: true,
     },
     type: {
@@ -100,7 +106,7 @@ const insightSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 insightSchema.plugin(toJSON);

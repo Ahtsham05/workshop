@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Sparkles, RefreshCw, AlertTriangle, TrendingUp, Package, DollarSign, Users } from 'lucide-react'
+import { Sparkles, RefreshCw, AlertTriangle, TrendingUp, Package, DollarSign, Users, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { useGetMyBranchesQuery } from '@/stores/branch.api'
+import { lastNDaysRange } from '@/lib/dashboard-date-range'
+import { RevenueChart } from '@/features/dashboard/components/revenue-chart'
 import {
   useGetTodayInsightsQuery,
   useGetAlertInsightsQuery,
@@ -12,6 +15,7 @@ import {
   useGetInventoryInsightsQuery,
   useGetProfitInsightsQuery,
   useGetCustomerInsightsQuery,
+  useGetBranchInsightsQuery,
   useRunInsightsNowMutation,
   type Insight,
   type InsightPriority,
@@ -20,7 +24,7 @@ import { InsightCard } from './components/insight-card'
 import { GroupedInsightCard } from './components/grouped-insight-card'
 import { groupInsights } from './utils/insight-display'
 
-type TabKey = 'today' | 'alert' | 'sales' | 'inventory' | 'profit' | 'customer'
+type TabKey = 'today' | 'alert' | 'sales' | 'inventory' | 'profit' | 'customer' | 'branches'
 
 const TABS: { key: TabKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'today', label: 'Today', icon: Sparkles },
@@ -29,7 +33,10 @@ const TABS: { key: TabKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'inventory', label: 'Inventory', icon: Package },
   { key: 'profit', label: 'Profit', icon: DollarSign },
   { key: 'customer', label: 'Customers', icon: Users },
+  { key: 'branches', label: 'Branches', icon: Building2 },
 ]
+
+const TREND_RANGE = lastNDaysRange(30)
 
 const PRIORITY_FILTERS: { key: InsightPriority | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -165,6 +172,9 @@ export default function InsightsPage() {
   const inventory = useGetInventoryInsightsQuery()
   const profit = useGetProfitInsightsQuery()
   const customers = useGetCustomerInsightsQuery()
+  const branchList = useGetMyBranchesQuery()
+  const hasMultipleBranches = (branchList.data?.length ?? 0) > 1
+  const branchInsights = useGetBranchInsightsQuery(undefined, { skip: !hasMultipleBranches })
 
   const [runInsightsNow, { isLoading: isRunning }] = useRunInsightsNowMutation()
 
@@ -195,7 +205,10 @@ export default function InsightsPage() {
     inventory: { data: inventory.data, isLoading: inventory.isLoading },
     profit: { data: profit.data, isLoading: profit.isLoading },
     customer: { data: customers.data, isLoading: customers.isLoading },
+    branches: { data: branchInsights.data, isLoading: branchInsights.isLoading },
   }
+
+  const visibleTabs = TABS.filter((tab) => tab.key !== 'branches' || hasMultipleBranches)
 
   return (
     <div className='space-y-6 p-4 md:p-6'>
@@ -224,7 +237,7 @@ export default function InsightsPage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
         <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
           <TabsList className='flex-wrap'>
-            {TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <TabsTrigger key={tab.key} value={tab.key} className='gap-1.5'>
                 <tab.icon className='h-3.5 w-3.5' />
                 {tab.label}
@@ -250,8 +263,9 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        {TABS.map((tab) => (
-          <TabsContent key={tab.key} value={tab.key} className='mt-4'>
+        {visibleTabs.map((tab) => (
+          <TabsContent key={tab.key} value={tab.key} className='mt-4 space-y-4'>
+            {tab.key === 'sales' && <RevenueChart dateRange={TREND_RANGE} />}
             <InsightGrid
               insights={tabData[tab.key].data}
               isLoading={tabData[tab.key].isLoading}

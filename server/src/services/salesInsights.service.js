@@ -21,6 +21,8 @@ const CONFIG = {
   ABC_THRESHOLD_B_PCT: 90, // cumulative revenue % boundary for "B" products
   INSIGHT_TTL_HOURS: 48, // insights auto-expire (TTL index) this many hours after generation
   TOP_LIST_SIZE: 10,
+  BRANCH_UNDERPERFORM_PCT_OF_AVG: 50, // branch revenue below this % of the org average gets flagged
+  FBT_MIN_PAIR_COUNT: 3, // a product pair must co-occur on at least this many invoices to surface
 };
 
 /** Sales/Invoice statuses & types that count as real, completed revenue. */
@@ -195,6 +197,61 @@ const aggregateCustomerLifetime = async ({ organizationId, branchId }) => {
     },
     { $sort: { totalRevenue: -1 } },
   ]);
+};
+
+/** Org-wide totals grouped by branch — feeds branch-comparison insights. */
+const aggregateBranchTotals = async ({ organizationId, start, end }) => {
+  const rows = await Invoice.aggregate([
+    {
+      $match: {
+        organizationId,
+        invoiceDate: { $gte: start, $lte: end },
+        ...SALES_MATCH_BASE,
+      },
+    },
+    {
+      $group: {
+        _id: '$branchId',
+        revenue: { $sum: '$total' },
+        profit: { $sum: '$totalProfit' },
+        orders: { $sum: 1 },
+      },
+    },
+  ]);
+  return new Map(rows.map((r) => [String(r._id), r]));
+};
+
+/** Counts how often pairs of products appear together on the same invoice — cross-sell candidates. */
+const aggregateFrequentlyBoughtTogether = async ({ organizationId, branchId, start, end }) => {
+  const invoices = await Invoice.find({
+    organizationId,
+    branchId,
+    invoiceDate: { $gte: start, $lte: end },
+    ...SALES_MATCH_BASE,
+  })
+    .select('items.productId')
+    .lean();
+
+  const pairCounts = new Map(); // "idA|idB" (sorted) -> count
+  for (const invoice of invoices) {
+    const productIds = [...new Set((invoice.items || []).map((i) => String(i.productId)).filter(Boolean))];
+    if (productIds.length < 2) continue;
+    for (let i = 0; i < productIds.length; i += 1) {
+      for (let j = i + 1; j < productIds.length; j += 1) {
+        const [a, b] = [productIds[i], productIds[j]].sort();
+        const key = `${a}|${b}`;
+        pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+      }
+    }
+  }
+
+  return [...pairCounts.entries()]
+    .map(([key, count]) => {
+      const [productAId, productBId] = key.split('|');
+      return { productAId, productBId, count };
+    })
+    .filter((p) => p.count >= CONFIG.FBT_MIN_PAIR_COUNT)
+    .sort((a, b) => b.count - a.count);
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -407,6 +464,60 @@ const buildSalesDropAlert = ({ scope, name, productId, growthPercent, current, p
   meta: { scope, productId, name, growthPercent: round2(growthPercent) },
 });
 
+const buildFrequentlyBoughtTogetherInsight = (pairs) => {
+  if (pairs.length === 0) return null;
+  const top = pairs[0];
+  return {
+    type: 'frequently_bought_together',
+    category: 'sales',
+    priority: 'low',
+    confidence: confidenceFromSampleSize(top.count),
+    title: `${top.productAName} and ${top.productBName} are often bought together`,
+    description: `These products appeared on the same invoice ${top.count} times in the last ${CONFIG.SALES_WINDOW_DAYS} days. Consider bundling or cross-promoting them.`,
+    meta: { pairs: pairs.slice(0, CONFIG.TOP_LIST_SIZE) },
+  };
+};
+
+const buildAtRiskCustomerInsight = (atRiskCustomers) => {
+  if (atRiskCustomers.length === 0) return null;
+  return {
+    type: 'at_risk_customer',
+    category: 'customer',
+    priority: 'medium',
+    confidence: 'medium',
+    title: `${atRiskCustomers.length} customer(s) are at risk of churning`,
+    description: `These customers haven't ordered in 30+ days after a history of regular purchases — they're not yet inactive, but the slowdown is worth a check-in before they go quiet.`,
+    meta: { customers: atRiskCustomers.slice(0, CONFIG.TOP_LIST_SIZE) },
+  };
+};
+
+const buildBranchTopPerformerInsight = (branches) => {
+  if (branches.length === 0) return null;
+  const leader = branches[0];
+  return {
+    type: 'branch_top_performer',
+    category: 'branch_comparison',
+    priority: 'low',
+    confidence: 'medium',
+    title: `${leader.name} is your top-performing branch`,
+    description: `${leader.name} generated Rs${round2(leader.revenue)} this month, ahead of all other branches.`,
+    meta: { branches: branches.slice(0, CONFIG.TOP_LIST_SIZE) },
+  };
+};
+
+const buildBranchUnderperformerInsight = (branches, avgRevenue) => {
+  if (branches.length === 0) return null;
+  return {
+    type: 'branch_underperformer',
+    category: 'branch_comparison',
+    priority: branches.some((b) => b.revenue <= avgRevenue * 0.25) ? 'high' : 'medium',
+    confidence: 'medium',
+    title: `${branches.length} branch(es) are underperforming this month`,
+    description: `These branches are generating well below the org-wide average of Rs${round2(avgRevenue)} per branch this month — worth investigating staffing, stock, or local demand.`,
+    meta: { branches: branches.slice(0, CONFIG.TOP_LIST_SIZE), avgRevenue: round2(avgRevenue) },
+  };
+};
+
 /* ────────────────────────────────────────────────────────────────────────
  * ORCHESTRATOR — runs every algorithm for one branch and returns insight
  * objects ready to be persisted.
@@ -418,18 +529,27 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
   const ranges = getDateRanges();
   const insights = [];
 
-  const [products, salesLast30, salesPrev30, salesLast90, storeCurrentMonth, storePreviousMonth, customerLifetime] =
-    await Promise.all([
-      Product.find({ organizationId: orgId, branchId: brId })
-        .select('name cost price stockQuantity categories category createdAt')
-        .lean(),
-      aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last30 }),
-      aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.prev30 }),
-      aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last90 }),
-      aggregateStoreTotals({ organizationId: orgId, branchId: brId, ...ranges.currentMonth }),
-      aggregateStoreTotals({ organizationId: orgId, branchId: brId, ...ranges.previousMonth }),
-      aggregateCustomerLifetime({ organizationId: orgId, branchId: brId }),
-    ]);
+  const [
+    products,
+    salesLast30,
+    salesPrev30,
+    salesLast90,
+    storeCurrentMonth,
+    storePreviousMonth,
+    customerLifetime,
+    fbtPairsRaw,
+  ] = await Promise.all([
+    Product.find({ organizationId: orgId, branchId: brId })
+      .select('name cost price stockQuantity categories category createdAt')
+      .lean(),
+    aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last30 }),
+    aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.prev30 }),
+    aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last90 }),
+    aggregateStoreTotals({ organizationId: orgId, branchId: brId, ...ranges.currentMonth }),
+    aggregateStoreTotals({ organizationId: orgId, branchId: brId, ...ranges.previousMonth }),
+    aggregateCustomerLifetime({ organizationId: orgId, branchId: brId }),
+    aggregateFrequentlyBoughtTogether({ organizationId: orgId, branchId: brId, ...ranges.last30 }),
+  ]);
 
   /* ── Per-product metrics: merge current product state with sales history ── */
   const productMetrics = products.map((p) => {
@@ -494,6 +614,16 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
     .sort((a, b) => b.revenue - a.revenue);
   insights.push(buildBestCategoryInsight(categories));
 
+  const productNameMap = new Map(productMetrics.map((p) => [p.productId, p.name]));
+  const fbtPairs = fbtPairsRaw
+    .map((pair) => ({
+      ...pair,
+      productAName: productNameMap.get(pair.productAId) || 'Unknown product',
+      productBName: productNameMap.get(pair.productBId) || 'Unknown product',
+    }))
+    .filter((pair) => productNameMap.has(pair.productAId) && productNameMap.has(pair.productBId));
+  insights.push(buildFrequentlyBoughtTogetherInsight(fbtPairs));
+
   /* ── 2. INVENTORY INTELLIGENCE ───────────────────────────────────────── */
   const lowStockProducts = productMetrics.filter(
     (p) => p.stock > 0 && p.dailySalesRate > 0 && p.stock <= p.reorderPoint,
@@ -556,6 +686,14 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
   const inactiveCustomers = customersRanked.filter((c) => new Date(c.lastOrderAt) < inactiveCutoff);
   insights.push(buildInactiveCustomerInsight(inactiveCustomers));
 
+  /* At-risk: gone quiet for 30+ days but not yet long enough silent to count as fully inactive. */
+  const recentCutoff = daysAgo(CONFIG.SALES_WINDOW_DAYS);
+  const atRiskCustomers = customersRanked.filter((c) => {
+    const last = new Date(c.lastOrderAt);
+    return last < recentCutoff && last >= inactiveCutoff;
+  });
+  insights.push(buildAtRiskCustomerInsight(atRiskCustomers));
+
   insights.push(buildContributionInsight(vips, totalCustomerRevenue));
 
   /* ── 5. BUSINESS ALERTS (cross-cutting) ──────────────────────────────── */
@@ -611,6 +749,55 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
 const sumPrevRevenue = (salesPrev30Map, productId) => salesPrev30Map.get(productId)?.revenue || 0;
 
 /**
+ * Generates organization-wide branch-comparison insights (no single branchId).
+ * Only meaningful with 2+ active branches — returns [] otherwise.
+ */
+const generateBranchComparisonInsights = async ({ organizationId }) => {
+  const orgId = toObjectId(organizationId);
+  const ranges = getDateRanges();
+
+  const activeBranches = await Branch.find({ organizationId: orgId, isActive: true }).select('_id name').lean();
+  if (activeBranches.length < 2) return [];
+
+  const totalsByBranch = await aggregateBranchTotals({ organizationId: orgId, ...ranges.currentMonth });
+
+  const branchMetrics = activeBranches.map((b) => {
+    const totals = totalsByBranch.get(String(b._id)) || { revenue: 0, profit: 0, orders: 0 };
+    return { branchId: String(b._id), name: b.name, revenue: totals.revenue, profit: totals.profit, orders: totals.orders };
+  });
+
+  const avgRevenue = branchMetrics.reduce((s, b) => s + b.revenue, 0) / branchMetrics.length;
+  const byRevenueDesc = [...branchMetrics].sort((a, b) => b.revenue - a.revenue);
+  const underperformers = branchMetrics
+    .filter((b) => b.revenue < avgRevenue * (CONFIG.BRANCH_UNDERPERFORM_PCT_OF_AVG / 100))
+    .sort((a, b) => a.revenue - b.revenue);
+
+  const insights = [buildBranchTopPerformerInsight(byRevenueDesc), buildBranchUnderperformerInsight(underperformers, avgRevenue)];
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + CONFIG.INSIGHT_TTL_HOURS * 60 * 60 * 1000);
+  return insights.filter(Boolean).map((insight) => ({
+    ...insight,
+    organizationId: orgId,
+    branchId: null,
+    generatedAt: now,
+    expiresAt,
+  }));
+};
+
+/** Replaces stored branch-comparison insights for one organization with a fresh computation. */
+const runBranchComparisonForOrganization = async ({ organizationId }) => {
+  const docs = await generateBranchComparisonInsights({ organizationId });
+  await Insight.deleteMany({
+    organizationId: toObjectId(organizationId),
+    branchId: null,
+    category: 'branch_comparison',
+  });
+  if (docs.length === 0) return [];
+  return Insight.insertMany(docs);
+};
+
+/**
  * Generates insights for one branch and replaces whatever was stored for it —
  * insights are fully recomputed every run, so there's no point accumulating duplicates.
  */
@@ -625,15 +812,27 @@ const runInsightsForBranch = async ({ organizationId, branchId }) => {
 const runInsightsForAllBranches = async () => {
   const branches = await Branch.find({ isActive: true }).select('_id organizationId').lean();
   const summary = { branchesProcessed: 0, insightsGenerated: 0, errors: [] };
+  const organizationIds = new Set();
   for (const branch of branches) {
     try {
       const created = await runInsightsForBranch({ organizationId: branch.organizationId, branchId: branch._id });
       summary.branchesProcessed += 1;
       summary.insightsGenerated += created.length;
+      organizationIds.add(String(branch.organizationId));
     } catch (error) {
       summary.errors.push({ branchId: String(branch._id), message: error.message });
     }
   }
+
+  for (const organizationId of organizationIds) {
+    try {
+      const created = await runBranchComparisonForOrganization({ organizationId });
+      summary.insightsGenerated += created.length;
+    } catch (error) {
+      summary.errors.push({ organizationId, message: error.message });
+    }
+  }
+
   return summary;
 };
 
@@ -654,6 +853,12 @@ const getTodayInsights = async ({ organizationId, branchId }) => {
   return sortByPriorityThenRecency(docs);
 };
 
+/** Org-wide branch-comparison insights — these have no branchId. */
+const getBranchComparisonInsights = async ({ organizationId }) => {
+  const docs = await Insight.find({ organizationId, branchId: null, category: 'branch_comparison' }).lean();
+  return sortByPriorityThenRecency(docs);
+};
+
 const updateInsightById = async (insightId, updateBody) => {
   return Insight.findByIdAndUpdate(insightId, updateBody, { new: true });
 };
@@ -663,9 +868,12 @@ module.exports = {
   generateInsightsForBranch,
   runInsightsForBranch,
   runInsightsForAllBranches,
+  generateBranchComparisonInsights,
+  runBranchComparisonForOrganization,
   queryInsights,
   getInsightsByCategory,
   getTodayInsights,
+  getBranchComparisonInsights,
   updateInsightById,
   // exported for unit tests
   calcGrowthPercent,

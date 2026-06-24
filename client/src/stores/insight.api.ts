@@ -1,7 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 
-export type InsightCategory = 'sales' | 'inventory' | 'profit' | 'customer' | 'alert'
+export type InsightCategory = 'sales' | 'inventory' | 'profit' | 'customer' | 'alert' | 'branch_comparison'
 export type InsightPriority = 'high' | 'medium' | 'low'
 export type InsightConfidence = 'high' | 'medium' | 'low'
 
@@ -17,10 +17,19 @@ export interface InsightCustomerRef {
   [key: string]: unknown
 }
 
+export interface InsightBranchRef {
+  branchId: string
+  name: string
+  revenue: number
+  profit: number
+  orders: number
+  [key: string]: unknown
+}
+
 export interface Insight {
   id: string
   organizationId: string
-  branchId: string
+  branchId: string | null
   type: string
   category: InsightCategory
   priority: InsightPriority
@@ -31,6 +40,8 @@ export interface Insight {
     products?: InsightProductRef[]
     customers?: InsightCustomerRef[]
     categories?: { name: string; revenue: number }[]
+    branches?: InsightBranchRef[]
+    pairs?: { productAId: string; productBId: string; productAName: string; productBName: string; count: number }[]
     [key: string]: unknown
   }
   isRead: boolean
@@ -66,6 +77,10 @@ export const insightApi = createApi({
       query: () => '/insights/customers',
       providesTags: ['Insight'],
     }),
+    getBranchInsights: builder.query<Insight[], void>({
+      query: () => '/insights/branches',
+      providesTags: ['Insight'],
+    }),
     runInsightsNow: builder.mutation<{ generated: number; insights: Insight[] }, void>({
       query: () => ({ url: '/insights/run', method: 'POST' }),
       invalidatesTags: ['Insight'],
@@ -84,6 +99,7 @@ export const {
   useGetInventoryInsightsQuery,
   useGetProfitInsightsQuery,
   useGetCustomerInsightsQuery,
+  useGetBranchInsightsQuery,
   useRunInsightsNowMutation,
   useMarkInsightReadMutation,
 } = insightApi

@@ -16,6 +16,7 @@ router.get('/sales', insightController.getSalesInsights);
 router.get('/inventory', insightController.getInventoryInsights);
 router.get('/profit', insightController.getProfitInsights);
 router.get('/customers', insightController.getCustomerInsights);
+router.get('/branches', insightController.getBranchInsights);
 router.post('/run', insightController.runInsightsNow);
 
 router.route('/').get(validate(insightValidation.getInsights), insightController.getInsights);

@@ -44,6 +44,21 @@ const CUSTOMER_COLUMNS: Record<string, { label: string; render: (c: any) => stri
   inactive_customer: [
     { label: 'Last order', render: (c) => (c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString() : '—') },
   ],
+  at_risk_customer: [
+    { label: 'Last order', render: (c) => (c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString() : '—') },
+    { label: 'Spent', render: (c) => formatMoney(c.totalRevenue) },
+  ],
+}
+
+const BRANCH_COLUMNS: Record<string, { label: string; render: (b: any) => string }[]> = {
+  branch_top_performer: [
+    { label: 'Revenue', render: (b) => formatMoney(b.revenue) },
+    { label: 'Orders', render: (b) => `${b.orders}` },
+  ],
+  branch_underperformer: [
+    { label: 'Revenue', render: (b) => formatMoney(b.revenue) },
+    { label: 'Orders', render: (b) => `${b.orders}` },
+  ],
 }
 
 const STAT_FIELDS: { key: string; label: string; render?: (v: unknown) => string }[] = [
@@ -115,6 +130,22 @@ function InsightMetaBody({ insight }: { insight: Insight }) {
       <MiniTable
         rows={meta.categories.map((c, i) => ({ ...c, productId: `cat-${i}` }))}
         columns={[{ label: 'Revenue', render: (c: any) => formatMoney(c.revenue) }]}
+      />
+    )
+  }
+  if (Array.isArray(meta.branches) && meta.branches.length > 0) {
+    const columns = BRANCH_COLUMNS[type] || [{ label: 'Revenue', render: (b: any) => formatMoney(b.revenue) }]
+    return <MiniTable rows={meta.branches} columns={columns} />
+  }
+  if (Array.isArray(meta.pairs) && meta.pairs.length > 0) {
+    return (
+      <MiniTable
+        rows={meta.pairs.map((p: any, i: number) => ({
+          ...p,
+          productId: `pair-${i}`,
+          name: `${p.productAName} + ${p.productBName}`,
+        }))}
+        columns={[{ label: 'Bought together', render: (p: any) => `${p.count}x` }]}
       />
     )
   }
