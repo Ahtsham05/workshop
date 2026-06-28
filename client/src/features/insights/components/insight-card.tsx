@@ -22,6 +22,10 @@ const PRODUCT_COLUMNS: Record<string, { label: string; render: (p: any) => strin
     { label: 'In stock', render: (p) => `${p.stock}` },
     { label: 'Tied up', render: (p) => formatMoney(p.stock * p.cost) },
   ],
+  expiring_stock: [
+    { label: 'In stock', render: (p) => `${p.stock}` },
+    { label: 'Expires in', render: (p) => `${p.daysUntilExpiry}d` },
+  ],
   high_margin_product: [
     { label: 'Margin', render: (p) => `${formatNumber(p.marginPercent)}%` },
     { label: 'Profit/unit', render: (p) => formatMoney(p.unitProfit) },

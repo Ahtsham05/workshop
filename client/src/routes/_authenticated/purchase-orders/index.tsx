@@ -3,7 +3,9 @@ import { z } from 'zod'
 import PurchaseOrdersPage from '@/features/purchase-orders'
 
 const purchaseOrdersSearchSchema = z.object({
-  prefillItems: z.array(z.object({ productId: z.string(), quantity: z.number() })).optional(),
+  prefillItems: z
+    .array(z.object({ productId: z.string(), variantId: z.string().optional(), quantity: z.number() }))
+    .optional(),
   supplierId: z.string().optional(),
 })
 

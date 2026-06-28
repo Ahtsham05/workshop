@@ -4,6 +4,7 @@ const { InstallmentPlan, InstallmentPayment, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
+const inventorySyncService = require('./inventorySync.service');
 
 // Convert scope filter (string IDs) to ObjectIds for aggregate $match
 const toAggregateScope = (scope) => {
@@ -95,6 +96,17 @@ const createInstallmentPlan = async (body) => {
     await Product.findByIdAndUpdate(body.productId, { $inc: { stockQuantity: quantity } }, { new: true });
     throw error;
   }
+
+  await inventorySyncService.recordStockChange({
+    organizationId: product.organizationId,
+    productId: product._id,
+    quantityDelta: -quantity,
+    type: 'sale',
+    refType: 'InstallmentPlan',
+    refId: plan._id,
+    unitCost: product.cost,
+    createdBy: body.createdBy,
+  });
 
   // Record down payment if > 0
   if (downPayment > 0) {
@@ -214,11 +226,20 @@ const deleteInstallmentPlan = async (planId) => {
   // A completed plan means the customer fully paid and kept the product,
   // so deleting it should not put the item back into inventory.
   if (plan.status !== 'completed' && plan.productId && Number(plan.quantity || 0) > 0) {
+    const restoredQuantity = Number(plan.quantity);
     await Product.findByIdAndUpdate(
       plan.productId,
-      { $inc: { stockQuantity: Number(plan.quantity) } },
+      { $inc: { stockQuantity: restoredQuantity } },
       { new: true }
     );
+    await inventorySyncService.recordStockChange({
+      organizationId: plan.organizationId,
+      productId: plan.productId,
+      quantityDelta: restoredQuantity,
+      type: 'return_in',
+      refType: 'InstallmentPlan',
+      refId: plan._id,
+    });
   }
   const payments = await InstallmentPayment.find({ installmentPlanId: plan._id });
   for (const payment of payments) {

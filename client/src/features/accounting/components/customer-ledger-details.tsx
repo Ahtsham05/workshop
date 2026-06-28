@@ -27,6 +27,7 @@ import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
@@ -190,6 +191,9 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
           <TableHeader>
             <TableRow>
               <TableHead>{t('Product')}</TableHead>
+              <TableHead>Variant</TableHead>
+              <TableHead>Batch #</TableHead>
+              <TableHead>Expiry</TableHead>
               <TableHead>{t('Quantity')}</TableHead>
               <TableHead>{t('price')}</TableHead>
               <TableHead className="text-right">{t('Total')}</TableHead>
@@ -197,17 +201,25 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
           </TableHeader>
           <TableBody>
             {invoiceData.items && invoiceData.items.length > 0 ? (
-              invoiceData.items.map((item: any, index: number) => (
+              invoiceData.items.map((item: any, index: number) => {
+                const variantLabel = item.variantId?.attributes
+                  ? Object.values(item.variantId.attributes).join(' / ')
+                  : ''
+                return (
                 <TableRow key={index}>
                   <TableCell>{item.name || item.product?.name || item.productName || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{variantLabel || '—'}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
+                  <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
                   <TableCell>{item.quantity || 0}</TableCell>
                   <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
                   <TableCell className="text-right">Rs{formatCurrency(item.subtotal || item.total)}</TableCell>
                 </TableRow>
-              ))
+                )
+              })
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-gray-500">{t('No items')}</TableCell>
+                <TableCell colSpan={7} className="text-center text-gray-500">{t('No items')}</TableCell>
               </TableRow>
             )}
           </TableBody>

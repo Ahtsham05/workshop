@@ -1,7 +1,107 @@
 const httpStatus = require('http-status');
-const { Product } = require('../models');
+const { Product, ProductVariant, Inventory, Batch } = require('../models');
 const ApiError = require('../utils/ApiError');
 const imeiService = require('./imei.service');
+const batchService = require('./batch.service');
+const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
+
+/**
+ * Turns on/off batch and/or expiry tracking for a simple (non-variant) product by
+ * proxying the flags onto its hidden default ProductVariant — see
+ * docs/architecture/universal-product-migration.md. This lets a simple product reuse
+ * the entire variant/batch/inventory pipeline (purchase, sale, receive, FEFO) with no
+ * new server logic for those flows; only `trackBatch`/`trackExpiry` live here.
+ *
+ * No-ops if neither flag is present in `updateFields` (the product form wasn't touching
+ * tracking) or if the product itself has hasVariants=true (tracking for those lives on
+ * each real variant instead, managed via the existing variant management UI).
+ */
+const syncDefaultVariantTracking = async (product, updateFields) => {
+  if (product.hasVariants) return;
+  const wantsBatch = Object.prototype.hasOwnProperty.call(updateFields, 'trackBatch');
+  const wantsExpiry = Object.prototype.hasOwnProperty.call(updateFields, 'trackExpiry');
+  if (!wantsBatch && !wantsExpiry) return;
+
+  const variant = await getOrCreateDefaultVariant(product._id);
+  if (!variant) return;
+
+  const wasTracked = !!(variant.trackBatch || variant.trackExpiry);
+  if (wantsBatch) variant.trackBatch = !!updateFields.trackBatch;
+  if (wantsExpiry) variant.trackExpiry = !!updateFields.trackExpiry;
+  await variant.save();
+
+  const nowTracked = !!(variant.trackBatch || variant.trackExpiry);
+  if (!nowTracked) return;
+
+  const inventory = await getOrCreateInventory(variant);
+  // First time tracking turns on for a product that already has stock: seed one
+  // opening batch so that existing stock doesn't vanish from the batch-aware views.
+  // Uses the batch number/expiry the user entered on the product form, if any —
+  // falls back to an auto-generated number so the batch is never left unidentified.
+  if (!wasTracked && Number(product.stockQuantity) > 0 && Number(inventory.quantity) === 0) {
+    await batchService.createBatch(variant._id, {
+      batchNumber: updateFields.batchNumber || `OPENING-${Date.now()}`,
+      quantity: Number(product.stockQuantity),
+      costPerUnit: Number(product.cost) || 0,
+      expiryDate: updateFields.expiryDate || undefined,
+      createdBy: product.createdBy,
+    });
+  }
+};
+
+/**
+ * Products with hasVariants=true keep legacy price/cost/stockQuantity at their
+ * fallback values (see docs/architecture/universal-product-migration.md) — the real
+ * numbers live on ProductVariant/Inventory. Attaches `variantStockTotal` (sum of
+ * Inventory.quantity across real variants) and `variantPriceRange` (min/max
+ * price+cost across real variants) to each variant product in a list page, with a
+ * single aggregation query per field (not one query per product).
+ */
+const attachVariantAggregates = async (products) => {
+  const variantProductIds = products.filter((p) => p.hasVariants).map((p) => p._id);
+  if (variantProductIds.length === 0) return products;
+
+  const [stockTotals, priceRanges] = await Promise.all([
+    Inventory.aggregate([
+      { $match: { productId: { $in: variantProductIds } } },
+      { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
+    ]),
+    ProductVariant.aggregate([
+      { $match: { productId: { $in: variantProductIds }, isDefault: false } },
+      {
+        $group: {
+          _id: '$productId',
+          minPrice: { $min: '$price' },
+          maxPrice: { $max: '$price' },
+          minCost: { $min: '$cost' },
+          maxCost: { $max: '$cost' },
+        },
+      },
+    ]),
+  ]);
+
+  const stockById = new Map(stockTotals.map((s) => [s._id.toString(), s.totalStock]));
+  const priceById = new Map(priceRanges.map((p) => [p._id.toString(), p]));
+
+  return products.map((product) => {
+    if (!product.hasVariants) return product;
+    const json = product.toJSON ? product.toJSON() : product;
+    const id = product._id.toString();
+    const priceRange = priceById.get(id);
+    return {
+      ...json,
+      variantStockTotal: stockById.get(id) ?? 0,
+      variantPriceRange: priceRange
+        ? {
+            minPrice: priceRange.minPrice,
+            maxPrice: priceRange.maxPrice,
+            minCost: priceRange.minCost,
+            maxCost: priceRange.maxCost,
+          }
+        : null,
+    };
+  });
+};
 
 /**
  * Create a product
@@ -9,7 +109,10 @@ const imeiService = require('./imei.service');
  * @returns {Promise<Product>}
  */
 const createProduct = async (productBody) => {
-  const { imeis, ...productFields } = productBody;
+  // trackBatch/trackExpiry aren't Product fields — they're proxied onto the product's
+  // hidden default ProductVariant, see syncDefaultVariantTracking.
+  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, ...productFields } = productBody;
+  if (productFields.brandId === '') productFields.brandId = null; // ObjectId ref can't cast ''
   const product = new Product(productFields); // Create a new instance of the Product model
   await product.save(); // Save the product instance
 
@@ -26,6 +129,8 @@ const createProduct = async (productBody) => {
     });
   }
 
+  await syncDefaultVariantTracking(product, productBody);
+
   return product;
 };
 
@@ -41,7 +146,9 @@ const createProduct = async (productBody) => {
  * @returns {Promise<QueryResult>}
  */
 const queryProducts = async (filter, options) => {
-  const products = await Product.paginate(filter, options);
+  const populate = [].concat(options.populate || [], { path: 'brandId', select: 'name logo' });
+  const products = await Product.paginate(filter, { ...options, populate });
+  products.results = await attachVariantAggregates(products.results);
   return products;
 };
 
@@ -55,6 +162,27 @@ const getProductById = async (id) => {
 };
 
 /**
+ * Same as getProductById, but also exposes the hidden default variant's
+ * trackBatch/trackExpiry/id for simple products — used by the single-product GET route
+ * that feeds the edit dialog. Returns a plain object (not a Mongoose doc); callers that
+ * need to `.save()` the result must use getProductById instead.
+ */
+const getProductForEdit = async (id) => {
+  const product = await getProductById(id);
+  if (!product || product.hasVariants) return product;
+
+  const variant = await ProductVariant.findOne({ productId: product._id, isDefault: true });
+  if (!variant || !(variant.trackBatch || variant.trackExpiry)) return product;
+
+  return {
+    ...product.toJSON(),
+    trackBatch: !!variant.trackBatch,
+    trackExpiry: !!variant.trackExpiry,
+    defaultVariantId: variant._id,
+  };
+};
+
+/**
  * Update product by id
  * @param {ObjectId} productId
  * @param {Object} updateBody
@@ -65,10 +193,15 @@ const updateProductById = async (productId, updateBody) => {
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
-  const { imeis, ...updateFields } = updateBody;
+  // trackBatch/trackExpiry aren't Product fields — they're proxied onto the product's
+  // hidden default ProductVariant, see syncDefaultVariantTracking.
+  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, ...updateFields } = updateBody;
+  if (updateFields.brandId === '') updateFields.brandId = null; // ObjectId ref can't cast ''
   const nameChanged = Object.prototype.hasOwnProperty.call(updateFields, 'name') && updateFields.name !== product.name;
   Object.assign(product, updateFields);
   await product.save();
+
+  await syncDefaultVariantTracking(product, updateBody);
 
   // Keep the IMEI tracking page's denormalized product name in sync on rename.
   if (nameChanged) {
@@ -109,9 +242,140 @@ const deleteProductById = async (productId) => {
 };
 
 const getAllProducts = async (filter = {}) => {
-  const products = await Product.find(filter);
-  return products;
+  const products = await Product.find(filter).populate('brandId', 'name logo');
+  return attachVariantAggregates(products);
 }
+
+/**
+ * Flat, purchase-ready catalog: one row per non-variant product, and one row *per real
+ * variant* for hasVariants products — each with its own real price/cost/stock, never a
+ * range or total. This is what Purchase's product picker searches/lists, so the user
+ * can pick the exact variant (and see its actual batches) instead of a vague rolled-up
+ * product row. See docs/architecture/universal-product-migration.md.
+ */
+const getPurchasableCatalog = async (filter = {}) => {
+  const products = await Product.find(filter).populate('brandId', 'name logo').lean();
+  const toBrand = (p) =>
+    p.brandId && typeof p.brandId === 'object' ? { _id: p.brandId._id, name: p.brandId.name, logo: p.brandId.logo } : null;
+
+  const variantProductIds = products.filter((p) => p.hasVariants).map((p) => p._id);
+  const simpleProductIds = products.filter((p) => !p.hasVariants).map((p) => p._id);
+  const items = [];
+
+  const realVariants = variantProductIds.length
+    ? await ProductVariant.find({ productId: { $in: variantProductIds }, isDefault: false }).lean()
+    : [];
+  // Simple products only get a default variant once batch/expiry tracking is turned on
+  // for them (see enableProductBatchTracking) — untracked simple products keep using
+  // Product.price/cost/stockQuantity directly, with no ProductVariant/Inventory rows at all.
+  const trackedDefaultVariants = simpleProductIds.length
+    ? await ProductVariant.find({
+        productId: { $in: simpleProductIds },
+        isDefault: true,
+        $or: [{ trackBatch: true }, { trackExpiry: true }],
+      }).lean()
+    : [];
+  const defaultVariantByProduct = new Map(trackedDefaultVariants.map((v) => [v.productId.toString(), v]));
+
+  const allVariants = [...realVariants, ...trackedDefaultVariants];
+  const allVariantIds = allVariants.map((v) => v._id);
+  const inventories = allVariantIds.length ? await Inventory.find({ variantId: { $in: allVariantIds } }).lean() : [];
+  const inventoryByVariant = new Map(inventories.map((inv) => [inv.variantId.toString(), inv]));
+
+  const batchTrackedInventoryIds = allVariants
+    .filter((v) => v.trackBatch || v.trackExpiry)
+    .map((v) => inventoryByVariant.get(v._id.toString())?._id)
+    .filter(Boolean);
+  const batches = batchTrackedInventoryIds.length
+    ? await Batch.find({ inventoryId: { $in: batchTrackedInventoryIds }, status: 'active' }).sort({ expiryDate: 1 }).lean()
+    : [];
+  const batchesByInventory = new Map();
+  batches.forEach((b) => {
+    const key = b.inventoryId.toString();
+    if (!batchesByInventory.has(key)) batchesByInventory.set(key, []);
+    batchesByInventory.get(key).push({
+      id: b._id,
+      batchNumber: b.batchNumber,
+      quantity: b.quantity,
+      expiryDate: b.expiryDate,
+      costPerUnit: b.costPerUnit,
+      sellingPrice: b.sellingPrice,
+    });
+  });
+
+  const variantsByProduct = new Map();
+  realVariants.forEach((v) => {
+    const key = v.productId.toString();
+    if (!variantsByProduct.has(key)) variantsByProduct.set(key, []);
+    variantsByProduct.get(key).push(v);
+  });
+
+  products.forEach((product) => {
+    if (!product.hasVariants) {
+      const defaultVariant = defaultVariantByProduct.get(product._id.toString());
+      const inventory = defaultVariant ? inventoryByVariant.get(defaultVariant._id.toString()) : null;
+      items.push({
+        type: 'product',
+        id: product._id,
+        productId: product._id,
+        name: product.name,
+        nameUrdu: product.nameUrdu,
+        barcode: product.barcode,
+        image: product.image,
+        unit: product.unit,
+        trackImei: product.trackImei,
+        brand: toBrand(product),
+        category: product.category,
+        categories: product.categories,
+        price: product.price,
+        cost: product.cost,
+        stockQuantity: defaultVariant ? (inventory?.quantity ?? 0) : product.stockQuantity,
+        variantId: defaultVariant?._id,
+        trackBatch: !!defaultVariant?.trackBatch,
+        trackExpiry: !!defaultVariant?.trackExpiry,
+        batches: defaultVariant && inventory ? batchesByInventory.get(inventory._id.toString()) || [] : [],
+        createdAt: product.createdAt,
+        supplier: product.supplier,
+        stockoutHistory: product.stockoutHistory,
+      });
+      return;
+    }
+
+    const productVariants = variantsByProduct.get(product._id.toString()) || [];
+    productVariants.forEach((variant) => {
+      const inventory = inventoryByVariant.get(variant._id.toString());
+      const variantLabel = Object.values(variant.attributes || {}).join(' / ');
+      items.push({
+        type: 'variant',
+        id: variant._id,
+        productId: product._id,
+        variantId: variant._id,
+        productName: product.name,
+        variantLabel,
+        name: variantLabel ? `${product.name} — ${variantLabel}` : product.name,
+        nameUrdu: product.nameUrdu,
+        barcode: variant.barcode || product.barcode,
+        image: variant.image?.url ? variant.image : product.image,
+        unit: variant.unit || product.unit,
+        brand: toBrand(product),
+        category: product.category,
+        categories: product.categories,
+        price: variant.price,
+        cost: variant.cost,
+        stockQuantity: inventory?.quantity ?? 0,
+        trackBatch: !!variant.trackBatch,
+        trackExpiry: !!variant.trackExpiry,
+        batches: (variant.trackBatch || variant.trackExpiry) && inventory
+          ? batchesByInventory.get(inventory._id.toString()) || []
+          : [],
+        createdAt: product.createdAt,
+        supplier: product.supplier,
+      });
+    });
+  });
+
+  return items;
+};
 
 /**
  * Bulk update products
@@ -206,9 +470,12 @@ module.exports = {
   createProduct,
   queryProducts,
   getProductById,
+  getProductForEdit,
   updateProductById,
   deleteProductById,
   getAllProducts,
   bulkUpdateProducts,
   bulkAddProducts,
+  attachVariantAggregates,
+  getPurchasableCatalog,
 };

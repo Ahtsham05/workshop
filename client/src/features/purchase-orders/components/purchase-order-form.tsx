@@ -11,8 +11,13 @@ import type { AppDispatch } from '@/stores/store'
 import type { Category, Product } from '@/features/invoice/index'
 import { ProductCatalog } from '@/features/purchase-invoice/components/product-catalog'
 import type { PurchaseOrder } from '@/stores/purchaseOrder.api'
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 import PurchaseOrderPanel from './purchase-order-panel'
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading.
+const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = []
 
 const PO_SHOW_CATALOG_KEY = 'purchaseOrderShowProductCatalog'
 
@@ -27,14 +32,14 @@ interface Props {
   onSaved: () => void
   editing?: PurchaseOrder | null
   /** Pre-add these products (e.g. from a "Create Purchase Order" reorder suggestion) once products load. */
-  prefillItems?: { productId: string; quantity: number }[]
+  prefillItems?: { productId: string; variantId?: string; quantity: number }[]
   /** Auto-select this supplier (e.g. the AI-recommended supplier) once suppliers load. */
   prefillSupplierId?: string
 }
 
 export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillItems, prefillSupplierId }: Props) {
   const dispatch = useDispatch<AppDispatch>()
-  const addProductRef = useRef<(product: Product, quantity?: number) => void>(() => {})
+  const addProductRef = useRef<(product: Product, quantity?: number, variantId?: string) => void>(() => {})
   const prefillAppliedRef = useRef(false)
 
   const [products, setProducts] = useState<Product[]>([])
@@ -79,34 +84,55 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
     })
   }, [dispatch])
 
+  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery()
+
+  // Build catalog tiles from the flat, variant-aware purchasable catalog — one tile
+  // per real variant (its own price/cost/stock), one tile per non-variant product. See
+  // the identical pattern in purchase-invoice/index.tsx.
   useEffect(() => {
     const categoryMap = new Map<string, Category>()
-    products.forEach((product) => {
+    purchasableCatalog.forEach((item) => {
       let categoryId = 'other'
       let categoryName = 'Other'
-      if (product.category) {
-        categoryId = product.category._id
-        categoryName = product.category.name
-      } else if (product.categories?.length) {
-        categoryId = product.categories[0]._id
-        categoryName = product.categories[0].name
+      if (item.categories && item.categories.length > 0) {
+        categoryId = item.categories[0]._id
+        categoryName = item.categories[0].name
       }
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, { _id: categoryId, name: categoryName, products: [] })
       }
       categoryMap.get(categoryId)!.products.push({
-        ...product,
-        name: product.name || product.nameUrdu || 'Unnamed product',
-        price: Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0),
-        cost: Number(product.cost ?? (product as { purchasePrice?: number }).purchasePrice ?? 0),
-        stockQuantity: Number(product.stockQuantity ?? (product as { stock?: number }).stock ?? 0),
-      })
+        id: item.type === 'variant' ? item.productId : item.id,
+        _id: item.type === 'variant' ? item.productId : item.id,
+        name: item.name,
+        nameUrdu: item.nameUrdu,
+        image: item.image,
+        barcode: item.barcode,
+        unit: item.unit,
+        hasVariants: item.type === 'variant',
+        brandId: item.brand,
+        price: item.price,
+        cost: item.cost,
+        stockQuantity: item.stockQuantity,
+        variantId: item.variantId,
+        trackBatch: item.trackBatch,
+        trackExpiry: item.trackExpiry,
+        knownBatches: item.batches,
+        // getDisplayStock/formatDisplayPrice (used by the tile rendering) read these
+        // when hasVariants is true — min===max here so they resolve to this row's own
+        // single real number instead of a range, since each row is already one
+        // specific variant.
+        variantStockTotal: item.stockQuantity,
+        variantPriceRange: item.type === 'variant'
+          ? { minPrice: item.price, maxPrice: item.price, minCost: item.cost, maxCost: item.cost }
+          : null,
+      } as Product)
     })
     setCategorizedProducts(Array.from(categoryMap.values()))
-  }, [products])
+  }, [purchasableCatalog])
 
-  const addToOrder = useCallback((product: Product, quantity = 1) => {
-    addProductRef.current(product, quantity)
+  const addToOrder = useCallback((product: Product, quantity = 1, variantId?: string) => {
+    addProductRef.current(product, quantity, variantId)
     setSearchTerm('')
   }, [])
 
@@ -116,9 +142,50 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   useEffect(() => {
     if (!prefillItems || prefillItems.length === 0) return
     if (prefillAppliedRef.current || loading || products.length === 0) return
+    // Any prefilled item carrying a variantId needs the purchasable catalog to resolve
+    // that variant's own stock/price — wait for it instead of falling back to the bare
+    // parent product (no variant pre-selected), same fix as purchase-invoice/index.tsx.
+    const needsCatalog = prefillItems.some((item) => item.variantId)
+    if (needsCatalog && (catalogLoading || purchasableCatalog.length === 0)) return
 
     let addedCount = 0
-    for (const { productId, quantity } of prefillItems) {
+    for (const { productId, variantId, quantity } of prefillItems) {
+      if (variantId) {
+        // A reorder suggestion for a specific real variant (or a batch-tracked
+        // simple product's hidden default variant) — pull its own price/cost from
+        // the purchasable catalog instead of the parent product's.
+        const catalogItem = purchasableCatalog.find((c) => c.variantId === variantId)
+        if (catalogItem) {
+          const builtProduct = {
+            id: catalogItem.productId,
+            _id: catalogItem.productId,
+            name: catalogItem.name,
+            nameUrdu: catalogItem.nameUrdu,
+            image: catalogItem.image,
+            barcode: catalogItem.barcode,
+            unit: catalogItem.unit,
+            hasVariants: catalogItem.type === 'variant',
+            price: catalogItem.price,
+            cost: catalogItem.cost,
+            stockQuantity: catalogItem.stockQuantity,
+            trackBatch: catalogItem.trackBatch,
+            trackExpiry: catalogItem.trackExpiry,
+            knownBatches: catalogItem.batches,
+            // getDisplayStock/formatDisplayPrice (used by the order item row) read
+            // these once hasVariants is true — without them the row shows "Stock 0"
+            // even though the variant has real stock, since stockQuantity/price are
+            // only the legacy parent-product fallbacks. min===max here because this
+            // row is already one specific variant, not a range.
+            variantStockTotal: catalogItem.stockQuantity,
+            variantPriceRange: catalogItem.type === 'variant'
+              ? { minPrice: catalogItem.price, maxPrice: catalogItem.price, minCost: catalogItem.cost, maxCost: catalogItem.cost }
+              : null,
+          } as Product
+          addProductRef.current(builtProduct, quantity, variantId)
+          addedCount += 1
+          continue
+        }
+      }
       const product = products.find((p) => (p.id || (p as { _id?: string })._id) === productId)
       if (product) {
         addProductRef.current(product, quantity)
@@ -129,7 +196,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
     if (addedCount > 0) {
       toast.success(`Added ${addedCount} product(s) from reorder suggestions`)
     }
-  }, [prefillItems, loading, products])
+  }, [prefillItems, loading, products, purchasableCatalog, catalogLoading])
 
   const handleBarcodeSearch = useCallback(
     (barcode: string) => {

@@ -1,6 +1,21 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { purchaseCatalogApi } from './purchaseCatalog.api'
+import { batchApi } from './batch.api'
+
+// Receiving items creates a real Purchase (and batches) behind the scenes — refresh
+// the product catalog's stock+batch chips and the per-variant batch list, which live
+// in separate RTK Query slices and won't auto-refetch otherwise.
+const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+    dispatch(batchApi.util.invalidateTags(['Batch']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -33,6 +48,7 @@ export type PurchaseOrderStatus =
 export interface PurchaseOrderItem {
   _id?: string
   product: any
+  variantId?: any
   productName?: string
   productNameUrdu?: string
   quantity: number
@@ -47,12 +63,15 @@ export interface PurchaseOrderItem {
 
 export interface PurchaseOrderReceiptItem {
   product: any
+  variantId?: any
   receivedQuantity: number
   priceAtPurchase: number
   sellingPriceAtPurchase?: number
   unit?: string
   conversionFactor?: number
   notes?: string
+  batchNumber?: string
+  expiryDate?: string
 }
 
 export interface PurchaseOrderReceipt {
@@ -199,12 +218,15 @@ export const purchaseOrderApi = createApi({
         id: string
         items: Array<{
           product: string
+          variantId?: string
           receivedQuantity: number
           priceAtPurchase: number
           sellingPriceAtPurchase?: number
           unit?: string
           conversionFactor?: number
           notes?: string
+          batchNumber?: string
+          expiryDate?: string
         }>
         receivedAt?: string
         notes?: string
@@ -224,6 +246,7 @@ export const purchaseOrderApi = createApi({
         'PurchaseOrderStats',
         'Purchase',
       ],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
   }),
 })

@@ -181,6 +181,12 @@ async function startApplication() {
           logger.warn('Supplier scoring scheduler skipped:', schedulerError.message);
         }
         try {
+          const { startInventoryDriftScheduler } = require('./jobs/inventoryDriftScheduler');
+          startInventoryDriftScheduler();
+        } catch (schedulerError) {
+          logger.warn('Inventory drift scheduler skipped:', schedulerError.message);
+        }
+        try {
           const { startSeasonalityScheduler } = require('./jobs/seasonalityScheduler');
           startSeasonalityScheduler();
         } catch (schedulerError) {

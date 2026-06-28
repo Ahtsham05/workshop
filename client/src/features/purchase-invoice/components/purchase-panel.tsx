@@ -22,7 +22,14 @@ import {
 import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
+import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading.
+const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = []
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useSelector, useDispatch } from 'react-redux'
@@ -68,10 +75,10 @@ import {
 interface PurchasePanelProps {
   purchase: Purchase
   setPurchase: React.Dispatch<React.SetStateAction<Purchase>>
-  updateQuantity: (productId: string, newQuantity: number) => void
-  removeFromPurchase: (productId: string) => void
-  updatePurchasePrice: (productId: string, price: number) => void
-  updateSellingPrice: (productId: string, price: number) => void
+  updateQuantity: (productId: string, newQuantity: number, variantId?: string) => void
+  removeFromPurchase: (productId: string, variantId?: string) => void
+  updatePurchasePrice: (productId: string, price: number, variantId?: string) => void
+  updateSellingPrice: (productId: string, price: number, variantId?: string) => void
   calculateTotals: () => { subtotal: number; total: number }
   onBackToList?: () => void
   onSaveSuccess?: (mode: 'create' | 'update') => void
@@ -140,8 +147,49 @@ export default function PurchasePanel({
     }))
   }, [setPurchase])
 
-  const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const purchasePriceInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const updateItemVariant = useCallback((index: number, variantId: string | undefined) => {
+    setPurchase((prev) => ({
+      ...prev,
+      // Clear batch/expiry when the variant changes — they belong to the previously
+      // selected variant and may no longer apply (e.g. switching to a non-batch variant).
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, variantId, batchNumber: undefined, expiryDate: undefined } : item,
+      ),
+    }))
+  }, [setPurchase])
+
+  const updateItemBatchNumber = useCallback((index: number, value: string) => {
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) => (i === index ? { ...item, batchNumber: value } : item)),
+    }))
+  }, [setPurchase])
+
+  const updateItemExpiryDate = useCallback((index: number, value: string) => {
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) => (i === index ? { ...item, expiryDate: value } : item)),
+    }))
+  }, [setPurchase])
+
+  const updateItemBatchCost = useCallback((index: number, cost: number) => {
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) => (i === index ? { ...item, purchasePrice: cost } : item)),
+    }))
+  }, [setPurchase])
+
+  // Per-row field refs, keyed by `${index}:${field}` — index, not productId, since two
+  // rows can be the same product with different variants and must never collide.
+  const itemFieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  // Whether each row's batch/expiry fields are currently rendered, written directly
+  // during the child's render (not via setState) so the Sale Price Enter handler can
+  // read it synchronously without an extra render round-trip.
+  const itemNeedsBatchRef = useRef<Record<number, boolean>>({})
+  const setItemFieldRef = (index: number, field: string) => (el: HTMLInputElement | null) => {
+    itemFieldRefs.current[`${index}:${field}`] = el
+  }
+  const focusItemField = (index: number, field: string) => focusField(itemFieldRefs.current[`${index}:${field}`])
   const paymentTypeTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
@@ -184,13 +232,19 @@ export default function PurchasePanel({
     matchesBilingualSearch(supplierSearchQuery, supplier.name, supplier.nameUrdu, supplier.phone),
   )
 
-  const filteredPurchaseProducts = products.filter((product) =>
+  // Flat purchase catalog: one row per non-variant product, and one row per real
+  // variant for hasVariants products — each with its own real price/cost/stock, so the
+  // picker shows "Toshiba — Black/64GB" with its own numbers instead of a vague
+  // rolled-up product row. See docs/architecture/universal-product-migration.md.
+  const { data: purchaseCatalog = EMPTY_PURCHASE_CATALOG, isLoading: purchaseCatalogLoading } = useGetPurchasableCatalogQuery()
+
+  const filteredPurchaseProducts = purchaseCatalog.filter((item) =>
     matchesBilingualSearch(
       productSearchQuery,
-      product.name,
-      product.nameUrdu,
-      product.barcode,
-      typeof product.description === 'string' ? product.description : undefined,
+      item.name,
+      item.nameUrdu,
+      item.barcode,
+      item.brand?.name,
     ),
   )
 
@@ -315,7 +369,12 @@ export default function PurchasePanel({
 
   // Handle product selection for manual entries
   const handleProductSelect = useCallback(
-    (itemIndex: number, product: any) => {
+    (
+      itemIndex: number,
+      product: any,
+      variantId?: string,
+      variantMeta?: { trackBatch?: boolean; trackExpiry?: boolean; knownBatches?: PurchaseItem['knownBatches'] },
+    ) => {
       setPurchase((prev) => {
         const newItems = [...prev.items]
         const unitOptions = getProductUnitOptions(product)
@@ -327,23 +386,52 @@ export default function PurchasePanel({
           stockQuantity: newItems[itemIndex].quantity || 1,
           purchasePrice: product.cost || 0,
           sellingPrice: product.price || 0,
-          isManualEntry: false
+          isManualEntry: false,
+          variantId,
+          trackBatch: variantMeta?.trackBatch,
+          trackExpiry: variantMeta?.trackExpiry,
+          knownBatches: variantMeta?.knownBatches,
         }
         return { ...prev, items: newItems }
       })
       setProductSelectOpen('')
       setProductSearchQuery('')
-      // Focus the quantity input of the just-selected product
-      const productId = product.id || product._id
-      setTimeout(() => {
-        const qtyInput = qtyInputRefs.current[productId]
-        if (qtyInput) {
-          qtyInput.focus()
-          qtyInput.select()
-        }
-      }, 100)
+      // Focus the quantity input of the just-selected row
+      setTimeout(() => focusItemField(itemIndex, 'quantity'), 100)
     },
     [setPurchase]
+  )
+
+  // Selecting a flat catalog row (product or real variant) — builds the product-shaped
+  // object the rest of this form expects, using the *variant's* real price/cost/stock
+  // when the row is a variant, and wires variantId + trackBatch/trackExpiry/batches
+  // straight through (the catalog already has all of it) so the batch fields render
+  // instantly instead of waiting on a fresh network round-trip.
+  const handleCatalogItemSelect = useCallback(
+    (itemIndex: number, catalogItem: PurchaseCatalogItem) => {
+      const builtProduct = {
+        id: catalogItem.productId,
+        _id: catalogItem.productId,
+        // catalogItem.name already reads "Toshiba — 12" for a variant row —
+        // productName alone would lose the variant label the user just picked.
+        name: catalogItem.name,
+        nameUrdu: catalogItem.nameUrdu,
+        image: catalogItem.image,
+        barcode: catalogItem.barcode,
+        unit: catalogItem.unit,
+        hasVariants: catalogItem.type === 'variant',
+        trackImei: catalogItem.trackImei,
+        price: catalogItem.price,
+        cost: catalogItem.cost,
+        stockQuantity: catalogItem.stockQuantity,
+      }
+      handleProductSelect(itemIndex, builtProduct, catalogItem.variantId, {
+        trackBatch: catalogItem.trackBatch,
+        trackExpiry: catalogItem.trackExpiry,
+        knownBatches: catalogItem.batches,
+      })
+    },
+    [handleProductSelect]
   )
 
   const addNewPurchaseRowAndOpenProduct = useCallback(() => {
@@ -363,7 +451,7 @@ export default function PurchasePanel({
         items: [...prev.items, createEmptyPurchaseManualItem()],
       }
     })
-  }, [setPurchase])
+  }, [setPurchase, purchase.items])
 
   const openPurchaseProductSelector = useCallback(() => {
     const emptyIdx = purchase.items.findIndex((item) => {
@@ -377,16 +465,32 @@ export default function PurchasePanel({
     addNewPurchaseRowAndOpenProduct()
   }, [purchase.items, addNewPurchaseRowAndOpenProduct])
 
+  // Keyboard cascade for a purchase row: Quantity → Purchase Price → Sale Price →
+  // (Batch Number → Expiry Date, only when the selected variant tracks batch/expiry) →
+  // a brand new row with the product picker already open.
   const handlePurchaseQuantityKeyDown = useCallback(
-    (e: React.KeyboardEvent, productId: string) => {
-      onEnterAdvance(e, () => focusField(purchasePriceInputRefs.current[productId]))
+    (e: React.KeyboardEvent, index: number) => {
+      onEnterAdvance(e, () => focusItemField(index, 'purchasePrice'))
     },
     [],
   )
 
   const handlePurchasePriceKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      onEnterAdvance(e, addNewPurchaseRowAndOpenProduct)
+    (e: React.KeyboardEvent, index: number) => {
+      onEnterAdvance(e, () => focusItemField(index, 'sellingPrice'))
+    },
+    [],
+  )
+
+  const handleSellingPriceKeyDown = useCallback(
+    (e: React.KeyboardEvent, index: number) => {
+      onEnterAdvance(e, () => {
+        if (itemNeedsBatchRef.current[index]) {
+          focusItemField(index, 'batchNumber')
+        } else {
+          addNewPurchaseRowAndOpenProduct()
+        }
+      })
     },
     [addNewPurchaseRowAndOpenProduct],
   )
@@ -534,6 +638,9 @@ export default function PurchasePanel({
             sellingPriceAtPurchase: item.sellingPrice || 0,
             total: item.quantity * item.purchasePrice,
             imeis: item.product.trackImei ? (item.imeis || []) : undefined,
+            variantId: item.variantId || undefined,
+            batchNumber: item.variantId ? (item.batchNumber || undefined) : undefined,
+            expiryDate: item.variantId ? (item.expiryDate || undefined) : undefined,
           };
         }),
         totalAmount: totals.total,
@@ -1015,7 +1122,7 @@ export default function PurchasePanel({
                                 {t('Select Product')} *
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[400px] p-0" align="start">
+                            <PopoverContent className="w-[560px] p-0" align="start">
                               <Command shouldFilter={false}>
                                 <div className="relative">
                                   <CommandInput
@@ -1031,7 +1138,7 @@ export default function PurchasePanel({
                                   </div>
                                 </div>
                                 <CommandList className="max-h-64 overflow-y-auto">
-                                  {productsLoading && products.length === 0 ? (
+                                  {purchaseCatalogLoading && purchaseCatalog.length === 0 ? (
                                     <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
                                       <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
                                       {t('loading_products')}
@@ -1050,19 +1157,17 @@ export default function PurchasePanel({
                                     )
                                   ) : (
                                     <CommandGroup>
-                                      {filteredPurchaseProducts.map((product: any) => {
-                                          const pid = product.id || product._id
-                                          return (
+                                      {filteredPurchaseProducts.map((catalogItem) => (
                                         <CommandItem
-                                          key={String(pid)}
-                                          value={`${String(pid)}-${String(product.name ?? '')}`}
-                                          onSelect={() => handleProductSelect(index, product)}
+                                          key={catalogItem.id}
+                                          value={`${catalogItem.id}-${catalogItem.name}`}
+                                          onSelect={() => handleCatalogItemSelect(index, catalogItem)}
                                           className="flex items-center gap-3 cursor-pointer p-3"
                                         >
-                                          {product.image?.url ? (
+                                          {catalogItem.image?.url ? (
                                             <img
-                                              src={product.image.url}
-                                              alt={product.name}
+                                              src={catalogItem.image.url}
+                                              alt={catalogItem.name}
                                               className="w-8 h-8 object-cover rounded-lg flex-shrink-0"
                                             />
                                           ) : (
@@ -1072,30 +1177,39 @@ export default function PurchasePanel({
                                           )}
                                           <div className="flex-1 min-w-0">
                                             <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                                              <div className="font-medium text-sm truncate shrink-0">{product.name}</div>
-                                              {product.nameUrdu?.trim() ? (
+                                              <div className="font-medium text-sm truncate shrink-0">{catalogItem.name}</div>
+                                              {catalogItem.nameUrdu?.trim() ? (
                                                 <span
                                                   dir="rtl"
                                                   className={cn(
                                                     'min-w-0 truncate text-xs',
-                                                    getUrduSecondaryNameClasses(product.nameUrdu),
+                                                    getUrduSecondaryNameClasses(catalogItem.nameUrdu),
                                                   )}
                                                 >
-                                                  {product.nameUrdu.trim()}
+                                                  {catalogItem.nameUrdu.trim()}
                                                 </span>
                                               ) : null}
+                                              {catalogItem.brand?.name && (
+                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                                                  {catalogItem.brand.name}
+                                                </Badge>
+                                              )}
                                             </div>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                              {product.barcode && <span>{product.barcode}</span>}
-                                              <span className="text-amber-600">Purchase Price: Rs{product.cost?.toFixed(2) || '0.00'}</span>
-                                              <span className={product.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
-                                                Stock: {product.stockQuantity}
+                                              {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
+                                              <span className="text-amber-600">Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
+                                              <span className={catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
+                                                Stock: {catalogItem.stockQuantity}
                                               </span>
+                                              {catalogItem.trackBatch && (
+                                                <span className="text-blue-600">
+                                                  {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
                                         </CommandItem>
-                                          )
-                                        })}
+                                      ))}
                                     </CommandGroup>
                                   )}
                                 </CommandList>
@@ -1162,7 +1276,7 @@ export default function PurchasePanel({
                         size="sm"
                         variant="ghost"
                         className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
-                        onClick={() => removeFromPurchase(productId)}
+                        onClick={() => removeFromPurchase(productId, item.variantId)}
                       >
                         <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
                       </Button>
@@ -1177,17 +1291,17 @@ export default function PurchasePanel({
                             size="sm"
                             variant="ghost"
                             className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1))}
+                            onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
                           >
                             <Minus className='h-3.5 w-3.5' />
                           </Button>
                           <Input
-                            ref={(el) => { qtyInputRefs.current[productId] = el }}
+                            ref={setItemFieldRef(index, 'quantity')}
                             type="number"
                             min="1"
                             value={item.quantity}
-                            onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1)}
-                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, productId)}
+                            onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1, item.variantId)}
+                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
                             onFocus={(e) => e.target.select()}
                             className='h-7 w-20 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                           />
@@ -1195,7 +1309,7 @@ export default function PurchasePanel({
                             size="sm"
                             variant="ghost"
                             className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            onClick={() => updateQuantity(productId, item.quantity + 1)}
+                            onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
                           >
                             <Plus className='h-3.5 w-3.5' />
                           </Button>
@@ -1263,13 +1377,13 @@ export default function PurchasePanel({
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
                           <Input
-                            ref={(el) => { purchasePriceInputRefs.current[productId] = el }}
+                            ref={setItemFieldRef(index, 'purchasePrice')}
                             type="text"
                             inputMode="decimal"
                             showVoiceInput={false}
                             value={item.purchasePrice > 0 ? item.purchasePrice : ''}
-                            onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0)}
-                            onKeyDown={handlePurchasePriceKeyDown}
+                            onChange={(e) => updatePurchasePrice(productId, parseFloat(e.target.value) || 0, item.variantId)}
+                            onKeyDown={(e) => handlePurchasePriceKeyDown(e, index)}
                             onFocus={(e) => e.target.select()}
                             className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                           />
@@ -1285,11 +1399,13 @@ export default function PurchasePanel({
                         <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden'>
                           <span className='px-2 h-7 flex items-center text-xs text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
                           <Input
+                            ref={setItemFieldRef(index, 'sellingPrice')}
                             type="text"
                             inputMode="decimal"
                             showVoiceInput={false}
                             value={(item.sellingPrice ?? 0) > 0 ? item.sellingPrice : ''}
-                            onChange={(e) => updateSellingPrice(productId, parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateSellingPrice(productId, parseFloat(e.target.value) || 0, item.variantId)}
+                            onKeyDown={(e) => handleSellingPriceKeyDown(e, index)}
                             onFocus={(e) => e.target.select()}
                             placeholder='0'
                             className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-blue-700 dark:text-blue-300 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
@@ -1360,6 +1476,20 @@ export default function PurchasePanel({
                         )}
                       </div>
                     )}
+
+                    {/* Row 4: variant + batch/expiry (only for products with variants) */}
+                    <PurchaseItemVariantBatchFields
+                      item={item}
+                      index={index}
+                      onVariantChange={updateItemVariant}
+                      onBatchNumberChange={updateItemBatchNumber}
+                      onExpiryDateChange={updateItemExpiryDate}
+                      onBatchCostChange={updateItemBatchCost}
+                      registerFieldRef={(field) => setItemFieldRef(index, field)}
+                      focusFieldByName={(field) => focusItemField(index, field)}
+                      onNeedsBatchChange={(i, needsBatch) => { itemNeedsBatchRef.current[i] = needsBatch }}
+                      onLastFieldEnter={addNewPurchaseRowAndOpenProduct}
+                    />
                   </div>
                 )
               })

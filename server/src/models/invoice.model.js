@@ -38,6 +38,16 @@ const invoiceItemSchema = new mongoose.Schema({
     profit: { type: Number, required: true },
     isManualEntry: { type: Boolean, default: false },
     imeis: [{ type: String, trim: true }], // IMEI/serial numbers sold for this line item, when product.trackImei is true
+    // Real (non-default) variant this line item is for, when the product hasVariants.
+    // Optional and additive — legacy items with no variantId keep going through the
+    // default-variant dual-write path in invoice.service.js, unchanged. See
+    // docs/architecture/universal-product-migration.md.
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+    // Manually picked batch to deplete (no automatic FEFO yet — see
+    // docs/architecture/universal-product-migration.md). Only set for variants where
+    // trackBatch/trackExpiry is true.
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
+    batchNumber: { type: String, trim: true },
 }, { _id: false });
 
 const InvoiceSchema = new mongoose.Schema({

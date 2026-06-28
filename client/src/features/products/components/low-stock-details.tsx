@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/context/language-context';
 import { AlertTriangle, Package, Search, ArrowLeft, TrendingDown, Download } from 'lucide-react';
 import { Product } from '../data/schema';
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display';
+import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product';
 import {
   Table,
   TableBody,
@@ -32,13 +34,14 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'out_of_stock' | 'critical' | 'low'>('all');
+  const expiringByProduct = useExpiringBatchesByProduct();
 
   // Calculate stock levels
   const stockLevels = useMemo(() => {
-    const outOfStock = products.filter(p => p.stockQuantity === 0);
-    const critical = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= Math.floor(threshold / 2));
-    const low = products.filter(p => p.stockQuantity > Math.floor(threshold / 2) && p.stockQuantity <= threshold);
-    
+    const outOfStock = products.filter(p => getDisplayStock(p) === 0);
+    const critical = products.filter(p => getDisplayStock(p) > 0 && getDisplayStock(p) <= Math.floor(threshold / 2));
+    const low = products.filter(p => getDisplayStock(p) > Math.floor(threshold / 2) && getDisplayStock(p) <= threshold);
+
     return { outOfStock, critical, low };
   }, [products, threshold]);
 
@@ -67,7 +70,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
       );
     }
 
-    return filtered.sort((a, b) => a.stockQuantity - b.stockQuantity);
+    return filtered.sort((a, b) => getDisplayStock(a) - getDisplayStock(b));
   }, [stockLevels, filterType, search]);
 
   const getStockBadge = (quantity: number) => {
@@ -85,11 +88,11 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
     const rows = filteredProducts.map(product => [
       product.name,
       product.barcode || '-',
-      product.stockQuantity,
-      product.price,
-      product.cost,
-      product.stockQuantity === 0 ? 'Out of Stock' : 
-        product.stockQuantity <= Math.floor(threshold / 2) ? 'Critical' : 'Low Stock'
+      getDisplayStock(product),
+      formatDisplayPrice(product, 'price'),
+      formatDisplayPrice(product, 'cost'),
+      getDisplayStock(product) === 0 ? 'Out of Stock' :
+        getDisplayStock(product) <= Math.floor(threshold / 2) ? 'Critical' : 'Low Stock'
     ]);
 
     const csvContent = [
@@ -204,23 +207,26 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                   <TableHead className="text-right">{t('price')}</TableHead>
                   <TableHead className="text-right">{t('cost')}</TableHead>
                   <TableHead>{t('status')}</TableHead>
+                  <TableHead>{t('expiry') || 'Expiry'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                       {search ? t('no_products_found') : t('no_low_stock_products')}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredProducts.map((product) => (
+                  filteredProducts.map((product) => {
+                    const expiry = expiringByProduct.get((product._id || product.id || '').toString())
+                    return (
                     <TableRow key={product._id || product.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {product.image?.url && (
-                            <img 
-                              src={product.image.url} 
+                            <img
+                              src={product.image.url}
                               alt={product.name}
                               className="w-8 h-8 rounded-full object-cover"
                             />
@@ -231,18 +237,28 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                       <TableCell className="text-gray-600">{product.barcode || '-'}</TableCell>
                       <TableCell className="text-right">
                         <span className={`font-semibold ${
-                          product.stockQuantity === 0 ? 'text-red-600' :
-                          product.stockQuantity <= Math.floor(threshold / 2) ? 'text-orange-600' :
+                          getDisplayStock(product) === 0 ? 'text-red-600' :
+                          getDisplayStock(product) <= Math.floor(threshold / 2) ? 'text-orange-600' :
                           'text-yellow-600'
                         }`}>
-                          {product.stockQuantity} {product.unit || 'pcs'}
+                          {getDisplayStock(product)} {product.unit || 'pcs'}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">Rs{Number(product.price ?? 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">Rs{Number(product.cost ?? 0).toFixed(2)}</TableCell>
-                      <TableCell>{getStockBadge(product.stockQuantity)}</TableCell>
+                      <TableCell className="text-right">Rs{formatDisplayPrice(product, 'price')}</TableCell>
+                      <TableCell className="text-right">Rs{formatDisplayPrice(product, 'cost')}</TableCell>
+                      <TableCell>{getStockBadge(getDisplayStock(product))}</TableCell>
+                      <TableCell>
+                        {expiry ? (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                            {daysUntil(expiry)}d
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  ))
+                    )
+                  })
                 )}
               </TableBody>
             </Table>

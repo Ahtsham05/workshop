@@ -2,14 +2,20 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
 import { imeiApi } from './imei.api'
+import { purchaseCatalogApi } from './purchaseCatalog.api'
+import { batchApi } from './batch.api'
 
-/** Invoice mutations live in a separate RTK Query slice from imeiApi, so a sale's
- *  effect on IMEI stock status doesn't auto-invalidate the IMEI picker's cache.
- *  Force that refresh explicitly whenever an invoice is created/updated/deleted. */
-const invalidateImeiCache = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+/** Invoice mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
+ *  batchApi, so a sale's effect on stock/IMEI status doesn't auto-invalidate the IMEI
+ *  picker, the product catalog's stock+batch chips, or the per-variant batch list —
+ *  those would otherwise stay stale until a full page reload. Force that refresh
+ *  explicitly whenever an invoice is created/updated/deleted/cancelled/converted. */
+const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
+    dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+    dispatch(batchApi.util.invalidateTags(['Batch']))
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -64,7 +70,7 @@ export const invoiceApi = createApi({
         body: invoiceData,
       }),
       invalidatesTags: ['Invoice'],
-      onQueryStarted: invalidateImeiCache,
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Get all invoices
@@ -90,7 +96,7 @@ export const invoiceApi = createApi({
         body: patch,
       }),
       invalidatesTags: ( { id }) => [{ type: 'Invoice', id }, 'Invoice'],
-      onQueryStarted: invalidateImeiCache,
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Delete invoice
@@ -100,7 +106,7 @@ export const invoiceApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Invoice'],
-      onQueryStarted: invalidateImeiCache,
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Finalize invoice
@@ -110,6 +116,7 @@ export const invoiceApi = createApi({
         method: 'PATCH',
       }),
       invalidatesTags: ( id) => [{ type: 'Invoice', id }],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Process payment
@@ -129,6 +136,7 @@ export const invoiceApi = createApi({
         method: 'PATCH',
       }),
       invalidatesTags: (id) => [{ type: 'Invoice', id }],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Duplicate invoice
@@ -148,6 +156,7 @@ export const invoiceApi = createApi({
         body,
       }),
       invalidatesTags: ['Invoice'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Get invoice statistics

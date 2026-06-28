@@ -5,6 +5,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
+const inventorySyncService = require('./inventorySync.service');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -153,6 +154,13 @@ const reserveProductStockForSimSale = async ({ productId, organizationId, branch
       `Insufficient stock for ${productName || 'this SIM product'}. Add stock or pick another item.`
     );
   }
+  await inventorySyncService.recordStockChange({
+    organizationId,
+    productId,
+    quantityDelta: -1,
+    type: 'sale',
+    refType: 'SimSale',
+  });
   return updated;
 };
 
@@ -163,6 +171,13 @@ const releaseProductStockForSimSale = async ({ productId, organizationId, branch
     { $inc: { stockQuantity: 1 } },
     { new: true }
   );
+  await inventorySyncService.recordStockChange({
+    organizationId,
+    productId,
+    quantityDelta: 1,
+    type: 'return_in',
+    refType: 'SimSale',
+  });
 };
 
 const syncCustomerLedgerForSimSale = async (sale) => {

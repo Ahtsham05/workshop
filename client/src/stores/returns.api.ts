@@ -1,5 +1,20 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
+import { purchaseCatalogApi } from './purchaseCatalog.api'
+import { batchApi } from './batch.api'
+
+// Returns restore/deduct stock behind the scenes — refresh the product catalog's
+// stock+batch chips and the per-variant batch list, which live in separate RTK Query
+// slices and won't auto-refetch otherwise.
+const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+    dispatch(batchApi.util.invalidateTags(['Batch']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 // ─── Shared Types ────────────────────────────────────────────────────────────
 
@@ -149,6 +164,7 @@ export const returnsApi = createApi({
         body,
       }),
       invalidatesTags: ['SalesReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     getSalesReturns: builder.query<SalesReturnListResponse, SalesReturnFilters>({
@@ -177,6 +193,7 @@ export const returnsApi = createApi({
         body,
       }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'SalesReturn', id }, 'SalesReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     deleteSalesReturn: builder.mutation<void, string>({
@@ -185,6 +202,7 @@ export const returnsApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['SalesReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // ── Purchase Returns ───────────────────────────────────────────────────
@@ -196,6 +214,7 @@ export const returnsApi = createApi({
         body,
       }),
       invalidatesTags: ['PurchaseReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     getPurchaseReturns: builder.query<PurchaseReturnListResponse, PurchaseReturnFilters>({
@@ -224,6 +243,7 @@ export const returnsApi = createApi({
         body,
       }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'PurchaseReturn', id }, 'PurchaseReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     deletePurchaseReturn: builder.mutation<void, string>({
@@ -232,6 +252,7 @@ export const returnsApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['PurchaseReturn'],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
   }),
 })

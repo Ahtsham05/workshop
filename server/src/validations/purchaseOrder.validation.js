@@ -4,6 +4,7 @@ const objectId = Joi.string().regex(/^[0-9a-fA-F]{24}$/);
 
 const itemSchema = Joi.object().keys({
   product: objectId.required(),
+  variantId: objectId.optional(),
   productName: Joi.string().allow('').optional(),
   productNameUrdu: Joi.string().allow('').optional(),
   quantity: Joi.number().min(0).required(),
@@ -114,12 +115,15 @@ const receiveItems = {
       .items(
         Joi.object().keys({
           product: objectId.required(),
+          variantId: objectId.optional(),
           receivedQuantity: Joi.number().min(0).required(),
           priceAtPurchase: Joi.number().min(0).required(),
           sellingPriceAtPurchase: Joi.number().min(0).optional(),
           unit: Joi.string().allow('').optional(),
           conversionFactor: Joi.number().positive().optional(),
           notes: Joi.string().allow('').optional(),
+          batchNumber: Joi.string().trim().allow('').optional(),
+          expiryDate: Joi.date().optional(),
         })
       )
       .min(1)

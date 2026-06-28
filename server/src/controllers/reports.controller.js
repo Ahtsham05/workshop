@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory } = require('../models');
 const { cashBookService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
@@ -27,6 +27,104 @@ const buildScope = (req) => {
 
 /** Wallets whose name contains "load" are load purchase/sale wallets (same rule as mobile-shop UI). */
 const isLoadWalletName = (name) => /load/i.test(String(name || ''));
+
+/**
+ * Pipeline stages that collect every `${itemsField}.variantId` referenced across the
+ * matched documents' item arrays and look up the real ProductVariant docs, so the
+ * final $project can attach a human-readable variant label (e.g. "Red / Large") to
+ * each line item — see docs/architecture/universal-product-migration.md. Reused by
+ * the Sales, Purchase, and Product-detail reports, which all carry `items.variantId`
+ * but no label of their own.
+ */
+const variantLookupStages = (itemsField = 'items') => [
+  {
+    $addFields: {
+      _variantIds: {
+        $filter: { input: `$${itemsField}.variantId`, as: 'v', cond: { $ne: ['$$v', null] } },
+      },
+    },
+  },
+  {
+    $lookup: {
+      from: ProductVariant.collection.name,
+      localField: '_variantIds',
+      foreignField: '_id',
+      as: '_variantDocs',
+    },
+  },
+];
+
+/** Same idea as variantLookupStages, but for Batch docs — used where the items only
+ * carry a `batchId` (Sales/Invoice items) and need the Batch looked up for its
+ * `expiryDate` (Purchase items store `expiryDate` directly and never need this). */
+const batchLookupStages = (itemsField = 'items') => [
+  {
+    $addFields: {
+      _batchIds: {
+        $filter: { input: `$${itemsField}.batchId`, as: 'b', cond: { $ne: ['$$b', null] } },
+      },
+    },
+  },
+  {
+    $lookup: {
+      from: Batch.collection.name,
+      localField: '_batchIds',
+      foreignField: '_id',
+      as: '_batchDocs',
+    },
+  },
+];
+
+/** Builds the "Red / Large" style label for `itemVar.variantId` from the looked-up
+ * `_variantDocs` array (see variantLookupStages). Returns null when the item has no
+ * variant or the variant wasn't found (e.g. since deleted). */
+const variantLabelExpr = (itemVar) => ({
+  $let: {
+    vars: {
+      variantDoc: {
+        $arrayElemAt: [
+          { $filter: { input: '$_variantDocs', as: 'v', cond: { $eq: ['$$v._id', `$$${itemVar}.variantId`] } } },
+          0,
+        ],
+      },
+    },
+    in: {
+      $cond: [
+        { $eq: ['$$variantDoc', null] },
+        null,
+        {
+          $reduce: {
+            input: { $objectToArray: { $ifNull: ['$$variantDoc.attributes', {}] } },
+            initialValue: '',
+            in: {
+              $cond: [
+                { $eq: ['$$value', ''] },
+                '$$this.v',
+                { $concat: ['$$value', ' / ', '$$this.v'] },
+              ],
+            },
+          },
+        },
+      ],
+    },
+  },
+});
+
+/** Looks up `itemVar.batchId`'s expiryDate from the `_batchDocs` array (see
+ * batchLookupStages). Returns null when the item has no batchId. */
+const batchExpiryExpr = (itemVar) => ({
+  $let: {
+    vars: {
+      batchDoc: {
+        $arrayElemAt: [
+          { $filter: { input: '$_batchDocs', as: 'b', cond: { $eq: ['$$b._id', `$$${itemVar}.batchId`] } } },
+          0,
+        ],
+      },
+    },
+    in: '$$batchDoc.expiryDate',
+  },
+});
 
 const { parseBusinessDateBoundary: parseDateBoundary, BUSINESS_TZ } = require('../utils/businessTimezone');
 
@@ -77,6 +175,8 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
       },
     },
     { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+    ...variantLookupStages('items'),
+    ...batchLookupStages('items'),
     {
       $project: {
         invoiceNumber: 1,
@@ -105,6 +205,10 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
               unitPrice: '$$item.unitPrice',
               subtotal: '$$item.subtotal',
               imeis: { $ifNull: ['$$item.imeis', []] },
+              variantId: { $ifNull: ['$$item.variantId', null] },
+              batchNumber: { $ifNull: ['$$item.batchNumber', null] },
+              variantLabel: variantLabelExpr('item'),
+              expiryDate: batchExpiryExpr('item'),
             },
           },
         },
@@ -318,6 +422,18 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
     },
     { $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
     {
+      $lookup: {
+        from: ProductVariant.collection.name,
+        let: { vid: '$items.variantId' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$_id', '$$vid'] }, { $ne: ['$$vid', null] }] } } },
+          { $project: { attributes: 1 } },
+        ],
+        as: 'variantDoc',
+      },
+    },
+    { $unwind: { path: '$variantDoc', preserveNullAndEmptyArrays: true } },
+    {
       $group: {
         _id: '$_id',
         invoiceNumber: { $first: '$invoiceNumber' },
@@ -341,6 +457,28 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
                 unitPrice: { $ifNull: ['$items.priceAtPurchase', 0] },
                 subtotal: { $ifNull: ['$items.total', 0] },
                 imeis: { $ifNull: ['$items.imeis', []] },
+                variantId: { $ifNull: ['$items.variantId', null] },
+                batchNumber: { $ifNull: ['$items.batchNumber', null] },
+                expiryDate: { $ifNull: ['$items.expiryDate', null] },
+                variantLabel: {
+                  $cond: [
+                    { $eq: ['$variantDoc', null] },
+                    null,
+                    {
+                      $reduce: {
+                        input: { $objectToArray: { $ifNull: ['$variantDoc.attributes', {}] } },
+                        initialValue: '',
+                        in: {
+                          $cond: [
+                            { $eq: ['$$value', ''] },
+                            '$$this.v',
+                            { $concat: ['$$value', ' / ', '$$this.v'] },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
               },
               '$$REMOVE',
             ],
@@ -482,7 +620,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
                               regex: '^[0-9a-fA-F]{24}$',
                             },
                           },
-                          { $toObjectId: '$$cid' },
+                          { $convert: { input: '$$cid', to: 'objectId', onError: null, onNull: null } },
                           null,
                         ],
                       },
@@ -496,6 +634,26 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         ],
         as: 'customerInfo',
       } },
+      { $lookup: {
+        from: ProductVariant.collection.name,
+        let: { vid: '$items.variantId' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$_id', '$$vid'] }, { $ne: ['$$vid', null] }] } } },
+          { $project: { attributes: 1 } },
+        ],
+        as: 'variantDoc',
+      } },
+      { $unwind: { path: '$variantDoc', preserveNullAndEmptyArrays: true } },
+      { $lookup: {
+        from: Batch.collection.name,
+        let: { bid: '$items.batchId' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$_id', '$$bid'] }, { $ne: ['$$bid', null] }] } } },
+          { $project: { expiryDate: 1 } },
+        ],
+        as: 'batchDoc',
+      } },
+      { $unwind: { path: '$batchDoc', preserveNullAndEmptyArrays: true } },
       { $project: {
         invoiceNumber: 1,
         date: '$invoiceDate',
@@ -506,6 +664,22 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         price: { $ifNull: ['$items.price', '$items.unitPrice'] },
         subtotal: { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] },
         profit: { $ifNull: ['$items.profit', 0] },
+        variantId: { $ifNull: ['$items.variantId', null] },
+        batchNumber: { $ifNull: ['$items.batchNumber', null] },
+        expiryDate: { $ifNull: ['$batchDoc.expiryDate', null] },
+        variantLabel: {
+          $cond: [
+            { $eq: ['$variantDoc', null] },
+            null,
+            {
+              $reduce: {
+                input: { $objectToArray: { $ifNull: ['$variantDoc.attributes', {}] } },
+                initialValue: '',
+                in: { $cond: [{ $eq: ['$$value', ''] }, '$$this.v', { $concat: ['$$value', ' / ', '$$this.v'] }] },
+              },
+            },
+          ],
+        },
       } },
       { $sort: { date: -1 } },
     ]),
@@ -514,6 +688,16 @@ const getProductDetailReport = catchAsync(async (req, res) => {
       { $unwind: '$items' },
       { $match: { 'items.product': productObjId } },
       { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: 'supplierInfo' } },
+      { $lookup: {
+        from: ProductVariant.collection.name,
+        let: { vid: '$items.variantId' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$_id', '$$vid'] }, { $ne: ['$$vid', null] }] } } },
+          { $project: { attributes: 1 } },
+        ],
+        as: 'variantDoc',
+      } },
+      { $unwind: { path: '$variantDoc', preserveNullAndEmptyArrays: true } },
       { $project: {
         purchaseNumber: { $ifNull: ['$invoiceNumber', 'N/A'] },
         date: '$purchaseDate',
@@ -523,6 +707,22 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         quantity: '$items.quantity',
         price: { $ifNull: ['$items.priceAtPurchase', '$items.price'] },
         subtotal: { $ifNull: ['$items.total', { $multiply: ['$items.quantity', { $ifNull: ['$items.priceAtPurchase', 0] }] }] },
+        variantId: { $ifNull: ['$items.variantId', null] },
+        batchNumber: { $ifNull: ['$items.batchNumber', null] },
+        expiryDate: { $ifNull: ['$items.expiryDate', null] },
+        variantLabel: {
+          $cond: [
+            { $eq: ['$variantDoc', null] },
+            null,
+            {
+              $reduce: {
+                input: { $objectToArray: { $ifNull: ['$variantDoc.attributes', {}] } },
+                initialValue: '',
+                in: { $cond: [{ $eq: ['$$value', ''] }, '$$this.v', { $concat: ['$$value', ' / ', '$$this.v'] }] },
+              },
+            },
+          ],
+        },
       } },
       { $sort: { date: -1 } },
     ]),
@@ -837,7 +1037,139 @@ const getInventoryReport = catchAsync(async (req, res) => {
     ]),
   ]);
 
-  res.status(httpStatus.OK).send({ data: inventoryData, summary: summary[0] || {} });
+  // Attach each product's active batches (if it — or its hidden default variant for
+  // simple products — has trackBatch/trackExpiry enabled), so the report can show
+  // expiry/FEFO detail instead of just a stock total. See
+  // docs/architecture/universal-product-migration.md.
+  const productIds = inventoryData.map((p) => p._id);
+  const trackedVariants = productIds.length
+    ? await ProductVariant.find({
+        productId: { $in: productIds },
+        $or: [{ trackBatch: true }, { trackExpiry: true }],
+      }).lean()
+    : [];
+  const variantIds = trackedVariants.map((v) => v._id);
+  const variantInventories = variantIds.length
+    ? await Inventory.find({ variantId: { $in: variantIds } }).lean()
+    : [];
+  const inventoryByVariant = new Map(variantInventories.map((inv) => [inv.variantId.toString(), inv]));
+  const inventoryIds = variantInventories.map((inv) => inv._id);
+  const batchDocs = inventoryIds.length
+    ? await Batch.find({ inventoryId: { $in: inventoryIds }, status: 'active' }).sort({ expiryDate: 1 }).lean()
+    : [];
+  const batchesByInventory = new Map();
+  batchDocs.forEach((b) => {
+    const key = b.inventoryId.toString();
+    if (!batchesByInventory.has(key)) batchesByInventory.set(key, []);
+    batchesByInventory.get(key).push({
+      batchNumber: b.batchNumber,
+      quantity: b.quantity,
+      expiryDate: b.expiryDate,
+      costPerUnit: b.costPerUnit,
+      sellingPrice: b.sellingPrice,
+    });
+  });
+  const variantsByProduct = new Map();
+  trackedVariants.forEach((v) => {
+    const key = v.productId.toString();
+    if (!variantsByProduct.has(key)) variantsByProduct.set(key, []);
+    variantsByProduct.get(key).push(v);
+  });
+  const dataWithBatches = inventoryData.map((p) => {
+    const productVariants = variantsByProduct.get(p._id.toString()) || [];
+    const batches = productVariants.flatMap((v) => {
+      const inv = inventoryByVariant.get(v._id.toString());
+      return inv ? batchesByInventory.get(inv._id.toString()) || [] : [];
+    });
+    return { ...p, batches };
+  });
+
+  res.status(httpStatus.OK).send({ data: dataWithBatches, summary: summary[0] || {} });
+});
+
+/* ── Batch & Expiry (FEFO) ─────────────────────────────────────────────────── */
+const getBatchExpiryReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { days } = req.query;
+
+  const inventoryMatch = {};
+  if (scope.organizationId) inventoryMatch.organizationId = scope.organizationId;
+  if (scope.branchId) inventoryMatch.branchId = scope.branchId;
+
+  const inventories = await Inventory.find(inventoryMatch).select('_id productId variantId').lean();
+  const inventoryIds = inventories.map((inv) => inv._id);
+  if (inventoryIds.length === 0) {
+    return res.status(httpStatus.OK).send({
+      data: [],
+      summary: { activeBatches: 0, totalBatchValue: 0, expiringSoonCount: 0, expiredCount: 0 },
+    });
+  }
+  const inventoryById = new Map(inventories.map((inv) => [inv._id.toString(), inv]));
+
+  const batchMatch = { inventoryId: { $in: inventoryIds }, status: 'active' };
+  // Without `days`, every active batch is returned (org-wide FEFO view); with it,
+  // only batches expiring within that window — same shape as
+  // batchService.getExpiringBatches, just not limited to "expiring soon" by default.
+  if (days) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + Number(days));
+    batchMatch.expiryDate = { $ne: null, $lte: cutoff };
+  }
+
+  const batches = await Batch.find(batchMatch).populate('supplierId', 'name').lean();
+
+  const productIds = [...new Set(inventories.map((inv) => inv.productId?.toString()).filter(Boolean))];
+  const variantIds = [...new Set(inventories.map((inv) => inv.variantId?.toString()).filter(Boolean))];
+  const [products, variants] = await Promise.all([
+    Product.find({ _id: { $in: productIds } }).select('name nameUrdu').lean(),
+    ProductVariant.find({ _id: { $in: variantIds } }).select('attributes sku').lean(),
+  ]);
+  const productById = new Map(products.map((p) => [p._id.toString(), p]));
+  const variantById = new Map(variants.map((v) => [v._id.toString(), v]));
+
+  const now = Date.now();
+  const rows = batches.map((b) => {
+    const inv = inventoryById.get(b.inventoryId.toString());
+    const product = inv?.productId ? productById.get(inv.productId.toString()) : null;
+    const variant = inv?.variantId ? variantById.get(inv.variantId.toString()) : null;
+    const variantLabel = variant?.attributes && Object.keys(variant.attributes).length
+      ? Object.values(variant.attributes).join(' / ')
+      : null;
+    const daysUntilExpiry = b.expiryDate
+      ? Math.ceil((new Date(b.expiryDate).getTime() - now) / (1000 * 60 * 60 * 24))
+      : null;
+    return {
+      id: b._id,
+      productName: product?.name || 'Unknown',
+      productNameUrdu: product?.nameUrdu || '',
+      variantLabel,
+      batchNumber: b.batchNumber,
+      quantity: b.quantity,
+      costPerUnit: b.costPerUnit,
+      sellingPrice: b.sellingPrice,
+      expiryDate: b.expiryDate,
+      daysUntilExpiry,
+      supplierName: b.supplierId?.name || null,
+      batchValue: (b.quantity || 0) * (b.costPerUnit || 0),
+    };
+  });
+
+  // FEFO order — soonest expiry first, batches without an expiry date last.
+  rows.sort((a, b) => {
+    if (a.expiryDate == null && b.expiryDate == null) return 0;
+    if (a.expiryDate == null) return 1;
+    if (b.expiryDate == null) return -1;
+    return new Date(a.expiryDate) - new Date(b.expiryDate);
+  });
+
+  const summary = {
+    activeBatches: rows.length,
+    totalBatchValue: rows.reduce((s, r) => s + r.batchValue, 0),
+    expiringSoonCount: rows.filter((r) => r.daysUntilExpiry != null && r.daysUntilExpiry >= 0 && r.daysUntilExpiry <= 30).length,
+    expiredCount: rows.filter((r) => r.daysUntilExpiry != null && r.daysUntilExpiry < 0).length,
+  };
+
+  res.status(httpStatus.OK).send({ data: rows, summary });
 });
 
 /* ── Tax ────────────────────────────────────────────────────────────────────── */
@@ -1365,7 +1697,7 @@ async function getSalesReturnsReport(req, res) {
     baseMatch.customerId = new mongoose.Types.ObjectId(customerId);
   }
 
-  const [datewise, summary, productwise] = await Promise.all([
+  const [datewise, summary, productwise, lineItems] = await Promise.all([
     // Date-wise totals
     SalesReturn.aggregate([
       { $match: baseMatch },
@@ -1412,12 +1744,62 @@ async function getSalesReturnsReport(req, res) {
       { $sort: { totalValue: -1 } },
       { $limit: 50 },
     ]),
+
+    // Per-line detail (which variant/batch was actually returned), newest first.
+    SalesReturn.aggregate([
+      { $match: baseMatch },
+      { $unwind: '$items' },
+      ...(productId && mongoose.Types.ObjectId.isValid(productId)
+        ? [{ $match: { 'items.productId': new mongoose.Types.ObjectId(productId) } }]
+        : []),
+      {
+        $lookup: {
+          from: ProductVariant.collection.name,
+          let: { vid: '$items.variantId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$vid'] }, { $ne: ['$$vid', null] }] } } },
+            { $project: { attributes: 1 } },
+          ],
+          as: 'variantDoc',
+        },
+      },
+      { $unwind: { path: '$variantDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: Batch.collection.name,
+          let: { bid: '$items.batchId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$bid'] }, { $ne: ['$$bid', null] }] } } },
+            { $project: { expiryDate: 1 } },
+          ],
+          as: 'batchDoc',
+        },
+      },
+      { $unwind: { path: '$batchDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          returnNumber: 1,
+          date: 1,
+          productName: '$items.name',
+          productNameUrdu: { $ifNull: ['$items.nameUrdu', ''] },
+          quantity: '$items.quantity',
+          total: '$items.total',
+          variantId: { $ifNull: ['$items.variantId', null] },
+          batchNumber: { $ifNull: ['$items.batchNumber', null] },
+          expiryDate: { $ifNull: ['$batchDoc.expiryDate', null] },
+          variantLabel: { $let: { vars: { item: '$items' }, in: variantLabelExpr('item') } },
+        },
+      },
+      { $sort: { date: -1 } },
+      { $limit: 200 },
+    ]),
   ]);
 
   res.status(httpStatus.OK).send({
     summary: summary[0] || { totalReturnsAmount: 0, totalReturns: 0, totalItemsReturned: 0 },
     datewise,
     productwise,
+    lineItems,
     period: { startDate: start, endDate: end },
   });
 }
@@ -1433,7 +1815,7 @@ async function getPurchaseReturnsReport(req, res) {
     baseMatch.supplierId = new mongoose.Types.ObjectId(supplierId);
   }
 
-  const [datewise, summary, productwise] = await Promise.all([
+  const [datewise, summary, productwise, lineItems] = await Promise.all([
     // Date-wise totals
     PurchaseReturn.aggregate([
       { $match: baseMatch },
@@ -1480,12 +1862,51 @@ async function getPurchaseReturnsReport(req, res) {
       { $sort: { totalValue: -1 } },
       { $limit: 50 },
     ]),
+
+    // Per-line detail (which variant/batch was actually returned), newest first.
+    // Purchase items store expiryDate directly — no Batch lookup needed.
+    PurchaseReturn.aggregate([
+      { $match: baseMatch },
+      { $unwind: '$items' },
+      ...(productId && mongoose.Types.ObjectId.isValid(productId)
+        ? [{ $match: { 'items.productId': new mongoose.Types.ObjectId(productId) } }]
+        : []),
+      {
+        $lookup: {
+          from: ProductVariant.collection.name,
+          let: { vid: '$items.variantId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$vid'] }, { $ne: ['$$vid', null] }] } } },
+            { $project: { attributes: 1 } },
+          ],
+          as: 'variantDoc',
+        },
+      },
+      { $unwind: { path: '$variantDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          returnNumber: 1,
+          date: 1,
+          productName: '$items.name',
+          productNameUrdu: { $ifNull: ['$items.nameUrdu', ''] },
+          quantity: '$items.quantity',
+          total: '$items.total',
+          variantId: { $ifNull: ['$items.variantId', null] },
+          batchNumber: { $ifNull: ['$items.batchNumber', null] },
+          expiryDate: { $ifNull: ['$items.expiryDate', null] },
+          variantLabel: { $let: { vars: { item: '$items' }, in: variantLabelExpr('item') } },
+        },
+      },
+      { $sort: { date: -1 } },
+      { $limit: 200 },
+    ]),
   ]);
 
   res.status(httpStatus.OK).send({
     summary: summary[0] || { totalReturnsAmount: 0, totalReturns: 0, totalItemsReturned: 0 },
     datewise,
     productwise,
+    lineItems,
     period: { startDate: start, endDate: end },
   });
 }
@@ -2844,6 +3265,7 @@ module.exports = {
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
+  getBatchExpiryReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
   getLoadReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,

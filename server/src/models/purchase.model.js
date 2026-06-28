@@ -41,6 +41,14 @@ const PurchaseSchema = new mongoose.Schema({
       sellingPriceAtPurchase: { type: Number, min: 0 }, // Selling price set at purchase time
       total: { type: Number, required: true }, // quantity * priceAtPurchase
       imeis: [{ type: String, trim: true }], // IMEI/serial numbers received for this line item, when product.trackImei is true
+      // Real (non-default) variant this line item is for, when the product hasVariants.
+      // Optional and additive — legacy items with no variantId keep going through the
+      // default-variant dual-write path in purchase.service.js, unchanged.
+      variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+      // Set only when variantId's ProductVariant has trackBatch/trackExpiry — receiving
+      // this line item creates a Batch instead of a plain inventory increment.
+      batchNumber: { type: String, trim: true },
+      expiryDate: { type: Date },
     },
   ],
   purchaseDate: { type: Date, default: Date.now },

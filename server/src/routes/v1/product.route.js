@@ -23,6 +23,10 @@ router
   .route('/all')
   .get(auth('viewProducts'), validate(productValidation.getAllProducts), productController.getAllProducts);
 
+router
+  .route('/purchasable')
+  .get(auth('viewProducts'), validate(productValidation.getAllProducts), productController.getPurchasableCatalog);
+
 // Bulk update route
 router
   .route('/bulk-update')

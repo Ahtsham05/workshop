@@ -13,7 +13,7 @@ type View = 'list' | 'form'
 export default function PurchaseOrdersPage() {
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as {
-    prefillItems?: { productId: string; quantity: number }[]
+    prefillItems?: { productId: string; variantId?: string; quantity: number }[]
     supplierId?: string
   }
   const hasPrefill = Boolean(search.prefillItems && search.prefillItems.length > 0)

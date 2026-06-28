@@ -40,6 +40,11 @@ const createProduct = {
     unit: Joi.string().allow('').optional(),
     unitConversions: Joi.array().items(unitConversionSchema).optional(),
     hasVariants: Joi.boolean().optional(),
+    trackBatch: Joi.boolean().optional(),
+    trackExpiry: Joi.boolean().optional(),
+    batchNumber: Joi.string().allow('').optional(),
+    expiryDate: Joi.string().allow('').optional(),
+    brandId: Joi.string().allow('', null).optional(),
   }),
 };
 
@@ -105,6 +110,11 @@ const updateProduct = {
     unit: Joi.string().allow(''),
     unitConversions: Joi.array().items(unitConversionSchema),
     hasVariants: Joi.boolean().optional(),
+    trackBatch: Joi.boolean().optional(),
+    trackExpiry: Joi.boolean().optional(),
+    batchNumber: Joi.string().allow('').optional(),
+    expiryDate: Joi.string().allow('').optional(),
+    brandId: Joi.string().allow('', null).optional(),
   }),
 };
 

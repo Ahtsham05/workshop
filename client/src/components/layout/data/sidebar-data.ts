@@ -30,6 +30,7 @@ import {
   IconReportAnalytics,
   IconClock,
   IconFileImport,
+  IconTag,
 } from '@tabler/icons-react'
 import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -96,6 +97,13 @@ export const sidebarData: SidebarData = {
           url: '/categories',
           icon: IconCategory,
           permission: 'viewCategories',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'Brands',
+          url: '/brands',
+          icon: IconTag,
+          permission: 'viewBrands',
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {

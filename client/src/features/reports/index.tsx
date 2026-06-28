@@ -25,6 +25,7 @@ import { SupplierReport } from './components/supplier-report'
 import { ExpenseReport } from './components/expense-report'
 import { ProfitLossReport } from './components/profit-loss-report'
 import { InventoryReport } from './components/inventory-report'
+import { BatchExpiryReport } from './components/batch-expiry-report'
 import { TaxReport } from './components/tax-report'
 import { SalesReturnsReport } from './components/sales-returns-report'
 import { PurchaseReturnsReport } from './components/purchase-returns-report'
@@ -237,6 +238,7 @@ export default function ReportsPage() {
             <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
             <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
             <TabsTrigger value='inventory' className='text-xs sm:text-sm px-2 sm:px-3'>{t('inventory')}</TabsTrigger>
+            <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
             <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
             <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
             <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
@@ -310,6 +312,10 @@ export default function ReportsPage() {
 
         <TabsContent value='inventory' className='mt-6'>
           <InventoryReport ref={activeTab === 'inventory' ? exportRef : null} />
+        </TabsContent>
+
+        <TabsContent value='batch-expiry' className='mt-6'>
+          <BatchExpiryReport ref={activeTab === 'batch-expiry' ? exportRef : null} />
         </TabsContent>
 
         <TabsContent value='tax' className='mt-6'>

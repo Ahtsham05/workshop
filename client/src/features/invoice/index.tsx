@@ -7,6 +7,13 @@ import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading, which would retrigger any effect keyed
+// on it infinitely ("Maximum update depth exceeded") — see the same fix in
+// purchase-invoice/index.tsx.
+const EMPTY_SELLABLE_CATALOG: PurchaseCatalogItem[] = []
 import { InvoicePanel, ProductCatalog, InvoiceList, PendingInvoiceConverter } from './components'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -66,6 +73,13 @@ export interface InvoiceItem {
   profit: number
   isManualEntry?: boolean
   imeis?: string[]
+  // Real (non-default) variant this line item is for, when product.hasVariants —
+  // see docs/architecture/universal-product-migration.md.
+  variantId?: string
+  // Manually picked batch to deplete (no automatic FEFO yet). Only set when the
+  // variant tracks batch/expiry.
+  batchId?: string
+  batchNumber?: string
 }
 
 export function createEmptyManualInvoiceItem(): InvoiceItem {
@@ -147,6 +161,20 @@ export interface Product {
   description?: string
   nameUrdu?: string
   trackImei?: boolean
+  hasVariants?: boolean
+  // Set server-side only for hasVariants products — price/cost/stockQuantity above stay
+  // at their legacy fallback (often 0) once a product has variants, see
+  // docs/architecture/universal-product-migration.md.
+  variantStockTotal?: number
+  variantPriceRange?: { minPrice: number; maxPrice: number; minCost: number; maxCost: number } | null
+  brandId?: { _id: string; name: string; logo?: { url: string; publicId: string } } | string | null
+  // Set only when this Product object actually represents one specific real variant
+  // (e.g. a row built from the flat purchasable catalog) rather than the legacy product
+  // itself — see docs/architecture/universal-product-migration.md.
+  variantId?: string
+  trackBatch?: boolean
+  trackExpiry?: boolean
+  knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number; sellingPrice?: number }[]
 }
 
 export interface Category {
@@ -204,6 +232,11 @@ export default function InvoicePage() {
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([])
   const [customers, setCustomers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  // Flat sellable catalog (one row per real variant for hasVariants products, with its
+  // own real price/cost/stock) — feeds the "Product Catalog" tile grid so variant
+  // products show as separate tiles instead of one rolled-up tile with a price range.
+  // Same endpoint Purchases use — see docs/architecture/universal-product-migration.md.
+  const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
   
   // UI state
   const [showImages, setShowImages] = useState(true)
@@ -540,40 +573,63 @@ export default function InvoicePage() {
     }))
   }, [search.customerId, customers, currentView])
 
-  // Group products by category
+  // Group the flat sellable catalog by category for the catalog tile grid — one tile
+  // per real variant (its own price/cost/stock), one tile per non-variant product.
   useEffect(() => {
     const categoryMap = new Map<string, Category>()
-    
-    products.forEach(product => {
+
+    sellableCatalog.forEach(item => {
       let categoryId = 'other'
       let categoryName = 'Other'
-      let categoryNameUrdu: string | undefined
-      
-      // Check for category in different possible formats
-      if (product.category) {
-        categoryId = product.category._id
-        categoryName = product.category.name
-        categoryNameUrdu = product.category.nameUrdu
-      } else if (product.categories && product.categories.length > 0) {
-        categoryId = product.categories[0]._id
-        categoryName = product.categories[0].name
-        categoryNameUrdu = product.categories[0].nameUrdu
+
+      if (item.categories && item.categories.length > 0) {
+        categoryId = item.categories[0]._id
+        categoryName = item.categories[0].name
       }
-      
+
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, {
           _id: categoryId,
           name: categoryName,
-          nameUrdu: categoryNameUrdu,
           products: []
         })
       }
-      
-      categoryMap.get(categoryId)!.products.push(product)
+
+      // Adapter: shape each flat catalog row as a Product so the existing tile grid
+      // (built for plain products) renders it unchanged. hasVariants/variantId here
+      // identify *which* variant this specific row/tile is for, so the invoice line it
+      // creates carries the right variantId straight through.
+      categoryMap.get(categoryId)!.products.push({
+        id: item.type === 'variant' ? item.productId : item.id,
+        _id: item.type === 'variant' ? item.productId : item.id,
+        name: item.name,
+        nameUrdu: item.nameUrdu,
+        image: item.image,
+        barcode: item.barcode,
+        unit: item.unit,
+        trackImei: item.trackImei,
+        hasVariants: item.type === 'variant',
+        brandId: item.brand,
+        price: item.price,
+        cost: item.cost,
+        stockQuantity: item.stockQuantity,
+        variantId: item.variantId,
+        trackBatch: item.trackBatch,
+        trackExpiry: item.trackExpiry,
+        knownBatches: item.batches,
+        // getDisplayStock/formatDisplayPrice (used by the tile rendering) read these
+        // when hasVariants is true — min===max here so they resolve to this row's own
+        // single real number instead of a range, since each row is already one
+        // specific variant.
+        variantStockTotal: item.stockQuantity,
+        variantPriceRange: item.type === 'variant'
+          ? { minPrice: item.price, maxPrice: item.price, minCost: item.cost, maxCost: item.cost }
+          : null,
+      } as Product)
     })
-    
+
     setCategorizedProducts(Array.from(categoryMap.values()))
-  }, [products])
+  }, [sellableCatalog])
 
   useEffect(() => {
     setInvoice((prev) => {
@@ -601,28 +657,41 @@ export default function InvoicePage() {
   }, [taxRate])
 
   // Add product to invoice
-  const addToInvoice = useCallback((product: Product, quantity: number = 1) => {
+  const addToInvoice = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
     // Get the product ID - try different possible field names
     const productId = product._id || product.id
+    // Default to the earliest-expiring batch (knownBatches is already sorted that way
+    // by the backend) — the seller can still switch batches on the line afterward. No
+    // automatic FEFO splitting across batches yet.
+    const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
+      ? product.knownBatches?.[0]
+      : undefined
+    const batchId = defaultBatch?.id
+    const batchNumber = defaultBatch?.batchNumber
+    // A batch can carry its own intended retail price, recorded at purchase time —
+    // use it instead of the product's generic price when one was auto-selected.
+    const unitPriceFromBatch = defaultBatch?.sellingPrice ?? product.price
     console.log('=== ADD TO INVOICE DEBUG ===')
     console.log('Adding product to invoice:', product.name, 'ID:', productId)
     console.log('Requested quantity:', quantity)
     console.log('Existing items:', invoice.items.map(item => ({ name: item.name, quantity: item.quantity, productId: item.productId })))
-    
+
     if (!productId) {
       console.error('Product has no valid ID:', product)
       return;
     }
 
-    // Get current stock from the products state (real-time stock)
-    const currentProduct = products.find(p => (p._id || p.id) === productId)
+    // Get current stock — for a real variant, `product.stockQuantity` is already that
+    // exact variant's live stock (from the purchasable catalog); the `products` cache
+    // below only ever holds the legacy/parent product, which would be the wrong number.
+    const currentProduct = variantId ? undefined : products.find(p => (p._id || p.id) === productId)
     const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
     const defaultUnitOption = getProductUnitOptions(product)[0]
     const defaultLine = calculateInvoiceLineValues({
       product,
       quantity,
       unit: defaultUnitOption?.value || product.unit,
-      unitPrice: product.price,
+      unitPrice: unitPriceFromBatch,
       cost: product.cost,
       conversionFactor: defaultUnitOption?.factor,
     })
@@ -641,7 +710,11 @@ export default function InvoicePage() {
       return;
     }
     
-    const existingItemIndex = invoice.items.findIndex(item => item.productId === productId)
+    // Match by (productId, variantId) — two different variants of the same product
+    // must stay on separate lines, not silently merge into one quantity.
+    const existingItemIndex = invoice.items.findIndex(
+      item => item.productId === productId && (item.variantId || undefined) === (variantId || undefined)
+    )
     console.log('Existing item index:', existingItemIndex)
     
     let newItems: InvoiceItem[]
@@ -745,7 +818,7 @@ export default function InvoicePage() {
             product,
             quantity: actualQuantityAdded,
             unit: defaultLine.lineUnit,
-            unitPrice: product.price,
+            unitPrice: unitPriceFromBatch,
             cost: product.cost,
             conversionFactor: defaultLine.conversionFactor,
           })
@@ -756,6 +829,9 @@ export default function InvoicePage() {
           const newItem: InvoiceItem = {
             id: `${productId}_${Date.now()}_${Math.random()}`,
             productId: productId,
+            variantId,
+            batchId,
+            batchNumber,
             name: product.name,
             nameUrdu: product.nameUrdu,
             image: product.image,
@@ -763,10 +839,12 @@ export default function InvoicePage() {
             unit: cappedLine.lineUnit,
             conversionFactor: cappedLine.conversionFactor,
             stockQuantity: cappedLine.stockQuantity,
-            unitPrice: product.price,
-            cost: product.cost,
+            unitPrice: unitPriceFromBatch,
+            // Use the auto-selected batch's actual cost when known — different batches
+            // can have been bought at different prices.
+            cost: defaultBatch?.costPerUnit ?? product.cost,
             subtotal: cappedLine.subtotal,
-            profit: cappedLine.profit
+            profit: cappedLine.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * cappedLine.stockQuantity)
           }
           
           toast.info(`Added ${actualQuantityAdded} ${cappedLine.lineUnit} of ${product.name} (maximum available)`)
@@ -781,6 +859,9 @@ export default function InvoicePage() {
         const newItem: InvoiceItem = {
           id: `${productId}_${Date.now()}_${Math.random()}`,
           productId: productId,
+          variantId,
+          batchId,
+          batchNumber,
           name: product.name,
           nameUrdu: product.nameUrdu,
           image: product.image,
@@ -788,27 +869,31 @@ export default function InvoicePage() {
           unit: defaultLine.lineUnit,
           conversionFactor: defaultLine.conversionFactor,
           stockQuantity: defaultLine.stockQuantity,
-          unitPrice: product.price,
-          cost: product.cost,
+          unitPrice: unitPriceFromBatch,
+          // Use the auto-selected batch's actual cost when known — different batches
+          // can have been bought at different prices.
+          cost: defaultBatch?.costPerUnit ?? product.cost,
           subtotal: defaultLine.subtotal,
-          profit: defaultLine.profit
+          profit: defaultLine.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * defaultLine.stockQuantity)
         }
-        
+
         console.log('Adding new item:', newItem)
         newItems = [...invoice.items, newItem]
       }
     }
     
-    // Update stock in real-time
-    if (actualQuantityAdded > 0) {
+    // Update stock in real-time — skipped for variant items: the `products` cache only
+    // ever holds the legacy/parent product, so mutating it here would touch the wrong
+    // (meaningless, fallback-only) stockQuantity field instead of the variant's.
+    if (actualQuantityAdded > 0 && !variantId) {
       const stockImpact = existingItemIndex >= 0
         ? ((newItems[existingItemIndex].stockQuantity || 0) - (invoice.items[existingItemIndex].stockQuantity || invoice.items[existingItemIndex].quantity || 0))
         : (newItems[newItems.length - 1].stockQuantity || actualQuantityAdded)
       console.log('STOCK UPDATE: Decreasing stock by', actualQuantityAdded)
       console.log('STOCK UPDATE: Current stock before update:', currentStock)
-      
-      setProducts(prevProducts => prevProducts.map(p => 
-        (p._id || p.id) === productId 
+
+      setProducts(prevProducts => prevProducts.map(p =>
+        (p._id || p.id) === productId
           ? { ...p, stockQuantity: p.stockQuantity - stockImpact }
           : p
       ))
@@ -844,14 +929,16 @@ export default function InvoicePage() {
     const newItems = invoice.items.filter(item => item.id !== itemId)
     const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
     
-    // Restore stock when item is removed
-    if (removedItem) {
-      setProducts(prevProducts => prevProducts.map(p => 
-        (p._id || p.id) === removedItem.productId 
+    // Restore stock when item is removed — skipped for variant items, since `products`
+    // only ever holds the legacy/parent product (the catalog reflects real stock after
+    // the next refetch/save).
+    if (removedItem && !removedItem.variantId) {
+      setProducts(prevProducts => prevProducts.map(p =>
+        (p._id || p.id) === removedItem.productId
           ? { ...p, stockQuantity: p.stockQuantity + (removedItem.stockQuantity || removedItem.quantity) }
           : p
       ))
-      
+
       console.log(`Stock restored: ${removedItem.name} + ${(removedItem.stockQuantity || removedItem.quantity)}`)
     }
     
@@ -879,6 +966,50 @@ export default function InvoicePage() {
     const currentItem = invoice.items.find(item => item.id === itemId)
     if (!currentItem) {
       console.error('Item not found:', itemId)
+      return
+    }
+
+    // Real-variant line item — no unit conversion support yet, and stock comes from
+    // the live sellable catalog (variant-specific), not the legacy `products` cache
+    // (whose stockQuantity is a stale fallback once a product hasVariants). See
+    // docs/architecture/universal-product-migration.md.
+    if (currentItem.variantId) {
+      const quantityDifference = newQuantity - currentItem.quantity
+      if (quantityDifference > 0) {
+        const catalogEntry = sellableCatalog.find(c => c.variantId === currentItem.variantId)
+        // A manually picked batch must have enough on its own — no automatic FEFO
+        // splitting across batches yet.
+        const available = currentItem.batchId
+          ? catalogEntry?.batches?.find(b => b.id === currentItem.batchId)?.quantity ?? 0
+          : catalogEntry?.stockQuantity ?? 0
+        if (quantityDifference > available) {
+          toast.error(`${currentItem.name} - Cannot increase by ${quantityDifference}. Only ${available} units available`)
+          return
+        }
+      }
+
+      const newItems = invoice.items.map(item => item.id === itemId
+        ? {
+            ...item,
+            quantity: newQuantity,
+            stockQuantity: newQuantity,
+            subtotal: newQuantity * item.unitPrice,
+            profit: (newQuantity * item.unitPrice) - (newQuantity * item.cost),
+          }
+        : item)
+
+      const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+      setInvoice(prev => ({
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
+        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
+      }))
       return
     }
 
@@ -985,7 +1116,7 @@ export default function InvoicePage() {
       paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
       balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
     }))
-  }, [invoice, calculateTotals, removeFromInvoice, products, setProducts])
+  }, [invoice, calculateTotals, removeFromInvoice, products, setProducts, sellableCatalog])
 
   // Handle barcode search
   const handleBarcodeSearch = useCallback((barcode: string) => {

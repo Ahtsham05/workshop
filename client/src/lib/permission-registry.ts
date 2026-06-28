@@ -8,6 +8,7 @@ export type PermissionKey =
   | 'viewCustomers' | 'createCustomers' | 'editCustomers' | 'deleteCustomers'
   | 'viewSuppliers' | 'createSuppliers' | 'editSuppliers' | 'deleteSuppliers'
   | 'viewCategories' | 'createCategories' | 'editCategories' | 'deleteCategories'
+  | 'viewBrands' | 'createBrands' | 'editBrands' | 'deleteBrands'
   | 'viewAccounting' | 'manageExpenses' | 'manageLedgers' | 'managePersonalWallet'
   | 'viewCashBook' | 'manageCashBook' | 'viewCashRegister' | 'manageCashRegister'
   | 'viewAccountsSystem' | 'manageAccountsSystem'
@@ -58,6 +59,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'customers', label: 'Customers', permissions: ['viewCustomers', 'createCustomers', 'editCustomers', 'deleteCustomers'] },
   { id: 'suppliers', label: 'Suppliers', permissions: ['viewSuppliers', 'createSuppliers', 'editSuppliers', 'deleteSuppliers'] },
   { id: 'categories', label: 'Categories', permissions: ['viewCategories', 'createCategories', 'editCategories', 'deleteCategories'] },
+  { id: 'brands', label: 'Brands', permissions: ['viewBrands', 'createBrands', 'editBrands', 'deleteBrands'] },
   { id: 'accounting', label: 'Accounts & Expenses', permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet'] },
   { id: 'cash', label: 'Cash Book & Register', permissions: ['viewCashBook', 'manageCashBook', 'viewCashRegister', 'manageCashRegister'] },
   { id: 'accounts_system', label: 'Accounts System', permissions: ['viewAccountsSystem', 'manageAccountsSystem'] },
@@ -102,7 +104,7 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 export const PERMISSION_TAB_GROUPS = {
   business: [
     'products', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
-    'customers', 'suppliers', 'categories', 'accounting', 'cash', 'accounts_system',
+    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'accounts_system',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'imei_tracking',

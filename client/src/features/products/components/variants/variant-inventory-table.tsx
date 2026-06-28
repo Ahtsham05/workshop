@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { useGetProductVariantsQuery } from '@/stores/productVariant.api'
 import { useGetInventoryQuery } from '@/stores/inventory.api'
 import type { ProductVariant } from '@/stores/productVariant.api'
+import { VariantBatchPanel } from './variant-batch-panel'
 
 function InventoryCell({ variantId }: { variantId: string }) {
   const { data: inventory, isLoading } = useGetInventoryQuery(variantId)
@@ -35,6 +36,7 @@ function VariantRow({ variant }: { variant: ProductVariant }) {
         )}
       </TableCell>
       <TableCell>{variant.sku || '—'}</TableCell>
+      <TableCell>{variant.barcode || '—'}</TableCell>
       <TableCell>{variant.cost}</TableCell>
       <TableCell>{variant.price}</TableCell>
       <TableCell>
@@ -64,8 +66,9 @@ export function VariantInventoryTable({ productId }: { productId: string }) {
             <TableRow>
               <TableHead>Variant</TableHead>
               <TableHead>SKU</TableHead>
-              <TableHead>Cost</TableHead>
-              <TableHead>Price</TableHead>
+              <TableHead>Barcode</TableHead>
+              <TableHead>Purchase price</TableHead>
+              <TableHead>Sale price</TableHead>
               <TableHead>In stock</TableHead>
             </TableRow>
           </TableHeader>
@@ -76,6 +79,15 @@ export function VariantInventoryTable({ productId }: { productId: string }) {
           </TableBody>
         </Table>
       </div>
+
+      {variants
+        .filter((v) => v.trackBatch || v.trackExpiry)
+        .map((variant) => {
+          const id = variant._id || variant.id || ''
+          const label =
+            Object.entries(variant.attributes || {}).map(([, value]) => value).join(' / ') || variant.sku || id
+          return <VariantBatchPanel key={id} variantId={id} variantLabel={label} />
+        })}
     </div>
   )
 }

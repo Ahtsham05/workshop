@@ -28,6 +28,7 @@ import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -298,7 +299,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                               <Eye className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl">
+                          <DialogContent className="max-w-4xl sm:max-w-5xl">
                             <DialogHeader>
                               <DialogTitle>{t('Purchase Details')} - {purchase.invoiceNumber}</DialogTitle>
                               <DialogDescription>
@@ -556,18 +557,11 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
           </TableHeader>
           <TableBody>
             {purchase.items?.map((item: any, index: number) => {
-              let productName = 'Unknown Product'
-
-              if (typeof item.product === 'string') {
-                // If product is just an ID string, try to use other fields
-                productName = item.productName || item.name || `Product ID: ${item.product.substring(0, 8)}...`
-              } else if (item.product && typeof item.product === 'object') {
-                // If product is an object, try to get name from it
-                productName = item.product.name || item.product.title || item.product.productName || 'Product Object Found'
-              } else {
-                // Try direct fields on item
-                productName = item.name || item.productName || item.title || 'Unknown Product'
-              }
+              // getPurchaseItemDisplayName reads item.variantId's attributes (when this
+              // line item is for a real variant) and returns "Toshiba — 12" instead of
+              // just "Toshiba" — without it, two different-variant lines for the same
+              // product look identical here.
+              const productName = getPurchaseItemDisplayName(item)
 
               const productNameUrdu =
                 (item.product && typeof item.product === 'object' && item.product.nameUrdu) ||
@@ -591,9 +585,14 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                       )}
                       <div className='min-w-0'>
                         <BilingualName primary={productName} secondary={productNameUrdu} primaryClassName='text-sm font-medium' />
-                        {(item.product?.barcode || item.barcode) && (
-                          <div className="text-xs text-muted-foreground">
-                            {item.product?.barcode || item.barcode}
+                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                          {getPurchaseItemBarcode(item) && <span>{getPurchaseItemBarcode(item)}</span>}
+                          {item.variantId?.sku && <span>SKU: {item.variantId.sku}</span>}
+                        </div>
+                        {item.batchNumber && (
+                          <div className="text-xs text-blue-600">
+                            Batch: {item.batchNumber}
+                            {item.expiryDate && ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}`}
                           </div>
                         )}
                       </div>

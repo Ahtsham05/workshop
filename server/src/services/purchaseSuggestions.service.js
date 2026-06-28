@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Product, Branch, Invoice, PurchaseOrder, SeasonalFactor, InventoryTransfer, Insight } = require('../models');
 const supplierScoringService = require('./supplierScoring.service');
+const productService = require('./product.service');
 
 /* ────────────────────────────────────────────────────────────────────────
  * CONFIG — every tunable number the engine uses. Nothing below is a fixed
@@ -202,7 +203,11 @@ const aggregateDailyProductSales = async ({ organizationId, branchId, windowDays
     { $unwind: '$items' },
     {
       $group: {
-        _id: { productId: '$items.productId', day: { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate' } } },
+        // Collapses to the variant when one exists (real variant, or a batch-tracked
+        // simple product's hidden default variant), else the product itself — same
+        // "unit key" convention as product.service.js#getPurchasableCatalog's `id`,
+        // so sales/PO data lines up with the right catalog row.
+        _id: { unitId: { $ifNull: ['$items.variantId', '$items.productId'] }, day: { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate' } } },
         qty: { $sum: '$items.quantity' },
         orders: { $sum: 1 },
       },
@@ -211,7 +216,7 @@ const aggregateDailyProductSales = async ({ organizationId, branchId, windowDays
 
   const byProduct = new Map();
   for (const row of rows) {
-    const pid = String(row._id.productId);
+    const pid = String(row._id.unitId);
     if (!byProduct.has(pid)) byProduct.set(pid, new Map());
     byProduct.get(pid).set(row._id.day, { qty: row.qty, orders: row.orders });
   }
@@ -241,7 +246,7 @@ const aggregateIncomingPurchaseOrderQty = async ({ organizationId, branchId }) =
     { $unwind: '$items' },
     {
       $group: {
-        _id: '$items.product',
+        _id: { $ifNull: ['$items.variantId', '$items.product'] },
         outstandingQty: { $sum: { $subtract: ['$items.quantity', '$items.receivedQuantity'] } },
       },
     },
@@ -259,10 +264,12 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
   const orgId = toObjectId(organizationId);
   const brId = toObjectId(branchId);
 
+  // One row per sellable unit — a whole simple product, or each real variant for a
+  // hasVariants product, or a batch-tracked simple product's hidden default variant —
+  // with real Inventory-based stock and (when tracked) its active batches. See
+  // product.service.js#getPurchasableCatalog and docs/architecture/universal-product-migration.md.
   const [products, dailySalesMap, incomingPOMap, seasonalFactors] = await Promise.all([
-    Product.find({ organizationId: orgId, branchId: brId })
-      .select('name barcode sku cost price stockQuantity categories category createdAt supplier stockoutHistory')
-      .lean(),
+    productService.getPurchasableCatalog({ organizationId: orgId, branchId: brId }),
     aggregateDailyProductSales({ organizationId: orgId, branchId: brId, windowDays: CONFIG.DEMAND_WINDOW_LONG_DAYS }),
     aggregateIncomingPurchaseOrderQty({ organizationId: orgId, branchId: brId }),
     SeasonalFactor.find({ organizationId: orgId, isActive: true }).lean(),
@@ -279,7 +286,10 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
   const stockoutCutoff = daysAgo(CONFIG.STOCKOUT_TRACKING_WINDOW_DAYS);
 
   return products.map((p) => {
-    const id = String(p._id);
+    // Catalog rows already use the right "unit key" as `id` — a variantId when one
+    // exists (real variant, or a batch-tracked simple product's default variant),
+    // else the productId — matching the sales/PO aggregations above.
+    const id = String(p.id);
     const productDaily = dailySalesMap.get(id);
 
     const series7 = buildDailySeries(productDaily, CONFIG.DEMAND_WINDOW_SHORT_DAYS);
@@ -313,13 +323,32 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
     const daysRemaining = dailyDemand > 0 ? p.stockQuantity / dailyDemand : p.stockQuantity > 0 ? Infinity : 0;
 
     const categoryName = p.categories?.[0]?.name || p.category || 'Uncategorized';
-    const seasonalFactor = getActiveSeasonalFactor({ seasonalFactors, productId: id, categoryName });
+    // Seasonal factors are configured by an admin against the real product, not a
+    // specific variant — match on p.productId (the real product), not the unit key.
+    const seasonalFactor = getActiveSeasonalFactor({ seasonalFactors, productId: String(p.productId), categoryName });
 
     const lastSoldDay = [...(productDaily?.keys() || [])].sort().pop();
     const daysSinceLastSale = lastSoldDay ? Math.floor((Date.now() - new Date(lastSoldDay).getTime()) / 86400000) : null;
 
+    // Nearest active batch expiry, when this unit tracks batches — used to warn
+    // against over-ordering when existing stock is about to expire anyway.
+    const nearestBatch = (p.batches || [])
+      .filter((b) => b.expiryDate && b.quantity > 0)
+      .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))[0] || null;
+    const expiryWarning = nearestBatch
+      ? {
+          batchNumber: nearestBatch.batchNumber,
+          daysUntilExpiry: Math.ceil((new Date(nearestBatch.expiryDate).getTime() - Date.now()) / 86400000),
+        }
+      : null;
+
     return {
       productId: id,
+      // The real Product._id, distinct from `productId` above (which is the per-unit
+      // key) — needed for calls that look up supplier purchase-price history, which is
+      // recorded against the real product, not a specific variant.
+      realProductId: String(p.productId),
+      variantId: p.variantId ? String(p.variantId) : null,
       branchId: String(brId),
       name: p.name,
       barcode: p.barcode || null,
@@ -345,6 +374,7 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
       daysRemaining,
       seasonalFactor: seasonalFactor ? { name: seasonalFactor.name, multiplier: seasonalFactor.multiplier } : null,
       daysSinceLastSale,
+      expiryWarning,
     };
   });
 };
@@ -508,7 +538,7 @@ const getPurchaseSuggestions = async ({ organizationId, branchId, horizonDays = 
   // Pass 2 (I/O, parallel): supplier scoring is independent per product, so fan it out
   // instead of awaiting one at a time — matters once a catalog has 50+ qualifying products.
   const rankedSuppliers = await Promise.all(
-    candidates.map((c) => supplierScoringService.scoreSuppliersForProduct({ organizationId: orgId, productId: c.p.productId })),
+    candidates.map((c) => supplierScoringService.scoreSuppliersForProduct({ organizationId: orgId, productId: c.p.realProductId })),
   );
 
   const suggestions = candidates.map(({ p, coveredByTransfer, suggestedOrderQty }, i) => {
@@ -518,6 +548,11 @@ const getPurchaseSuggestions = async ({ organizationId, branchId, horizonDays = 
 
     return {
       productId: p.productId,
+      // Real Product._id, distinct from `productId` above when this row is a
+      // specific variant — needed by the client to add the right product to a
+      // purchase invoice/order and then select the matching variant on it.
+      realProductId: p.realProductId,
+      variantId: p.variantId,
       name: p.name,
       categoryName: p.categoryName,
       currentStock: p.stock,
@@ -533,10 +568,12 @@ const getPurchaseSuggestions = async ({ organizationId, branchId, horizonDays = 
       trend: p.trend,
       seasonalFactor: p.seasonalFactor,
       recommendedSupplier,
+      expiryWarning: p.expiryWarning,
       reason: [
         `Based on ~${round2(p.dailyDemand)} units/day demand and a ${p.leadTimeDays}-day lead time, order ${suggestedOrderQty} unit(s) to stay covered for the next ${horizonDays} days.`,
         coveredByTransfer > 0 ? `${coveredByTransfer} unit(s) of the need are already covered by an incoming branch transfer.` : null,
         supplierReason,
+        p.expiryWarning ? `Heads up: existing batch ${p.expiryWarning.batchNumber} expires in ${p.expiryWarning.daysUntilExpiry} day(s) — consider a smaller order.` : null,
       ]
         .filter(Boolean)
         .join(' '),

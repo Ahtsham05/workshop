@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { expiryBadge } from '../utils/expiry-badge'
 
 interface SalesReportProps {
   startDate: string
@@ -61,6 +62,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         unitPrice: number
         subtotal: number
         imeis?: string[]
+        variantLabel?: string | null
+        batchNumber?: string | null
+        expiryDate?: string | null
       }>>()
       detailData.invoices.forEach((inv) => {
         const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
@@ -74,6 +78,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
             imeis: item.imeis,
+            variantLabel: item.variantLabel,
+            batchNumber: item.batchNumber,
+            expiryDate: item.expiryDate,
           })
         })
       })
@@ -126,6 +133,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   'Paid Amount':  idx === 0 ? inv.paidAmount : '',
                   Balance:        idx === 0 ? inv.balance : '',
                   Product:        reportEntityName(language, item.name, item.nameUrdu),
+                  Variant:        item.variantLabel || '',
+                  'Batch #':      item.batchNumber || '',
+                  Expiry:         item.expiryDate ? format(new Date(item.expiryDate), 'yyyy-MM-dd') : '',
                   Qty:            item.quantity,
                   'Unit Sale Price':   item.unitPrice,
                   Subtotal:       item.subtotal,
@@ -144,6 +154,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               'Paid Amount':  '',
               Balance:        '',
               Product:        '',
+              Variant:        '',
+              'Batch #':      '',
+              Expiry:         '',
               Qty:            detailData.summary.totalItems,
               'Unit Sale Price':   '',
               Subtotal:       detailData.summary.totalSales,
@@ -367,6 +380,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       <TableHead>Date</TableHead>
                       <TableHead>Invoice #</TableHead>
                       <TableHead>Product</TableHead>
+                      <TableHead>Variant</TableHead>
+                      <TableHead>Batch #</TableHead>
+                      <TableHead>Expiry</TableHead>
                       <TableHead className='text-right'>Qty</TableHead>
                       <TableHead className='text-right'>Unit Sale Price</TableHead>
                       <TableHead className='text-right'>Subtotal</TableHead>
@@ -378,7 +394,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                         {/* Date group header */}
                         <TableRow className='bg-muted/40 border-t'>
                           <TableCell
-                            colSpan={6}
+                            colSpan={9}
                             className='py-2 px-4 font-semibold text-sm text-foreground'
                           >
                             {date}
@@ -411,6 +427,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 </div>
                               )}
                             </TableCell>
+                            <TableCell className='text-sm text-muted-foreground'>
+                              {row.variantLabel || '—'}
+                            </TableCell>
+                            <TableCell className='font-mono text-xs text-muted-foreground'>
+                              {row.batchNumber || '—'}
+                            </TableCell>
+                            <TableCell>{expiryBadge(row.expiryDate)}</TableCell>
                             <TableCell className='text-right text-sm'>{row.quantity}</TableCell>
                             <TableCell className='text-right text-sm'>
                               {formatCurrency(row.unitPrice)}
@@ -426,7 +449,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
 
                   <TableFooter>
                     <TableRow className='bg-muted font-bold border-t-2'>
-                      <TableCell colSpan={3} className='text-sm uppercase tracking-wide'>
+                      <TableCell colSpan={6} className='text-sm uppercase tracking-wide'>
                         Total — {detailData.summary.totalInvoices} invoice
                         {detailData.summary.totalInvoices !== 1 ? 's' : ''}
                       </TableCell>
@@ -568,6 +591,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                     IMEI: {item.imeis.join(', ')}
                                   </span>
                                 )}
+                                {(item.variantLabel || item.batchNumber || item.expiryDate) && (
+                                  <span className='mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground'>
+                                    {item.variantLabel && <span>{item.variantLabel}</span>}
+                                    {item.batchNumber && <span className='font-mono'>{item.batchNumber}</span>}
+                                    {item.expiryDate && expiryBadge(item.expiryDate)}
+                                  </span>
+                                )}
                               </TableCell>
                               {/* Phone */}
                               <TableCell />
@@ -693,6 +723,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
                                 IMEI: {item.imeis.join(', ')}
+                              </div>
+                            )}
+                            {(item.variantLabel || item.batchNumber || item.expiryDate) && (
+                              <div className='mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground'>
+                                {item.variantLabel && <span>{item.variantLabel}</span>}
+                                {item.batchNumber && <span className='font-mono'>{item.batchNumber}</span>}
+                                {item.expiryDate && expiryBadge(item.expiryDate)}
                               </div>
                             )}
                           </TableCell>

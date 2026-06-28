@@ -22,6 +22,11 @@ const salesReturnItemSchema = new mongoose.Schema(
     },
     price: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
+    // Copied from the original invoice item being returned, when it was a
+    // batch/expiry-tracked variant — see docs/architecture/universal-product-migration.md.
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
+    batchNumber: { type: String },
   },
   { _id: false }
 );

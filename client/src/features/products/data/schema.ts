@@ -33,6 +33,25 @@ export const productSchema = z.object({
       publicId: z.string(),
     }).optional(),
   })).optional(), // product categories is optional
+  hasVariants: z.boolean().optional(),
+  brandId: z.union([
+    z.string(),
+    z.object({
+      _id: z.string(),
+      name: z.string(),
+      logo: z.object({ url: z.string(), publicId: z.string() }).optional(),
+    }),
+  ]).nullable().optional(),
+  // Set server-side only for hasVariants products — price/cost/stockQuantity above stay
+  // at their legacy fallback (often 0) once a product has variants, see
+  // docs/architecture/universal-product-migration.md.
+  variantStockTotal: z.number().optional(),
+  variantPriceRange: z.object({
+    minPrice: z.number(),
+    maxPrice: z.number(),
+    minCost: z.number(),
+    maxCost: z.number(),
+  }).nullable().optional(),
 })
 
 // Define a schema for a list of products

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { TrendingUp, TrendingDown, Users, Package } from 'lucide-react'
 import { getUnitLabel } from '@/lib/units'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { expiryBadge } from '../utils/expiry-badge'
 import { cn } from '@/lib/utils'
 
 interface ProductDetailDialogProps {
@@ -144,6 +145,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[100px]'>{t('Invoice#')}</TableHead>
                           <TableHead className='min-w-[150px]'>{t('customer')}</TableHead>
                           {/* <TableHead className='min-w-[100px]'>{t('phone')}</TableHead> */}
+                          <TableHead className='min-w-[100px]'>Variant</TableHead>
+                          <TableHead className='min-w-[100px]'>Batch #</TableHead>
+                          <TableHead className='min-w-[100px]'>Expiry</TableHead>
                           <TableHead className='text-right min-w-[80px]'>{t('Quantity')}</TableHead>
                           <TableHead className='min-w-[60px]'>{t('Unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
@@ -171,6 +175,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                                 {reportEntityName(language, sale.customerName, sale.customerNameUrdu)}
                               </TableCell>
                               {/* <TableCell>{sale.customerPhone || 'N/A'}</TableCell> */}
+                              <TableCell className='text-muted-foreground text-sm'>{sale.variantLabel || '—'}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground'>{sale.batchNumber || '—'}</TableCell>
+                              <TableCell>{expiryBadge(sale.expiryDate)}</TableCell>
                               <TableCell className='text-right'>{sale.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(sale.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(sale.price)}</TableCell>
@@ -182,7 +189,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={9} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={12} className='text-center py-8 text-muted-foreground'>
                               {t('no_sales_found')}
                             </TableCell>
                           </TableRow>
@@ -203,6 +210,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[100px]'>{t('purchase_no')}</TableHead>
                           <TableHead className='min-w-[150px]'>{t('supplier')}</TableHead>
                           <TableHead className='min-w-[100px]'>{t('phone')}</TableHead>
+                          <TableHead className='min-w-[100px]'>Variant</TableHead>
+                          <TableHead className='min-w-[100px]'>Batch #</TableHead>
+                          <TableHead className='min-w-[100px]'>Expiry</TableHead>
                           <TableHead className='text-right min-w-[80px]'>{t('quantity')}</TableHead>
                           <TableHead className='min-w-[60px]'>{t('unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
@@ -229,6 +239,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                                 {reportEntityName(language, purchase.supplierName, purchase.supplierNameUrdu)}
                               </TableCell>
                               <TableCell>{purchase.supplierPhone || 'N/A'}</TableCell>
+                              <TableCell className='text-muted-foreground text-sm'>{purchase.variantLabel || '—'}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground'>{purchase.batchNumber || '—'}</TableCell>
+                              <TableCell>{expiryBadge(purchase.expiryDate)}</TableCell>
                               <TableCell className='text-right'>{purchase.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(purchase.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(purchase.price)}</TableCell>
@@ -237,7 +250,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={8} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={11} className='text-center py-8 text-muted-foreground'>
                               {t('no_purchases_found')}
                             </TableCell>
                           </TableRow>

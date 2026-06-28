@@ -3,6 +3,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AppDispatch, RootState } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api';
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading, which retriggers any effect keyed on
+// it infinitely ("Maximum update depth exceeded").
+const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = [];
 import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
 import { ProductCatalog } from './components/product-catalog';
@@ -47,6 +53,19 @@ export interface PurchaseItem {
   sellingPrice?: number; // price we will sell it at (retail)
   isManualEntry?: boolean; // flag for manual product selection
   imeis?: string[]; // IMEI/serial numbers received, when product.trackImei is true
+  // Real (non-default) variant this line item is for, when product.hasVariants.
+  // batchNumber/expiryDate only apply when the chosen variant has trackBatch/trackExpiry —
+  // see docs/architecture/universal-product-migration.md.
+  variantId?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  // Snapshot captured at selection time from the purchasable catalog (which already
+  // has this for free) so the batch fields render instantly instead of waiting on a
+  // fresh useGetProductVariantsQuery/useGetBatchesForVariantQuery round-trip — see
+  // docs/architecture/universal-product-migration.md.
+  trackBatch?: boolean;
+  trackExpiry?: boolean;
+  knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number }[];
 }
 
 // Supplier Interface
@@ -111,7 +130,7 @@ const PurchaseInvoicePage = () => {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
     supplierId?: string;
-    prefillItems?: { productId: string; quantity: number }[];
+    prefillItems?: { productId: string; variantId?: string; quantity: number }[];
   };
   const prefillAppliedRef = useRef(false);
   const suppliersData = useSelector((state: RootState) => state.supplier.data);
@@ -138,6 +157,11 @@ const PurchaseInvoicePage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
+  // Flat purchasable catalog (one row per real variant for hasVariants products, with
+  // its own real price/cost/stock) — feeds the "Product Catalog" tile grid so variant
+  // products show as separate tiles instead of one rolled-up tile with a price range.
+  // See docs/architecture/universal-product-migration.md.
+  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery();
   
   // UI state
   const [showImages, setShowImages] = useState(true);
@@ -422,30 +446,20 @@ const PurchaseInvoicePage = () => {
     });
   }, [search.supplierId, suppliersData, currentView, isEditing]);
   
-  // Group products by category
+  // Group the flat purchasable catalog by category for the catalog tile grid — one
+  // tile per real variant (its own price/cost/stock), one tile per non-variant product.
   useEffect(() => {
     const categoryMap = new Map<string, Category>();
-    
-    products.forEach(product => {
+
+    purchasableCatalog.forEach(item => {
       let categoryId = 'other';
       let categoryName = 'Other';
-      
-      // Ensure stockQuantity exists and preserve original product structure
-      // Don't add id property if _id doesn't exist - keep the product as-is
-      const productWithStock = {
-        ...product,
-        stockQuantity: product.stockQuantity || 0
-      };
-      
-      // Check for category in different possible formats
-      if (product.category) {
-        categoryId = product.category._id;
-        categoryName = product.category.name;
-      } else if (product.categories && product.categories.length > 0) {
-        categoryId = product.categories[0]._id;
-        categoryName = product.categories[0].name;
+
+      if (item.categories && item.categories.length > 0) {
+        categoryId = item.categories[0]._id;
+        categoryName = item.categories[0].name;
       }
-      
+
       if (!categoryMap.has(categoryId)) {
         categoryMap.set(categoryId, {
           _id: categoryId,
@@ -453,23 +467,52 @@ const PurchaseInvoicePage = () => {
           products: []
         });
       }
-      
-      categoryMap.get(categoryId)!.products.push(productWithStock);
+
+      // Adapter: shape each flat catalog row as a Product so the existing tile grid
+      // (built for plain products) renders it unchanged. hasVariants/variantId here
+      // identify *which* variant this specific row/tile is for, so the purchase line
+      // it creates carries the right variantId straight through.
+      categoryMap.get(categoryId)!.products.push({
+        id: item.type === 'variant' ? item.productId : item.id,
+        _id: item.type === 'variant' ? item.productId : item.id,
+        name: item.name,
+        nameUrdu: item.nameUrdu,
+        image: item.image,
+        barcode: item.barcode,
+        unit: item.unit,
+        trackImei: item.trackImei,
+        hasVariants: item.type === 'variant',
+        brandId: item.brand,
+        price: item.price,
+        cost: item.cost,
+        stockQuantity: item.stockQuantity,
+        variantId: item.variantId,
+        trackBatch: item.trackBatch,
+        trackExpiry: item.trackExpiry,
+        knownBatches: item.batches,
+        // getDisplayStock/formatDisplayPrice (used by the tile rendering) read these
+        // when hasVariants is true — min===max here so they resolve to this row's own
+        // single real number instead of a range, since each row is already one
+        // specific variant.
+        variantStockTotal: item.stockQuantity,
+        variantPriceRange: item.type === 'variant'
+          ? { minPrice: item.price, maxPrice: item.price, minCost: item.cost, maxCost: item.cost }
+          : null,
+      } as Product);
     });
-    
+
     setCategorizedProducts(Array.from(categoryMap.values()));
-  }, [products]);
+  }, [purchasableCatalog]);
 
   // Add product to purchase
-  const addToPurchase = useCallback((product: Product, quantity: number = 1) => {
-    console.log('Adding product to purchase:', product);
-    console.log('Product id:', product.id || (product as any)._id);
-    
+  const addToPurchase = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
     setPurchase((prev) => {
       const productIdToMatch = product.id || (product as any)._id;
+      // Match by (productId, variantId) — two different variants of the same product
+      // must stay on separate lines, not silently merge into one quantity.
       const existingIndex = prev.items.findIndex((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
-        return itemProductId === productIdToMatch;
+        return itemProductId === productIdToMatch && (item.variantId || undefined) === (variantId || undefined);
       });
 
       if (existingIndex >= 0) {
@@ -481,14 +524,30 @@ const PurchaseInvoicePage = () => {
         return { ...prev, items: updated };
       }
 
+      // Default to the earliest-expiring batch (already sorted that way by the
+      // backend) — same rule as Sale Invoice's product-select default, and same as
+      // clicking that batch's chip would do. The seller can still switch batches on
+      // the line afterward. Only the purchase price follows the batch — sale price
+      // stays the product's own, per the earlier fix that batch-switching in Purchase
+      // Invoice must never touch sale price.
+      const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
+        ? product.knownBatches?.[0]
+        : undefined;
+
       const newItem: PurchaseItem = {
         product,
         quantity,
         unit: product.unit || 'pcs',
         conversionFactor: 1,
         stockQuantity: quantity,
-        purchasePrice: product.cost || product.price,
+        purchasePrice: defaultBatch?.costPerUnit ?? (product.cost || product.price),
         sellingPrice: product.price || 0,
+        variantId,
+        trackBatch: product.trackBatch,
+        trackExpiry: product.trackExpiry,
+        knownBatches: product.knownBatches,
+        batchNumber: defaultBatch?.batchNumber,
+        expiryDate: defaultBatch?.expiryDate?.slice(0, 10),
       };
 
       return { ...prev, items: [...prev.items, newItem] };
@@ -500,6 +559,11 @@ const PurchaseInvoicePage = () => {
   useEffect(() => {
     if (!search.prefillItems || search.prefillItems.length === 0) return;
     if (prefillAppliedRef.current || loading || products.length === 0) return;
+    // Any prefilled item carrying a variantId needs the purchasable catalog to resolve
+    // that variant's own stock/price/batches — wait for it instead of marking applied
+    // and silently falling back to the bare parent product (no variant pre-selected).
+    const needsCatalog = search.prefillItems.some((item) => item.variantId);
+    if (needsCatalog && (catalogLoading || purchasableCatalog.length === 0)) return;
     prefillAppliedRef.current = true;
 
     setPurchase((prev) => ({
@@ -508,7 +572,36 @@ const PurchaseInvoicePage = () => {
     }));
 
     let addedCount = 0;
-    for (const { productId, quantity } of search.prefillItems) {
+    for (const { productId, variantId, quantity } of search.prefillItems) {
+      if (variantId) {
+        // A purchase suggestion for a specific real variant (or a batch-tracked
+        // simple product's hidden default variant) — pull its own price/cost/batches
+        // from the purchasable catalog instead of the parent product's, same as
+        // picking it manually from the catalog (see handleCatalogItemSelect).
+        const catalogItem = purchasableCatalog.find((c) => c.variantId === variantId);
+        if (catalogItem) {
+          const builtProduct = {
+            id: catalogItem.productId,
+            _id: catalogItem.productId,
+            name: catalogItem.name,
+            nameUrdu: catalogItem.nameUrdu,
+            image: catalogItem.image,
+            barcode: catalogItem.barcode,
+            unit: catalogItem.unit,
+            hasVariants: catalogItem.type === 'variant',
+            trackImei: catalogItem.trackImei,
+            price: catalogItem.price,
+            cost: catalogItem.cost,
+            stockQuantity: catalogItem.stockQuantity,
+            trackBatch: catalogItem.trackBatch,
+            trackExpiry: catalogItem.trackExpiry,
+            knownBatches: catalogItem.batches,
+          } as Product;
+          addToPurchase(builtProduct, quantity, variantId);
+          addedCount += 1;
+          continue;
+        }
+      }
       const product = products.find((p) => (p.id || (p as any)._id) === productId);
       if (product) {
         addToPurchase(product, quantity);
@@ -518,51 +611,55 @@ const PurchaseInvoicePage = () => {
     if (addedCount > 0) {
       toast.success(`Added ${addedCount} product(s) from reorder suggestions`);
     }
-  }, [search.prefillItems, loading, products, addToPurchase]);
+  }, [search.prefillItems, loading, products, purchasableCatalog, catalogLoading, addToPurchase]);
 
-  // Remove item from purchase
-  const removeFromPurchase = useCallback((productId: string) => {
+  // Remove item from purchase. Matches by (productId, variantId) — two different
+  // variants of the same product are different lines and must not affect each other.
+  const removeFromPurchase = useCallback((productId: string, variantId?: string) => {
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.filter((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
-        return itemProductId !== productId;
+        return !(itemProductId === productId && (item.variantId || undefined) === (variantId || undefined));
       }),
     }));
   }, []);
 
   // Update quantity
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
+  const updateQuantity = useCallback((productId: string, quantity: number, variantId?: string) => {
     if (quantity <= 0) return;
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
-        return itemProductId === productId ? { ...item, quantity } : item;
+        const matches = itemProductId === productId && (item.variantId || undefined) === (variantId || undefined);
+        return matches ? { ...item, quantity } : item;
       }),
     }));
   }, []);
 
   // Update purchase price
-  const updatePurchasePrice = useCallback((productId: string, price: number) => {
+  const updatePurchasePrice = useCallback((productId: string, price: number, variantId?: string) => {
     if (price < 0) return;
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
-        return itemProductId === productId ? { ...item, purchasePrice: price } : item;
+        const matches = itemProductId === productId && (item.variantId || undefined) === (variantId || undefined);
+        return matches ? { ...item, purchasePrice: price } : item;
       }),
     }));
   }, []);
 
   // Update selling price
-  const updateSellingPrice = useCallback((productId: string, price: number) => {
+  const updateSellingPrice = useCallback((productId: string, price: number, variantId?: string) => {
     if (price < 0) return;
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item) => {
         const itemProductId = item.product.id || (item.product as any)._id;
-        return itemProductId === productId ? { ...item, sellingPrice: price } : item;
+        const matches = itemProductId === productId && (item.variantId || undefined) === (variantId || undefined);
+        return matches ? { ...item, sellingPrice: price } : item;
       }),
     }));
   }, []);
@@ -651,17 +748,61 @@ const PurchaseInvoicePage = () => {
     setIsEditing(true);
     setEditingPurchase(purchaseToEdit);
     
-    // Transform items from backend format to frontend format
-    const transformedItems = (purchaseToEdit.items || []).map((item: any) => ({
-      product: item.product, // Already populated by backend
-      quantity: item.quantity,
-      unit: item.unit || item.product?.unit,
-      conversionFactor: item.conversionFactor,
-      stockQuantity: item.stockQuantity,
-      purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
-      sellingPrice: item.sellingPriceAtPurchase || item.product?.price || 0,
-      imeis: item.imeis || [],
-    }));
+    // Transform items from backend format to frontend format. Real-variant line items
+    // need the same product-shaped object the create-flow's catalog picker builds
+    // (handleCatalogItemSelect in purchase-panel.tsx) — name with the variant label,
+    // hasVariants:true, and the *live* stock from the purchasable catalog (the saved
+    // item's stockQuantity is what was bought at purchase time, not current stock) —
+    // otherwise the edit form shows "Toshiba" / "Out of stock" / an empty Variant
+    // dropdown instead of the real variant. See
+    // docs/architecture/universal-product-migration.md.
+    const transformedItems = (purchaseToEdit.items || []).map((item: any) => {
+      const variant = item.variantId && typeof item.variantId === 'object' ? item.variantId : null;
+      // toJSON transforms _id -> id, so a populated variant only has `.id`, not `._id`.
+      const variantId = variant?.id || variant?._id || (typeof item.variantId === 'string' ? item.variantId : undefined);
+
+      if (variantId) {
+        const catalogEntry = purchasableCatalog.find((c) => c.variantId === variantId);
+        const variantLabel = variant?.attributes
+          ? Object.values(variant.attributes as Record<string, string>).join(' / ')
+          : catalogEntry?.variantLabel;
+        const baseName = item.product?.name || catalogEntry?.productName || '';
+        return {
+          product: {
+            ...item.product,
+            id: item.product?.id || item.product?._id,
+            hasVariants: true,
+            name: variantLabel ? `${baseName} — ${variantLabel}` : baseName,
+            // Live stock, not the stale quantity bought at purchase time.
+            stockQuantity: catalogEntry?.stockQuantity ?? item.product?.stockQuantity ?? 0,
+          },
+          variantId,
+          quantity: item.quantity,
+          unit: item.unit || variant?.unit || item.product?.unit,
+          conversionFactor: item.conversionFactor,
+          stockQuantity: item.stockQuantity,
+          purchasePrice: item.priceAtPurchase,
+          sellingPrice: item.sellingPriceAtPurchase || variant?.price || 0,
+          imeis: item.imeis || [],
+          batchNumber: item.batchNumber,
+          expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : undefined,
+          trackBatch: variant?.trackBatch ?? catalogEntry?.trackBatch,
+          trackExpiry: variant?.trackExpiry ?? catalogEntry?.trackExpiry,
+          knownBatches: catalogEntry?.batches,
+        };
+      }
+
+      return {
+        product: item.product, // Already populated by backend
+        quantity: item.quantity,
+        unit: item.unit || item.product?.unit,
+        conversionFactor: item.conversionFactor,
+        stockQuantity: item.stockQuantity,
+        purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
+        sellingPrice: item.sellingPriceAtPurchase || item.product?.price || 0,
+        imeis: item.imeis || [],
+      };
+    });
     
     console.log('Transformed items:', transformedItems);
     
@@ -673,7 +814,7 @@ const PurchaseInvoicePage = () => {
       paymentType: purchaseToEdit.paymentType || 'Cash', // Ensure paymentType has valid default
       walletType: purchaseToEdit.walletType || undefined,
     });
-  }, []);
+  }, [purchasableCatalog]);
 
   const refreshProductsAfterPurchase = useCallback(() => {
     setProducts(prevProducts => {

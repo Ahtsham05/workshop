@@ -39,6 +39,10 @@ export const productAttributeApi = createApi({
   reducerPath: 'productAttributeApi',
   baseQuery: baseQueryWithAuth,
   tagTypes: ['ProductAttribute'],
+  // Attribute definitions (Size, Color, ...) change rarely — cache for an hour instead of
+  // the default 60s so reopening the product dialog repeatedly doesn't refetch every time.
+  // Create/update/delete still invalidate the LIST tag immediately, so edits show up right away.
+  keepUnusedDataFor: 3600,
   endpoints: (builder) => ({
     getAllProductAttributes: builder.query<ProductAttribute[], void>({
       query: () => '/all',

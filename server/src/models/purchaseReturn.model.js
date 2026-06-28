@@ -22,6 +22,11 @@ const purchaseReturnItemSchema = new mongoose.Schema(
     },
     costPrice: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
+    // Copied from the original purchase item being returned, when it was a
+    // batch/expiry-tracked variant — see docs/architecture/universal-product-migration.md.
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+    batchNumber: { type: String },
+    expiryDate: { type: Date },
   },
   { _id: false }
 );

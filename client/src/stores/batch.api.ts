@@ -1,6 +1,19 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { purchaseCatalogApi } from './purchaseCatalog.api'
+
+// Receiving/writing-off a batch here also changes the stock+batch chips shown in the
+// Purchase/Sale Invoice product catalog, which lives in a separate RTK Query slice and
+// won't auto-refetch otherwise.
+const invalidatePurchaseCatalog = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -31,6 +44,7 @@ export interface Batch {
   batchNumber: string
   quantity: number
   costPerUnit: number
+  sellingPrice?: number
   manufactureDate?: string
   expiryDate?: string
   supplierId?: string
@@ -42,6 +56,7 @@ export interface CreateBatchBody {
   batchNumber: string
   quantity: number
   costPerUnit: number
+  sellingPrice?: number
   manufactureDate?: string
   expiryDate?: string
   supplierId?: string
@@ -74,6 +89,7 @@ export const batchApi = createApi({
         { type: 'Batch', id: `LIST-${variantId}` },
         { type: 'Batch', id: 'EXPIRING' },
       ],
+      onQueryStarted: invalidatePurchaseCatalog,
     }),
 
     writeOffBatch: builder.mutation<Batch, { batchId: string; variantId: string; reason?: string }>({
@@ -82,6 +98,7 @@ export const batchApi = createApi({
         { type: 'Batch', id: `LIST-${variantId}` },
         { type: 'Batch', id: 'EXPIRING' },
       ],
+      onQueryStarted: invalidatePurchaseCatalog,
     }),
   }),
 })

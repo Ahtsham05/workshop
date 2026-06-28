@@ -5,6 +5,7 @@ module.exports.Customer = require('./customer.model');
 module.exports.Supplier = require('./supplier.model');
 module.exports.Product = require('./product.model');
 module.exports.Category = require('./category.model');
+module.exports.Brand = require('./brand.model');
 module.exports.Purchase = require('./purchase.model');
 module.exports.PurchaseOrder = require('./purchaseOrder.model');
 module.exports.Invoice = require('./invoice.model');
@@ -42,6 +43,15 @@ module.exports.SalesReturn = require('./salesReturn.model');
 module.exports.PurchaseReturn = require('./purchaseReturn.model');
 module.exports.SeasonalFactor = require('./seasonalFactor.model');
 module.exports.InventoryTransfer = require('./inventoryTransfer.model');
+
+// Universal Product Architecture (see docs/architecture/universal-product-migration.md)
+module.exports.ProductAttribute = require('./productAttribute.model');
+module.exports.ProductVariant = require('./productVariant.model');
+module.exports.Barcode = require('./barcode.model');
+module.exports.Inventory = require('./inventory.model');
+module.exports.Batch = require('./batch.model');
+module.exports.SerialNumber = require('./serialNumber.model');
+module.exports.InventoryTransaction = require('./inventoryTransaction.model');
 
 // Utility Bill Models
 module.exports.UtilityCompany = require('./utilityCompany.model');

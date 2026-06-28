@@ -29,6 +29,12 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading.
+const EMPTY_SELLABLE_CATALOG: PurchaseCatalogItem[] = []
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
@@ -539,8 +545,17 @@ export function InvoicePanel({
     ),
   )
 
+  // Flat sellable catalog: one row per non-variant product, and one row per real
+  // variant for hasVariants products — each with its own real price/cost/stock, so the
+  // picker shows "Toshiba — Black/64GB" with its own numbers instead of a vague
+  // rolled-up product row. See docs/architecture/universal-product-migration.md.
+  const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
+  const filteredSellableProducts = sellableCatalog.filter((item) =>
+    matchesBilingualSearch(productSearchQuery, item.name, item.nameUrdu, item.barcode, item.brand?.name),
+  )
+
   // Handle product selection for manual entries
-  const handleProductSelect = useCallback((itemId: string, product: any) => {
+  const handleProductSelect = useCallback((itemId: string, product: any, variantId?: string) => {
     const productId = product._id || product.id
     if (!productId) {
       console.error('Product has no valid ID:', product)
@@ -548,9 +563,23 @@ export function InvoicePanel({
       return
     }
 
-    // Get current stock from the products state (real-time stock)
-    const currentProduct = products.find(p => (p._id || p.id) === productId)
+    // Get current stock — for a real variant, `product.stockQuantity` is already that
+    // exact variant's live stock (from the catalog); the `products` cache only ever
+    // holds the legacy/parent product, which would be the wrong number.
+    const currentProduct = variantId ? undefined : products.find(p => (p._id || p.id) === productId)
     const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
+
+    // Default to the earliest-expiring batch (already sorted that way by the backend)
+    // — the seller can still switch batches on the line afterward. No automatic FEFO
+    // splitting across batches yet.
+    const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
+      ? product.knownBatches?.[0]
+      : undefined
+    const batchId = defaultBatch?.id
+    const batchNumber = defaultBatch?.batchNumber
+    // A batch can carry its own intended retail price, recorded at purchase time —
+    // use it instead of the product's generic price when one was auto-selected.
+    const unitPriceFromBatch = defaultBatch?.sellingPrice ?? product.price
     const unitOptions = getProductUnitOptions(product)
     
     console.log('=== PRODUCT SELECT DEBUG ===')
@@ -565,11 +594,13 @@ export function InvoicePanel({
       return
     }
 
-    // If this item already had a product selected, restore its stock first
-    if (currentItem.productId && !currentItem.isManualEntry) {
+    // If this item already had a (non-variant) product selected, restore its stock
+    // first — skipped when the previous selection was a real variant, since the
+    // `products` cache only ever holds the legacy/parent product.
+    if (currentItem.productId && !currentItem.isManualEntry && !currentItem.variantId) {
       const previousStockQuantity = currentItem.stockQuantity || currentItem.quantity
-      setProducts(prevProducts => prevProducts.map(p => 
-        (p._id || p.id) === currentItem.productId 
+      setProducts(prevProducts => prevProducts.map(p =>
+        (p._id || p.id) === currentItem.productId
           ? { ...p, stockQuantity: p.stockQuantity + previousStockQuantity }
           : p
       ))
@@ -580,7 +611,7 @@ export function InvoicePanel({
       product,
       quantity: currentItem.quantity,
       unit: unitOptions[0]?.value || product.unit,
-      unitPrice: product.price,
+      unitPrice: unitPriceFromBatch,
       cost: product.cost,
       conversionFactor: unitOptions[0]?.factor,
     })
@@ -597,33 +628,42 @@ export function InvoicePanel({
       return
     }
     
-    const newItems = invoice.items.map(item => 
-      item.id === itemId 
-        ? { 
-            ...item, 
+    const newItems = invoice.items.map(item =>
+      item.id === itemId
+        ? {
+            ...item,
             productId: productId,
+            variantId,
+            batchId,
+            batchNumber,
             name: product.name,
             nameUrdu: product.nameUrdu,
             image: product.image,
             unit: lineValues.lineUnit,
             conversionFactor: lineValues.conversionFactor,
             stockQuantity: lineValues.stockQuantity,
-            unitPrice: product.price,
-            cost: product.cost,
+            unitPrice: unitPriceFromBatch,
+            // Use the auto-selected batch's actual cost when known — different batches
+            // can have been bought at different prices.
+            cost: defaultBatch?.costPerUnit ?? product.cost,
             subtotal: lineValues.subtotal,
-            profit: lineValues.profit,
+            profit: lineValues.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * lineValues.stockQuantity),
             isManualEntry: false
           }
         : item
     )
 
-    // Update stock to reflect the selection (decrease by current item quantity)
-    setProducts(prevProducts => prevProducts.map(p => 
-      (p._id || p.id) === productId 
-        ? { ...p, stockQuantity: p.stockQuantity - lineValues.stockQuantity }
-        : p
-    ))
-    
+    // Update stock to reflect the selection (decrease by current item quantity) — for
+    // variant items this client-side cache doesn't apply (the legacy product's field
+    // would be the wrong number); the catalog query reflects real stock after refetch.
+    if (!variantId) {
+      setProducts(prevProducts => prevProducts.map(p =>
+        (p._id || p.id) === productId
+          ? { ...p, stockQuantity: p.stockQuantity - lineValues.stockQuantity }
+          : p
+      ))
+    }
+
     console.log(`Stock updated: ${product.name} - decreased by ${lineValues.stockQuantity}`)
     console.log('=== PRODUCT SELECT DEBUG END ===')
     
@@ -674,6 +714,84 @@ export function InvoicePanel({
       }
     }, 100)
   }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
+
+  // Selecting a flat catalog row (product or real variant) — builds the product-shaped
+  // object handleProductSelect expects, using the *variant's* real price/cost/stock
+  // when the row is a variant, and wires variantId straight through.
+  const handleCatalogItemSelect = useCallback(
+    (itemId: string, catalogItem: PurchaseCatalogItem) => {
+      const builtProduct = {
+        id: catalogItem.productId,
+        _id: catalogItem.productId,
+        // catalogItem.name already reads "Toshiba — 12" for a variant row —
+        // productName alone would lose the variant label the user just picked.
+        name: catalogItem.name,
+        nameUrdu: catalogItem.nameUrdu,
+        image: catalogItem.image,
+        barcode: catalogItem.barcode,
+        unit: catalogItem.unit,
+        hasVariants: catalogItem.type === 'variant',
+        trackImei: catalogItem.trackImei,
+        trackBatch: catalogItem.trackBatch,
+        trackExpiry: catalogItem.trackExpiry,
+        knownBatches: catalogItem.batches,
+        price: catalogItem.price,
+        cost: catalogItem.cost,
+        stockQuantity: catalogItem.stockQuantity,
+      }
+      handleProductSelect(itemId, builtProduct, catalogItem.variantId)
+    },
+    [handleProductSelect]
+  )
+
+  // Switching which batch a line item deducts from on save (no automatic FEFO
+  // splitting yet — see docs/architecture/universal-product-migration.md). Different
+  // batches can have been bought at, and intended to sell for, different prices —
+  // switch both cost AND sale price (unitPrice) to match the batch actually picked,
+  // not just its identity. When the picked batch doesn't carry its own sellingPrice
+  // (e.g. a legacy batch created before that field existed), falls back to the
+  // product/variant's own price — NOT to whatever the line currently shows — so
+  // re-selecting an earlier batch reliably resets the price instead of silently
+  // keeping whatever the last-selected batch left behind.
+  const updateItemBatch = useCallback((itemId: string, batchId: string, batchNumber: string, costPerUnit?: number, sellingPrice?: number, basePrice?: number) => {
+    setInvoice(prev => {
+      const newItems = prev.items.map(item => {
+        if (item.id !== itemId) return item
+        const cost = costPerUnit ?? item.cost
+        const unitPrice = sellingPrice ?? basePrice ?? item.unitPrice
+        const selectedProduct = products.find((p) => (p._id || p.id) === item.productId) || { unit: item.unit }
+        const lineValues = calculateInvoiceLineValues({
+          product: selectedProduct,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice,
+          cost,
+          conversionFactor: item.conversionFactor,
+        })
+        if (!lineValues) return { ...item, batchId, batchNumber, cost, profit: item.subtotal - (cost * item.quantity) }
+        return {
+          ...item,
+          batchId,
+          batchNumber,
+          cost,
+          unitPrice,
+          subtotal: lineValues.subtotal,
+          profit: lineValues.profit,
+        }
+      })
+      if (!calculateTotals) return { ...prev, items: newItems }
+      const totals = calculateTotals(newItems, prev.discount, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      return {
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+      }
+    })
+  }, [setInvoice, calculateTotals, products])
 
   const addNewRowAndOpenProduct = useCallback(() => {
     const nextEmptyRow = invoice.items.find((item) => item.isManualEntry && !item.productId)
@@ -841,6 +959,9 @@ export function InvoicePanel({
       const invoiceData = {
         items: validItems.map(item => ({
           productId: item.productId,
+          variantId: item.variantId,
+          batchId: item.batchId,
+          batchNumber: item.batchNumber,
           name: item.name,
           nameUrdu: item.nameUrdu,
           image: item.image,
@@ -1493,7 +1614,13 @@ export function InvoicePanel({
             ) : (
               invoice.items.map((item) => {
                 const currentProduct = products.find(p => (p._id || p.id) === item.productId)
-                const remainingStock = currentProduct?.stockQuantity
+                // For a real variant, `products` only ever holds the legacy/parent
+                // product (its stockQuantity is a stale fallback, not this variant's
+                // real number) — read the variant's live stock from the catalog instead.
+                const catalogEntry = item.variantId
+                  ? sellableCatalog.find(c => c.variantId === item.variantId)
+                  : undefined
+                const remainingStock = item.variantId ? catalogEntry?.stockQuantity : currentProduct?.stockQuantity
                 return (
                   <div key={item.id} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
                     {/* Row 1: Image + Name/Selector + Delete */}
@@ -1559,7 +1686,7 @@ export function InvoicePanel({
                                   <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-[400px] p-0" align="start" side="bottom" sideOffset={4}>
+                              <PopoverContent className="w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
                                 <Command shouldFilter={false}>
                                   <div className="relative">
                                     <CommandInput
@@ -1576,12 +1703,12 @@ export function InvoicePanel({
                                   </div>
                                 </div>
                                 <CommandList className="max-h-[300px] overflow-y-auto">
-                                  {productsLoading && products.length === 0 ? (
+                                  {productsLoading && filteredSellableProducts.length === 0 ? (
                                     <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
                                       <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
                                       {t('loading_products')}
                                     </div>
-                                  ) : filteredProducts.length === 0 ? (
+                                  ) : filteredSellableProducts.length === 0 ? (
                                     canCreateProduct ? (
                                       <EntityCreateEmptyPrompt
                                         message={t('no_products_found')}
@@ -1595,20 +1722,18 @@ export function InvoicePanel({
                                     )
                                   ) : (
                                     <CommandGroup>
-                                      {filteredProducts.map((product) => {
-                                        const pid = product._id || product.id
-                                        return (
+                                      {filteredSellableProducts.map((catalogItem) => (
                                         <CommandItem
-                                          key={String(pid)}
-                                          value={`${String(pid)}-${String(product.name ?? '')}`}
-                                          onSelect={() => handleProductSelect(item.id, product)}
+                                          key={catalogItem.id}
+                                          value={`${catalogItem.id}-${catalogItem.name}`}
+                                          onSelect={() => handleCatalogItemSelect(item.id, catalogItem)}
                                           className="flex items-center gap-2 cursor-pointer p-3"
                                         >
                                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            {product.image?.url ? (
+                                            {catalogItem.image?.url ? (
                                               <img
-                                                src={product.image.url}
-                                                alt={product.name}
+                                                src={catalogItem.image.url}
+                                                alt={catalogItem.name}
                                                 className="w-8 h-8 object-cover rounded flex-shrink-0"
                                               />
                                             ) : (
@@ -1618,47 +1743,56 @@ export function InvoicePanel({
                                             )}
                                             <div className="flex flex-col flex-1 min-w-0">
                                               <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                                                <span className={getTextClasses(product.name, 'text-sm font-medium truncate shrink-0')} title={product.name}>
-                                                  {product.name}
+                                                <span className={getTextClasses(catalogItem.name, 'text-sm font-medium truncate shrink-0')} title={catalogItem.name}>
+                                                  {catalogItem.name}
                                                 </span>
-                                                {product.nameUrdu?.trim() ? (
+                                                {catalogItem.nameUrdu?.trim() ? (
                                                   <span
                                                     dir="rtl"
-                                                    className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(product.nameUrdu))}
-                                                    title={product.nameUrdu.trim()}
+                                                    className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
+                                                    title={catalogItem.nameUrdu.trim()}
                                                   >
-                                                    {product.nameUrdu.trim()}
+                                                    {catalogItem.nameUrdu.trim()}
                                                   </span>
                                                 ) : null}
+                                                {catalogItem.brand?.name && (
+                                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                                                    {catalogItem.brand.name}
+                                                  </Badge>
+                                                )}
                                               </div>
                                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <span key={`price-${product._id}`}>Rs{product.price}</span>
+                                                <span>Rs{Number(catalogItem.price || 0).toFixed(2)}</span>
                                                 <span
-                                                  key={`stock-${product._id}`}
-                                                  className={product.stockQuantity <= 0 ? 'text-red-600 font-medium' : product.stockQuantity <= 5 ? 'text-red-500 font-medium' : product.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
+                                                  className={catalogItem.stockQuantity <= 0 ? 'text-red-600 font-medium' : catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : catalogItem.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
                                                 >
-                                                  Stock: {product.stockQuantity}
+                                                  Stock: {catalogItem.stockQuantity}
                                                 </span>
-                                                {product.cost != null && (
+                                                <span
+                                                  className={cn(
+                                                    'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
+                                                    showProductCost
+                                                      ? 'cursor-default'
+                                                      : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
+                                                  )}
+                                                  title="Purchase cost"
+                                                >
+                                                  Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
+                                                </span>
+                                                {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
                                                   <span
-                                                    key={`cost-${product._id}`}
-                                                    className={cn(
-                                                      'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
-                                                      showProductCost
-                                                        ? 'cursor-default'
-                                                        : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
-                                                    )}
-                                                    title="Purchase cost"
+                                                    className="text-blue-600"
+                                                    title={catalogItem.batches.map(b => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${new Date(b.expiryDate).toLocaleDateString()})` : ''}`).join(', ')}
                                                   >
-                                                    Cost: Rs{Number(product.cost).toFixed(2)}
+                                                    {catalogItem.batches.length} batch{catalogItem.batches.length === 1 ? '' : 'es'}
+                                                    {catalogItem.batches[0]?.expiryDate && ` · exp ${new Date(catalogItem.batches[0].expiryDate).toLocaleDateString()}`}
                                                   </span>
                                                 )}
                                               </div>
                                             </div>
                                           </div>
                                         </CommandItem>
-                                        )
-                                      })}
+                                      ))}
                                     </CommandGroup>
                                   )}
                                 </CommandList>
@@ -1688,6 +1822,32 @@ export function InvoicePanel({
                                 </span>
                               )}
                             </div>
+                            {/* Which batch this sale depletes — defaults to earliest
+                                expiry but switchable; no automatic FEFO splitting across
+                                batches yet, see docs/architecture/universal-product-migration.md. */}
+                            {catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0 && (
+                              <div className='flex flex-wrap items-center gap-1 mt-1'>
+                                {catalogEntry.batches.map(b => {
+                                  const isSelected = item.batchId === b.id
+                                  return (
+                                    <button
+                                      key={b.id}
+                                      type='button'
+                                      onClick={() => updateItemBatch(item.id, b.id, b.batchNumber, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
+                                      title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                                      className={cn(
+                                        'rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
+                                        isSelected
+                                          ? 'border-blue-600 bg-blue-100 text-blue-800'
+                                          : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                                      )}
+                                    >
+                                      {b.batchNumber} · {b.quantity} left
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

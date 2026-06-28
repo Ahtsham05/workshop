@@ -4,6 +4,9 @@ const { SalesReturn, Invoice, Product, CustomerLedger, Customer, CashBookEntry, 
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const accountsSystemService = require('./accountsSystem.service');
+const inventorySyncService = require('./inventorySync.service');
+const inventoryService = require('./inventory.service');
+const batchService = require('./batch.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -108,6 +111,12 @@ const createSalesReturn = async (returnBody) => {
         unit: conversion.lineUnit,
         conversionFactor: conversion.conversionFactor,
         stockQuantity: conversion.stockQuantity,
+        // Carry the variant/batch identity across from the original sale, so
+        // batch/expiry reporting can trace which batch was actually returned — see
+        // docs/architecture/universal-product-migration.md.
+        variantId: item.variantId ?? invoiceLineItem?.variantId,
+        batchId: item.batchId ?? invoiceLineItem?.batchId,
+        batchNumber: item.batchNumber ?? invoiceLineItem?.batchNumber,
       });
     }
 
@@ -122,19 +131,37 @@ const createSalesReturn = async (returnBody) => {
       },
     ], { session });
 
-    // 4. Increase stock for each returned item (atomic increment)
+    // 4. Increase stock for each returned item (atomic increment). Real-variant /
+    // batch-tracked items restore via Inventory/Batch instead of the legacy
+    // Product.stockQuantity fallback — see docs/architecture/universal-product-migration.md.
+    // Those restores run after the transaction commits (batchService/inventoryService
+    // don't participate in this Mongoose session), mirrored by `pendingVariantRestores`.
+    const pendingStockSyncs = [];
+    const pendingVariantRestores = [];
     for (const item of normalizedItems) {
+      const returnedQuantity = Number(item.stockQuantity || item.quantity || 0);
+      if (item.variantId) {
+        pendingVariantRestores.push({
+          variantId: item.variantId,
+          batchId: item.batchId,
+          quantity: returnedQuantity,
+        });
+        continue;
+      }
       const updated = await Product.findOneAndUpdate(
         {
           _id: item.productId,
           organizationId: returnBody.organizationId,
         },
-        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
+        { $inc: { stockQuantity: returnedQuantity } },
         { session, new: true }
       );
       if (!updated) {
         throw new ApiError(httpStatus.NOT_FOUND, `Product ${item.productId} not found`);
       }
+      // Recorded after the transaction commits (see below) — recordStockChange runs
+      // outside this session, so it must not fire until the legacy write is final.
+      pendingStockSyncs.push({ productId: item.productId, quantityDelta: returnedQuantity });
     }
 
     // 5. Update invoice status to 'refunded' if all items are returned
@@ -154,6 +181,36 @@ const createSalesReturn = async (returnBody) => {
     await _createCashBookEntryInSession(salesReturn, session);
 
     await session.commitTransaction();
+
+    for (const sync of pendingStockSyncs) {
+      await inventorySyncService.recordStockChange({
+        organizationId: returnBody.organizationId,
+        productId: sync.productId,
+        quantityDelta: sync.quantityDelta,
+        type: 'return_in',
+        refType: 'SalesReturn',
+        refId: salesReturn._id,
+        createdBy: returnBody.createdBy,
+      });
+    }
+
+    for (const restore of pendingVariantRestores) {
+      if (restore.batchId) {
+        await batchService.restoreToBatch(restore.batchId, restore.quantity, {
+          refType: 'SalesReturn',
+          refId: salesReturn._id,
+          userId: returnBody.createdBy,
+        });
+      } else {
+        await inventoryService.adjustInventory(restore.variantId, {
+          quantityDelta: restore.quantity,
+          type: 'return_in',
+          refType: 'SalesReturn',
+          refId: salesReturn._id,
+          userId: returnBody.createdBy,
+        });
+      }
+    }
 
     accountsSystemService
       .postSalesReturn(
@@ -357,10 +414,40 @@ const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
     // Stock already increased on creation — create cash entry now
     await _createCashBookEntry(ret);
   } else if (status === 'rejected') {
-    // Reverse stock that was added at creation time
+    // Reverse stock that was added at creation time. Real-variant / batch-tracked
+    // items reverse via Inventory/Batch instead of the legacy Product.stockQuantity
+    // fallback — see docs/architecture/universal-product-migration.md.
     for (const item of ret.items) {
+      const reversedQuantity = -Number(item.stockQuantity || item.quantity || 0);
+      if (item.variantId) {
+        if (item.batchId) {
+          await batchService.restoreToBatch(item.batchId, reversedQuantity, {
+            refType: 'SalesReturn',
+            refId: ret._id,
+            userId,
+          });
+        } else {
+          await inventoryService.adjustInventory(item.variantId, {
+            quantityDelta: reversedQuantity,
+            type: 'return_out',
+            refType: 'SalesReturn',
+            refId: ret._id,
+            userId,
+          });
+        }
+        continue;
+      }
       await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) },
+        $inc: { stockQuantity: reversedQuantity },
+      });
+      await inventorySyncService.recordStockChange({
+        organizationId: ret.organizationId,
+        productId: item.productId,
+        quantityDelta: reversedQuantity,
+        type: 'return_out',
+        refType: 'SalesReturn',
+        refId: ret._id,
+        createdBy: userId,
       });
     }
   }
@@ -372,10 +459,36 @@ const deleteSalesReturn = async (id) => {
   const ret = await SalesReturn.findById(id);
   if (!ret) throw new ApiError(httpStatus.NOT_FOUND, 'Sales return not found');
 
-  // Reverse stock
+  // Reverse stock. Real-variant / batch-tracked items reverse via Inventory/Batch
+  // instead of the legacy Product.stockQuantity fallback.
   for (const item of ret.items) {
+    const reversedQuantity = -Number(item.stockQuantity || item.quantity || 0);
+    if (item.variantId) {
+      if (item.batchId) {
+        await batchService.restoreToBatch(item.batchId, reversedQuantity, {
+          refType: 'SalesReturn',
+          refId: ret._id,
+        });
+      } else {
+        await inventoryService.adjustInventory(item.variantId, {
+          quantityDelta: reversedQuantity,
+          type: 'return_out',
+          refType: 'SalesReturn',
+          refId: ret._id,
+        });
+      }
+      continue;
+    }
     await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) },
+      $inc: { stockQuantity: reversedQuantity },
+    });
+    await inventorySyncService.recordStockChange({
+      organizationId: ret.organizationId,
+      productId: item.productId,
+      quantityDelta: reversedQuantity,
+      type: 'return_out',
+      refType: 'SalesReturn',
+      refId: ret._id,
     });
   }
 

@@ -252,7 +252,16 @@ export default function PurchaseSuggestionsPage() {
   const getSelectedSuggestions = () => allSuggestions.filter((s) => selected.has(s.productId))
 
   const getSelectedPrefillItems = () =>
-    getSelectedSuggestions().map((s) => ({ productId: s.productId, quantity: s.suggestedOrderQty }))
+    getSelectedSuggestions().map((s) => ({
+      // `s.productId` is the real product id when this is a simple, untracked
+      // product; for a real variant or a batch-tracked simple product it's actually
+      // the variantId (see docs/architecture/universal-product-migration.md) — pass
+      // it through as `variantId` too so the purchase invoice can select the exact
+      // variant instead of just the parent product.
+      productId: s.variantId ? s.realProductId ?? s.productId : s.productId,
+      variantId: s.variantId || undefined,
+      quantity: s.suggestedOrderQty,
+    }))
 
   /** Most common recommended supplier among the selected products — the right pick when a whole supplier group is selected, and still a sane default when the selection spans more than one. */
   const getSelectedSupplierId = (): string | undefined => {

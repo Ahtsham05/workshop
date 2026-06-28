@@ -22,6 +22,10 @@ const PERMISSION_LABELS = {
   createUsers: 'create users',
   editUsers: 'edit users',
   deleteUsers: 'delete users',
+  viewBrands: 'view brands',
+  createBrands: 'create brands',
+  editBrands: 'edit brands',
+  deleteBrands: 'delete brands',
 };
 
 const formatPermissionError = (permissions) => {

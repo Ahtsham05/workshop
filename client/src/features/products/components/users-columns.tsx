@@ -118,6 +118,26 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     enableHiding: true,
   },
   {
+    id: 'brand',
+    accessorFn: (product) => (typeof product.brandId === 'object' && product.brandId ? product.brandId.name : ''),
+    header: ({ column }) => <DataTableColumnHeader column={column} title='brand' />,
+    cell: ({ row }) => {
+      const brand = row.original.brandId
+      if (!brand || typeof brand !== 'object') {
+        return <span className="text-muted-foreground">-</span>
+      }
+      return (
+        <Badge variant="secondary" className="flex items-center gap-1 max-w-fit">
+          {brand.logo?.url && (
+            <img src={brand.logo.url} alt={brand.name} className="w-3 h-3 rounded-full object-cover" />
+          )}
+          <span className={getTextClasses(brand.name, 'text-xs')}>{brand.name}</span>
+        </Badge>
+      )
+    },
+    enableHiding: true,
+  },
+  {
     accessorKey: 'barcode',
     header: ({ column }) => <DataTableColumnHeader column={column} title='barcode' />,
     cell: ({ row }) => <div>{row.getValue('barcode')}</div>,
@@ -127,6 +147,15 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     accessorKey: 'price',
     header: ({ column }) => <DataTableColumnHeader column={column} title='price' />,
     cell: ({ row }) => {
+      const product = row.original
+      const range = product.hasVariants ? product.variantPriceRange : null
+      if (range) {
+        return (
+          <div>
+            {range.minPrice === range.maxPrice ? range.minPrice : `${range.minPrice}–${range.maxPrice}`}
+          </div>
+        )
+      }
       const value = Number(row.getValue('price') ?? 0)
       return <div>{value}</div>
     },
@@ -135,6 +164,15 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     accessorKey: 'cost',
     header: ({ column }) => <DataTableColumnHeader column={column} title='cost' />,
     cell: ({ row }) => {
+      const product = row.original
+      const range = product.hasVariants ? product.variantPriceRange : null
+      if (range) {
+        return (
+          <div>
+            {range.minCost === range.maxCost ? range.minCost : `${range.minCost}–${range.maxCost}`}
+          </div>
+        )
+      }
       const value = Number(row.getValue('cost') ?? 0)
       return <div>{value}</div>
     },
@@ -145,9 +183,10 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     cell: ({ row }) => {
       const product = row.original
       const unit = product.unit || DEFAULT_UNIT
+      const value = product.hasVariants ? (product.variantStockTotal ?? 0) : row.getValue('stockQuantity')
       return (
         <Badge variant='outline' className={cn('capitalize')}>
-          {row.getValue('stockQuantity')} {getUnitLabel(unit)}
+          {value} {getUnitLabel(unit)}
         </Badge>
       )
     },

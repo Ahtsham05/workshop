@@ -103,6 +103,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/products/bulk-edit', anyPermission: ['editProducts'] },
   { prefix: '/products', anyPermission: ['viewProducts'] },
   { prefix: '/categories', anyPermission: ['viewCategories'] },
+  { prefix: '/brands', anyPermission: ['viewBrands'] },
   { prefix: '/customers', anyPermission: ['viewCustomers'] },
   { prefix: '/suppliers', anyPermission: ['viewSuppliers'] },
   { prefix: '/purchase-orders', anyPermission: ['viewPurchaseOrders', 'viewPurchases'] },

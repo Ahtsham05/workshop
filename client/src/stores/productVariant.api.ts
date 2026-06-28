@@ -35,6 +35,7 @@ export interface ProductVariant {
   productId: string
   isDefault?: boolean
   sku?: string
+  barcode?: string
   attributes?: Record<string, string>
   price: number
   cost: number
@@ -49,6 +50,7 @@ export interface ProductVariant {
 
 export interface CreateProductVariantBody {
   sku?: string
+  barcode?: string
   attributes?: Record<string, string>
   price: number
   cost: number
@@ -57,6 +59,10 @@ export interface CreateProductVariantBody {
   trackBatch?: boolean
   trackExpiry?: boolean
   trackSerial?: boolean
+  // Opening-stock batch identity, only used when trackBatch/trackExpiry is true and
+  // quantity > 0 — see docs/architecture/universal-product-migration.md.
+  batchNumber?: string
+  expiryDate?: string
 }
 
 export const productVariantApi = createApi({

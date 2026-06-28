@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Insight, Invoice, Product, Customer, Branch } = require('../models');
+const productService = require('./product.service');
 
 /* ────────────────────────────────────────────────────────────────────────
  * CONFIG — every "magic number" the engine uses lives here so behaviour
@@ -140,7 +141,11 @@ const aggregateProductSales = async ({ organizationId, branchId, start, end }) =
     { $unwind: '$items' },
     {
       $group: {
-        _id: '$items.productId',
+        // Collapses to the variant when one exists (real variant, or a batch-tracked
+        // simple product's hidden default variant), else the product itself — matches
+        // product.service.js#getPurchasableCatalog's `id` convention, see
+        // docs/architecture/universal-product-migration.md.
+        _id: { $ifNull: ['$items.variantId', '$items.productId'] },
         quantitySold: { $sum: '$items.quantity' },
         revenue: { $sum: '$items.subtotal' },
         profit: { $sum: '$items.profit' },
@@ -380,6 +385,22 @@ const buildDeadStockInsight = (deadProducts) => {
   };
 };
 
+/** Stock that's about to expire — distinct from age-based dead stock, since a unit
+ * can be selling perfectly fine and still have one batch expiring soon. */
+const buildExpiringStockInsight = (expiringProducts) => {
+  if (expiringProducts.length === 0) return null;
+  const atRiskValue = expiringProducts.reduce((sum, p) => sum + p.stock * p.cost, 0);
+  return {
+    type: 'expiring_stock',
+    category: 'inventory',
+    priority: expiringProducts.some((p) => p.daysUntilExpiry <= 7) ? 'high' : 'medium',
+    confidence: 'high',
+    title: `${expiringProducts.length} product(s) have batches expiring within 30 days`,
+    description: `About Rs${round2(atRiskValue)} in stock is tied to batches nearing expiry — sell through, discount, or write off before it's wasted.`,
+    meta: { products: expiringProducts.slice(0, CONFIG.TOP_LIST_SIZE), atRiskValue: round2(atRiskValue) },
+  };
+};
+
 const buildMarginInsight = (type, products, label) => {
   if (products.length === 0) return null;
   const leader = products[0];
@@ -539,9 +560,10 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
     customerLifetime,
     fbtPairsRaw,
   ] = await Promise.all([
-    Product.find({ organizationId: orgId, branchId: brId })
-      .select('name cost price stockQuantity categories category createdAt')
-      .lean(),
+    // One row per sellable unit (simple product, real variant, or a batch-tracked
+    // simple product's hidden default variant) with real Inventory-based stock — see
+    // product.service.js#getPurchasableCatalog and docs/architecture/universal-product-migration.md.
+    productService.getPurchasableCatalog({ organizationId: orgId, branchId: brId }),
     aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last30 }),
     aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.prev30 }),
     aggregateProductSales({ organizationId: orgId, branchId: brId, ...ranges.last90 }),
@@ -551,9 +573,11 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
     aggregateFrequentlyBoughtTogether({ organizationId: orgId, branchId: brId, ...ranges.last30 }),
   ]);
 
-  /* ── Per-product metrics: merge current product state with sales history ── */
+  /* ── Per-unit metrics: merge current stock state with sales history. `id` is the
+   * unit key from getPurchasableCatalog (variantId when one exists, else productId),
+   * matching the `$ifNull` grouping in aggregateProductSales above. ── */
   const productMetrics = products.map((p) => {
-    const id = String(p._id);
+    const id = String(p.id);
     const s30 = salesLast30.get(id) || { quantitySold: 0, revenue: 0, profit: 0, orders: 0, lastSoldAt: null };
     const sPrev30 = salesPrev30.get(id) || { quantitySold: 0, revenue: 0, profit: 0, orders: 0 };
     const s90 = salesLast90.get(id) || { quantitySold: 0, lastSoldAt: null };
@@ -567,8 +591,19 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
     const growthPercent = calcGrowthPercent(s30.quantitySold, sPrev30.quantitySold);
     const categoryName = p.categories?.[0]?.name || p.category || 'Uncategorized';
 
+    // Nearest active batch expiry, when this unit tracks batches — feeds the
+    // expiring-stock insight below, separate from age-based dead-stock detection.
+    const nearestBatch = (p.batches || [])
+      .filter((b) => b.expiryDate && b.quantity > 0)
+      .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))[0] || null;
+    const daysUntilExpiry = nearestBatch
+      ? Math.ceil((new Date(nearestBatch.expiryDate).getTime() - Date.now()) / 86400000)
+      : null;
+
     return {
       productId: id,
+      realProductId: String(p.productId),
+      variantId: p.variantId ? String(p.variantId) : null,
       name: p.name,
       stock: p.stockQuantity,
       cost: p.cost,
@@ -588,6 +623,8 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
       unitProfit,
       marginPercent,
       growthPercent,
+      nearestBatchNumber: nearestBatch?.batchNumber || null,
+      daysUntilExpiry,
     };
   });
 
@@ -645,6 +682,11 @@ const generateInsightsForBranch = async ({ organizationId, branchId }) => {
     return p.stock > 0 && neverSoldRecently && isOldEnoughToJudge;
   });
   insights.push(buildDeadStockInsight(deadProducts));
+
+  const expiringProducts = productMetrics.filter(
+    (p) => p.stock > 0 && p.daysUntilExpiry !== null && p.daysUntilExpiry <= 30,
+  );
+  insights.push(buildExpiringStockInsight(expiringProducts));
 
   /* ── 3. PROFIT ANALYTICS ─────────────────────────────────────────────── */
   const byMargin = [...productMetrics].sort((a, b) => b.marginPercent - a.marginPercent);

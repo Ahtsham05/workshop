@@ -17,6 +17,7 @@ import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } f
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ProductHistoryDialog } from './product-history-dialog'
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -27,7 +28,7 @@ interface ProductCatalogProps {
   setShowCost: (show: boolean) => void
   searchTerm: string
   setSearchTerm: (term: string) => void
-  onAddToInvoice: (product: Product, quantity?: number) => void
+  onAddToInvoice: (product: Product, quantity?: number, variantId?: string) => void
   onBarcodeSearch: (barcode: string) => void
   selectedCustomerId?: string
   selectedCustomerName?: string
@@ -128,7 +129,7 @@ export function ProductCatalog({
 
   // Quick add with different quantities
   const handleQuickAdd = useCallback((product: Product, quantity: number = 1) => {
-    onAddToInvoice(product, quantity)
+    onAddToInvoice(product, quantity, product.variantId)
   }, [onAddToInvoice])
 
   const getTotalProducts = () => {
@@ -314,9 +315,9 @@ export function ProductCatalog({
                   >
                     {category.products.map((product) => (
                       <div
-                        key={product._id}
+                        key={product.variantId || product._id}
                         onClick={() => {
-                          if (product.stockQuantity > 0) {
+                          if (getDisplayStock(product) > 0) {
                             handleQuickAdd(product, 1)
                           } else {
                             // Show error toast for out of stock items
@@ -325,13 +326,13 @@ export function ProductCatalog({
                         }}
                         className={showImages
                           ? `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
-                              product.stockQuantity > 0 
-                                ? 'hover:shadow-sm cursor-pointer' 
+                              getDisplayStock(product) > 0
+                                ? 'hover:shadow-sm cursor-pointer'
                                 : 'opacity-60 cursor-not-allowed bg-gray-50'
                             }`
                           : `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors ${
-                              product.stockQuantity > 0 
-                                ? 'hover:bg-muted/30 cursor-pointer' 
+                              getDisplayStock(product) > 0
+                                ? 'hover:bg-muted/30 cursor-pointer'
                                 : 'opacity-60 cursor-not-allowed bg-gray-50'
                             }`
                         }
@@ -351,12 +352,12 @@ export function ProductCatalog({
                               </div>
                             )}
                             {/* Stock badge overlay */}
-                            {product.stockQuantity <= 5 && product.stockQuantity > 0 && (
+                            {getDisplayStock(product) <= 5 && getDisplayStock(product) > 0 && (
                               <Badge variant="destructive" className='absolute top-1 right-1 text-xs px-1 py-0'>
                                 Low
                               </Badge>
                             )}
-                            {product.stockQuantity === 0 && (
+                            {getDisplayStock(product) === 0 && (
                               <Badge variant="secondary" className='absolute top-1 right-1 text-xs px-1 py-0'>
                                 Out
                               </Badge>
@@ -410,16 +411,16 @@ export function ProductCatalog({
                             )}
                           >
                             <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
-                              Rs{Number(product.price ?? 0).toFixed(2)}
+                              Rs{formatDisplayPrice(product, 'price')}
                             </span>
-                            <span key={`stock-${product._id}`}>Stock: {Number(product.stockQuantity ?? 0)}</span>
+                            <span key={`stock-${product._id}`}>Stock: {getDisplayStock(product)}</span>
                             {!showImages && product.barcode && (
                               <span key={`barcode-${product._id}`} className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}
                               </span>
                             )}
                           </div>
-                          {product.cost != null && (
+                          {(product.hasVariants || product.cost != null) && (
                             <div className={`flex ${showImages ? 'justify-center' : ''} text-xs select-none`}>
                               <span
                                 className={`text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 cursor-pointer hover:blur-none hover:opacity-100 ${
@@ -427,7 +428,7 @@ export function ProductCatalog({
                                 }`}
                                 title="Purchase cost"
                               >
-                                Cost: Rs{Number(product.cost ?? 0).toFixed(2)}
+                                Cost: Rs{formatDisplayPrice(product, 'cost')}
                               </span>
                             </div>
                           )}
@@ -499,13 +500,13 @@ export function ProductCatalog({
                         {/* Stock Warning for list view only */}
                         {!showImages && (
                           <>
-                            {product.stockQuantity <= 5 && product.stockQuantity > 0 && (
+                            {getDisplayStock(product) <= 5 && getDisplayStock(product) > 0 && (
                               <Badge variant="destructive" className='text-xs px-1 py-0'>
                                 {t('low_stock')}
                               </Badge>
                             )}
-                            
-                            {product.stockQuantity === 0 && (
+
+                            {getDisplayStock(product) === 0 && (
                               <Badge variant="secondary" className='text-xs px-1 py-0'>
                                 {t('out_of_stock')}
                               </Badge>

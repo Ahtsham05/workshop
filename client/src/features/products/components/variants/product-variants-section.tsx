@@ -11,6 +11,12 @@ import {
 interface Props {
   draftVariants: VariantDraftRow[]
   onDraftVariantsChange: (rows: VariantDraftRow[]) => void
+  productName?: string
+}
+
+/** First word of the product name, A-Z0-9 only, e.g. "Classic T-Shirt" -> "CLASSIC". */
+function skuPrefixFromName(name?: string): string {
+  return (name || '').trim().split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z0-9]+/g, '') || ''
 }
 
 /**
@@ -19,11 +25,11 @@ interface Props {
  * ProductVariant + Inventory rows) once the parent product form is submitted, since
  * the variant-create endpoint needs a saved productId first.
  */
-export function ProductVariantsSection({ draftVariants, onDraftVariantsChange }: Props) {
+export function ProductVariantsSection({ draftVariants, onDraftVariantsChange, productName }: Props) {
   const [selectedAttributes, setSelectedAttributes] = useState<SelectedAttribute[]>([])
 
   const handleGenerate = () => {
-    const generated = generateVariantCombinations(selectedAttributes)
+    const generated = generateVariantCombinations(selectedAttributes, skuPrefixFromName(productName))
     // Preserve any already-edited sku/price/etc. for combinations that still exist;
     // re-generating shouldn't discard work the user already did on unaffected rows.
     const existingByKey = new Map(draftVariants.map((row) => [row.key, row]))

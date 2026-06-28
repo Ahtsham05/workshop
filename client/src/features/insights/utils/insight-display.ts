@@ -17,6 +17,7 @@ import {
   Building2,
   Link2,
   UserMinus,
+  CalendarClock,
   type LucideIcon,
 } from 'lucide-react'
 import type { Insight, InsightPriority } from '@/stores/insight.api'
@@ -31,6 +32,7 @@ export const TYPE_ICON: Record<string, LucideIcon> = {
   stock_out_risk: PackageX,
   reorder_suggestion: ShoppingCart,
   dead_stock: Archive,
+  expiring_stock: CalendarClock,
   high_margin_product: Gem,
   low_margin_product: TrendingDown,
   vip_customer: Crown,

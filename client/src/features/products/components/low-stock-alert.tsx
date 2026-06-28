@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getDisplayStock } from '@/lib/product-stock-display';
+import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product';
 
 interface LowStockAlertProps {
   products: Product[];
@@ -28,6 +30,7 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
   const [showSettings, setShowSettings] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [tempThreshold, setTempThreshold] = useState(defaultThreshold);
+  const expiringByProduct = useExpiringBatchesByProduct();
 
   // Load settings from localStorage
   useEffect(() => {
@@ -47,21 +50,23 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
 
   // Calculate low stock products
   const lowStockProducts = useMemo(() => {
-    return products.filter(product => 
-      product.stockQuantity <= threshold && product.stockQuantity > 0
-    );
+    return products.filter(product => {
+      const stock = getDisplayStock(product)
+      return stock <= threshold && stock > 0
+    });
   }, [products, threshold]);
 
   // Calculate out of stock products
   const outOfStockProducts = useMemo(() => {
-    return products.filter(product => product.stockQuantity === 0);
+    return products.filter(product => getDisplayStock(product) === 0);
   }, [products]);
 
   // Calculate critical stock products (< 50% of threshold)
   const criticalStockProducts = useMemo(() => {
-    return products.filter(product => 
-      product.stockQuantity > 0 && product.stockQuantity <= Math.floor(threshold / 2)
-    );
+    return products.filter(product => {
+      const stock = getDisplayStock(product)
+      return stock > 0 && stock <= Math.floor(threshold / 2)
+    });
   }, [products, threshold]);
 
   const handleSaveSettings = () => {
@@ -210,7 +215,7 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
                     <div key={product._id || product.id} className="flex items-center justify-between">
                       <span className="text-sm">{product.name}</span>
                       <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                        {product.stockQuantity} {t('left')}
+                        {getDisplayStock(product)} {t('left')}
                       </Badge>
                     </div>
                   ))}
@@ -230,16 +235,26 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
               <div className="font-medium text-sm mb-2 text-orange-700">{t('low_stock_products')}:</div>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {lowStockProducts
-                  .filter(p => p.stockQuantity > Math.floor(threshold / 2))
+                  .filter(p => getDisplayStock(p) > Math.floor(threshold / 2))
                   .slice(0, 5)
-                  .map((product) => (
-                    <div key={product._id || product.id} className="flex items-center justify-between bg-white p-2 rounded border border-orange-100">
-                      <span className="text-sm">{product.name}</span>
-                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                        {product.stockQuantity} {t('left')}
-                      </Badge>
-                    </div>
-                  ))}
+                  .map((product) => {
+                    const expiry = expiringByProduct.get((product._id || product.id || '').toString())
+                    return (
+                      <div key={product._id || product.id} className="flex items-center justify-between bg-white p-2 rounded border border-orange-100">
+                        <span className="text-sm">{product.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          {expiry && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                              {t('expires_in_days', { days: daysUntil(expiry) }) || `Expires in ${daysUntil(expiry)}d`}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                            {getDisplayStock(product)} {t('left')}
+                          </Badge>
+                        </div>
+                      </div>
+                    )
+                  })}
               </div>
             </div>
           )}

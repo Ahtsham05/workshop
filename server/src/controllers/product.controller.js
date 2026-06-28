@@ -57,7 +57,7 @@ const getProducts = catchAsync(async (req, res) => {
 });
 
 const getProduct = catchAsync(async (req, res) => {
-  const product = await productService.getProductById(req.params.productId);
+  const product = await productService.getProductForEdit(req.params.productId);
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
@@ -183,6 +183,13 @@ const getAllProducts = catchAsync(async (req, res) => {
   res.send(products);
 });
 
+const getPurchasableCatalog = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const items = await productService.getPurchasableCatalog(filter);
+  res.send(items);
+});
+
 const bulkUpdateProducts = catchAsync(async (req, res) => {
   const { products } = req.body;
   
@@ -255,6 +262,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   getAllProducts,
+  getPurchasableCatalog,
   uploadProductImage,
   deleteProductImage,
   fetchImageFromSearch,

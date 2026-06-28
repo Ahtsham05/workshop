@@ -16,6 +16,7 @@ const INSIGHT_TYPES = [
   'stock_out_risk',
   'reorder_suggestion',
   'dead_stock',
+  'expiring_stock',
   // profit
   'high_margin_product',
   'low_margin_product',

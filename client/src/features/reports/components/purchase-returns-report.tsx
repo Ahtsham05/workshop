@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { expiryBadge } from '../utils/expiry-badge'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -50,6 +51,20 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
               [t('return_count')]: row.returnCount,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pwData), 'Product-wise')
+          }
+
+          if (data.lineItems?.length > 0) {
+            const liData = data.lineItems.map(row => ({
+              [t('date')]: format(new Date(row.date), 'yyyy-MM-dd'),
+              'Return #': row.returnNumber,
+              [t('product')]: reportEntityName(language, row.productName, row.productNameUrdu),
+              Variant: row.variantLabel || '',
+              'Batch #': row.batchNumber || '',
+              Expiry: row.expiryDate ? format(new Date(row.expiryDate), 'yyyy-MM-dd') : '',
+              Qty: row.quantity,
+              Total: row.total,
+            }))
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(liData), 'Line Items')
           }
 
           XLSX.writeFile(wb, `purchase-returns-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
@@ -167,6 +182,48 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
                         <Badge variant='outline'>{row.returnCount}</Badge>
                       </TableCell>
                     </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Per-line detail (variant/batch/expiry) */}
+        {(data?.lineItems?.length ?? 0) > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Returned Items — Variant &amp; Batch Detail</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('date')}</TableHead>
+                    <TableHead>Return #</TableHead>
+                    <TableHead>{t('product')}</TableHead>
+                    <TableHead>Variant</TableHead>
+                    <TableHead>Batch #</TableHead>
+                    <TableHead>Expiry</TableHead>
+                    <TableHead className='text-right'>Qty</TableHead>
+                    <TableHead className='text-right'>{t('amount')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data!.lineItems.map((row, idx) => {
+                    const pn = reportEntityName(language, row.productName, row.productNameUrdu)
+                    return (
+                      <TableRow key={`${row.returnNumber}-${idx}`}>
+                        <TableCell className='whitespace-nowrap'>{format(new Date(row.date), 'MMM dd, yyyy')}</TableCell>
+                        <TableCell className='font-mono text-xs'>{row.returnNumber}</TableCell>
+                        <TableCell className={cn('font-medium', reportEntityNameClass(language, pn))}>{pn}</TableCell>
+                        <TableCell className='text-muted-foreground text-sm'>{row.variantLabel || '—'}</TableCell>
+                        <TableCell className='font-mono text-xs text-muted-foreground'>{row.batchNumber || '—'}</TableCell>
+                        <TableCell>{expiryBadge(row.expiryDate)}</TableCell>
+                        <TableCell className='text-right'>{row.quantity}</TableCell>
+                        <TableCell className='text-right text-blue-600 font-medium'>{fmt(row.total)}</TableCell>
+                      </TableRow>
                     )
                   })}
                 </TableBody>

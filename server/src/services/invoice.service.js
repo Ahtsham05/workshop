@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Invoice, Product, Customer, CustomerLedger, Organization } = require('../models');
+const { Invoice, Product, Customer, CustomerLedger, Organization, Inventory, Batch } = require('../models');
+const batchService = require('./batch.service');
 const ApiError = require('../utils/ApiError');
 const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
@@ -10,6 +11,8 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
 const imeiService = require('./imei.service');
+const inventorySyncService = require('./inventorySync.service');
+const inventoryService = require('./inventory.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -235,6 +238,57 @@ const createInvoice = async (invoiceBody, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
     }
 
+    // Real-variant line item — stock lives on Inventory.quantity for that specific
+    // variant, not the legacy Product.stockQuantity fallback. No unit-conversion
+    // support for variants yet (matches the same scope limit as Purchase's variant
+    // items), so quantity is used as-is.
+    if (item.variantId) {
+      if (!isQuotation) {
+        // A manually picked batch (no automatic FEFO yet) must have enough on its own —
+        // see docs/architecture/universal-product-migration.md.
+        if (item.batchId) {
+          const batch = await Batch.findById(item.batchId);
+          const available = batch?.quantity ?? 0;
+          if (!batch || batch.status !== 'active' || available < item.quantity) {
+            throw new ApiError(
+              httpStatus.BAD_REQUEST,
+              `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+            );
+          }
+        } else {
+          const inventory = await Inventory.findOne({ variantId: item.variantId });
+          const available = inventory?.quantity ?? 0;
+          if (available < item.quantity) {
+            throw new ApiError(
+              httpStatus.BAD_REQUEST,
+              `Insufficient stock for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+            );
+          }
+        }
+      }
+
+      validatedItems.push({
+        productId: item.productId,
+        variantId: item.variantId,
+        batchId: item.batchId,
+        batchNumber: item.batchNumber,
+        name: item.name || product.name,
+        nameUrdu: item.nameUrdu || product.nameUrdu || '',
+        image: item.image || product.image,
+        quantity: item.quantity,
+        unit: item.unit || product.unit,
+        conversionFactor: 1,
+        stockQuantity: item.quantity,
+        unitPrice: item.unitPrice,
+        cost: item.cost,
+        subtotal: item.quantity * item.unitPrice,
+        profit: (item.quantity * item.unitPrice) - (item.quantity * item.cost),
+        isManualEntry: item.isManualEntry || false,
+        imeis: item.imeis || [],
+      });
+      continue;
+    }
+
     const conversion = toStockQuantity({ product, item, businessType });
 
     // Check stock availability (quotations do not reserve stock)
@@ -245,7 +299,7 @@ const createInvoice = async (invoiceBody, userId) => {
         requested: conversion.stockQuantity
       });
       throw new ApiError(
-        httpStatus.BAD_REQUEST, 
+        httpStatus.BAD_REQUEST,
         `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
       );
     }
@@ -369,16 +423,51 @@ const createInvoice = async (invoiceBody, userId) => {
     }
   }
 
-  // Update product stock quantities (quotations do not affect stock until converted)
+  // Update product stock quantities (quotations do not affect stock until converted).
+  // Real-variant line items bypass the legacy Product.stockQuantity path entirely —
+  // that field is a fallback-only display value once a product hasVariants, see
+  // docs/architecture/universal-product-migration.md. A manually picked batchId
+  // deducts from that specific Batch; without one, this just decrements the variant's
+  // total Inventory.quantity (automatic FEFO splitting is a deliberate follow-up).
   if (!isQuotation) {
     console.log('Updating stock quantities for invoice type:', invoice.type);
     for (const item of validatedItems) {
+      if (item.variantId && item.batchId) {
+        await batchService.sellFromBatch(item.batchId, item.stockQuantity, {
+          refType: 'Invoice',
+          refId: invoice._id,
+          userId,
+        });
+        continue;
+      }
+      if (item.variantId) {
+        await inventoryService.adjustInventory(item.variantId, {
+          quantityDelta: -item.stockQuantity,
+          type: 'sale',
+          refType: 'Invoice',
+          refId: invoice._id,
+          userId,
+        });
+        continue;
+      }
+
       await Product.findByIdAndUpdate(
         item.productId,
         { $inc: { stockQuantity: -item.stockQuantity } },
         { new: true }
       );
       console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
+
+      await inventorySyncService.recordStockChange({
+        organizationId: invoice.organizationId,
+        productId: item.productId,
+        quantityDelta: -item.stockQuantity,
+        type: 'sale',
+        refType: 'Invoice',
+        refId: invoice._id,
+        unitCost: item.cost,
+        createdBy: userId,
+      });
     }
 
     await imeiService.markImeisSoldForInvoice({
@@ -396,6 +485,7 @@ const createInvoice = async (invoiceBody, userId) => {
   // Populate references conditionally
   const populateOptions = [
     { path: 'items.productId', select: 'name nameUrdu barcode category' },
+    { path: 'items.variantId' },
     { path: 'createdBy', select: 'name email' }
   ];
 
@@ -505,6 +595,8 @@ const getInvoiceById = async (id) => {
   // Populate references conditionally
   const populateOptions = [
     { path: 'items.productId', select: 'name nameUrdu barcode category description' },
+    { path: 'items.variantId' },
+    { path: 'items.batchId', select: 'batchNumber expiryDate' },
     { path: 'createdBy updatedBy', select: 'name email' }
   ];
 
@@ -562,11 +654,40 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     // Restore original stock quantities (quotations never deducted stock)
     if (originalType !== 'quotation') {
       for (const item of invoice.items) {
+        const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
+        if (item.variantId && item.batchId) {
+          await batchService.restoreToBatch(item.batchId, restoredQuantity, {
+            refType: 'Invoice',
+            refId: invoice._id,
+            userId,
+          });
+          continue;
+        }
+        if (item.variantId) {
+          await inventoryService.adjustInventory(item.variantId, {
+            quantityDelta: restoredQuantity,
+            type: 'return_in',
+            refType: 'Invoice',
+            refId: invoice._id,
+            userId,
+          });
+          continue;
+        }
         await Product.findByIdAndUpdate(
           item.productId,
-          { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
+          { $inc: { stockQuantity: restoredQuantity } },
           { new: true }
         );
+        await inventorySyncService.recordStockChange({
+          organizationId: invoice.organizationId,
+          productId: item.productId,
+          quantityDelta: restoredQuantity,
+          type: 'return_in',
+          refType: 'Invoice',
+          refId: invoice._id,
+          unitCost: item.cost,
+          createdBy: userId,
+        });
       }
       // Put back any IMEIs sold on this invoice — they'll be re-marked sold below for whatever's still selected
       await imeiService.releaseImeisForInvoice(invoice._id);
@@ -587,11 +708,55 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
       }
 
+      if (item.variantId) {
+        if (!willRemainQuotation) {
+          if (item.batchId) {
+            const batch = await Batch.findById(item.batchId);
+            const available = batch?.quantity ?? 0;
+            if (!batch || batch.status !== 'active' || available < item.quantity) {
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+              );
+            }
+          } else {
+            const inventory = await Inventory.findOne({ variantId: item.variantId });
+            const available = inventory?.quantity ?? 0;
+            if (available < item.quantity) {
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                `Insufficient stock for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+              );
+            }
+          }
+        }
+        validatedItems.push({
+          productId: item.productId,
+          variantId: item.variantId,
+          batchId: item.batchId,
+          batchNumber: item.batchNumber,
+          name: item.name || product.name,
+          nameUrdu: item.nameUrdu || product.nameUrdu || '',
+          image: item.image || product.image,
+          quantity: item.quantity,
+          unit: item.unit || product.unit,
+          conversionFactor: 1,
+          stockQuantity: item.quantity,
+          unitPrice: item.unitPrice,
+          cost: item.cost,
+          subtotal: item.quantity * item.unitPrice,
+          profit: (item.quantity * item.unitPrice) - (item.quantity * item.cost),
+          isManualEntry: item.isManualEntry || false,
+          imeis: item.imeis || [],
+        });
+        continue;
+      }
+
       const conversion = getStockQuantityFromItem({ product, item, businessType });
 
       if (!willRemainQuotation && product.stockQuantity < conversion.stockQuantity) {
         throw new ApiError(
-          httpStatus.BAD_REQUEST, 
+          httpStatus.BAD_REQUEST,
           `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
         );
       }
@@ -629,11 +794,39 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     // Update stock quantities for new items (quotations do not affect stock)
     if (!willRemainQuotation) {
       for (const item of validatedItems) {
+        if (item.variantId && item.batchId) {
+          await batchService.sellFromBatch(item.batchId, item.stockQuantity, {
+            refType: 'Invoice',
+            refId: invoice._id,
+            userId,
+          });
+          continue;
+        }
+        if (item.variantId) {
+          await inventoryService.adjustInventory(item.variantId, {
+            quantityDelta: -item.stockQuantity,
+            type: 'sale',
+            refType: 'Invoice',
+            refId: invoice._id,
+            userId,
+          });
+          continue;
+        }
         await Product.findByIdAndUpdate(
           item.productId,
           { $inc: { stockQuantity: -item.stockQuantity } },
           { new: true }
         );
+        await inventorySyncService.recordStockChange({
+          organizationId: invoice.organizationId,
+          productId: item.productId,
+          quantityDelta: -item.stockQuantity,
+          type: 'sale',
+          refType: 'Invoice',
+          refId: invoice._id,
+          unitCost: item.cost,
+          createdBy: userId,
+        });
       }
 
       await imeiService.markImeisSoldForInvoice({
@@ -801,11 +994,36 @@ const deleteInvoiceById = async (invoiceId) => {
   // Restore stock quantities (quotations never deducted stock)
   if (invoice.type !== 'quotation') {
     for (const item of invoice.items) {
+      const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
+      if (item.variantId && item.batchId) {
+        await batchService.restoreToBatch(item.batchId, restoredQuantity, {
+          refType: 'Invoice',
+          refId: invoice._id,
+        });
+        continue;
+      }
+      if (item.variantId) {
+        await inventoryService.adjustInventory(item.variantId, {
+          quantityDelta: restoredQuantity,
+          type: 'return_in',
+          refType: 'Invoice',
+          refId: invoice._id,
+        });
+        continue;
+      }
       await Product.findByIdAndUpdate(
         item.productId,
-        { $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) } },
+        { $inc: { stockQuantity: restoredQuantity } },
         { new: true }
       );
+      await inventorySyncService.recordStockChange({
+        organizationId: invoice.organizationId,
+        productId: item.productId,
+        quantityDelta: restoredQuantity,
+        type: 'return_in',
+        refType: 'Invoice',
+        refId: invoice._id,
+      });
     }
     await imeiService.releaseImeisForInvoice(invoice._id);
   }
@@ -875,6 +1093,29 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   }
 
   for (const item of invoice.items) {
+    if (item.variantId) {
+      const stockQty = getStockQuantityFromItem(item);
+      if (item.batchId) {
+        const batch = await Batch.findById(item.batchId);
+        const available = batch?.quantity ?? 0;
+        if (!batch || batch.status !== 'active' || available < stockQty) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name}. Available: ${available}, Required: ${stockQty}`,
+          );
+        }
+        continue;
+      }
+      const inventory = await Inventory.findOne({ variantId: item.variantId });
+      const available = inventory?.quantity ?? 0;
+      if (available < stockQty) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Insufficient stock for ${item.name}. Available: ${available}, Required: ${stockQty}`,
+        );
+      }
+      continue;
+    }
     const product = await Product.findById(item.productId);
     if (!product) {
       throw new ApiError(httpStatus.BAD_REQUEST, `Product not found for item ${item.name}`);
@@ -930,11 +1171,39 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
 
   for (const item of invoice.items) {
     const stockQty = getStockQuantityFromItem(item);
+    if (item.variantId && item.batchId) {
+      await batchService.sellFromBatch(item.batchId, stockQty, {
+        refType: 'Invoice',
+        refId: invoice._id,
+        userId,
+      });
+      continue;
+    }
+    if (item.variantId) {
+      await inventoryService.adjustInventory(item.variantId, {
+        quantityDelta: -stockQty,
+        type: 'sale',
+        refType: 'Invoice',
+        refId: invoice._id,
+        userId,
+      });
+      continue;
+    }
     await Product.findByIdAndUpdate(
       item.productId,
       { $inc: { stockQuantity: -stockQty } },
       { new: true },
     );
+    await inventorySyncService.recordStockChange({
+      organizationId: invoice.organizationId,
+      productId: item.productId,
+      quantityDelta: -stockQty,
+      type: 'sale',
+      refType: 'Invoice',
+      refId: invoice._id,
+      unitCost: item.cost,
+      createdBy: userId,
+    });
   }
 
   if (invoice.customerId && invoice.customerId !== 'walk-in') {

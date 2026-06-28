@@ -24,11 +24,13 @@ const ProductSchema = new mongoose.Schema({
     name: { type: String, required: true },
     nameUrdu: { type: String },
     description: { type: String },
-    barcode: { 
-        type: String, 
-        sparse: true, 
-        unique: true,
-        default: null
+    // No `default: null` here — Mongo's sparse index only skips documents where the
+    // field is truly *missing*, not where it's explicitly null, so defaulting to null
+    // would make every barcode-less product collide on the unique index.
+    barcode: {
+        type: String,
+        sparse: true,
+        unique: true
     },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
@@ -80,6 +82,7 @@ const ProductSchema = new mongoose.Schema({
         }
     }],
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' }, // Reference to supplier
+    brandId: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', default: null, index: true },
     /**
      * Dates (one per calendar day, deduped) on which this product was found at zero stock.
      * Pruned to a trailing 90-day window by the daily purchase-suggestions job — feeds the
@@ -91,15 +94,22 @@ const ProductSchema = new mongoose.Schema({
         url: { type: String }, // Cloudinary URL
         publicId: { type: String } // Cloudinary public ID for deletion
     },
+    // Universal Product Architecture migration (see docs/architecture/universal-product-migration.md):
+    // schemaVersion 1 = legacy flat product. 2 = a default ProductVariant + Inventory row
+    // have been backfilled for this product. hasVariants stays false until a user opts a
+    // product into the variant UI; both default to fully backward-compatible values.
+    schemaVersion: { type: Number, default: 1 },
+    hasVariants: { type: Boolean, default: false },
 },{
     timestamps: true
 });
 
 // Pre-save middleware to handle empty barcode values
 ProductSchema.pre('save', function(next) {
-    // Convert empty string barcode to null to work with sparse unique index
-    if (this.barcode === '') {
-        this.barcode = null;
+    // Convert empty/null barcode to a genuinely *absent* field (not null) so it doesn't
+    // collide with other docs under the sparse unique index.
+    if (this.barcode === '' || this.barcode === null) {
+        this.barcode = undefined;
     }
     next();
 });
@@ -107,8 +117,9 @@ ProductSchema.pre('save', function(next) {
 // Pre-update middleware to handle empty barcode values
 ProductSchema.pre(['updateOne', 'findOneAndUpdate'], function(next) {
     const update = this.getUpdate();
-    if (update.barcode === '') {
-        update.barcode = null;
+    if (update.barcode === '' || update.barcode === null) {
+        delete update.barcode;
+        update.$unset = { ...(update.$unset || {}), barcode: '' };
     }
     next();
 });

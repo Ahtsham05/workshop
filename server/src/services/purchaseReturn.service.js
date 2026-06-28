@@ -1,9 +1,12 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PurchaseReturn, Purchase, Product, SupplierLedger, Supplier, SalesReturn, CashBookEntry, Organization } = require('../models');
+const { PurchaseReturn, Purchase, Product, SupplierLedger, Supplier, SalesReturn, CashBookEntry, Organization, Inventory } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const accountsSystemService = require('./accountsSystem.service');
+const inventorySyncService = require('./inventorySync.service');
+const inventoryService = require('./inventory.service');
+const batchService = require('./batch.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -109,8 +112,19 @@ const createPurchaseReturn = async (returnBody) => {
       };
 
       const conversion = getStockQuantityFromItem({ product, item: conversionInput, businessType });
+      const itemVariantId = item.variantId ?? purchaseLineItem?.variantId;
 
-      if (product.stockQuantity < conversion.stockQuantity) {
+      if (itemVariantId) {
+        const inventory = await Inventory.findOne({ variantId: itemVariantId }).session(session);
+        const available = inventory?.quantity ?? 0;
+        if (available < conversion.stockQuantity) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Insufficient stock for "${product.name}". ` +
+              `Available: ${available}, Requested to return: ${conversion.stockQuantity}.`
+          );
+        }
+      } else if (product.stockQuantity < conversion.stockQuantity) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           `Insufficient stock for product "${product.name}". ` +
@@ -123,6 +137,12 @@ const createPurchaseReturn = async (returnBody) => {
         unit: conversion.lineUnit,
         conversionFactor: conversion.conversionFactor,
         stockQuantity: conversion.stockQuantity,
+        // Carry the variant/batch identity across from the original purchase, so
+        // batch/expiry reporting can trace which batch was actually returned — see
+        // docs/architecture/universal-product-migration.md.
+        variantId: item.variantId ?? purchaseLineItem?.variantId,
+        batchNumber: item.batchNumber ?? purchaseLineItem?.batchNumber,
+        expiryDate: item.expiryDate ?? purchaseLineItem?.expiryDate,
       });
     }
 
@@ -138,13 +158,30 @@ const createPurchaseReturn = async (returnBody) => {
       },
     ], { session });
 
-    // 5. Decrease stock for each returned item
+    // 5. Decrease stock for each returned item. Real-variant / batch-tracked items
+    // adjust via Inventory/Batch instead of the legacy Product.stockQuantity fallback
+    // — see docs/architecture/universal-product-migration.md. Those run after the
+    // transaction commits (batchService/inventoryService don't join this session).
+    const pendingStockSyncs = [];
+    const pendingVariantAdjustments = [];
     for (const item of normalizedItems) {
+      const returnedQuantity = Number(item.stockQuantity || item.quantity || 0);
+      if (item.variantId) {
+        pendingVariantAdjustments.push({
+          variantId: item.variantId,
+          batchNumber: item.batchNumber,
+          quantity: returnedQuantity,
+        });
+        continue;
+      }
       await Product.findOneAndUpdate(
         { _id: item.productId, organizationId: returnBody.organizationId },
-        { $inc: { stockQuantity: -Number(item.stockQuantity || item.quantity || 0) } },
+        { $inc: { stockQuantity: -returnedQuantity } },
         { session, new: true }
       );
+      // Recorded after the transaction commits (see below) — recordStockChange runs
+      // outside this session, so it must not fire until the legacy write is final.
+      pendingStockSyncs.push({ productId: item.productId, quantityDelta: -returnedQuantity });
     }
 
     // 6. Reduce supplier payable and update Supplier.balance
@@ -193,6 +230,36 @@ const createPurchaseReturn = async (returnBody) => {
     await _createCashBookEntryInSession(purchaseReturn, session);
 
     await session.commitTransaction();
+
+    for (const sync of pendingStockSyncs) {
+      await inventorySyncService.recordStockChange({
+        organizationId: returnBody.organizationId,
+        productId: sync.productId,
+        quantityDelta: sync.quantityDelta,
+        type: 'return_out',
+        refType: 'PurchaseReturn',
+        refId: purchaseReturn._id,
+        createdBy: returnBody.createdBy,
+      });
+    }
+
+    for (const adj of pendingVariantAdjustments) {
+      if (adj.batchNumber) {
+        await batchService.adjustBatchQuantity(adj.variantId, {
+          batchNumber: adj.batchNumber,
+          quantityDelta: -adj.quantity,
+          createdBy: returnBody.createdBy,
+        });
+      } else {
+        await inventoryService.adjustInventory(adj.variantId, {
+          quantityDelta: -adj.quantity,
+          type: 'return_out',
+          refType: 'PurchaseReturn',
+          refId: purchaseReturn._id,
+          userId: returnBody.createdBy,
+        });
+      }
+    }
 
     // 8. Mark the originating sales return as converted (prevents re-listing in pending tab)
     if (returnBody.salesReturnId) {
@@ -317,10 +384,40 @@ const updatePurchaseReturnStatus = async (id, status, userId, rejectionReason) =
   if (status === 'approved') {
     await _createCashBookEntry(ret);
   } else if (status === 'rejected') {
-    // Reverse stock reduction that happened at creation time
+    // Reverse stock reduction that happened at creation time. Real-variant /
+    // batch-tracked items reverse via Inventory/Batch instead of the legacy
+    // Product.stockQuantity fallback.
     for (const item of ret.items) {
+      const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
+      if (item.variantId) {
+        if (item.batchNumber) {
+          await batchService.adjustBatchQuantity(item.variantId, {
+            batchNumber: item.batchNumber,
+            quantityDelta: restoredQuantity,
+            createdBy: userId,
+          });
+        } else {
+          await inventoryService.adjustInventory(item.variantId, {
+            quantityDelta: restoredQuantity,
+            type: 'return_in',
+            refType: 'PurchaseReturn',
+            refId: ret._id,
+            userId,
+          });
+        }
+        continue;
+      }
       await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) },
+        $inc: { stockQuantity: restoredQuantity },
+      });
+      await inventorySyncService.recordStockChange({
+        organizationId: ret.organizationId,
+        productId: item.productId,
+        quantityDelta: restoredQuantity,
+        type: 'return_in',
+        refType: 'PurchaseReturn',
+        refId: ret._id,
+        createdBy: userId,
       });
     }
   }
@@ -332,10 +429,36 @@ const deletePurchaseReturn = async (id) => {
   const ret = await PurchaseReturn.findById(id);
   if (!ret) throw new ApiError(httpStatus.NOT_FOUND, 'Purchase return not found');
 
-  // Reverse stock decrease
+  // Reverse stock decrease. Real-variant / batch-tracked items reverse via
+  // Inventory/Batch instead of the legacy Product.stockQuantity fallback.
   for (const item of ret.items) {
+    const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
+    if (item.variantId) {
+      if (item.batchNumber) {
+        await batchService.adjustBatchQuantity(item.variantId, {
+          batchNumber: item.batchNumber,
+          quantityDelta: restoredQuantity,
+        });
+      } else {
+        await inventoryService.adjustInventory(item.variantId, {
+          quantityDelta: restoredQuantity,
+          type: 'return_in',
+          refType: 'PurchaseReturn',
+          refId: ret._id,
+        });
+      }
+      continue;
+    }
     await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stockQuantity: Number(item.stockQuantity || item.quantity || 0) },
+      $inc: { stockQuantity: restoredQuantity },
+    });
+    await inventorySyncService.recordStockChange({
+      organizationId: ret.organizationId,
+      productId: item.productId,
+      quantityDelta: restoredQuantity,
+      type: 'return_in',
+      refType: 'PurchaseReturn',
+      refId: ret._id,
     });
   }
 

@@ -7,7 +7,14 @@ export type InsightConfidence = 'high' | 'medium' | 'low'
 
 export interface InsightProductRef {
   productId: string
+  // Set when this row is a specific real variant, or a batch-tracked simple
+  // product's hidden default variant — `name` already includes the variant label
+  // (e.g. "Toshiba — 12") when this is set. See
+  // docs/architecture/universal-product-migration.md.
+  variantId?: string | null
   name: string
+  nearestBatchNumber?: string | null
+  daysUntilExpiry?: number | null
   [key: string]: unknown
 }
 

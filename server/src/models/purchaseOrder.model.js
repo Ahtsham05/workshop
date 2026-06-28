@@ -17,6 +17,11 @@ const PurchaseOrderItemSchema = new mongoose.Schema(
       ref: 'Product',
       required: true,
     },
+    // Real (non-default) variant this line is for, when product.hasVariants. Batch
+    // number/expiry aren't tracked here — nothing's been purchased yet at order time;
+    // those are captured on the receipt when the order is actually received. See
+    // docs/architecture/universal-product-migration.md.
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
     productName: { type: String, trim: true }, // snapshot at order time (helps if product is renamed/deleted)
     productNameUrdu: { type: String, trim: true },
     quantity: { type: Number, required: true, min: 0 }, // ordered quantity (in the order line unit)
@@ -40,12 +45,18 @@ const PurchaseOrderReceiptSchema = new mongoose.Schema(
     items: [
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+        variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
         receivedQuantity: { type: Number, required: true, min: 0 }, // received this time, in order's unit
         priceAtPurchase: { type: Number, required: true, min: 0 }, // actual paid price
         sellingPriceAtPurchase: { type: Number, min: 0 },
         unit: { type: String },
         conversionFactor: { type: Number, default: 1, min: 0.000001 },
         notes: { type: String, trim: true },
+        // Set only when the variant tracks batch/expiry — creates a real Batch on
+        // receipt, mirroring Purchase's createPurchase, see
+        // docs/architecture/universal-product-migration.md.
+        batchNumber: { type: String, trim: true },
+        expiryDate: { type: Date },
       },
     ],
     notes: { type: String, trim: true },

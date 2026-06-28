@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 // import { toast } from 'sonner'
 
 interface ProductCatalogProps {
@@ -24,7 +25,7 @@ interface ProductCatalogProps {
   setShowImages: (show: boolean) => void
   searchTerm: string
   setSearchTerm: (term: string) => void
-  onAddToInvoice: (product: Product, quantity?: number) => void
+  onAddToInvoice: (product: Product, quantity?: number, variantId?: string) => void
   onBarcodeSearch: (barcode: string) => void
 }
 
@@ -73,6 +74,7 @@ export function ProductCatalog({
             product.nameUrdu,
             product.barcode,
             product.description,
+            typeof product.brandId === 'object' ? product.brandId?.name : undefined,
           ),
         ),
       })).filter(category => category.products.length > 0)
@@ -108,7 +110,7 @@ export function ProductCatalog({
 
   // Quick add with different quantities
   const handleQuickAdd = useCallback((product: Product, quantity: number = 1) => {
-    onAddToInvoice(product, quantity)
+    onAddToInvoice(product, quantity, product.variantId)
   }, [onAddToInvoice])
 
   const getTotalProducts = () => {
@@ -257,7 +259,7 @@ export function ProductCatalog({
                   >
                     {category.products.map((product) => (
                       <div
-                        key={product._id}
+                        key={product.variantId || product._id}
                         onClick={() => handleQuickAdd(product, 1)}
                         className={showImages
                           ? 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white hover:shadow-sm cursor-pointer'
@@ -280,7 +282,7 @@ export function ProductCatalog({
                             )}
                             {/* Stock info badge - shows current stock */}
                             <Badge variant="outline" className='absolute top-1 right-1 text-xs px-1.5 py-0.5 bg-white/90 backdrop-blur-sm'>
-                              {product.stockQuantity}
+                              {getDisplayStock(product)}
                             </Badge>
                           </div>
                         )}
@@ -331,9 +333,11 @@ export function ProductCatalog({
                             )}
                           >
                             <span className='font-medium text-foreground text-sm'>
-                              Rs{Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0).toFixed(2)}
+                              Rs{product.hasVariants
+                                ? formatDisplayPrice(product, 'price')
+                                : Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0).toFixed(2)}
                             </span>
-                            <span>Stock: {Number(product.stockQuantity ?? 0)}</span>
+                            <span>Stock: {getDisplayStock(product)}</span>
                             {!showImages && product.barcode && (
                               <span className='text-xs bg-muted px-1 py-0.5 rounded'>
                                 {product.barcode}
@@ -388,7 +392,7 @@ export function ProductCatalog({
                         {/* Stock info badge for list view */}
                         {!showImages && (
                           <Badge variant="outline" className='text-xs px-1.5 py-0.5 bg-white/90'>
-                            {product.stockQuantity}
+                            {getDisplayStock(product)}
                           </Badge>
                         )}
                       </div>

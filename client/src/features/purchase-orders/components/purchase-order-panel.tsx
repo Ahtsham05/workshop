@@ -48,11 +48,23 @@ import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalo
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
+import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+
+// Stable empty-array reference — an inline `= []` default on `data` would create a new
+// array every render while the query is loading.
+const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = []
 
 export interface OrderItem {
   product: Product
+  // Real (non-default) variant this line is for, when product.hasVariants — see
+  // docs/architecture/universal-product-migration.md. Batch number/expiry aren't
+  // captured here; they're entered when the order is actually received.
+  variantId?: string
+  trackBatch?: boolean
+  trackExpiry?: boolean
   quantity: number
   unit?: string
   expectedPrice: number
@@ -98,7 +110,10 @@ export function createEmptyOrderManualItem(): OrderItem {
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-function buildInitialDraft(editing?: PurchaseOrder | null): PurchaseOrderDraft {
+function buildInitialDraft(
+  editing?: PurchaseOrder | null,
+  purchasableCatalog: PurchaseCatalogItem[] = EMPTY_PURCHASE_CATALOG,
+): PurchaseOrderDraft {
   if (!editing) {
     return {
       supplier: {},
@@ -127,18 +142,34 @@ function buildInitialDraft(editing?: PurchaseOrder | null): PurchaseOrderDraft {
   const items: OrderItem[] = (editing.items || []).map((it: any) => {
     const product = it.product
     const productId = typeof product === 'object' ? product?.id || product?._id || '' : product
+    // toJSON transforms _id -> id, so a populated variant only has `.id`, not `._id`.
+    const variant = it.variantId && typeof it.variantId === 'object' ? it.variantId : null
+    const variantId = variant?.id || variant?._id || (typeof it.variantId === 'string' ? it.variantId : undefined)
+    // it.productName was already saved as "Toshiba — 12" at order-creation time (see
+    // handleCatalogItemSelect below) — no need to reconstruct it from variant.attributes.
+    const baseName = it.productName || (typeof product === 'object' ? product?.name : '') || ''
+    // The saved item's stockQuantity is stale (it's whatever the product/variant had at
+    // order time) — look up the *live* figure from the purchasable catalog when possible.
+    const catalogEntry = variantId ? purchasableCatalog.find((c) => c.variantId === variantId) : undefined
     return {
       product: {
         ...(typeof product === 'object' ? product : {}),
         id: productId,
         _id: productId,
-        name: it.productName || (typeof product === 'object' ? product?.name : '') || '',
+        hasVariants: !!variantId || (typeof product === 'object' ? product?.hasVariants : false),
+        name: baseName,
         nameUrdu: it.productNameUrdu || (typeof product === 'object' ? product?.nameUrdu : undefined),
         cost: Number(it.expectedPrice || 0),
         price: Number(it.expectedSellingPrice || 0),
-        stockQuantity: typeof product === 'object' ? product?.stockQuantity : 0,
+        stockQuantity:
+          catalogEntry?.stockQuantity ?? (typeof product === 'object' ? product?.stockQuantity : 0),
+        // getDisplayStock reads this (not stockQuantity) once hasVariants is true.
+        variantStockTotal: catalogEntry?.stockQuantity ?? (typeof product === 'object' ? product?.stockQuantity : 0),
         unit: it.unit || (typeof product === 'object' ? product?.unit : 'pcs'),
       } as Product,
+      variantId,
+      trackBatch: variant?.trackBatch,
+      trackExpiry: variant?.trackExpiry,
       quantity: Number(it.quantity || 1),
       unit: it.unit || 'pcs',
       expectedPrice: Number(it.expectedPrice || 0),
@@ -170,7 +201,7 @@ interface Props {
   editing?: PurchaseOrder | null
   products: Product[]
   productsLoading?: boolean
-  onRegisterAddProduct?: (fn: (product: Product, quantity?: number) => void) => void
+  onRegisterAddProduct?: (fn: (product: Product, quantity?: number, variantId?: string) => void) => void
   /** Auto-select this supplier (e.g. the AI-recommended supplier) once suppliers load. */
   prefillSupplierId?: string
 }
@@ -184,7 +215,8 @@ export default function PurchaseOrderPanel({
   onRegisterAddProduct,
   prefillSupplierId,
 }: Props) {
-  const [draft, setDraft] = useState<PurchaseOrderDraft>(() => buildInitialDraft(editing))
+  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
+  const [draft, setDraft] = useState<PurchaseOrderDraft>(() => buildInitialDraft(editing, purchasableCatalog))
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState('')
@@ -207,8 +239,14 @@ export default function PurchaseOrderPanel({
   const [sendPO] = useSendPurchaseOrderMutation()
 
   useEffect(() => {
-    setDraft(buildInitialDraft(editing))
+    // Deliberately keyed on `editing` only (not `purchasableCatalog`) — this should
+    // only reset the draft when switching which order is being edited, not every time
+    // the catalog refetches (which would wipe out in-progress unsaved edits). The
+    // effect closure still captures whatever `purchasableCatalog` value is current at
+    // the moment `editing` changes, since React re-creates the closure every render.
+    setDraft(buildInitialDraft(editing, purchasableCatalog))
     autoOpenDoneRef.current = false
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing])
 
   useEffect(() => {
@@ -233,18 +271,16 @@ export default function PurchaseOrderPanel({
     matchesBilingualSearch(supplierSearchQuery, s.name, s.nameUrdu, s.phone),
   )
 
-  const filteredProducts = products.filter((p) =>
-    matchesBilingualSearch(
-      productSearchQuery,
-      p.name,
-      p.nameUrdu,
-      p.barcode,
-      typeof p.description === 'string' ? p.description : undefined,
-    ),
+  const filteredCatalogItems = purchasableCatalog.filter((p) =>
+    matchesBilingualSearch(productSearchQuery, p.name, p.nameUrdu, p.barcode, p.brand),
   )
 
   const getProductId = (item: OrderItem) =>
     item.product.id || (item.product as { _id?: string })._id || ''
+
+  // Row identity is (productId, variantId) — two different variants of the same
+  // product are different lines and must not be confused with each other.
+  const rowKey = (productId: string, variantId?: string) => `${productId}::${variantId || ''}`
 
   const subtotal = draft.items.reduce(
     (sum, item) => sum + item.quantity * (item.expectedPrice || 0),
@@ -255,13 +291,15 @@ export default function PurchaseOrderPanel({
     subtotal - draft.discount + draft.tax + draft.shippingCost,
   )
 
-  const addProductToOrder = useCallback((product: Product, quantity = 1) => {
+  const addProductToOrder = useCallback((product: Product, quantity = 1, variantId?: string) => {
     const productId = product.id || (product as { _id?: string })._id
     if (!productId) return
+    const resolvedVariantId = variantId ?? (product as { variantId?: string }).variantId
 
     setDraft((prev) => {
       const existingIndex = prev.items.findIndex(
-        (item) => getProductId(item) === productId,
+        (item) =>
+          getProductId(item) === productId && (item.variantId || undefined) === (resolvedVariantId || undefined),
       )
       if (existingIndex >= 0) {
         const items = [...prev.items]
@@ -277,6 +315,9 @@ export default function PurchaseOrderPanel({
       )
       const newItem: OrderItem = {
         product,
+        variantId: resolvedVariantId,
+        trackBatch: (product as { trackBatch?: boolean }).trackBatch,
+        trackExpiry: (product as { trackExpiry?: boolean }).trackExpiry,
         quantity,
         unit: product.unit || 'pcs',
         expectedPrice: product.cost || product.price || 0,
@@ -294,8 +335,7 @@ export default function PurchaseOrderPanel({
     })
 
     setTimeout(() => {
-      const pid = String(productId)
-      focusField(qtyInputRefs.current[pid])
+      focusField(qtyInputRefs.current[rowKey(String(productId), resolvedVariantId)])
     }, 80)
   }, [])
 
@@ -329,58 +369,99 @@ export default function PurchaseOrderPanel({
     addNewRowAndOpenProduct()
   }, [draft.items, addNewRowAndOpenProduct])
 
-  const handleProductSelect = useCallback((itemIndex: number, product: Product) => {
-    setDraft((prev) => {
-      const items = [...prev.items]
-      items[itemIndex] = {
-        product,
-        quantity: items[itemIndex]?.quantity || 1,
-        unit: product.unit || 'pcs',
-        expectedPrice: product.cost || 0,
-        expectedSellingPrice: product.price || 0,
-        isManualEntry: false,
-      }
-      return { ...prev, items }
-    })
-    setProductSelectOpen('')
-    setProductSearchQuery('')
-    const productId = product.id || (product as { _id?: string })._id
-    setTimeout(() => focusField(qtyInputRefs.current[String(productId)]), 80)
-  }, [])
+  const handleProductSelect = useCallback(
+    (itemIndex: number, product: Product, variantId?: string, meta?: { trackBatch?: boolean; trackExpiry?: boolean }) => {
+      setDraft((prev) => {
+        const items = [...prev.items]
+        items[itemIndex] = {
+          product,
+          variantId,
+          trackBatch: meta?.trackBatch,
+          trackExpiry: meta?.trackExpiry,
+          quantity: items[itemIndex]?.quantity || 1,
+          unit: product.unit || 'pcs',
+          expectedPrice: product.cost || 0,
+          expectedSellingPrice: product.price || 0,
+          isManualEntry: false,
+        }
+        return { ...prev, items }
+      })
+      setProductSelectOpen('')
+      setProductSearchQuery('')
+      const productId = product.id || (product as { _id?: string })._id
+      setTimeout(() => focusField(qtyInputRefs.current[rowKey(String(productId), variantId)]), 80)
+    },
+    [],
+  )
 
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
+  const handleCatalogItemSelect = useCallback(
+    (itemIndex: number, catalogItem: PurchaseCatalogItem) => {
+      const builtProduct = {
+        id: catalogItem.productId,
+        _id: catalogItem.productId,
+        // catalogItem.name already reads "Toshiba — 12" for a variant row — productName
+        // alone would lose the variant label the user just picked.
+        name: catalogItem.name,
+        nameUrdu: catalogItem.nameUrdu,
+        image: catalogItem.image,
+        barcode: catalogItem.barcode,
+        unit: catalogItem.unit,
+        hasVariants: catalogItem.type === 'variant',
+        price: catalogItem.price,
+        cost: catalogItem.cost,
+        stockQuantity: catalogItem.stockQuantity,
+        // getDisplayStock reads this (not stockQuantity) once hasVariants is true.
+        variantStockTotal: catalogItem.stockQuantity,
+      } as Product
+      handleProductSelect(itemIndex, builtProduct, catalogItem.variantId, {
+        trackBatch: catalogItem.trackBatch,
+        trackExpiry: catalogItem.trackExpiry,
+      })
+    },
+    [handleProductSelect],
+  )
+
+  const updateQuantity = useCallback((productId: string, quantity: number, variantId?: string) => {
     if (quantity <= 0) return
     setDraft((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        getProductId(item) === productId ? { ...item, quantity } : item,
+        getProductId(item) === productId && (item.variantId || undefined) === (variantId || undefined)
+          ? { ...item, quantity }
+          : item,
       ),
     }))
   }, [])
 
-  const updateExpectedPrice = useCallback((productId: string, price: number) => {
+  const updateExpectedPrice = useCallback((productId: string, price: number, variantId?: string) => {
     if (price < 0) return
     setDraft((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        getProductId(item) === productId ? { ...item, expectedPrice: price } : item,
+        getProductId(item) === productId && (item.variantId || undefined) === (variantId || undefined)
+          ? { ...item, expectedPrice: price }
+          : item,
       ),
     }))
   }, [])
 
-  const updateSellingPrice = useCallback((productId: string, price: number) => {
+  const updateSellingPrice = useCallback((productId: string, price: number, variantId?: string) => {
     if (price < 0) return
     setDraft((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
-        getProductId(item) === productId ? { ...item, expectedSellingPrice: price } : item,
+        getProductId(item) === productId && (item.variantId || undefined) === (variantId || undefined)
+          ? { ...item, expectedSellingPrice: price }
+          : item,
       ),
     }))
   }, [])
 
-  const removeItem = useCallback((productId: string) => {
+  const removeItem = useCallback((productId: string, variantId?: string) => {
     setDraft((prev) => {
-      const next = prev.items.filter((item) => getProductId(item) !== productId)
+      const next = prev.items.filter(
+        (item) => !(getProductId(item) === productId && (item.variantId || undefined) === (variantId || undefined)),
+      )
       return {
         ...prev,
         items: next.length > 0 ? next : [createEmptyOrderManualItem()],
@@ -408,6 +489,7 @@ export default function PurchaseOrderPanel({
       status,
       items: validItems.map((item) => ({
         product: getProductId(item),
+        variantId: item.variantId,
         productName: item.product.name,
         productNameUrdu: item.product.nameUrdu,
         quantity: Number(item.quantity),
@@ -725,36 +807,32 @@ export default function PurchaseOrderPanel({
                                 </div>
                               </div>
                               <CommandList className='max-h-64 overflow-y-auto'>
-                                {productsLoading && products.length === 0 ? (
+                                {productsLoading && filteredCatalogItems.length === 0 ? (
                                   <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
                                     <Loader2 className='h-6 w-6 animate-spin' />
                                     Loading products...
                                   </div>
-                                ) : filteredProducts.length === 0 ? (
+                                ) : filteredCatalogItems.length === 0 ? (
                                   <p className='py-6 text-center text-sm text-muted-foreground'>
                                     No products found
                                   </p>
                                 ) : (
                                   <CommandGroup>
-                                    {filteredProducts.map((product) => {
-                                      const pid = product.id || (product as { _id?: string })._id
-                                      return (
-                                        <CommandItem
-                                          key={String(pid)}
-                                          value={String(pid)}
-                                          onSelect={() => handleProductSelect(index, product)}
-                                          className='flex cursor-pointer items-center gap-3 p-3'
-                                        >
-                                          <div className='min-w-0 flex-1'>
-                                            <p className='truncate text-sm font-medium'>{product.name}</p>
-                                            <p className='text-xs text-muted-foreground'>
-                                              Cost Rs{Number(product.cost || 0).toFixed(2)} · Stock{' '}
-                                              {product.stockQuantity ?? 0}
-                                            </p>
-                                          </div>
-                                        </CommandItem>
-                                      )
-                                    })}
+                                    {filteredCatalogItems.map((catalogItem) => (
+                                      <CommandItem
+                                        key={catalogItem.id}
+                                        value={catalogItem.id}
+                                        onSelect={() => handleCatalogItemSelect(index, catalogItem)}
+                                        className='flex cursor-pointer items-center gap-3 p-3'
+                                      >
+                                        <div className='min-w-0 flex-1'>
+                                          <p className='truncate text-sm font-medium'>{catalogItem.name}</p>
+                                          <p className='text-xs text-muted-foreground'>
+                                            Cost Rs{catalogItem.cost} · Stock {catalogItem.stockQuantity}
+                                          </p>
+                                        </div>
+                                      </CommandItem>
+                                    ))}
                                   </CommandGroup>
                                 )}
                               </CommandList>
@@ -781,9 +859,11 @@ export default function PurchaseOrderPanel({
                 )
               }
 
+              const rk = rowKey(productId, item.variantId)
+
               return (
                 <div
-                  key={`${productId}-${index}`}
+                  key={`${rk}-${index}`}
                   className='overflow-hidden rounded-xl border bg-card shadow-sm'
                 >
                   <div className='flex items-start gap-3 p-3'>
@@ -794,14 +874,14 @@ export default function PurchaseOrderPanel({
                       <p className='truncate text-sm font-semibold'>{item.product.name}</p>
                       <p className='mt-0.5 text-xs text-muted-foreground'>
                         {item.unit || item.product.unit || 'pcs'} · Stock{' '}
-                        {item.product.stockQuantity ?? 0}
+                        {getDisplayStock(item.product)}
                       </p>
                     </div>
                     <Button
                       size='sm'
                       variant='ghost'
                       className='h-7 w-7 shrink-0 p-0'
-                      onClick={() => removeItem(productId)}
+                      onClick={() => removeItem(productId, item.variantId)}
                     >
                       <Trash2 className='h-3.5 w-3.5 text-red-400' />
                     </Button>
@@ -814,22 +894,22 @@ export default function PurchaseOrderPanel({
                           size='sm'
                           variant='ghost'
                           className='h-7 w-7 rounded-none border-r p-0'
-                          onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1))}
+                          onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
                         >
                           <Minus className='h-3.5 w-3.5' />
                         </Button>
                         <Input
                           ref={(el) => {
-                            qtyInputRefs.current[productId] = el
+                            qtyInputRefs.current[rk] = el
                           }}
                           type='number'
                           min={1}
                           value={item.quantity}
                           onChange={(e) =>
-                            updateQuantity(productId, parseInt(e.target.value, 10) || 1)
+                            updateQuantity(productId, parseInt(e.target.value, 10) || 1, item.variantId)
                           }
                           onKeyDown={(e) =>
-                            onEnterAdvance(e, () => focusField(costInputRefs.current[productId]))
+                            onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
                           }
                           onFocus={(e) => e.target.select()}
                           className='h-7 w-20 border-0 text-center text-sm font-semibold focus-visible:ring-0'
@@ -839,7 +919,7 @@ export default function PurchaseOrderPanel({
                           size='sm'
                           variant='ghost'
                           className='h-7 w-7 rounded-none border-l p-0'
-                          onClick={() => updateQuantity(productId, item.quantity + 1)}
+                          onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
                         >
                           <Plus className='h-3.5 w-3.5' />
                         </Button>
@@ -852,14 +932,14 @@ export default function PurchaseOrderPanel({
                         <span className='flex h-7 items-center border-r bg-muted px-2 text-xs'>Rs</span>
                         <Input
                           ref={(el) => {
-                            costInputRefs.current[productId] = el
+                            costInputRefs.current[rk] = el
                           }}
                           type='text'
                           inputMode='decimal'
                           showVoiceInput={false}
                           value={item.expectedPrice > 0 ? item.expectedPrice : ''}
                           onChange={(e) =>
-                            updateExpectedPrice(productId, parseFloat(e.target.value) || 0)
+                            updateExpectedPrice(productId, parseFloat(e.target.value) || 0, item.variantId)
                           }
                           onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
                           onFocus={(e) => e.target.select()}
@@ -880,7 +960,7 @@ export default function PurchaseOrderPanel({
                           showVoiceInput={false}
                           value={(item.expectedSellingPrice ?? 0) > 0 ? item.expectedSellingPrice : ''}
                           onChange={(e) =>
-                            updateSellingPrice(productId, parseFloat(e.target.value) || 0)
+                            updateSellingPrice(productId, parseFloat(e.target.value) || 0, item.variantId)
                           }
                           onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
                           onFocus={(e) => e.target.select()}

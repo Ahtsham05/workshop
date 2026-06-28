@@ -34,8 +34,11 @@ import { insightApi } from './insight.api';
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
 import { productAttributeApi } from './productAttribute.api';
 import { productVariantApi } from './productVariant.api';
+import { productApi } from './product.api';
 import { inventoryApi } from './inventory.api';
 import { batchApi } from './batch.api';
+import { brandApi } from './brand.api';
+import { purchaseCatalogApi } from './purchaseCatalog.api';
 
 export const store = configureStore({
   reducer: {
@@ -74,8 +77,11 @@ export const store = configureStore({
     [purchaseSuggestionsApi.reducerPath]: purchaseSuggestionsApi.reducer,
     [productAttributeApi.reducerPath]: productAttributeApi.reducer,
     [productVariantApi.reducerPath]: productVariantApi.reducer,
+    [productApi.reducerPath]: productApi.reducer,
     [inventoryApi.reducerPath]: inventoryApi.reducer,
     [batchApi.reducerPath]: batchApi.reducer,
+    [brandApi.reducerPath]: brandApi.reducer,
+    [purchaseCatalogApi.reducerPath]: purchaseCatalogApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -108,8 +114,11 @@ export const store = configureStore({
       purchaseSuggestionsApi.middleware,
       productAttributeApi.middleware,
       productVariantApi.middleware,
+      productApi.middleware,
       inventoryApi.middleware,
       batchApi.middleware,
+      brandApi.middleware,
+      purchaseCatalogApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

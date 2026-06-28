@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { addProduct, updateProduct } from '@/stores/product.slice'
-import { fetchCategories } from '@/stores/category.slice'
+import { fetchCategories, createCategory } from '@/stores/category.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
@@ -65,22 +65,37 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { EntityFormSection } from '@/components/entity-form-section'
 import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
+import { useGetProductQuery, productApi } from '@/stores/product.api'
 import { ProductVariantsSection } from './variants/product-variants-section'
 import { VariantInventoryTable } from './variants/variant-inventory-table'
+import { ProductDefaultVariantBatchPanel } from './variants/product-default-variant-batch-panel'
 import type { VariantDraftRow } from './variants/generate-variant-combinations'
+import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
+import { BrandSelector } from './brand-selector'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   nameUrdu: z.string().optional(),
   description: z.string(),
+  sku: z.string().optional(),
+  brandId: z.string().optional(),
   barcode: z.string().optional(),
   hasVariants: z.boolean().optional(),
   trackImei: z.boolean().optional(),
+  trackBatch: z.boolean().optional(),
+  trackExpiry: z.boolean().optional(),
+  // Opening-batch identity, only used the first time trackBatch/trackExpiry is turned
+  // on for a product that already has stock — see syncDefaultVariantTracking.
+  batchNumber: z.string().optional(),
+  expiryDate: z.string().optional(),
   warrantyMonths: z.number().min(0).optional(),
   imeis: z.array(z.string()).optional(),
-  price: z.number().min(1, { message: 'Sale price is required.' }),
-  cost: z.number().min(1, { message: 'Purchase price is required.' }),
+  // No .min() here — price/cost/stock are only required for products WITHOUT variants;
+  // see the superRefine below. Once variants exist these fields are unused fallbacks
+  // (each variant has its own price/cost/stock) and are hidden from the form entirely.
+  price: z.number().min(0),
+  cost: z.number().min(0),
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }),
   unit: z.string().optional(),
   unitConversions: z.array(z.object({
@@ -102,6 +117,14 @@ const formSchema = z.object({
       publicId: z.string(),
     }).optional(),
   })).optional(),
+}).superRefine((data, ctx) => {
+  if (data.hasVariants) return
+  if (!data.price || data.price < 1) {
+    ctx.addIssue({ code: 'custom', path: ['price'], message: 'Sale price is required.' })
+  }
+  if (!data.cost || data.cost < 1) {
+    ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Purchase price is required.' })
+  }
 })
 
 type productForm = z.infer<typeof formSchema>
@@ -121,6 +144,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [categorySearchQuery, setCategorySearchQuery] = useState('')
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false)
   const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
   const [imeiDraft, setImeiDraft] = useState('')
@@ -146,9 +171,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         name: currentRow?.name || '',
         nameUrdu: currentRow?.nameUrdu || '',
         description: currentRow?.description || '',
+        sku: currentRow?.sku || '',
+        brandId: currentRow?.brandId || undefined,
         barcode: currentRow?.barcode || '',
         hasVariants: currentRow?.hasVariants || false,
         trackImei: currentRow?.trackImei || false,
+        trackBatch: currentRow?.trackBatch || false,
+        trackExpiry: currentRow?.trackExpiry || false,
+        batchNumber: '',
+        expiryDate: '',
         warrantyMonths: currentRow?.warrantyMonths || 0,
         price: currentRow?.price || 0,
         cost: currentRow?.cost || 0,
@@ -162,9 +193,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         name: '',
         nameUrdu: '',
         description: '',
+        sku: '',
+        brandId: undefined,
         barcode: '',
         hasVariants: false,
         trackImei: false,
+        trackBatch: false,
+        trackExpiry: false,
+        batchNumber: '',
+        expiryDate: '',
         warrantyMonths: 0,
         imeis: [],
         stockQuantity: 0,
@@ -184,9 +221,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         name: currentRow.name || '',
         nameUrdu: currentRow.nameUrdu || '',
         description: currentRow.description || '',
+        sku: currentRow.sku || '',
+        brandId: currentRow.brandId || undefined,
         barcode: currentRow.barcode || '',
         hasVariants: currentRow.hasVariants || false,
         trackImei: currentRow.trackImei || false,
+        trackBatch: currentRow.trackBatch || false,
+        trackExpiry: currentRow.trackExpiry || false,
+        batchNumber: '',
+        expiryDate: '',
         warrantyMonths: currentRow.warrantyMonths || 0,
         price: currentRow.price || 0,
         cost: currentRow.cost || 0,
@@ -201,9 +244,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         name: '',
         nameUrdu: '',
         description: '',
+        sku: '',
+        brandId: undefined,
         barcode: '',
         hasVariants: false,
         trackImei: false,
+        trackBatch: false,
+        trackExpiry: false,
+        batchNumber: '',
+        expiryDate: '',
         warrantyMonths: 0,
         stockQuantity: 0,
         price: 0,
@@ -222,6 +271,17 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
 
   const editingProductId = isEdit ? (currentRow?.id || currentRow?._id) : undefined
+  // currentRow comes from the paginated product list, which doesn't carry
+  // trackBatch/trackExpiry (only the single-product GET does) — fetch fresh so the
+  // checkboxes reflect reality instead of always defaulting to unchecked.
+  const { data: freshProduct } = useGetProductQuery(editingProductId!, {
+    skip: !open || !isEdit || !editingProductId,
+  })
+  useEffect(() => {
+    if (!open || !isEdit || !freshProduct) return
+    form.setValue('trackBatch', !!freshProduct.trackBatch)
+    form.setValue('trackExpiry', !!freshProduct.trackExpiry)
+  }, [open, isEdit, freshProduct, form])
   const { data: openingStockImeis } = useGetOpeningStockImeisQuery(
     { productId: editingProductId },
     { skip: !open || !isEdit || !editingProductId },
@@ -249,10 +309,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
           productId,
           data: {
             sku: row.sku || undefined,
+            barcode: row.barcode || undefined,
             attributes: row.attributes,
             price: row.price,
             cost: row.cost,
             quantity: row.quantity,
+            trackBatch: row.trackBatchOrExpiry,
+            trackExpiry: row.trackBatchOrExpiry,
+            batchNumber: row.trackBatchOrExpiry ? (row.batchNumber || undefined) : undefined,
+            expiryDate: row.trackBatchOrExpiry ? (row.expiryDate || undefined) : undefined,
           },
         }).unwrap()
       } catch {
@@ -264,6 +329,33 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     } else {
       toast.success(`${draftVariants.length} variant(s) saved.`)
     }
+  }
+
+  // Without this, pressing Enter (or clicking Save) while a required field is still
+  // invalid (e.g. Sale Price left at 0) fails validation completely silently — looks
+  // exactly like the button/Enter key "did nothing".
+  const onInvalid = (errors: Record<string, { message?: string }>) => {
+    const firstError = Object.values(errors)[0]
+    toast.error(firstError?.message || 'Please fill in the required fields before saving.')
+  }
+
+  // Enter should move to the next field, like Tab, instead of submitting the form —
+  // submission only happens via the Save button. Fields that already use Enter for their
+  // own purpose (adding an IMEI, a custom attribute value, a conversion rule, etc.) call
+  // e.preventDefault() themselves before this ever runs, so e.defaultPrevented lets us
+  // skip those and leave their existing behavior untouched.
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter' || e.defaultPrevented) return
+    const target = e.target as HTMLElement
+    if (target.tagName !== 'INPUT') return // let buttons/comboboxes/textareas behave normally
+    e.preventDefault()
+    const focusable = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>(
+        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+      )
+    ).filter((el) => el.offsetParent !== null)
+    const nextField = focusable[focusable.indexOf(target) + 1]
+    nextField?.focus()
   }
 
   const onSubmit = async (values: productForm) => {
@@ -283,6 +375,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         }
         setFetch?.((prev: any) => !prev)
         dispatch(imeiApi.util.invalidateTags(['Imei']))
+        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
       })
     } else {
       try {
@@ -307,6 +400,21 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     form.setValue(field, Number(value), { shouldValidate: true })
   }
 
+  // Generate SKU function (e.g. for a "Classic T-Shirt" -> "CLASSIC-X7K3Q")
+  const generateSku = () => {
+    const namePart = (form.getValues('name') || 'SKU').trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9]+/g, '') || 'SKU'
+    const random = Math.random().toString(36).slice(2, 7).toUpperCase()
+    form.setValue('sku', `${namePart}-${random}`, { shouldValidate: true })
+    toast.success('SKU generated')
+  }
+
+  // Auto-generate SKU when dialog opens for new product
+  useEffect(() => {
+    if (open && !isEdit && !form.getValues('sku')) {
+      generateSku()
+    }
+  }, [open, isEdit])
+
   // Generate barcode function
   const generateBarcode = () => {
     const timestamp = Date.now().toString()
@@ -323,7 +431,38 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     }
   }, [open, isEdit])
   
+  // Create a new category inline from the product form's category combobox, then
+  // immediately select it (mirrors the inline "create brand" flow in BrandSelector).
+  const handleCreateCategory = async () => {
+    const name = categorySearchQuery.trim()
+    if (!name) return
+    if (categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(`"${name}" already exists`)
+      return
+    }
+    setIsCreatingCategory(true)
+    try {
+      const created = await dispatch(createCategory({ name })).unwrap()
+      toast.success(t('category_created_successfully') || `Category "${name}" created`)
+      const currentCategories = form.getValues('categories') || []
+      form.setValue('categories', [
+        ...currentCategories,
+        { _id: created.id, name: created.name, image: created.image },
+      ])
+      setCategorySearchQuery('')
+      setCategoriesOpen(false)
+    } catch {
+      toast.error(`Failed to create category "${name}"`)
+    } finally {
+      setIsCreatingCategory(false)
+    }
+  }
+
   const nameWatch = form.watch('name')
+  const hasVariantsWatch = form.watch('hasVariants')
+  const trackBatchWatch = form.watch('trackBatch')
+  const trackExpiryWatch = form.watch('trackExpiry')
+  const stockQuantityWatch = form.watch('stockQuantity')
 
   return (
     <Dialog
@@ -335,7 +474,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         onOpenChange(state)
       }}
     >
-      <DialogContent className='flex max-h-[90vh] w-[calc(100vw-1.25rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0'>
+      <DialogContent className='flex h-[95vh] w-[97vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1600px]'>
         <DialogHeader className='shrink-0 space-y-2 border-b border-border/60 px-6 pb-4 pt-6 text-left'>
           <DialogTitle className='text-xl'>
             {isEdit ? t('edit_product') : t('add_product')}
@@ -346,7 +485,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         </DialogHeader>
         <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
-            <form id='user-form' onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+            <form id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
               <EntityFormSection
                 title={isEdit ? 'Product details' : 'New product'}
                 description='Name, description, and categories shoppers see in menus and lists.'
@@ -419,7 +558,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     <FormControl>
                       <div className='space-y-2'>
                         {/* Category Selection Dropdown */}
-                        <Popover open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+                        <Popover
+                          open={categoriesOpen}
+                          onOpenChange={(open) => {
+                            setCategoriesOpen(open)
+                            if (!open) setCategorySearchQuery('')
+                          }}
+                        >
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -470,7 +615,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                           <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
                             <Command>
                               <div className="relative">
-                                <CommandInput placeholder={t('search_categories')} />
+                                <CommandInput
+                                  placeholder={t('search_categories')}
+                                  value={categorySearchQuery}
+                                  onValueChange={setCategorySearchQuery}
+                                />
                                 <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
                                   <VoiceInputButton 
                                     onTranscript={(text) => {
@@ -537,6 +686,30 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                     )
                                   })}
                                 </CommandGroup>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value={categorySearchQuery.trim() ? `create-category-${categorySearchQuery.trim()}` : 'create-category-prompt'}
+                                    onSelect={
+                                      categorySearchQuery.trim() &&
+                                      !categories.some((c) => c.name.toLowerCase() === categorySearchQuery.trim().toLowerCase())
+                                        ? handleCreateCategory
+                                        : undefined
+                                    }
+                                    disabled={
+                                      isCreatingCategory ||
+                                      !categorySearchQuery.trim() ||
+                                      categories.some((c) => c.name.toLowerCase() === categorySearchQuery.trim().toLowerCase())
+                                    }
+                                    className="cursor-pointer text-primary data-[disabled=true]:opacity-100"
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    {!categorySearchQuery.trim()
+                                      ? 'Type a name above to create a new category'
+                                      : categories.some((c) => c.name.toLowerCase() === categorySearchQuery.trim().toLowerCase())
+                                        ? `"${categorySearchQuery.trim()}" already exists — select it above`
+                                        : `Create "${categorySearchQuery.trim()}"`}
+                                  </CommandItem>
+                                </CommandGroup>
                               </CommandList>
                             </Command>
                           </PopoverContent>
@@ -547,9 +720,28 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name='brandId'
+                render={({ field }) => (
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>Brand</FormLabel>
+                    <FormControl>
+                      <BrandSelector value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               </EntityFormSection>
 
               <EntityFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
+              {hasVariantsWatch ? (
+                <p className='rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground'>
+                  Cost, sale price, and stock are set per variant below — these fields are
+                  hidden and unused while this product has variants.
+                </p>
+              ) : (
               <div className='grid gap-4 sm:grid-cols-2'>
                 <FormField
                   control={form.control}
@@ -594,7 +786,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   )}
                 />
               </div>
+              )}
               <div className='grid gap-4 sm:grid-cols-2'>
+                {!hasVariantsWatch && (
                 <FormField
                   control={form.control}
                   name='stockQuantity'
@@ -616,6 +810,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     </FormItem>
                   )}
                 />
+                )}
                 <FormField
                   control={form.control}
                   name='unit'
@@ -676,6 +871,90 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   )}
                 />
               </div>
+              {/* Opening-batch identity inputs only matter the first time tracking turns
+                  on for a product that already has stock (no default variant/batches
+                  exist yet) — each shown right under its own checkbox, one per line.
+                  Once a default variant exists, ProductDefaultVariantBatchPanel below
+                  takes over for receiving further batches. */}
+              {!hasVariantsWatch && (
+                <div className='grid gap-2'>
+                  <FormField
+                    control={form.control}
+                    name='trackBatch'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormControl>
+                          <div className='flex items-center gap-2'>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked)
+                                if (checked && !form.getValues('batchNumber')) {
+                                  form.setValue('batchNumber', generateBatchNumber())
+                                }
+                              }}
+                            />
+                            <span className='text-sm text-muted-foreground'>
+                              Track batch numbers for this product
+                            </span>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {trackBatchWatch && stockQuantityWatch > 0 && !freshProduct?.defaultVariantId && (
+                    <FormField
+                      control={form.control}
+                      name='batchNumber'
+                      render={({ field }) => (
+                        <FormItem className='gap-1.5'>
+                          <FormLabel>Batch number</FormLabel>
+                          <FormControl>
+                            <Input placeholder='Batch number' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  <FormField
+                    control={form.control}
+                    name='trackExpiry'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormControl>
+                          <div className='flex items-center gap-2'>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                            <span className='text-sm text-muted-foreground'>
+                              Track expiry dates for this product
+                            </span>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {trackExpiryWatch && stockQuantityWatch > 0 && !freshProduct?.defaultVariantId && (
+                    <FormField
+                      control={form.control}
+                      name='expiryDate'
+                      render={({ field }) => (
+                        <FormItem className='gap-1.5'>
+                          <FormLabel>Expiry date</FormLabel>
+                          <FormControl>
+                            <Input type='date' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              )}
+              {isEdit && editingProductId && (form.watch('trackBatch') || form.watch('trackExpiry')) && (
+                <ProductDefaultVariantBatchPanel productId={editingProductId} productName={form.watch('name')} />
+              )}
               {showConversionRules && (
                 <FormField
                   control={form.control}
@@ -767,42 +1046,25 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
               )}
               </EntityFormSection>
 
-              <EntityFormSection
-                title='Variants'
-                description='Sell this product in multiple options (e.g. size, color, pack size) instead of a single price and stock count.'
-              >
-                <FormField
-                  control={form.control}
-                  name='hasVariants'
-                  render={({ field }) => (
-                    <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border border-border/60 p-3'>
-                      <div className='space-y-0.5'>
-                        <FormLabel>This product has variants</FormLabel>
-                        <p className='text-xs text-muted-foreground'>
-                          The price, cost, and stock quantity above stay as-is and are only
-                          used as a fallback — each variant gets its own price, cost, and stock.
-                        </p>
+              <EntityFormSection title='SKU, barcode & scanning'>
+              <FormField
+                control={form.control}
+                name='sku'
+                render={({ field }) => (
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>SKU</FormLabel>
+                    <FormControl>
+                      <div className='flex gap-2'>
+                        <Input placeholder='Auto-generated SKU' showVoiceInput={false} {...field} value={field.value ?? ''} />
+                        <Button type='button' variant='outline' size='sm' onClick={generateSku}>
+                          Generate
+                        </Button>
                       </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                {form.watch('hasVariants') && (
-                  <>
-                    {isEdit && editingProductId && (
-                      <VariantInventoryTable productId={editingProductId} />
-                    )}
-                    <ProductVariantsSection
-                      draftVariants={draftVariants}
-                      onDraftVariantsChange={setDraftVariants}
-                    />
-                  </>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </EntityFormSection>
-
-              <EntityFormSection title='Barcode & scanning'>
+              />
               <FormField
                 control={form.control}
                 name='barcode'
@@ -997,6 +1259,43 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              </EntityFormSection>
+
+              <EntityFormSection
+                title='Variants'
+                description='Sell this product in multiple options (e.g. size, color, pack size) instead of a single price and stock count.'
+                className='col-span-full'
+              >
+                <FormField
+                  control={form.control}
+                  name='hasVariants'
+                  render={({ field }) => (
+                    <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border border-border/60 p-3'>
+                      <div className='space-y-0.5'>
+                        <FormLabel>This product has variants</FormLabel>
+                        <p className='text-xs text-muted-foreground'>
+                          The price, cost, and stock quantity above stay as-is and are only
+                          used as a fallback — each variant gets its own price, cost, and stock.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                {form.watch('hasVariants') && (
+                  <>
+                    {isEdit && editingProductId && (
+                      <VariantInventoryTable productId={editingProductId} />
+                    )}
+                    <ProductVariantsSection
+                      draftVariants={draftVariants}
+                      onDraftVariantsChange={setDraftVariants}
+                      productName={nameWatch}
+                    />
+                  </>
+                )}
               </EntityFormSection>
 
             </form>

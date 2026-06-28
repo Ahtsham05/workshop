@@ -56,6 +56,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewCategories', 'createCategories', 'editCategories', 'deleteCategories'],
   },
   {
+    id: 'brands',
+    label: 'Brands',
+    permissions: ['viewBrands', 'createBrands', 'editBrands', 'deleteBrands'],
+  },
+  {
     id: 'accounting',
     label: 'Accounts & Expenses',
     permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet'],
@@ -227,6 +232,7 @@ const PERMISSION_TAB_GROUPS = {
     'customers',
     'suppliers',
     'categories',
+    'brands',
     'accounting',
     'cash',
     'accounts_system',

@@ -60,6 +60,10 @@ export interface SalesInvoiceItem {
   unitPrice: number
   subtotal: number
   imeis?: string[]
+  variantId?: string | null
+  variantLabel?: string | null
+  batchNumber?: string | null
+  expiryDate?: string | null
 }
 
 export interface SalesInvoiceDetail {
@@ -106,6 +110,10 @@ export interface PurchaseInvoiceItem {
   unitPrice: number
   subtotal: number
   imeis?: string[]
+  variantId?: string | null
+  variantLabel?: string | null
+  batchNumber?: string | null
+  expiryDate?: string | null
 }
 
 export interface PurchaseInvoiceDetail {
@@ -218,6 +226,14 @@ export interface ProfitLossReport {
   }
 }
 
+export interface InventoryBatchRow {
+  batchNumber: string
+  quantity: number
+  expiryDate?: string | null
+  costPerUnit: number
+  sellingPrice?: number
+}
+
 export interface InventoryReportData {
   _id: string
   name: string
@@ -232,6 +248,29 @@ export interface InventoryReportData {
   potentialRevenue: number
   status: string
   unit?: string
+  batches?: InventoryBatchRow[]
+}
+
+export interface BatchExpiryReportRow {
+  id: string
+  productName: string
+  productNameUrdu?: string
+  variantLabel?: string | null
+  batchNumber: string
+  quantity: number
+  costPerUnit: number
+  sellingPrice?: number
+  expiryDate?: string | null
+  daysUntilExpiry?: number | null
+  supplierName?: string | null
+  batchValue: number
+}
+
+export interface BatchExpiryReportSummary {
+  activeBatches: number
+  totalBatchValue: number
+  expiringSoonCount: number
+  expiredCount: number
 }
 
 export interface TaxReportData {
@@ -262,10 +301,24 @@ export interface ReturnReportSummary {
   totalItemsReturned: number
 }
 
+export interface ReturnLineItem {
+  returnNumber: string
+  date: string
+  productName: string
+  productNameUrdu?: string
+  quantity: number
+  total: number
+  variantId?: string | null
+  variantLabel?: string | null
+  batchNumber?: string | null
+  expiryDate?: string | null
+}
+
 export interface ReturnsReport {
   summary: ReturnReportSummary
   datewise: ReturnReportDatewise[]
   productwise: ReturnReportItem[]
+  lineItems: ReturnLineItem[]
   period: { startDate: string; endDate: string }
 }
 
@@ -894,6 +947,17 @@ export const reportsApi = createApi({
       },
       providesTags: ['Inventory'],
     }),
+    getBatchExpiryReport: builder.query<{
+      data: BatchExpiryReportRow[]
+      summary: BatchExpiryReportSummary
+    }, { days?: number } | void>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params?.days) searchParams.set('days', String(params.days))
+        return `/batches?${searchParams.toString()}`
+      },
+      providesTags: ['Inventory'],
+    }),
     getTaxReport: builder.query<{
       data: TaxReportData[]
       summary: any
@@ -1045,6 +1109,7 @@ export const {
   useGetProfitLossReportQuery,
   useGetProfitLossFullReportQuery,
   useGetInventoryReportQuery,
+  useGetBatchExpiryReportQuery,
   useGetTaxReportQuery,
   useGetSalesReturnsReportQuery,
   useGetPurchaseReturnsReportQuery,

@@ -15,6 +15,9 @@ const createPurchase = {
         sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number().required(),
         imeis: Joi.array().items(Joi.string().trim()).optional(),
+        variantId: Joi.string().optional(),
+        batchNumber: Joi.string().trim().allow('').optional(),
+        expiryDate: Joi.date().optional(),
       })
     ).required(),
     totalAmount: Joi.number().required(),
@@ -67,6 +70,9 @@ const updatePurchase = {
         sellingPriceAtPurchase: Joi.number().min(0).optional(),
         total: Joi.number(),
         imeis: Joi.array().items(Joi.string().trim()).optional(),
+        variantId: Joi.string().optional(),
+        batchNumber: Joi.string().trim().allow('').optional(),
+        expiryDate: Joi.date().optional(),
       })
     ),
     totalAmount: Joi.number(),

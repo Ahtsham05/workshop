@@ -30,8 +30,20 @@ export interface SupplierRecommendation {
   overallScore: number
 }
 
+export interface ExpiryWarning {
+  batchNumber: string
+  daysUntilExpiry: number
+}
+
 export interface PurchaseSuggestion {
+  // The per-unit key — a variantId when this row is a specific real variant or a
+  // batch-tracked simple product's hidden default variant, else the real product id.
+  // `name` already includes the variant label (e.g. "Toshiba — 12") when it is.
   productId: string
+  // The real Product._id — always present, distinct from `productId` above when
+  // `variantId` is set. Needed when adding this suggestion to a purchase invoice/order.
+  realProductId?: string
+  variantId?: string | null
   name: string
   categoryName: string
   currentStock: number
@@ -47,6 +59,7 @@ export interface PurchaseSuggestion {
   trend: DemandTrend
   seasonalFactor: SeasonalFactorRef | null
   recommendedSupplier: SupplierRecommendation | null
+  expiryWarning?: ExpiryWarning | null
   reason: string
 }
 

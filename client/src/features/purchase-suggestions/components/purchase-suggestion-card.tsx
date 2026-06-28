@@ -1,4 +1,4 @@
-import { ChevronDown, ShoppingCart, Sparkles, AlertCircle } from 'lucide-react'
+import { ChevronDown, ShoppingCart, Sparkles, AlertCircle, Hourglass } from 'lucide-react'
 import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -72,6 +72,12 @@ export function PurchaseSuggestionCard({
           {suggestion.coveredByTransfer > 0 && (
             <span className='rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-medium text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400'>
               {suggestion.coveredByTransfer} via transfer
+            </span>
+          )}
+          {suggestion.expiryWarning && (
+            <span className='flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'>
+              <Hourglass className='h-2.5 w-2.5' />
+              batch {suggestion.expiryWarning.batchNumber} expires in {suggestion.expiryWarning.daysUntilExpiry}d
             </span>
           )}
         </div>

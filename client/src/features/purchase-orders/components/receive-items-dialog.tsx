@@ -28,6 +28,8 @@ import {
   useReceivePurchaseOrderItemsMutation,
   type PurchaseOrder,
 } from '@/stores/purchaseOrder.api'
+import { useGetBatchesForVariantQuery } from '@/stores/batch.api'
+import { generateBatchNumber } from '@/features/products/components/variants/generate-variant-combinations'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -54,6 +56,11 @@ type Row = {
   priceAtPurchase: number
   sellingPriceAtPurchase?: number
   notes?: string
+  variantId?: string
+  trackBatch?: boolean
+  trackExpiry?: boolean
+  batchNumber?: string
+  expiryDate?: string
 }
 
 interface Props {
@@ -75,8 +82,12 @@ function buildRowsFromOrder(order: PurchaseOrder): Row[] {
   return order.items.map((it: any) => {
     const product = it.product
     const productId = typeof product === 'object' ? product?._id || product?.id : product
-    const productName =
-      it.productName || (typeof product === 'object' ? product?.name : '') || ''
+    // toJSON transforms _id -> id, so a populated variant only has `.id`, not `._id`.
+    const variant = it.variantId && typeof it.variantId === 'object' ? it.variantId : null
+    const variantId = variant?.id || variant?._id || (typeof it.variantId === 'string' ? it.variantId : undefined)
+    // it.productName was already saved as "Toshiba — 12" at order-creation time (see
+    // handleCatalogItemSelect in purchase-order-panel.tsx) — no need to reconstruct it.
+    const productName = it.productName || (typeof product === 'object' ? product?.name : '') || ''
     const ordered = Number(it.quantity || 0)
     const alreadyReceived = Number(it.receivedQuantity || 0)
     const remaining = Math.max(0, ordered - alreadyReceived)
@@ -98,8 +109,95 @@ function buildRowsFromOrder(order: PurchaseOrder): Row[] {
         ? Number(it.expectedSellingPrice)
         : undefined,
       notes: '',
+      variantId,
+      trackBatch: variant?.trackBatch,
+      trackExpiry: variant?.trackExpiry,
+      batchNumber: '',
+      expiryDate: '',
     }
   })
+}
+
+/**
+ * Batch number/expiry entry for a receiving row whose variant tracks batch/expiry.
+ * Picking an existing batch chip re-stocks it (matched by batch number, same as
+ * Purchase's createPurchase); "+ New batch" starts a fresh one. Pulled into its own
+ * component because it needs its own useGetBatchesForVariantQuery call per row, which
+ * the Rules of Hooks don't allow inside the rows.map() loop body directly.
+ */
+function ReceiveRowBatchFields({ row, onChange }: { row: Row; onChange: (patch: Partial<Row>) => void }) {
+  if (!row.trackBatch && !row.trackExpiry) return null
+  const { data: batches = [] } = useGetBatchesForVariantQuery(row.variantId || '', {
+    skip: !row.variantId,
+  })
+  const activeBatches = batches.filter((b) => (b.status || 'active') === 'active')
+
+  // Default to the earliest-expiring batch (already sorted that way by the backend)
+  // once it loads, instead of leaving the row unselected — same rule as Purchase
+  // Invoice/Sale Invoice's default-batch selection. The receiver can still switch to
+  // a different batch chip afterward.
+  useEffect(() => {
+    if (row.batchNumber || activeBatches.length === 0) return
+    const defaultBatch = activeBatches[0]
+    onChange({
+      batchNumber: defaultBatch.batchNumber,
+      expiryDate: row.expiryDate,
+      priceAtPurchase: defaultBatch.costPerUnit,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBatches.length])
+
+  return (
+    <div className='ml-10 flex flex-wrap items-center gap-1.5 px-2.5 pb-2'>
+      {activeBatches.length > 0 && (
+        <div className='flex flex-wrap gap-1'>
+          {activeBatches.map((b) => {
+            const id = b._id || b.id
+            const isSelected = row.batchNumber === b.batchNumber
+            return (
+              <button
+                key={id}
+                type='button'
+                onClick={() =>
+                  onChange({ batchNumber: b.batchNumber, expiryDate: row.expiryDate, priceAtPurchase: b.costPerUnit })
+                }
+                title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                className={cn(
+                  'rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+                  isSelected
+                    ? 'border-blue-600 bg-blue-100 text-blue-800'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {b.batchNumber} · {b.quantity} left
+              </button>
+            )
+          })}
+          <button
+            type='button'
+            onClick={() => onChange({ batchNumber: generateBatchNumber(), expiryDate: '' })}
+            className='rounded-full border border-dashed px-2 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+          >
+            + New batch
+          </button>
+        </div>
+      )}
+      <Input
+        placeholder='Batch number'
+        value={row.batchNumber || ''}
+        showVoiceInput={false}
+        onChange={(e) => onChange({ batchNumber: e.target.value })}
+        className='h-7 w-[200px] text-xs'
+      />
+      <Input
+        type='date'
+        value={row.expiryDate || ''}
+        showVoiceInput={false}
+        onChange={(e) => onChange({ expiryDate: e.target.value })}
+        className='h-7 w-[160px] text-xs'
+      />
+    </div>
+  )
 }
 
 export default function ReceiveItemsDialog({ open, order, onClose, onReceived }: Props) {
@@ -342,6 +440,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
         id: order._id || order.id!,
         items: filtered.map((r) => ({
           product: r.productId,
+          variantId: r.variantId,
           receivedQuantity: Number(r.receivedQuantity),
           priceAtPurchase: Number(r.priceAtPurchase),
           sellingPriceAtPurchase: r.sellingPriceAtPurchase
@@ -350,6 +449,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
           unit: r.unit,
           conversionFactor: r.conversionFactor,
           notes: r.notes,
+          batchNumber: r.batchNumber || undefined,
+          expiryDate: r.expiryDate || undefined,
         })),
         receivedAt: new Date(receivedAt).toISOString(),
         paymentType,
@@ -641,6 +742,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                           }}
                           type='text'
                           inputMode='decimal'
+                          showVoiceInput={false}
                           value={r.priceAtPurchase > 0 ? r.priceAtPurchase : ''}
                           onChange={(e) =>
                             updateRow(idx, {
@@ -667,6 +769,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                           }}
                           type='text'
                           inputMode='decimal'
+                          showVoiceInput={false}
                           value={(r.sellingPriceAtPurchase ?? 0) > 0 ? r.sellingPriceAtPurchase : ''}
                           onChange={(e) =>
                             updateRow(idx, {
@@ -687,13 +790,17 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                         Rs{lineTotal.toFixed(2)}
                       </p>
                     </div>
-                  ) : (
+                  ) : null}
+                  {!fullyReceivedAlready && (
+                    <ReceiveRowBatchFields row={r} onChange={(patch) => updateRow(idx, patch)} />
+                  )}
+                  {fullyReceivedAlready ? (
                     <div className='flex items-center gap-2 px-2.5 py-2 text-xs text-emerald-700'>
                       <Package className='h-3.5 w-3.5' />
                       <span className='font-medium'>{r.productName}</span>
                       <span className='text-muted-foreground'>· Fully received</span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )
             })}

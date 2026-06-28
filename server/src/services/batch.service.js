@@ -3,20 +3,35 @@ const { ProductVariant, Inventory, Batch, InventoryTransaction } = require('../m
 const ApiError = require('../utils/ApiError');
 
 /**
- * Receiving a batch is a manual stock-in event for batch/expiry-tracked variants,
- * independent of the Purchase flow (see docs/architecture/universal-product-migration.md).
- * Increments Inventory.quantity and logs the matching InventoryTransaction, the same way
- * inventorySync.service.js does for legacy products.
+ * Creates a Batch and increments Inventory.quantity to match, logging the matching
+ * InventoryTransaction (same accounting as inventorySync.service.js for legacy products).
+ * If `batchNumber` matches an existing *active* batch for this variant, this re-stocks
+ * it instead (quantity increases; the existing costPerUnit/expiryDate are left exactly
+ * as originally recorded, so re-stocking never silently rewrites batch history) —
+ * otherwise a brand new Batch is created. This is also what makes purchasing the same
+ * batch number twice safe, instead of hitting the batchNumber unique index.
+ *
+ * Called from two places:
+ *  - purchase.service.js's createPurchase, with `purchaseId` set — this is now the
+ *    primary path for batch-tracked variants (see
+ *    docs/architecture/universal-product-migration.md).
+ *  - batch.controller.js's "Receive batch" endpoint, with no `purchaseId` — reserved
+ *    for opening stock, manual corrections, and supplier replacements that don't go
+ *    through a Purchase.
  */
 const createBatch = async (variantId, body) => {
   const variant = await ProductVariant.findById(variantId);
   if (!variant) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found');
   }
-  if (variant.isDefault) {
+  // isDefault variants are normally just a legacy/non-variant product's stand-in and
+  // don't track batches — except when the product itself opted into batch/expiry
+  // tracking (see product.service.js#setProductBatchTracking), which flips trackBatch/
+  // trackExpiry on this very default variant. Block only the untracked case.
+  if (variant.isDefault && !variant.trackBatch && !variant.trackExpiry) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      "This is a legacy product's default variant — batch tracking is only available for real variants."
+      "This product does not have batch or expiry tracking enabled."
     );
   }
 
@@ -25,17 +40,31 @@ const createBatch = async (variantId, body) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Inventory row not found for this variant');
   }
 
-  const batch = await Batch.create({
-    organizationId: variant.organizationId,
+  const existingBatch = await Batch.findOne({
     inventoryId: inventory._id,
     batchNumber: body.batchNumber,
-    quantity: body.quantity,
-    costPerUnit: body.costPerUnit,
-    manufactureDate: body.manufactureDate,
-    expiryDate: body.expiryDate,
-    supplierId: body.supplierId,
     status: 'active',
   });
+
+  const batch = existingBatch
+    ? await Batch.findOneAndUpdate(
+        { _id: existingBatch._id },
+        { $inc: { quantity: body.quantity } },
+        { new: true }
+      )
+    : await Batch.create({
+        organizationId: variant.organizationId,
+        inventoryId: inventory._id,
+        batchNumber: body.batchNumber,
+        quantity: body.quantity,
+        costPerUnit: body.costPerUnit,
+        sellingPrice: body.sellingPrice,
+        manufactureDate: body.manufactureDate,
+        expiryDate: body.expiryDate,
+        supplierId: body.supplierId,
+        purchaseId: body.purchaseId,
+        status: 'active',
+      });
 
   const updatedInventory = await Inventory.findOneAndUpdate(
     { _id: inventory._id },
@@ -58,6 +87,55 @@ const createBatch = async (variantId, body) => {
   });
 
   return batch;
+};
+
+/**
+ * Adjusts an existing batch's quantity (and the parent Inventory's aggregate) by a
+ * signed delta — used when a purchase referencing this batch is edited (quantity
+ * changed) or deleted (fully reversed), so the batch's own remaining quantity stays
+ * correct, not just the Inventory total. Unlike `createBatch`, this never creates a
+ * new batch — if the named batch can't be found (e.g. it was written off since), it
+ * falls back to adjusting only the Inventory aggregate so the edit/delete still
+ * succeeds instead of silently leaving stock wrong.
+ */
+const adjustBatchQuantity = async (variantId, { batchNumber, quantityDelta, createdBy }) => {
+  const variant = await ProductVariant.findById(variantId);
+  if (!variant) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found');
+  }
+  const inventory = await Inventory.findOne({ variantId });
+  if (!inventory) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Inventory row not found for this variant');
+  }
+
+  const batch = batchNumber
+    ? await Batch.findOne({ inventoryId: inventory._id, batchNumber })
+    : null;
+
+  if (batch) {
+    await Batch.findOneAndUpdate({ _id: batch._id }, { $inc: { quantity: quantityDelta } });
+  }
+
+  const updatedInventory = await Inventory.findOneAndUpdate(
+    { _id: inventory._id },
+    { $inc: { quantity: quantityDelta } },
+    { new: true }
+  );
+
+  await InventoryTransaction.create({
+    organizationId: variant.organizationId,
+    branchId: variant.branchId,
+    inventoryId: inventory._id,
+    variantId: variant._id,
+    type: 'adjustment',
+    quantityDelta,
+    balanceAfter: updatedInventory.quantity,
+    refType: 'Batch',
+    refId: batch?._id,
+    createdBy,
+  });
+
+  return updatedInventory;
 };
 
 const getBatchesForVariant = async (variantId) => {
@@ -120,9 +198,101 @@ const writeOffBatch = async (batchId, { reason, userId } = {}) => {
   return batch;
 };
 
+/**
+ * Deducts `quantity` from one specific Batch (manual batch selection on sale — see
+ * docs/architecture/universal-product-migration.md). Full automatic FEFO (splitting a
+ * sale across multiple batches by expiry) is a separate, not-yet-built feature; this
+ * only depletes the single batch the seller picked, and errors if it doesn't have
+ * enough on its own.
+ */
+const sellFromBatch = async (batchId, quantity, { userId, refType, refId } = {}) => {
+  const batch = await Batch.findById(batchId);
+  if (!batch) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Batch not found');
+  }
+  if (batch.status !== 'active') {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Batch ${batch.batchNumber} is ${batch.status}`);
+  }
+  if (batch.quantity < quantity) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Insufficient stock in batch ${batch.batchNumber}. Available: ${batch.quantity}, Requested: ${quantity}`
+    );
+  }
+
+  const updatedBatch = await Batch.findOneAndUpdate(
+    { _id: batchId },
+    { $inc: { quantity: -quantity }, ...(batch.quantity - quantity === 0 ? { status: 'depleted' } : {}) },
+    { new: true }
+  );
+
+  const inventory = await Inventory.findById(batch.inventoryId);
+  const updatedInventory = await Inventory.findOneAndUpdate(
+    { _id: batch.inventoryId },
+    { $inc: { quantity: -quantity } },
+    { new: true }
+  );
+
+  await InventoryTransaction.create({
+    organizationId: batch.organizationId,
+    branchId: inventory.branchId,
+    inventoryId: batch.inventoryId,
+    variantId: inventory.variantId,
+    type: 'sale',
+    quantityDelta: -quantity,
+    balanceAfter: updatedInventory.quantity,
+    unitCost: batch.costPerUnit,
+    refType: refType || 'Invoice',
+    refId,
+    createdBy: userId,
+  });
+
+  return updatedBatch;
+};
+
+/** Reverses `sellFromBatch` — restores quantity to the batch (invoice edit/delete). */
+const restoreToBatch = async (batchId, quantity, { userId, refType, refId } = {}) => {
+  const batch = await Batch.findById(batchId);
+  if (!batch) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Batch not found');
+  }
+
+  const updatedBatch = await Batch.findOneAndUpdate(
+    { _id: batchId },
+    { $inc: { quantity }, status: 'active' },
+    { new: true }
+  );
+
+  const inventory = await Inventory.findById(batch.inventoryId);
+  const updatedInventory = await Inventory.findOneAndUpdate(
+    { _id: batch.inventoryId },
+    { $inc: { quantity } },
+    { new: true }
+  );
+
+  await InventoryTransaction.create({
+    organizationId: batch.organizationId,
+    branchId: inventory.branchId,
+    inventoryId: batch.inventoryId,
+    variantId: inventory.variantId,
+    type: 'return_in',
+    quantityDelta: quantity,
+    balanceAfter: updatedInventory.quantity,
+    unitCost: batch.costPerUnit,
+    refType: refType || 'Invoice',
+    refId,
+    createdBy: userId,
+  });
+
+  return updatedBatch;
+};
+
 module.exports = {
   createBatch,
+  adjustBatchQuantity,
   getBatchesForVariant,
   getExpiringBatches,
   writeOffBatch,
+  sellFromBatch,
+  restoreToBatch,
 };

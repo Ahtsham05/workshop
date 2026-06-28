@@ -1,9 +1,9 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
-const { mobileDashboardService, cashBookService } = require('../services');
+const { mobileDashboardService, cashBookService, productService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
@@ -79,13 +79,38 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const totalSalesChange =
     previousSales > 0 ? ((totalSales - previousSales) / previousSales) * 100 : 0;
 
-  // Low stock and out of stock products (current snapshot)
+  // Low stock and out of stock products (current snapshot). For hasVariants products,
+  // Product.stockQuantity/cost stay at their legacy fallback (often 0) — real numbers
+  // live on Inventory/ProductVariant, see docs/architecture/universal-product-migration.md.
   const allProducts = await Product.find({ ...bf });
-  const lowStockCount = allProducts.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
-  const outOfStockCount = allProducts.filter((p) => p.stockQuantity === 0).length;
+  const variantProductIds = allProducts.filter((p) => p.hasVariants).map((p) => p._id);
+  const variantStockById = new Map();
+  const variantValueById = new Map();
+  if (variantProductIds.length > 0) {
+    const inventoryAgg = await Inventory.aggregate([
+      { $match: { productId: { $in: variantProductIds } } },
+      {
+        $group: {
+          _id: '$productId',
+          totalStock: { $sum: '$quantity' },
+          totalValue: { $sum: { $multiply: ['$quantity', '$averageCost'] } },
+        },
+      },
+    ]);
+    inventoryAgg.forEach((row) => {
+      variantStockById.set(row._id.toString(), row.totalStock);
+      variantValueById.set(row._id.toString(), row.totalValue);
+    });
+  }
+  const getEffectiveStock = (p) => (p.hasVariants ? (variantStockById.get(p._id.toString()) ?? 0) : (p.stockQuantity || 0));
+
+  const lowStockCount = allProducts.filter((p) => { const s = getEffectiveStock(p); return s > 0 && s <= 10; }).length;
+  const outOfStockCount = allProducts.filter((p) => getEffectiveStock(p) === 0).length;
 
   const totalInventoryValue = allProducts.reduce((sum, product) => {
-    const productValue = (product.stockQuantity || 0) * (product.cost || product.price || 0);
+    const productValue = product.hasVariants
+      ? (variantValueById.get(product._id.toString()) ?? 0)
+      : (product.stockQuantity || 0) * (product.cost || product.price || 0);
     return sum + productValue;
   }, 0);
 
@@ -451,10 +476,26 @@ const getTopProducts = catchAsync(async (req, res) => {
         totalQuantity: 1,
         totalRevenue: 1,
         stockQuantity: '$product.stockQuantity',
+        hasVariants: '$product.hasVariants',
         _id: 0
       }
     }
   ]);
+
+  // hasVariants products keep Product.stockQuantity at its legacy fallback — resolve
+  // the real number from Inventory instead (see
+  // docs/architecture/universal-product-migration.md).
+  const variantProductIds = topProducts.filter((p) => p.hasVariants).map((p) => p.id);
+  if (variantProductIds.length > 0) {
+    const stockTotals = await Inventory.aggregate([
+      { $match: { productId: { $in: variantProductIds } } },
+      { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
+    ]);
+    const stockById = new Map(stockTotals.map((s) => [s._id.toString(), s.totalStock]));
+    topProducts.forEach((p) => {
+      if (p.hasVariants) p.stockQuantity = stockById.get(p.id.toString()) ?? 0;
+    });
+  }
 
   res.status(httpStatus.OK).send(topProducts);
 });
@@ -541,25 +582,26 @@ const getTopCustomers = catchAsync(async (req, res) => {
  */
 const getLowStockProducts = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
-  const products = await Product.find({
-    ...bf,
-    $or: [
-      { stockQuantity: { $lte: 10 } },
-      { stockQuantity: 0 }
-    ]
-  })
-    .populate('category', 'name')
-    .sort({ stockQuantity: 1 })
-    .limit(20);
+  // Can't filter stockQuantity<=10 in the Mongo query here — for hasVariants products
+  // that field stays at its legacy fallback (often 0) while the real stock lives on
+  // Inventory/ProductVariant (see docs/architecture/universal-product-migration.md).
+  // Fetch the branch's products, resolve real stock via attachVariantAggregates, then
+  // filter/sort/limit in memory.
+  const products = await Product.find(bf).populate('category', 'name');
+  const withAggregates = await productService.attachVariantAggregates(products);
 
-  const lowStockProducts = products.map(product => ({
-    id: product._id,
-    name: product.name,
-    image: product.image,
-    stockQuantity: product.stockQuantity,
-    minStockLevel: 10,
-    category: product.category && product.category.name ? product.category.name : 'Uncategorized'
-  }));
+  const lowStockProducts = withAggregates
+    .map(product => ({
+      id: product._id,
+      name: product.name,
+      image: product.image,
+      stockQuantity: product.hasVariants ? (product.variantStockTotal ?? 0) : product.stockQuantity,
+      minStockLevel: 10,
+      category: product.category && product.category.name ? product.category.name : 'Uncategorized'
+    }))
+    .filter(p => p.stockQuantity <= 10)
+    .sort((a, b) => a.stockQuantity - b.stockQuantity)
+    .slice(0, 20);
 
   res.status(httpStatus.OK).send(lowStockProducts);
 });

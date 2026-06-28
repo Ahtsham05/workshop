@@ -1,6 +1,7 @@
 // Purchase invoice print utilities - delegates to the central language system
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
+import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
 
 /** Match sales invoice thermal/A4: Naskh Arabic stack — no Nastaliq / Jameel Noori. */
 const PURCHASE_PRINT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
@@ -88,7 +89,7 @@ export function generatePurchaseInvoiceHTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td>${index + 1}</td>
-      <td>${item.product?.name || item.name || ''}</td>
+      <td>${getPurchaseItemDisplayName(item)}${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ''}</small>` : ''}</td>
       <td>${resolveUnitPrice(item).toFixed(2)}</td>
       <td>${item.quantity}</td>
       <td>${resolveLineTotal(item).toFixed(2)}</td>
@@ -258,7 +259,7 @@ export function generatePurchaseInvoiceA4HTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td class="text-center"><strong>${index + 1}</strong></td>
-      <td class="text-left"><strong>${item.product?.name || item.name || ''}</strong></td>
+      <td class="text-left"><strong>${getPurchaseItemDisplayName(item)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ''}</small>` : ''}</td>
       <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
       <td class="text-right"><strong>${formatCurrency(resolveUnitPrice(item))}</strong></td>
       <td class="text-right"><strong>${formatCurrency(resolveLineTotal(item))}</strong></td>

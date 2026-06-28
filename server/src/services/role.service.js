@@ -150,6 +150,7 @@ const createDefaultRoles = async () => {
         viewCustomers: true, createCustomers: true, editCustomers: true,
         viewSuppliers: true, createSuppliers: true, editSuppliers: true,
         viewCategories: true, createCategories: true, editCategories: true,
+        viewBrands: true, createBrands: true, editBrands: true,
         viewAccounting: true, manageExpenses: true, manageLedgers: true, managePersonalWallet: true,
         viewCashBook: true, manageCashBook: true, viewCashRegister: true, manageCashRegister: true,
         viewAccountsSystem: true, manageAccountsSystem: true,
@@ -194,7 +195,7 @@ const createDefaultRoles = async () => {
       permissions: {
         viewProducts: true, viewInvoices: true, viewPurchases: true,
         viewPurchaseOrders: true, viewSalesReturns: true, viewPurchaseReturns: true,
-        viewCustomers: true, viewSuppliers: true, viewCategories: true,
+        viewCustomers: true, viewSuppliers: true, viewCategories: true, viewBrands: true,
         viewAccounting: true, viewCashBook: true, viewCashRegister: true, viewAccountsSystem: true,
         viewWallet: true, viewLoadManagement: true, viewSimSales: true, viewCashManagement: true,
         viewRepairs: true, viewServices: true, viewBillPayments: true, viewInstallments: true,

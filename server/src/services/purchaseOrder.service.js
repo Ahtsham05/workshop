@@ -8,6 +8,7 @@ const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const POPULATE_PATHS = [
   { path: 'supplier' },
   { path: 'items.product' },
+  { path: 'items.variantId' },
   { path: 'createdBy', select: 'name email' },
   {
     path: 'receipts.purchase',
@@ -188,7 +189,11 @@ const queryPurchaseOrders = async (filter, options) => {
     documentFields: ['orderNumber', 'notes'],
   });
 
-  opts.populate = 'supplier,items.product,createdBy,receipts.purchase';
+  // Array form, not a comma-joined string — two paths sharing the same top-level
+  // "items" array (items.product + items.variantId) would otherwise silently
+  // overwrite each other's populate via the pagination plugin's string parser. See
+  // the identical fix in purchase.service.js's queryPurchases.
+  opts.populate = ['supplier', 'items.product', 'items.variantId', 'createdBy', 'receipts.purchase'];
   const result = await PurchaseOrder.paginate(filter, opts);
   return result;
 };
@@ -232,8 +237,12 @@ const updatePurchaseOrderById = async (orderId, updateBody) => {
     updateBody.subtotal = totals.subtotal;
     updateBody.totalAmount = totals.totalAmount;
     updateBody.items = updateBody.items.map((item) => {
+      // Match by (product, variantId) — two different variants of the same product
+      // are different lines and must not be confused with each other.
       const existing = order.items.find(
-        (it) => String(it.product) === String(item.product)
+        (it) =>
+          String(it.product) === String(item.product) &&
+          String(it.variantId || '') === String(item.variantId || '')
       );
       return {
         ...item,
@@ -348,13 +357,15 @@ const receiveItems = async (orderId, body, ctx) => {
   }
 
   // Validate each incoming line: must reference an order line, and quantity
-  // must not exceed the remaining ordered quantity.
+  // must not exceed the remaining ordered quantity. Keyed by (product, variantId) —
+  // two different variants of the same product are different lines.
+  const orderLineKey = (productId, variantId) => `${productId}::${variantId || ''}`;
   const orderItemMap = new Map();
-  order.items.forEach((it) => orderItemMap.set(String(it.product), it));
+  order.items.forEach((it) => orderItemMap.set(orderLineKey(String(it.product), it.variantId && String(it.variantId)), it));
 
   const purchaseItems = [];
   for (const incoming of incomingItems) {
-    const orderLine = orderItemMap.get(String(incoming.product));
+    const orderLine = orderItemMap.get(orderLineKey(String(incoming.product), incoming.variantId));
     if (!orderLine) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
@@ -376,6 +387,7 @@ const receiveItems = async (orderId, body, ctx) => {
 
     purchaseItems.push({
       product: incoming.product,
+      variantId: incoming.variantId,
       quantity: receiving,
       unit: incoming.unit || orderLine.unit,
       conversionFactor: incoming.conversionFactor || orderLine.conversionFactor || 1,
@@ -384,6 +396,11 @@ const receiveItems = async (orderId, body, ctx) => {
         ? Number(incoming.sellingPriceAtPurchase)
         : undefined,
       total: Number(receiving) * Number(incoming.priceAtPurchase || 0),
+      // Pass through to purchase.service.js's createPurchase, which already creates a
+      // real Batch for batch/expiry-tracked variants — see
+      // docs/architecture/universal-product-migration.md.
+      batchNumber: incoming.batchNumber,
+      expiryDate: incoming.expiryDate,
     });
   }
 
@@ -416,7 +433,9 @@ const receiveItems = async (orderId, body, ctx) => {
   // Apply receipt to order doc
   for (const incoming of incomingItems) {
     const orderLine = order.items.find(
-      (it) => String(it.product) === String(incoming.product)
+      (it) =>
+        String(it.product) === String(incoming.product) &&
+        String(it.variantId || '') === String(incoming.variantId || '')
     );
     if (orderLine) {
       orderLine.receivedQuantity =
@@ -431,6 +450,7 @@ const receiveItems = async (orderId, body, ctx) => {
     receivedBy: ctx.userId,
     items: incomingItems.map((it) => ({
       product: it.product,
+      variantId: it.variantId,
       receivedQuantity: Number(it.receivedQuantity || 0),
       priceAtPurchase: Number(it.priceAtPurchase || 0),
       sellingPriceAtPurchase: it.sellingPriceAtPurchase
@@ -439,6 +459,8 @@ const receiveItems = async (orderId, body, ctx) => {
       unit: it.unit,
       conversionFactor: it.conversionFactor || 1,
       notes: it.notes,
+      batchNumber: it.batchNumber,
+      expiryDate: it.expiryDate,
     })),
     notes: body.notes,
   });

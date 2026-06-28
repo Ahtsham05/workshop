@@ -57,6 +57,7 @@ import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authentic
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
+import { Route as AuthenticatedBrandsIndexImport } from './routes/_authenticated/brands/index'
 import { Route as AuthenticatedBranchesIndexImport } from './routes/_authenticated/branches/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/admin/index'
@@ -440,6 +441,12 @@ const AuthenticatedCategoriesIndexRoute =
     path: '/categories/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedBrandsIndexRoute = AuthenticatedBrandsIndexImport.update({
+  id: '/brands/',
+  path: '/brands/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedBranchesIndexRoute = AuthenticatedBranchesIndexImport.update(
   {
@@ -1461,6 +1468,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBranchesIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/brands/': {
+      id: '/_authenticated/brands/'
+      path: '/brands'
+      fullPath: '/brands'
+      preLoaderRoute: typeof AuthenticatedBrandsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/categories/': {
       id: '/_authenticated/categories/'
       path: '/categories'
@@ -2197,6 +2211,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedBranchesIndexRoute: typeof AuthenticatedBranchesIndexRoute
+  AuthenticatedBrandsIndexRoute: typeof AuthenticatedBrandsIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
@@ -2269,6 +2284,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedBranchesIndexRoute: AuthenticatedBranchesIndexRoute,
+  AuthenticatedBrandsIndexRoute: AuthenticatedBrandsIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
@@ -2368,6 +2384,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
+  '/brands': typeof AuthenticatedBrandsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -2500,6 +2517,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
+  '/brands': typeof AuthenticatedBrandsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -2635,6 +2653,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
+  '/_authenticated/brands/': typeof AuthenticatedBrandsIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -2772,6 +2791,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/apps'
     | '/branches'
+    | '/brands'
     | '/categories'
     | '/chats'
     | '/customers'
@@ -2903,6 +2923,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/apps'
     | '/branches'
+    | '/brands'
     | '/categories'
     | '/chats'
     | '/customers'
@@ -3036,6 +3057,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/'
     | '/_authenticated/apps/'
     | '/_authenticated/branches/'
+    | '/_authenticated/brands/'
     | '/_authenticated/categories/'
     | '/_authenticated/chats/'
     | '/_authenticated/customers/'
@@ -3207,6 +3229,7 @@ export const routeTree = rootRoute
         "/_authenticated/admin/",
         "/_authenticated/apps/",
         "/_authenticated/branches/",
+        "/_authenticated/brands/",
         "/_authenticated/categories/",
         "/_authenticated/chats/",
         "/_authenticated/customers/",
@@ -3513,6 +3536,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/branches/": {
       "filePath": "_authenticated/branches/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/brands/": {
+      "filePath": "_authenticated/brands/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/categories/": {
