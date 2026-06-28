@@ -23,7 +23,6 @@ import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
-import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
 
@@ -102,7 +101,6 @@ export default function PurchasePanel({
   isEditing = false,
   editingPurchase,
   products,
-  productsLoading = false,
   setProducts,
 }: PurchasePanelProps) {
   const { t } = useLanguage()

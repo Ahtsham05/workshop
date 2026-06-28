@@ -48,7 +48,7 @@ import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalo
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
-import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { getDisplayStock } from '@/lib/product-stock-display'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
@@ -210,7 +210,6 @@ export default function PurchaseOrderPanel({
   onBack,
   onSaved,
   editing,
-  products,
   productsLoading = false,
   onRegisterAddProduct,
   prefillSupplierId,
@@ -272,7 +271,7 @@ export default function PurchaseOrderPanel({
   )
 
   const filteredCatalogItems = purchasableCatalog.filter((p) =>
-    matchesBilingualSearch(productSearchQuery, p.name, p.nameUrdu, p.barcode, p.brand),
+    matchesBilingualSearch(productSearchQuery, p.name, p.nameUrdu, p.barcode, p.brand?.name),
   )
 
   const getProductId = (item: OrderItem) =>

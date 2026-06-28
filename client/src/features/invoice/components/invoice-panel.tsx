@@ -29,7 +29,6 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
-import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
@@ -532,17 +531,6 @@ export function InvoicePanel({
   // Filter customers by name, Urdu name, or phone
   const filteredCustomers = customers.filter((customer) =>
     matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
-  )
-
-  // Filter products by name, Urdu name, barcode, description (description may be non-string from API)
-  const filteredProducts = products.filter((product) =>
-    matchesBilingualSearch(
-      productSearchQuery,
-      product.name,
-      product.nameUrdu,
-      product.barcode,
-      typeof product.description === 'string' ? product.description : undefined,
-    ),
   )
 
   // Flat sellable catalog: one row per non-variant product, and one row per real

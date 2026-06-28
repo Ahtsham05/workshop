@@ -183,7 +183,7 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     cell: ({ row }) => {
       const product = row.original
       const unit = product.unit || DEFAULT_UNIT
-      const value = product.hasVariants ? (product.variantStockTotal ?? 0) : row.getValue('stockQuantity')
+      const value = product.hasVariants ? (product.variantStockTotal ?? 0) : Number(row.getValue('stockQuantity') ?? 0)
       return (
         <Badge variant='outline' className={cn('capitalize')}>
           {value} {getUnitLabel(unit)}

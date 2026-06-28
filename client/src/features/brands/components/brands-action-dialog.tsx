@@ -28,7 +28,7 @@ import {
 import SmartInput from '@/components/smart-input.tsx'
 import { Input } from '@/components/ui/input'
 import toast from 'react-hot-toast'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useBrands } from '../context/brands-context'
 import { useCreateBrandMutation, useUpdateBrandMutation } from '@/stores/brand.api'
 import ImageUpload from '@/components/image-upload'

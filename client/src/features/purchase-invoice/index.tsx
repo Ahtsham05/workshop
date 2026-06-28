@@ -65,7 +65,7 @@ export interface PurchaseItem {
   // docs/architecture/universal-product-migration.md.
   trackBatch?: boolean;
   trackExpiry?: boolean;
-  knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number }[];
+  knownBatches?: { id: string; _id?: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number; status?: 'active' | 'depleted' | 'expired' | 'written_off' }[];
 }
 
 // Supplier Interface
