@@ -221,6 +221,7 @@ const createBillPaymentsBatch = async (body) => {
       walletType,
       status: 'pending',
       billAmount: Number(bill.billAmount),
+      expectedLateAmount: bill.expectedLateAmount != null ? Number(bill.expectedLateAmount) : undefined,
       customerName: bill.customerName || 'Walk-in',
       referenceNumber: bill.referenceNumber || '-',
     };
@@ -228,6 +229,78 @@ const createBillPaymentsBatch = async (body) => {
     results.push(created);
   }
   return results;
+};
+
+/**
+ * Create a new bill and settle an older unpaid bill on the same Ref # as a single
+ * combined cash event — for when the customer physically only hands over the net
+ * difference (new bill total minus what's owed on the old one), rather than the
+ * shop collecting the new bill's full amount and separately paying out the old
+ * one. Both bills still get their own correct amount/profit/loss fields (for
+ * receipts and reports), but only ONE net Cash Book/wallet entry is recorded
+ * against the new bill, instead of two larger entries that happen to net out —
+ * matching what actually moved in the till.
+ */
+const settleCombinedBill = async ({ newBill, oldBillId, actualOldBillAmount, userId }) => {
+  const created = new BillPayment({
+    ...newBill,
+    dueDate: parseBusinessDateTime(newBill.dueDate) || newBill.dueDate,
+    status: 'pending',
+    paymentDate: null,
+    createdBy: userId,
+  });
+  applyBillPaymentFinancials(created);
+  await created.save();
+
+  const oldBill = await getBillPaymentById(oldBillId);
+  if (oldBill.status === 'paid') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'That old bill is already paid');
+  }
+  oldBill.status = 'paid';
+  oldBill.paymentDate = new Date();
+  oldBill.actualBillAmount = Number(actualOldBillAmount);
+  oldBill.updatedBy = userId;
+  applyBillPaymentFinancials(oldBill);
+  await oldBill.save();
+  // Deliberately skip syncBillCashEntry for both — the new bill's income leg and
+  // the old bill's expense leg are folded into the single net entry below instead.
+
+  const net = created.totalReceived - oldBill.actualBillAmount;
+  const commonFields = {
+    organizationId: created.organizationId,
+    branchId: created.branchId,
+    source: 'bill_payment',
+    paymentMethod: created.paymentMethod,
+    referenceId: created._id,
+    referenceModel: 'BillPayment',
+    createdBy: userId,
+    date: new Date(),
+  };
+  const description = `Bill collection (net of old Ref# ${oldBill.referenceNumber} arrears): ${created.companyName} – Ref# ${created.referenceNumber} (${created.customerName})`;
+
+  if (net !== 0) {
+    await cashBookService.upsertReferenceEntry({
+      ...commonFields,
+      type: net > 0 ? 'income' : 'expense',
+      amount: Math.abs(net),
+      description,
+    });
+  }
+  await walletEntryService.syncWalletPayment({
+    organizationId: created.organizationId,
+    branchId: created.branchId,
+    referenceId: created._id,
+    referenceModel: 'BillPayment',
+    direction: net >= 0 ? 'in' : 'out',
+    amount: Math.abs(net),
+    paymentMethod: created.paymentMethod,
+    walletType: created.walletType,
+    description,
+    date: new Date(),
+    createdBy: userId,
+  });
+
+  return { newBill: created, oldBill };
 };
 
 const queryBillPayments = async (filter, options) => {
@@ -286,6 +359,42 @@ const getBillPaymentById = async (id) => {
   return billPayment;
 };
 
+/**
+ * Settling the latest bill on a Ref # almost always means the cashier just paid the
+ * utility company a combined figure that covers older, still-unpaid bills on the
+ * same connection too — so paying the newest one auto-settles everything older
+ * instead of leaving arrears that have to be closed out by hand, one by one.
+ * Each older bill is paid using its own pre-recorded `expectedLateAmount` (the
+ * "after due date" figure captured when it was created), falling back to its
+ * original bill amount if none was set.
+ */
+const cascadeSettlePreviousBills = async (billPayment, userId) => {
+  const olderUnpaid = await BillPayment.find({
+    _id: { $ne: billPayment._id },
+    organizationId: billPayment.organizationId,
+    referenceNumber: billPayment.referenceNumber,
+    companyId: billPayment.companyId,
+    status: { $ne: 'paid' },
+    dueDate: { $lt: billPayment.dueDate },
+  });
+
+  for (const old of olderUnpaid) {
+    const previous = {
+      paymentMethod: old.paymentMethod,
+      walletType: old.walletType,
+      totalReceived: old.totalReceived,
+      utilityAmount: computeBillUtilityAmount(old),
+    };
+    old.status = 'paid';
+    old.paymentDate = billPayment.paymentDate;
+    old.actualBillAmount = old.expectedLateAmount ?? old.billAmount;
+    old.updatedBy = userId;
+    applyBillPaymentFinancials(old);
+    await old.save();
+    await syncBillCashEntry(old, previous);
+  }
+};
+
 const updateBillPaymentById = async (id, updateBody, userId) => {
   const billPayment = await getBillPaymentById(id);
   const previous = {
@@ -294,6 +403,7 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
     totalReceived: billPayment.totalReceived,
     utilityAmount: computeBillUtilityAmount(billPayment),
   };
+  const wasAlreadyPaid = billPayment.status === 'paid';
 
   Object.assign(billPayment, updateBody, { updatedBy: userId });
 
@@ -311,7 +421,28 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
   applyBillPaymentFinancials(billPayment);
   await billPayment.save();
   await syncBillCashEntry(billPayment, previous);
+
+  if (billPayment.status === 'paid' && !wasAlreadyPaid) {
+    await cascadeSettlePreviousBills(billPayment, userId);
+  }
+
   return billPayment;
+};
+
+/**
+ * Find the most recent unpaid bill sharing this reference number (excluding the bill
+ * itself) — surfaced on a new bill's receipt so the customer sees the old arrears
+ * alongside the new charges, instead of the two getting mixed up.
+ */
+const getPreviousOutstandingBill = async (billPayment) => {
+  return BillPayment.findOne({
+    _id: { $ne: billPayment._id },
+    organizationId: billPayment.organizationId,
+    referenceNumber: billPayment.referenceNumber,
+    status: { $ne: 'paid' },
+  })
+    .sort({ dueDate: 1 })
+    .lean();
 };
 
 const deleteBillPaymentById = async (id) => {
@@ -612,12 +743,14 @@ const getDueDateRangeSummary = async ({
 module.exports = {
   createBillPayment,
   createBillPaymentsBatch,
+  settleCombinedBill,
   queryBillPayments,
   getBillPaymentById,
   updateBillPaymentById,
   deleteBillPaymentById,
   getBillsDueToday,
   getOverdueBills,
+  getPreviousOutstandingBill,
   getBillPaymentReport,
   getDueDateRangeSummary,
   refreshOverdueStatuses,

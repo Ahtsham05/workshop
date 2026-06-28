@@ -60,6 +60,15 @@ const billPaymentSchema = new mongoose.Schema(
       type: Number,
       min: 0,
     },
+    // Cashier's estimate of what the utility will actually charge once this bill is
+    // settled late (e.g. the company already quoted a higher figure over the phone,
+    // or bundled it into next month's bill). Entered while still pending/overdue, so
+    // Mark-as-Paid can default `actualBillAmount` to it instead of the cashier
+    // re-typing/guessing weeks later.
+    expectedLateAmount: {
+      type: Number,
+      min: 0,
+    },
     latePaymentLoss: {
       type: Number,
       min: 0,

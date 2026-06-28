@@ -267,6 +267,26 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
     </div>
   </div>
 
+  ${receipt.previousOutstanding ? `
+  <div class="totals-section" style="border-top: 1px dashed #000;">
+    <div class="total-row" style="font-weight: bold; text-decoration: underline;">
+      <span>${labels.previous_outstanding} (${receipt.previousOutstanding.referenceNumber})</span>
+    </div>
+    <div class="total-row">
+      <span>${labels.already_collected}:</span>
+      <span>${fmt(receipt.previousOutstanding.totalReceived)}</span>
+    </div>
+    <div class="total-row">
+      <span>${labels.overdue_since}:</span>
+      <span>${fmtDate(receipt.previousOutstanding.dueDate)}</span>
+    </div>
+    <div class="total-row total-final">
+      <span>${labels.amount_to_settle}:</span>
+      <span>${fmt(receipt.previousOutstanding.expectedLateAmount ?? receipt.previousOutstanding.billAmount)}</span>
+    </div>
+  </div>
+  ` : ''}
+
   ${options.branchDetails?.invoiceNote?.trim()
     ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(options.branchDetails.invoiceNote)}</div>`
     : ''}

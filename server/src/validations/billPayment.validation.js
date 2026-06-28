@@ -12,6 +12,8 @@ const createBillPayment = {
     referenceNumber: Joi.string().required(),
     billAmount: Joi.number().min(0.01).required(),
     serviceCharge: Joi.number().min(0).required(),
+    // "After due date" figure printed on the same physical bill, captured up front.
+    expectedLateAmount: Joi.number().min(0),
     dueDate: Joi.date().required(),
     paymentDate: Joi.date(),
     status: Joi.string().valid('pending', 'paid', 'overdue'),
@@ -54,6 +56,7 @@ const updateBillPayment = {
       serviceCharge: Joi.number().min(0),
       dueDate: Joi.date(),
       actualBillAmount: Joi.number().min(0.01),
+      expectedLateAmount: Joi.number().min(0).allow(null),
       paymentDate: Joi.date(),
       status: Joi.string().valid('pending', 'paid', 'overdue'),
       paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
@@ -106,6 +109,7 @@ const createBillPaymentsBatch = {
       .items(
         Joi.object().keys({
           billAmount: Joi.number().min(0.01).required(),
+          expectedLateAmount: Joi.number().min(0),
           customerName: Joi.string().allow('').default(''),
           referenceNumber: Joi.string().allow('').default(''),
         })
@@ -115,9 +119,32 @@ const createBillPaymentsBatch = {
   }),
 };
 
+const settleCombinedBill = {
+  body: Joi.object().keys({
+    newBill: Joi.object()
+      .keys({
+        customerName: Joi.string().required(),
+        billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other').required(),
+        companyId: Joi.string().custom(objectId).required(),
+        companyName: Joi.string().required(),
+        referenceNumber: Joi.string().required(),
+        billAmount: Joi.number().min(0.01).required(),
+        serviceCharge: Joi.number().min(0).required(),
+        expectedLateAmount: Joi.number().min(0),
+        dueDate: Joi.date().required(),
+        paymentMethod: Joi.string().valid(...PAYMENT_METHODS).required(),
+        walletType: Joi.string().allow(''),
+      })
+      .required(),
+    oldBillId: Joi.string().custom(objectId).required(),
+    actualOldBillAmount: Joi.number().min(0.01).required(),
+  }),
+};
+
 module.exports = {
   createBillPayment,
   createBillPaymentsBatch,
+  settleCombinedBill,
   getBillPayments,
   updateBillPayment,
   deleteBillPayment,

@@ -58,8 +58,10 @@ import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
   useGetBillPaymentsQuery,
+  useLazyGetBillPaymentsQuery,
   // useCreateBillPaymentMutation,
   useCreateBillPaymentsBatchMutation,
+  useSettleCombinedBillMutation,
   useDeleteBillPaymentMutation,
   useUpdateBillPaymentMutation,
   useGetUtilityCompaniesQuery,
@@ -84,7 +86,13 @@ import { formatBusinessDate, getBusinessToday, shiftBusinessCalendarDate } from 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type BillRow = {
+  // "Within due date" amount — every Pakistani utility bill prints two figures;
+  // this is the lower one.
   billAmount: string
+  // The bill's own "after due date" figure, printed right on the same physical
+  // bill — captured now, at creation, instead of guessing it weeks later when the
+  // bill is actually settled late. Saved as this bill's `expectedLateAmount`.
+  afterDueAmount: string
   customerName: string
   referenceNumber: string
 }
@@ -161,6 +169,7 @@ function getInitialBillListFilters(filter?: BillListFilter) {
 
 const makeEmptyBillRow = (): BillRow => ({
   billAmount: '',
+  afterDueAmount: '',
   customerName: '',
   referenceNumber: '',
 })
@@ -394,13 +403,34 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
   const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [actualBillAmount, setActualBillAmount] = useState('')
   const [updateBill, { isLoading }] = useUpdateBillPaymentMutation()
+  const [lookupOlderBills] = useLazyGetBillPaymentsQuery()
+  const [olderUnpaid, setOlderUnpaid] = useState<BillPaymentRecord[]>([])
 
   useEffect(() => {
     if (bill) {
       setPaymentDate(getBusinessToday())
-      setActualBillAmount(String(bill.billAmount))
+      // Default to the cashier's own earlier estimate (entered while this bill was
+      // still pending/overdue) instead of the original bill amount, if one exists.
+      setActualBillAmount(String(bill.expectedLateAmount ?? bill.billAmount))
+      // Paying this bill auto-settles any older unpaid bill on the same Ref # too —
+      // surface that here so the cashier isn't surprised by it.
+      lookupOlderBills({ search: bill.referenceNumber, limit: 10 }).unwrap()
+        .then((result) => {
+          const older = (result?.results ?? []).filter(
+            (b) =>
+              b.id !== bill.id &&
+              b.referenceNumber === bill.referenceNumber &&
+              b.companyId === bill.companyId &&
+              b.status !== 'paid' &&
+              new Date(b.dueDate) < new Date(bill.dueDate),
+          )
+          setOlderUnpaid(older)
+        })
+        .catch(() => setOlderUnpaid([]))
+    } else {
+      setOlderUnpaid([])
     }
-  }, [bill])
+  }, [bill, lookupOlderBills])
 
   const isLate = bill
     ? bill.status === 'overdue' || isBillPaymentLate(bill.dueDate, paymentDate)
@@ -428,7 +458,10 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
           ...(isLate ? { actualBillAmount: parsedActualBillAmount } : {}),
         },
       }).unwrap()
-      toast.success(isLate && lateLoss > 0 ? 'Bill paid — late payment loss recorded' : 'Bill marked as paid')
+      const cascadeNote = olderUnpaid.length > 0 ? ` — ${olderUnpaid.length} older bill(s) settled too` : ''
+      toast.success(
+        (isLate && lateLoss > 0 ? 'Bill paid — late payment loss recorded' : 'Bill marked as paid') + cascadeNote,
+      )
       onClose()
     } catch {
       toast.error('Failed to update bill')
@@ -452,6 +485,22 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
               <p><span className='text-muted-foreground'>Service Charge: </span><strong className='text-green-600'>Rs. {bill.serviceCharge.toLocaleString()}</strong></p>
               <p><span className='text-muted-foreground'>Collected from Customer: </span><strong>Rs. {bill.totalReceived.toLocaleString()}</strong></p>
             </div>
+
+            {olderUnpaid.length > 0 && (
+              <div className='rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800'>
+                <p className='flex items-center gap-2 font-medium'>
+                  <AlertCircle className='h-4 w-4' />
+                  This will also settle {olderUnpaid.length} older unpaid bill(s) on this Ref #
+                </p>
+                <ul className='mt-1.5 space-y-0.5 text-xs'>
+                  {olderUnpaid.map((b) => (
+                    <li key={b.id}>
+                      Due {formatBusinessDate(b.dueDate)} — Rs. {(b.expectedLateAmount ?? b.billAmount).toLocaleString()} to the company
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {isLate && (
               <div className='rounded-md border border-red-200 bg-red-50 p-3 space-y-3'>
@@ -568,6 +617,12 @@ export default function BillPaymentsPage() {
   const [filterStatus, setFilterStatus] = useState<string>(initialFilters.filterStatus)
   const [filterBillType, setFilterBillType] = useState<string>('all')
   const [form, setForm] = useState<BatchFormState>(makeInitialBatchForm())
+  // Outstanding (unpaid) bills found for a Ref # typed into the New Bill rows below —
+  // surfaces arrears from a previous period so the customer isn't re-billed for
+  // charges already collected, and the old bill gets settled (with its true
+  // late-payment cost) instead of silently forgotten.
+  const [outstandingByRow, setOutstandingByRow] = useState<Record<number, BillPaymentRecord[]>>({})
+  const [lookupOutstanding] = useLazyGetBillPaymentsQuery()
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   // Collecting a bill payment at the counter is money-in — hide wallet balances.
@@ -611,6 +666,7 @@ export default function BillPaymentsPage() {
 
   const { data, isLoading } = useGetBillPaymentsQuery(billQuery as any)
   const [createBatchBills, { isLoading: isCreating }] = useCreateBillPaymentsBatchMutation()
+  const [settleCombined, { isLoading: isSettlingCombined }] = useSettleCombinedBillMutation()
   const [deleteBill, { isLoading: isDeleting }] = useDeleteBillPaymentMutation()
 
   const bills = data?.results ?? []
@@ -659,7 +715,34 @@ export default function BillPaymentsPage() {
     setForm((f) => ({ ...f, bills: [...f.bills, makeEmptyBillRow()] }))
   }, [])
 
+  // Fires when a Ref # field loses focus — looks for any not-yet-paid bill that
+  // already used this reference (last month's arrears) so the cashier sees it
+  // before re-billing the customer for charges already collected.
+  const checkOutstandingForRow = useCallback(async (index: number, referenceNumber: string) => {
+    const ref = referenceNumber.trim()
+    if (!ref) {
+      setOutstandingByRow((prev) => {
+        if (!prev[index]) return prev
+        const next = { ...prev }
+        delete next[index]
+        return next
+      })
+      return
+    }
+    const result = await lookupOutstanding({ search: ref, limit: 5 }).unwrap().catch(() => null)
+    const matches = (result?.results ?? []).filter(
+      (b) => b.referenceNumber === ref && b.status !== 'paid',
+    )
+    setOutstandingByRow((prev) => ({ ...prev, [index]: matches }))
+  }, [lookupOutstanding])
+
   const removeBillRow = useCallback((index: number) => {
+    setOutstandingByRow((prev) => {
+      if (!prev[index]) return prev
+      const next = { ...prev }
+      delete next[index]
+      return next
+    })
     setForm((f) => {
       if (f.bills.length <= 1) return f
       return { ...f, bills: f.bills.filter((_, i) => i !== index) }
@@ -713,32 +796,33 @@ export default function BillPaymentsPage() {
     if (!form.companyId) return toast.error('Please select a company')
     if (!form.dueDate) return toast.error('Due date is required')
 
-    const validBills = form.bills.filter((b) => {
-      const amt = parseFloat(b.billAmount)
-      return !isNaN(amt) && amt > 0
-    })
+    const validBills = form.bills.filter((row) => (parseFloat(row.billAmount) || 0) > 0)
 
     if (validBills.length === 0) return toast.error('At least one bill with amount > 0 is required')
 
-    const payload: CreateBillPaymentsBatchInput = {
-      companyId: form.companyId,
-      companyName: form.companyName,
-      billType: form.billType as CreateBillPaymentsBatchInput['billType'],
-      serviceCharge: svcCharge,
-      dueDate: form.dueDate,
-      paymentMethod: form.paymentMethod as CreateBillPaymentsBatchInput['paymentMethod'],
-      walletType: form.paymentMethod === 'wallet' ? form.walletType : undefined,
-      bills: validBills.map((b) => ({
-        billAmount: parseFloat(b.billAmount),
-        customerName: b.customerName || undefined,
-        referenceNumber: b.referenceNumber || undefined,
-      })),
-    }
-
     try {
+      const payload: CreateBillPaymentsBatchInput = {
+        companyId: form.companyId,
+        companyName: form.companyName,
+        billType: form.billType as CreateBillPaymentsBatchInput['billType'],
+        serviceCharge: svcCharge,
+        dueDate: form.dueDate,
+        paymentMethod: form.paymentMethod as CreateBillPaymentsBatchInput['paymentMethod'],
+        walletType: form.paymentMethod === 'wallet' ? form.walletType : undefined,
+        bills: validBills.map((row) => ({
+          billAmount: parseFloat(row.billAmount),
+          // Captured now, straight off the physical bill, so Mark-as-Paid already
+          // knows the after-due figure instead of the cashier guessing it later.
+          expectedLateAmount: parseFloat(row.afterDueAmount) || undefined,
+          customerName: row.customerName || undefined,
+          referenceNumber: row.referenceNumber || undefined,
+        })),
+      }
       await createBatchBills(payload).unwrap()
+
       toast.success(`${validBills.length} bill(s) recorded as pending`)
       setForm(makeInitialBatchForm())
+      setOutstandingByRow({})
       setDialogOpen(false)
     } catch {
       toast.error('Failed to record bills')
@@ -746,6 +830,44 @@ export default function BillPaymentsPage() {
   }
 
   submitBillRef.current = handleSubmit
+
+  // Collects only the net difference from the customer right now: creates this
+  // row's new bill and settles the matched old one in one combined action, with a
+  // single net Cash Book/wallet entry instead of two larger ones that net out.
+  const handleSettleCombined = async (row: BillRow, oldBill: BillPaymentRecord) => {
+    if (!form.companyId) return toast.error('Please select a company')
+    if (!form.dueDate) return toast.error('Due date is required')
+    const billAmount = parseFloat(row.billAmount) || 0
+    if (billAmount <= 0) return toast.error('Enter this bill\'s amount first')
+    const oldOwed = oldBill.expectedLateAmount ?? oldBill.billAmount
+
+    try {
+      await settleCombined({
+        newBill: {
+          companyId: form.companyId,
+          companyName: form.companyName,
+          billType: form.billType as CreateBillPaymentsBatchInput['billType'],
+          serviceCharge: svcCharge,
+          dueDate: form.dueDate,
+          paymentMethod: form.paymentMethod as CreateBillPaymentsBatchInput['paymentMethod'],
+          walletType: form.paymentMethod === 'wallet' ? form.walletType : undefined,
+          billAmount,
+          expectedLateAmount: parseFloat(row.afterDueAmount) || undefined,
+          customerName: row.customerName || 'Walk-in',
+          referenceNumber: row.referenceNumber || oldBill.referenceNumber,
+        },
+        oldBillId: oldBill.id,
+        actualOldBillAmount: oldOwed,
+      }).unwrap()
+
+      toast.success('Settled — net amount recorded in Cash Book')
+      setForm(makeInitialBatchForm())
+      setOutstandingByRow({})
+      setDialogOpen(false)
+    } catch {
+      toast.error('Failed to settle combined bill')
+    }
+  }
 
   const billHeaderEnter = useMemo(
     () =>
@@ -805,7 +927,7 @@ export default function BillPaymentsPage() {
               <TabsTrigger value='companies'>Companies</TabsTrigger>
             </TabsList>
             {activeTab === 'bills' && (
-              <Button onClick={() => setDialogOpen(true)}>
+              <Button onClick={() => { setOutstandingByRow({}); setDialogOpen(true) }}>
                 <Plus className='mr-1 h-4 w-4' />
                 New Bill
               </Button>
@@ -906,11 +1028,19 @@ export default function BillPaymentsPage() {
                             Rs. {bill.totalReceived.toLocaleString()}
                           </TableCell>
                           <TableCell>
-                            {bill.status === 'paid'
-                              ? `Rs. ${(bill.actualBillAmount ?? bill.billAmount).toLocaleString()}`
-                              : bill.status === 'overdue'
-                                ? <span className='text-xs text-red-600'>Pay after due</span>
-                                : '—'}
+                            {bill.status === 'paid' ? (
+                              `Rs. ${(bill.actualBillAmount ?? bill.billAmount).toLocaleString()}`
+                            ) : bill.status === 'overdue' ? (
+                              <span className='text-xs text-red-600'>
+                                {bill.expectedLateAmount
+                                  ? <>You will pay Rs. {bill.expectedLateAmount.toLocaleString()}</>
+                                  : 'Pay after due'}
+                              </span>
+                            ) : bill.expectedLateAmount ? (
+                              <span className='text-xs text-amber-700'>
+                                Est. Rs. {bill.expectedLateAmount.toLocaleString()} if late
+                              </span>
+                            ) : '—'}
                           </TableCell>
                           <TableCell className={bill.latePaymentLoss ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
                             {bill.latePaymentLoss ? `Rs. ${bill.latePaymentLoss.toLocaleString()}` : '—'}
@@ -942,10 +1072,10 @@ export default function BillPaymentsPage() {
                                 <CheckCircle2 className='h-4 w-4 text-green-600' />
                               </Button>
                             )}
-                            {/* Print receipt — only for paid */}
-                            {bill.status === 'paid' && (
-                              <PrintReceiptButton billId={bill.id} />
-                            )}
+                            {/* Print receipt — cash is collected from the customer at
+                                creation, so a receipt is valid immediately, not just
+                                once the shop has settled with the utility company. */}
+                            <PrintReceiptButton billId={bill.id} />
                             <Button
                               size='icon'
                               variant='ghost'
@@ -978,7 +1108,7 @@ export default function BillPaymentsPage() {
 
       {/* ── New Bill Dialog (Multi-bill) ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'>
+        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-3xl'>
           <DialogHeader>
             <DialogTitle>New Bill Payment</DialogTitle>
           </DialogHeader>
@@ -1069,6 +1199,9 @@ export default function BillPaymentsPage() {
                     <TableRow>
                       <TableHead className='w-[40px]'>#</TableHead>
                       <TableHead>Bill Amount (Rs.) *</TableHead>
+                      <TableHead title="The higher figure printed on the same bill for paying after the due date — captured now so Mark-as-Paid already knows it">
+                        After Due Date (Rs.)
+                      </TableHead>
                       <TableHead>Customer Name</TableHead>
                       <TableHead>Ref #</TableHead>
                       <TableHead className='w-[50px]'></TableHead>
@@ -1094,6 +1227,17 @@ export default function BillPaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <Input
+                            type='number'
+                            min={row.billAmount || '0'}
+                            step='1'
+                            placeholder='Optional'
+                            className='h-8'
+                            value={row.afterDueAmount}
+                            onChange={(e) => updateBillRow(i, 'afterDueAmount', e.target.value)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
                             ref={(el) => { billCustomerRefs.current[i] = el }}
                             placeholder='Optional'
                             className='h-8'
@@ -1110,6 +1254,7 @@ export default function BillPaymentsPage() {
                             value={row.referenceNumber}
                             onChange={(e) => updateBillRow(i, 'referenceNumber', e.target.value)}
                             onKeyDown={(e) => handleBillRowKeyDown(e, 'ref', i)}
+                            onBlur={(e) => checkOutstandingForRow(i, e.target.value)}
                           />
                         </TableCell>
                         <TableCell>
@@ -1127,6 +1272,84 @@ export default function BillPaymentsPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {form.bills.map((row, i) => {
+                      const outstanding = outstandingByRow[i] ?? []
+                      if (outstanding.length === 0) return null
+                      const newBillAmount = parseFloat(row.billAmount) || 0
+                      const nowCollecting = newBillAmount > 0 ? newBillAmount + svcCharge : 0
+                      return (
+                        <TableRow key={`warn-${i}`} className='bg-amber-50'>
+                          <TableCell colSpan={6} className='max-w-0 py-2 whitespace-normal break-words'>
+                            <div className='flex items-start gap-2 text-xs text-amber-800'>
+                              <AlertCircle className='mt-0.5 h-3.5 w-3.5 shrink-0' />
+                              <div className='min-w-0 flex-1 space-y-2.5'>
+                                {outstanding.map((b) => {
+                                  const oldOwed = b.expectedLateAmount ?? b.billAmount
+                                  return (
+                                    <div key={b.id} className='min-w-0 space-y-1'>
+                                      <p className='break-words'>
+                                        <strong>Row {i + 1}:</strong> Ref # {b.referenceNumber} — previously you
+                                        received <strong>Rs. {b.totalReceived.toLocaleString()}</strong> from the
+                                        customer but haven't paid the company yet ({b.status === 'overdue' ? 'overdue since' : 'due'}{' '}
+                                        <strong>{formatBusinessDate(b.dueDate)}</strong>; you'll owe{' '}
+                                        <strong>Rs. {oldOwed.toLocaleString()}</strong> for it).
+                                      </p>
+                                      {nowCollecting > 0 ? (
+                                        <>
+                                          <p className='break-words'>
+                                            Now you will collect <strong>Rs. {nowCollecting.toLocaleString()}</strong>{' '}
+                                            for this new bill (Rs. {newBillAmount.toLocaleString()} + Rs. {svcCharge.toLocaleString()}{' '}
+                                            service charge) — your profit on it is{' '}
+                                            <strong className='text-green-700'>Rs. {svcCharge.toLocaleString()}</strong>.
+                                          </p>
+                                          <p className='break-words'>
+                                            If you settle the old bill at the same time: Rs. {nowCollecting.toLocaleString()} −{' '}
+                                            Rs. {oldOwed.toLocaleString()} ={' '}
+                                            <strong className={nowCollecting - oldOwed >= 0 ? 'text-green-700' : 'text-red-700'}>
+                                              Rs. {(nowCollecting - oldOwed).toLocaleString()}
+                                            </strong>{' '}
+                                            net in hand.
+                                          </p>
+                                        </>
+                                      ) : null}
+                                      <div className='flex flex-wrap items-center gap-1.5'>
+                                        {newBillAmount > 0 && (
+                                          <Button
+                                            type='button'
+                                            size='sm'
+                                            className='h-6 bg-green-700 px-2 text-[11px] hover:bg-green-800'
+                                            disabled={isSettlingCombined}
+                                            onClick={() => handleSettleCombined(row, b)}
+                                          >
+                                            Settle Now — Collect Rs. {(nowCollecting - oldOwed).toLocaleString()} Only
+                                          </Button>
+                                        )}
+                                        <Button
+                                          type='button'
+                                          size='sm'
+                                          variant='outline'
+                                          className='h-6 border-amber-300 bg-white px-2 text-[11px]'
+                                          onClick={() => {
+                                            setDialogOpen(false)
+                                            setMarkPaidTarget(b)
+                                          }}
+                                        >
+                                          Settle old bill separately
+                                        </Button>
+                                      </div>
+                                      <p className='text-[11px] text-amber-700'>
+                                        "Settle Now" books only the net amount in the Cash Book. Or skip both —
+                                        marking this new bill paid later will automatically settle the old one too.
+                                      </p>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1144,9 +1367,9 @@ export default function BillPaymentsPage() {
                 </span>
                 <strong className='text-green-600'>Rs. {totalServiceCharge.toLocaleString()}</strong>
               </div>
-              <div className='flex justify-between border-t pt-1'>
-                <span className='font-semibold'>Total to Collect:</span>
-                <strong>Rs. {grandTotal.toLocaleString()}</strong>
+              <div className='flex justify-between border-t pt-1.5'>
+                <span className='font-semibold'>Total You Will Receive From Customer Now:</span>
+                <strong className='text-base'>Rs. {grandTotal.toLocaleString()}</strong>
               </div>
             </div>
           </div>

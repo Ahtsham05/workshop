@@ -63,6 +63,7 @@ const getOverdueBills = catchAsync(async (req, res) => {
 
 const getBillPaymentReceipt = catchAsync(async (req, res) => {
   const billPayment = await billPaymentService.getBillPaymentById(req.params.billPaymentId);
+  const previous = await billPaymentService.getPreviousOutstandingBill(billPayment);
   res.send({
     customerName: billPayment.customerName,
     companyName: billPayment.companyName,
@@ -75,6 +76,16 @@ const getBillPaymentReceipt = catchAsync(async (req, res) => {
     dueDate: billPayment.dueDate,
     paymentDate: billPayment.paymentDate,
     status: billPayment.status,
+    previousOutstanding: previous
+      ? {
+          referenceNumber: previous.referenceNumber,
+          dueDate: previous.dueDate,
+          billAmount: previous.billAmount,
+          totalReceived: previous.totalReceived,
+          expectedLateAmount: previous.expectedLateAmount,
+          status: previous.status,
+        }
+      : null,
   });
 });
 
@@ -113,9 +124,21 @@ const createBillPaymentsBatch = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(result);
 });
 
+const settleCombinedBill = catchAsync(async (req, res) => {
+  const branchContext = getBranchContext(req);
+  const result = await billPaymentService.settleCombinedBill({
+    newBill: { ...req.body.newBill, ...branchContext },
+    oldBillId: req.body.oldBillId,
+    actualOldBillAmount: req.body.actualOldBillAmount,
+    userId: req.user.id,
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
 module.exports = {
   createBillPayment,
   createBillPaymentsBatch,
+  settleCombinedBill,
   getBillPayments,
   getBillPayment,
   updateBillPayment,

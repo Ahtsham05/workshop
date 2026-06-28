@@ -262,6 +262,7 @@ export interface BillPaymentRecord {
   serviceCharge: number
   totalReceived: number
   actualBillAmount?: number
+  expectedLateAmount?: number
   latePaymentLoss?: number
   netBillProfit?: number
   paidAfterDueDate?: boolean
@@ -286,6 +287,7 @@ export interface CreateBillPaymentInput {
   paymentDate?: string
   status?: 'pending' | 'paid' | 'overdue'
   actualBillAmount?: number
+  expectedLateAmount?: number
   paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
   notes?: string
@@ -300,7 +302,7 @@ export interface CreateBillPaymentsBatchInput {
   paymentDate?: string
   paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
-  bills: { billAmount: number; customerName?: string; referenceNumber?: string }[]
+  bills: { billAmount: number; expectedLateAmount?: number; customerName?: string; referenceNumber?: string }[]
 }
 
 export interface BillPaymentTrendItem {
@@ -359,6 +361,14 @@ export interface BillPaymentReceipt {
   dueDate: string
   paymentDate?: string
   status: string
+  previousOutstanding?: {
+    referenceNumber: string
+    dueDate: string
+    billAmount: number
+    totalReceived: number
+    expectedLateAmount?: number
+    status: string
+  } | null
 }
 
 export interface CashBookEntryRecord {
@@ -900,6 +910,13 @@ export const mobileShopApi = createApi({
       query: (body) => ({ url: '/bill-payments/batch', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
     }),
+    settleCombinedBill: builder.mutation<
+      { newBill: BillPaymentRecord; oldBill: BillPaymentRecord },
+      { newBill: CreateBillPaymentInput; oldBillId: string; actualOldBillAmount: number }
+    >({
+      query: (body) => ({ url: '/bill-payments/settle-combined', method: 'POST', body }),
+      invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+    }),
     updateBillPayment: builder.mutation<BillPaymentRecord, { id: string; body: Partial<CreateBillPaymentInput> }>({
       query: ({ id, body }) => ({ url: `/bill-payments/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
@@ -1087,8 +1104,10 @@ export const {
   useUpdateUtilityCompanyMutation,
   useDeleteUtilityCompanyMutation,
   useGetBillPaymentsQuery,
+  useLazyGetBillPaymentsQuery,
   useCreateBillPaymentMutation,
   useCreateBillPaymentsBatchMutation,
+  useSettleCombinedBillMutation,
   useUpdateBillPaymentMutation,
   useDeleteBillPaymentMutation,
   useGetBillPaymentReceiptQuery,

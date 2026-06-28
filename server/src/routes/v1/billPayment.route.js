@@ -24,6 +24,9 @@ router.get('/overdue', billPaymentController.getOverdueBills);
 // Batch create
 router.post('/batch', validate(billPaymentValidation.createBillPaymentsBatch), billPaymentController.createBillPaymentsBatch);
 
+// Create a new bill and settle an older unpaid one on the same Ref # as a single net cash event
+router.post('/settle-combined', validate(billPaymentValidation.settleCombinedBill), billPaymentController.settleCombinedBill);
+
 // CRUD
 router
   .route('/')

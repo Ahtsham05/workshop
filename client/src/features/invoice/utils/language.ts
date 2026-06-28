@@ -460,6 +460,10 @@ export const billReceiptLabels = {
     thank_you: 'Thank you for using our service!',
     print: 'Print Receipt',
     close: 'Close',
+    previous_outstanding: 'Previous Outstanding Bill',
+    already_collected: 'Already Collected',
+    amount_to_settle: 'Amount Still to Settle',
+    overdue_since: 'Overdue Since',
     ...sharedLabels.en,
   },
   ur: {
@@ -478,6 +482,10 @@ export const billReceiptLabels = {
     thank_you: 'ہماری سروس استعمال کرنے کا شکریہ!',
     print: 'پرنٹ رسید',
     close: 'بند کریں',
+    previous_outstanding: 'پچھلا واجب الادا بل',
+    already_collected: 'وصول شدہ رقم',
+    amount_to_settle: 'باقی ادائیگی',
+    overdue_since: 'تاخیر کی تاریخ',
     ...sharedLabels.ur,
   },
 } as const
