@@ -15,6 +15,7 @@ const PLAN_LABELS = {
 };
 
 function getRequiredPlan(featureName) {
+  if (featureName === 'hr_management') return 'growth';
   if (BUSINESS_FEATURES.includes(featureName)) return 'business';
   if (MOBILE_SHOP_FEATURES.includes(featureName)) return 'growth';
   return 'starter';

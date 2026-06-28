@@ -55,7 +55,7 @@ export type FeatureKey =
 const PLAN_FEATURE_KEYS: Record<string, readonly string[]> = {
   trial:      [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
   starter:    BASE_FEATURES,
-  growth:     [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
+  growth:     [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, 'hr_management'],
   business:   [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, ...BUSINESS_FEATURES],
   enterprise: ['all_features'],
   // legacy
@@ -83,6 +83,7 @@ export function isUnlimitedPlan(planType: string | undefined | null): boolean {
 
 /** Returns which plan first unlocks a given feature. */
 export function getRequiredPlan(featureName: FeatureKey): string {
+  if (featureName === 'hr_management') return 'growth'
   if ((BUSINESS_FEATURES as readonly string[]).includes(featureName)) return 'business'
   if ((MOBILE_SHOP_FEATURES as readonly string[]).includes(featureName)) return 'growth'
   return 'starter'

@@ -90,9 +90,10 @@ const PLANS = {
       'Mobile Shop Modules (Load, Repair, Bill Payments)',
       'Wallet & Cash Book',
       'Customer & Supplier Ledger',
+      'HR System (Employees, Attendance, Payroll)',
       'Priority Support',
     ],
-    featureKeys: [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
+    featureKeys: [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, 'hr_management'],
   },
   business: {
     planType: 'business',
