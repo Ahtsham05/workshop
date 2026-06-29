@@ -40,6 +40,23 @@ const InventoryTransferSchema = new mongoose.Schema(
     toProductId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     productName: { type: String, trim: true }, // snapshot for display
 
+    // Set when the transferred item is a real (or batch/expiry-tracked default) variant —
+    // stock for those lives in Inventory, not Product.stockQuantity, see
+    // docs/architecture/universal-product-migration.md. Both null for a plain product.
+    fromVariantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+    toVariantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
+
+    // Snapshot of the specific batch depleted at the source, captured at creation time
+    // so completion can credit an equivalent batch at the destination even if the
+    // source batch is later fully depleted/written off.
+    batchSnapshot: {
+      batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
+      batchNumber: { type: String, trim: true },
+      costPerUnit: { type: Number },
+      sellingPrice: { type: Number },
+      expiryDate: { type: Date },
+    },
+
     quantity: { type: Number, required: true, min: 1 },
 
     reason: { type: String, trim: true }, // human-readable justification, e.g. "Lahore has 100 units, Karachi has 5 and is selling 8/day"
