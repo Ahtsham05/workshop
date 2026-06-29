@@ -2,12 +2,24 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
-const { userService } = require('../services');
+const { userService, auditLogService } = require('../services');
+
+// Never log password — only account/role fields, which is what businesses actually need to audit.
+const TRACKED_USER_FIELDS = ['name', 'email', 'role', 'systemRole', 'isActive'];
 
 const createUser = catchAsync(async (req, res) => {
   // Inherit the organization of the authenticated user
   const organizationId = req.user.organizationId;
   const user = await userService.createUser({ ...req.body, organizationId });
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'create',
+    module: 'User',
+    entityId: user._id,
+    entityName: user.name,
+    after: user.toObject ? user.toObject() : user,
+    fields: TRACKED_USER_FIELDS,
+  });
   res.status(httpStatus.CREATED).send(user);
 });
 
@@ -34,12 +46,33 @@ const getUser = catchAsync(async (req, res) => {
 });
 
 const updateUser = catchAsync(async (req, res) => {
+  const before = await userService.getUserById(req.params.userId);
+  const beforeSnapshot = before && before.toObject ? before.toObject() : before;
   const user = await userService.updateUserById(req.params.userId, req.body);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'User',
+    entityId: user._id,
+    entityName: user.name,
+    before: beforeSnapshot,
+    after: user.toObject ? user.toObject() : user,
+    fields: TRACKED_USER_FIELDS,
+  });
   res.send(user);
 });
 
 const deleteUser = catchAsync(async (req, res) => {
+  const user = await userService.getUserById(req.params.userId);
   await userService.deleteUserById(req.params.userId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'delete',
+    module: 'User',
+    entityId: req.params.userId,
+    entityName: user?.name,
+    metadata: { email: user?.email, role: user?.role },
+  });
   res.status(httpStatus.NO_CONTENT).send();
 });
 

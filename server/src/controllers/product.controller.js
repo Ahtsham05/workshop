@@ -7,6 +7,9 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upl
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 const productVisionService = require('../services/productVision.service');
+const { auditLogService } = require('../services');
+
+const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'barcode'];
 
 const createProduct = catchAsync(async (req, res) => {
   let productData = req.body;
@@ -29,6 +32,15 @@ const createProduct = catchAsync(async (req, res) => {
   
   try {
     const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id });
+    await auditLogService.recordAuditLog({
+      req,
+      action: 'create',
+      module: 'Product',
+      entityId: product._id,
+      entityName: product.name,
+      after: product.toObject(),
+      fields: TRACKED_PRODUCT_FIELDS,
+    });
     res.status(httpStatus.CREATED).send(product);
   } catch (error) {
     // Handle MongoDB duplicate key errors
@@ -94,7 +106,19 @@ const updateProduct = catchAsync(async (req, res) => {
   }
   
   try {
+    const before = await productService.getProductById(req.params.productId);
+    const beforeSnapshot = before ? before.toObject() : null;
     const product = await productService.updateProductById(req.params.productId, productData);
+    await auditLogService.recordAuditLog({
+      req,
+      action: 'update',
+      module: 'Product',
+      entityId: product._id,
+      entityName: product.name,
+      before: beforeSnapshot,
+      after: product.toObject(),
+      fields: TRACKED_PRODUCT_FIELDS,
+    });
     res.send(product);
   } catch (error) {
     // Handle MongoDB duplicate key errors
@@ -129,6 +153,14 @@ const deleteProduct = catchAsync(async (req, res) => {
   }
   
   await productService.deleteProductById(req.params.productId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'delete',
+    module: 'Product',
+    entityId: req.params.productId,
+    entityName: product?.name,
+    metadata: { price: product?.price, cost: product?.cost, stockQuantity: product?.stockQuantity },
+  });
   res.status(httpStatus.NO_CONTENT).send();
 });
 

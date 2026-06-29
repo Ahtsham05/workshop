@@ -13,6 +13,7 @@ module.exports.purchaseService = require('./purchase.service.js');
 module.exports.purchaseOrderService = require('./purchaseOrder.service.js');
 module.exports.invoiceService = require('./invoice.service.js');
 module.exports.expenseService = require('./expense.service.js');
+module.exports.auditLogService = require('./auditLog.service.js');
 module.exports.customerLedgerService = require('./customerLedger.service.js');
 module.exports.supplierLedgerService = require('./supplierLedger.service.js');
 module.exports.personalLedgerService = require('./personalLedger.service.js');

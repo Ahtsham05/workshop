@@ -39,7 +39,8 @@ export type PermissionKey =
   | 'viewStaff' | 'manageStaff'
   | 'viewSettings' | 'editSettings'
   | 'viewDashboard'
-  | 'viewPayments' | 'createPayments' | 'editPayments' | 'deletePayments';
+  | 'viewPayments' | 'createPayments' | 'editPayments' | 'deletePayments'
+  | 'viewAuditLogs';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -97,6 +98,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'settings', label: 'Settings', permissions: ['viewSettings', 'editSettings'] },
   { id: 'dashboard', label: 'Dashboard', permissions: ['viewDashboard'] },
   { id: 'payments', label: 'Payments', permissions: ['viewPayments', 'createPayments', 'editPayments', 'deletePayments'] },
+  { id: 'audit_logs', label: 'Audit Logs', permissions: ['viewAuditLogs'] },
 ];
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
@@ -112,7 +114,7 @@ export const PERMISSION_TAB_GROUPS = {
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
   ],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],
 } as const;
 
 export type PermissionTabId = keyof typeof PERMISSION_TAB_GROUPS;

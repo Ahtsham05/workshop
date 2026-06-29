@@ -217,6 +217,11 @@ const PERMISSION_GROUPS = [
     label: 'Payments',
     permissions: ['viewPayments', 'createPayments', 'editPayments', 'deletePayments'],
   },
+  {
+    id: 'audit_logs',
+    label: 'Audit Logs',
+    permissions: ['viewAuditLogs'],
+  },
 ];
 
 const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))];
@@ -249,7 +254,7 @@ const PERMISSION_TAB_GROUPS = {
     'imei_tracking',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],
 };
 
 const sanitizePermissions = (input = {}) => {

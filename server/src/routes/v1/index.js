@@ -50,6 +50,7 @@ const utilityCompanyRoute = require('./utilityCompany.route');
 const billPaymentRoute = require('./billPayment.route');
 const repairStockItemRoute = require('./repairStockItem.route');
 const installmentRoute = require('./installment.route');
+const auditLogRoute = require('./auditLog.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -503,6 +504,10 @@ const defaultRoutes = [
     path: '/admin',
     route: adminRoute,
   },
+  {
+    path: '/audit-logs',
+    route: auditLogRoute,
+  },
 ];
 
 const devRoutes = [
@@ -579,6 +584,7 @@ const protectedPaths = [
   '/whatsapp-cloud',
   '/admin',
   '/restaurant',
+  '/audit-logs',
 ];
 
 // Apply trial guard + enforcement to protected routes

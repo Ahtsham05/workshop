@@ -1,10 +1,12 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { purchaseService, supplierService, productService } = require('../services');
+const { purchaseService, supplierService, productService, auditLogService } = require('../services');
 const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+
+const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items'];
 
 const createPurchase = catchAsync(async (req, res) => {
   const MAX_RETRIES = 3;
@@ -28,6 +30,16 @@ const createPurchase = catchAsync(async (req, res) => {
     }
   }
 
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'create',
+    module: 'Purchase',
+    entityId: purchase._id,
+    entityName: purchase.invoiceNumber,
+    after: purchase.toObject ? purchase.toObject() : purchase,
+    fields: TRACKED_PURCHASE_FIELDS,
+  });
+
   res.status(httpStatus.CREATED).send(purchase);
 });
 
@@ -48,12 +60,33 @@ const getPurchase = catchAsync(async (req, res) => {
 });
 
 const updatePurchase = catchAsync(async (req, res) => {
+  const before = await purchaseService.getPurchaseById(req.params.purchaseId);
+  const beforeSnapshot = before && before.toObject ? before.toObject() : before;
   const purchase = await purchaseService.updatePurchaseById(req.params.purchaseId, req.body);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'Purchase',
+    entityId: purchase._id,
+    entityName: purchase.invoiceNumber,
+    before: beforeSnapshot,
+    after: purchase.toObject ? purchase.toObject() : purchase,
+    fields: TRACKED_PURCHASE_FIELDS,
+  });
   res.send(purchase);
 });
 
 const deletePurchase = catchAsync(async (req, res) => {
+  const purchase = await purchaseService.getPurchaseById(req.params.purchaseId);
   await purchaseService.deletePurchaseById(req.params.purchaseId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'delete',
+    module: 'Purchase',
+    entityId: req.params.purchaseId,
+    entityName: purchase?.invoiceNumber,
+    metadata: { totalAmount: purchase?.totalAmount, supplier: purchase?.supplier },
+  });
   res.status(httpStatus.NO_CONTENT).send();
 });
 

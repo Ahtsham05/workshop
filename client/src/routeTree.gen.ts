@@ -61,6 +61,7 @@ import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
 import { Route as AuthenticatedBrandsIndexImport } from './routes/_authenticated/brands/index'
 import { Route as AuthenticatedBranchesIndexImport } from './routes/_authenticated/branches/index'
+import { Route as AuthenticatedAuditLogsIndexImport } from './routes/_authenticated/audit-logs/index'
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
@@ -472,6 +473,13 @@ const AuthenticatedBranchesIndexRoute = AuthenticatedBranchesIndexImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedAuditLogsIndexRoute =
+  AuthenticatedAuditLogsIndexImport.update({
+    id: '/audit-logs/',
+    path: '/audit-logs/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexImport.update({
   id: '/apps/',
@@ -1492,6 +1500,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/audit-logs/': {
+      id: '/_authenticated/audit-logs/'
+      path: '/audit-logs'
+      fullPath: '/audit-logs'
+      preLoaderRoute: typeof AuthenticatedAuditLogsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/branches/': {
       id: '/_authenticated/branches/'
       path: '/branches'
@@ -2243,6 +2258,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
+  AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
   AuthenticatedBranchesIndexRoute: typeof AuthenticatedBranchesIndexRoute
   AuthenticatedBrandsIndexRoute: typeof AuthenticatedBrandsIndexRoute
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
@@ -2318,6 +2334,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
+  AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
   AuthenticatedBranchesIndexRoute: AuthenticatedBranchesIndexRoute,
   AuthenticatedBrandsIndexRoute: AuthenticatedBrandsIndexRoute,
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
@@ -2420,6 +2437,7 @@ export interface FileRoutesByFullPath {
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/brands': typeof AuthenticatedBrandsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -2555,6 +2573,7 @@ export interface FileRoutesByTo {
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
+  '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/branches': typeof AuthenticatedBranchesIndexRoute
   '/brands': typeof AuthenticatedBrandsIndexRoute
   '/categories': typeof AuthenticatedCategoriesIndexRoute
@@ -2693,6 +2712,7 @@ export interface FileRoutesById {
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
+  '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/_authenticated/branches/': typeof AuthenticatedBranchesIndexRoute
   '/_authenticated/brands/': typeof AuthenticatedBrandsIndexRoute
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
@@ -2833,6 +2853,7 @@ export interface FileRouteTypes {
     | '/accounting'
     | '/admin'
     | '/apps'
+    | '/audit-logs'
     | '/branches'
     | '/brands'
     | '/categories'
@@ -2967,6 +2988,7 @@ export interface FileRouteTypes {
     | '/accounting'
     | '/admin'
     | '/apps'
+    | '/audit-logs'
     | '/branches'
     | '/brands'
     | '/categories'
@@ -3103,6 +3125,7 @@ export interface FileRouteTypes {
     | '/_authenticated/accounting/'
     | '/_authenticated/admin/'
     | '/_authenticated/apps/'
+    | '/_authenticated/audit-logs/'
     | '/_authenticated/branches/'
     | '/_authenticated/brands/'
     | '/_authenticated/categories/'
@@ -3277,6 +3300,7 @@ export const routeTree = rootRoute
         "/_authenticated/accounting/",
         "/_authenticated/admin/",
         "/_authenticated/apps/",
+        "/_authenticated/audit-logs/",
         "/_authenticated/branches/",
         "/_authenticated/brands/",
         "/_authenticated/categories/",
@@ -3589,6 +3613,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/apps/": {
       "filePath": "_authenticated/apps/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/audit-logs/": {
+      "filePath": "_authenticated/audit-logs/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/branches/": {

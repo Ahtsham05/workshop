@@ -1,12 +1,23 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { expenseService } = require('../services');
+const { expenseService, auditLogService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+
+const TRACKED_EXPENSE_FIELDS = ['amount', 'category', 'paymentMethod', 'description'];
 
 const createExpense = catchAsync(async (req, res) => {
   const expenseData = { ...req.body, ...getBranchContext(req) };
   const expense = await expenseService.createExpense(expenseData);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'create',
+    module: 'Expense',
+    entityId: expense._id,
+    entityName: expense.description || expense.category,
+    after: expense.toObject ? expense.toObject() : expense,
+    fields: TRACKED_EXPENSE_FIELDS,
+  });
   res.status(httpStatus.CREATED).send(expense);
 });
 
@@ -27,12 +38,33 @@ const getExpense = catchAsync(async (req, res) => {
 });
 
 const updateExpense = catchAsync(async (req, res) => {
+  const before = await expenseService.getExpenseById(req.params.expenseId);
+  const beforeSnapshot = before && before.toObject ? before.toObject() : before;
   const expense = await expenseService.updateExpenseById(req.params.expenseId, req.body);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'Expense',
+    entityId: expense._id,
+    entityName: expense.description || expense.category,
+    before: beforeSnapshot,
+    after: expense.toObject ? expense.toObject() : expense,
+    fields: TRACKED_EXPENSE_FIELDS,
+  });
   res.send(expense);
 });
 
 const deleteExpense = catchAsync(async (req, res) => {
+  const expense = await expenseService.getExpenseById(req.params.expenseId);
   await expenseService.deleteExpenseById(req.params.expenseId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'delete',
+    module: 'Expense',
+    entityId: req.params.expenseId,
+    entityName: expense?.description || expense?.category,
+    metadata: { amount: expense?.amount, category: expense?.category },
+  });
   res.status(httpStatus.NO_CONTENT).send();
 });
 

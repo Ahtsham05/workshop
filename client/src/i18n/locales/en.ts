@@ -1242,6 +1242,31 @@ const en: Record<string, string> = {
     "Failed to change password": "Failed to change password",
     "Company profile created successfully": "Company profile created successfully",
     "Failed to create company profile": "Failed to create company profile",
+
+    // Audit Logs
+    "audit_logs": "Audit Logs",
+    "audit_logs_description": "Track who changed prices, deleted invoices, or modified stock — every important action in your business.",
+    "activity_history": "Activity History",
+    "audit_logs_filter_description": "Filter by module, action type, or search by record/user name",
+    "search_audit_logs": "Search by record or user name...",
+    "module": "Module",
+    "all_modules": "All Modules",
+    "action": "Action",
+    "all_actions": "All Actions",
+    "date_time": "Date & Time",
+    "user": "User",
+    "record": "Record",
+    "details": "Details",
+    "no_audit_logs_found": "No activity recorded yet",
+    "activity_details": "Activity Details",
+    "additional_info": "Additional Info",
+    "no_additional_details": "No additional details recorded for this activity.",
+    "action_created": "Created",
+    "action_updated": "Updated",
+    "action_deleted": "Deleted",
+    "action_stock_adjust": "Stock Adjusted",
+    "action_permission_change": "Permissions Changed",
+    "action_status_change": "Status Changed",
 }
 
 export default en

@@ -2,11 +2,23 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
-const { invoiceService } = require('../services');
+const { invoiceService, auditLogService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+
+const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'discount', 'items'];
 
 const createInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.createInvoice({ ...req.body, ...getBranchContext(req) }, req.user.id);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'create',
+    module: 'Invoice',
+    entityId: invoice._id,
+    entityName: invoice.invoiceNumber,
+    after: invoice.toObject ? invoice.toObject() : invoice,
+    fields: TRACKED_INVOICE_FIELDS,
+    metadata: { total: invoice.total, type: invoice.type },
+  });
   res.status(httpStatus.CREATED).send(invoice);
 });
 
@@ -134,12 +146,33 @@ const getInvoice = catchAsync(async (req, res) => {
 });
 
 const updateInvoice = catchAsync(async (req, res) => {
+  const before = await invoiceService.getInvoiceById(req.params.invoiceId);
+  const beforeSnapshot = before && before.toObject ? before.toObject() : before;
   const invoice = await invoiceService.updateInvoiceById(req.params.invoiceId, req.body, req.user.id);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'Invoice',
+    entityId: invoice._id,
+    entityName: invoice.invoiceNumber,
+    before: beforeSnapshot,
+    after: invoice.toObject ? invoice.toObject() : invoice,
+    fields: TRACKED_INVOICE_FIELDS,
+  });
   res.send(invoice);
 });
 
 const deleteInvoice = catchAsync(async (req, res) => {
+  const invoice = await invoiceService.getInvoiceById(req.params.invoiceId);
   await invoiceService.deleteInvoiceById(req.params.invoiceId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'delete',
+    module: 'Invoice',
+    entityId: req.params.invoiceId,
+    entityName: invoice?.invoiceNumber,
+    metadata: { total: invoice?.total, type: invoice?.type, customerName: invoice?.customerName },
+  });
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -197,11 +230,22 @@ const getOutstandingInvoices = catchAsync(async (req, res) => {
 });
 
 const cancelInvoice = catchAsync(async (req, res) => {
+  const before = await invoiceService.getInvoiceById(req.params.invoiceId);
   const invoice = await invoiceService.updateInvoiceById(
-    req.params.invoiceId, 
-    { status: 'cancelled', allowUpdateFinalized: true }, 
+    req.params.invoiceId,
+    { status: 'cancelled', allowUpdateFinalized: true },
     req.user.id
   );
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'status_change',
+    module: 'Invoice',
+    entityId: invoice._id,
+    entityName: invoice.invoiceNumber,
+    before: before && before.toObject ? before.toObject() : before,
+    after: invoice.toObject ? invoice.toObject() : invoice,
+    fields: ['status'],
+  });
   res.send(invoice);
 });
 
