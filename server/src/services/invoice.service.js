@@ -15,6 +15,7 @@ const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+const businessNotifications = require('./whatsapp/businessNotifications.service');
 
 /**
  * Post (or re-post) the double-entry journal entries for an invoice.
@@ -516,6 +517,10 @@ const createInvoice = async (invoiceBody, userId) => {
     }
   } else {
     invoiceObj.customerName = 'Walk-in Customer';
+  }
+
+  if (isValidCustomerObjectId(invoice.customerId) && invoice.type !== 'pending' && invoice.type !== 'quotation') {
+    businessNotifications.fireAndForget(businessNotifications.sendInvoiceOnCreate(invoice._id), 'sendInvoiceOnCreate');
   }
 
   return invoiceObj;

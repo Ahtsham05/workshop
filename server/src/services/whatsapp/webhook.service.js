@@ -5,10 +5,12 @@ const {
   WhatsAppTemplate,
   WhatsAppWebhookLog,
   WhatsAppCampaign,
+  Organization,
 } = require('../../models');
 const connectionService = require('./connection.service');
 const inboxService = require('./inbox.service');
 const parentAssistant = require('./ai/parentAssistant.service');
+const businessAssistant = require('./ai/businessAssistant.service');
 
 async function processWebhookPayload(body) {
   const entry = body.entry?.[0];
@@ -73,8 +75,10 @@ async function handleInboundMessage(connection, msg, contact) {
   const messageDoc = await inboxService.storeInboundMessage(connection, conversation, msg);
 
   if (['text', 'audio'].includes(msg.type)) {
-    parentAssistant.handleInbound(connection, conversation, messageDoc).catch((err) => {
-      logger.error('Parent AI assistant error:', err);
+    const organization = await Organization.findById(connection.organizationId).select('businessType').lean();
+    const assistant = organization?.businessType === 'school' ? parentAssistant : businessAssistant;
+    assistant.handleInbound(connection, conversation, messageDoc).catch((err) => {
+      logger.error('WhatsApp AI assistant error:', err);
     });
   }
 }
