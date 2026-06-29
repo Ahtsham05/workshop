@@ -92,6 +92,8 @@ module.exports.Diary = require('./diary.model');
 module.exports.Notification = require('./notification.model');
 module.exports.NotificationRead = require('./notificationRead.model');
 module.exports.PushSubscription = require('./pushSubscription.model');
+module.exports.AiConversation = require('./aiConversation.model');
+module.exports.AiMessage = require('./aiMessage.model');
 
 // HR Models
 module.exports.Employee = require('./employee.model');

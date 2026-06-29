@@ -41,6 +41,7 @@ import { brandApi } from './brand.api';
 import { purchaseCatalogApi } from './purchaseCatalog.api';
 import { inventoryTransferApi } from './inventoryTransfer.api';
 import { auditLogApi } from './auditLog.api';
+import { aiAssistantApi } from './aiAssistant.api';
 
 export const store = configureStore({
   reducer: {
@@ -86,6 +87,7 @@ export const store = configureStore({
     [purchaseCatalogApi.reducerPath]: purchaseCatalogApi.reducer,
     [inventoryTransferApi.reducerPath]: inventoryTransferApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
+    [aiAssistantApi.reducerPath]: aiAssistantApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -125,6 +127,7 @@ export const store = configureStore({
       purchaseCatalogApi.middleware,
       inventoryTransferApi.middleware,
       auditLogApi.middleware,
+      aiAssistantApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

@@ -51,6 +51,7 @@ const billPaymentRoute = require('./billPayment.route');
 const repairStockItemRoute = require('./repairStockItem.route');
 const installmentRoute = require('./installment.route');
 const auditLogRoute = require('./auditLog.route');
+const aiAssistantRoute = require('./aiAssistant.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
 // HR Routes
@@ -508,6 +509,10 @@ const defaultRoutes = [
     path: '/audit-logs',
     route: auditLogRoute,
   },
+  {
+    path: '/ai-assistant',
+    route: aiAssistantRoute,
+  },
 ];
 
 const devRoutes = [
@@ -585,6 +590,7 @@ const protectedPaths = [
   '/admin',
   '/restaurant',
   '/audit-logs',
+  '/ai-assistant',
 ];
 
 // Apply trial guard + enforcement to protected routes

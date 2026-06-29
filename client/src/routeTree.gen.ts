@@ -24,6 +24,7 @@ import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticate
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
 import { Route as AuthenticatedBarcodeGeneratorImport } from './routes/_authenticated/barcode-generator'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
+import { Route as AuthenticatedAiAssistantImport } from './routes/_authenticated/ai-assistant'
 import { Route as AuthenticatedActivitiesImport } from './routes/_authenticated/activities'
 import { Route as errors503Import } from './routes/(errors)/503'
 import { Route as errors500Import } from './routes/(errors)/500'
@@ -228,6 +229,12 @@ const AuthenticatedBarcodeGeneratorRoute =
 const AuthenticatedBarcodeDemoRoute = AuthenticatedBarcodeDemoImport.update({
   id: '/barcode-demo',
   path: '/barcode-demo',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+
+const AuthenticatedAiAssistantRoute = AuthenticatedAiAssistantImport.update({
+  id: '/ai-assistant',
+  path: '/ai-assistant',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 
@@ -1176,6 +1183,13 @@ declare module '@tanstack/react-router' {
       path: '/activities'
       fullPath: '/activities'
       preLoaderRoute: typeof AuthenticatedActivitiesImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/ai-assistant': {
+      id: '/_authenticated/ai-assistant'
+      path: '/ai-assistant'
+      fullPath: '/ai-assistant'
+      preLoaderRoute: typeof AuthenticatedAiAssistantImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/barcode-demo': {
@@ -2224,6 +2238,7 @@ const AuthenticatedHrEmployeesIdRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedActivitiesRoute: typeof AuthenticatedActivitiesRoute
+  AuthenticatedAiAssistantRoute: typeof AuthenticatedAiAssistantRoute
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedBarcodeGeneratorRoute: typeof AuthenticatedBarcodeGeneratorRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
@@ -2295,6 +2310,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedActivitiesRoute: AuthenticatedActivitiesRoute,
+  AuthenticatedAiAssistantRoute: AuthenticatedAiAssistantRoute,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedBarcodeGeneratorRoute: AuthenticatedBarcodeGeneratorRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
@@ -2391,6 +2407,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
+  '/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
@@ -2528,6 +2545,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
+  '/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
@@ -2666,6 +2684,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/activities': typeof AuthenticatedActivitiesRoute
+  '/_authenticated/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/_authenticated/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
@@ -2807,6 +2826,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/activities'
+    | '/ai-assistant'
     | '/barcode-demo'
     | '/barcode-generator'
     | '/cash-book'
@@ -2943,6 +2963,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/activities'
+    | '/ai-assistant'
     | '/barcode-demo'
     | '/barcode-generator'
     | '/cash-book'
@@ -3079,6 +3100,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/activities'
+    | '/_authenticated/ai-assistant'
     | '/_authenticated/barcode-demo'
     | '/_authenticated/barcode-generator'
     | '/_authenticated/cash-book'
@@ -3266,6 +3288,7 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/settings",
         "/_authenticated/activities",
+        "/_authenticated/ai-assistant",
         "/_authenticated/barcode-demo",
         "/_authenticated/barcode-generator",
         "/_authenticated/cash-book",
@@ -3387,6 +3410,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/activities": {
       "filePath": "_authenticated/activities.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/ai-assistant": {
+      "filePath": "_authenticated/ai-assistant.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/barcode-demo": {

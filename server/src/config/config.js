@@ -31,6 +31,7 @@ const envVarsSchema = Joi.object()
     GEMINI_API_KEY: Joi.string().allow('').description('Google Gemini API key for customer image AI scan'),
     GEMINI_VISION_MODEL: Joi.string().allow('').description('Gemini vision model (default gemini-2.5-flash-lite, API v1)'),
     GEMINI_FALLBACK_MODELS: Joi.string().allow('').description('Comma-separated fallback models if quota hit'),
+    GEMINI_CHAT_MODEL: Joi.string().allow('').description('Gemini model for the AI business chat assistant (function calling)'),
     WHATSAPP_PROVIDER: Joi.string().valid('auto', 'cloud', 'web').default('auto'),
     WHATSAPP_CLOUD_ACCESS_TOKEN: Joi.string().allow('').description('Meta WhatsApp Cloud API permanent access token'),
     WHATSAPP_CLOUD_PHONE_NUMBER_ID: Joi.string().allow('').description('WhatsApp Cloud API phone number ID'),
@@ -101,6 +102,7 @@ module.exports = {
     apiKey: envVars.GEMINI_API_KEY || '',
     model: envVars.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite',
     fallbackModels: envVars.GEMINI_FALLBACK_MODELS || '',
+    chatModel: envVars.GEMINI_CHAT_MODEL || 'gemini-2.5-flash-lite',
   },
   whatsapp: {
     provider: envVars.WHATSAPP_PROVIDER || 'auto',
