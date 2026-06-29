@@ -6,7 +6,9 @@ import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Eye } from 'lucide-react'
-import { forwardRef, useImperativeHandle, useState } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Search } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -25,6 +27,18 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     const { t, language } = useLanguage()
     const { data, isLoading } = useGetProductReportQuery({ startDate, endDate })
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
+    const [searchTerm, setSearchTerm] = useState('')
+
+    const filteredProducts = useMemo(() => {
+      if (!data?.data) return []
+      const term = searchTerm.trim().toLowerCase()
+      if (!term) return data.data
+      return data.data.filter((product) =>
+        reportEntityName(language, product.productName, product.productNameUrdu)
+          .toLowerCase()
+          .includes(term)
+      )
+    }, [data?.data, searchTerm, language])
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -137,8 +151,17 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className='flex flex-row items-center justify-between gap-4 space-y-0'>
             <CardTitle>{t('top_selling_products')}</CardTitle>
+            <div className='relative w-full max-w-xs'>
+              <Search className='absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t('search_products')}
+                className='pl-8'
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -153,7 +176,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.data?.map((product) => {
+                {filteredProducts.map((product) => {
                   const label = reportEntityName(language, product.productName, product.productNameUrdu)
                   return (
                   <TableRow key={product._id}>
@@ -178,6 +201,13 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   </TableRow>
                   )
                 })}
+                {filteredProducts.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className='text-center text-muted-foreground'>
+                      {t('no_products_found')}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
