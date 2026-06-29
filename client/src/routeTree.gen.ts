@@ -21,6 +21,7 @@ import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authe
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
+import { Route as AuthenticatedBarcodeGeneratorImport } from './routes/_authenticated/barcode-generator'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as AuthenticatedActivitiesImport } from './routes/_authenticated/activities'
 import { Route as errors503Import } from './routes/(errors)/503'
@@ -206,6 +207,13 @@ const AuthenticatedCashBookRoute = AuthenticatedCashBookImport.update({
   path: '/cash-book',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedBarcodeGeneratorRoute =
+  AuthenticatedBarcodeGeneratorImport.update({
+    id: '/barcode-generator',
+    path: '/barcode-generator',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedBarcodeDemoRoute = AuthenticatedBarcodeDemoImport.update({
   id: '/barcode-demo',
@@ -1158,6 +1166,13 @@ declare module '@tanstack/react-router' {
       path: '/barcode-demo'
       fullPath: '/barcode-demo'
       preLoaderRoute: typeof AuthenticatedBarcodeDemoImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/barcode-generator': {
+      id: '/_authenticated/barcode-generator'
+      path: '/barcode-generator'
+      fullPath: '/barcode-generator'
+      preLoaderRoute: typeof AuthenticatedBarcodeGeneratorImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/cash-book': {
@@ -2179,6 +2194,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedActivitiesRoute: typeof AuthenticatedActivitiesRoute
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
+  AuthenticatedBarcodeGeneratorRoute: typeof AuthenticatedBarcodeGeneratorRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
@@ -2247,6 +2263,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedActivitiesRoute: AuthenticatedActivitiesRoute,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
+  AuthenticatedBarcodeGeneratorRoute: AuthenticatedBarcodeGeneratorRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
@@ -2340,6 +2357,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
@@ -2474,6 +2492,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
@@ -2609,6 +2628,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/activities': typeof AuthenticatedActivitiesRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
+  '/_authenticated/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
@@ -2747,6 +2767,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/barcode-demo'
+    | '/barcode-generator'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
@@ -2880,6 +2901,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/barcode-demo'
+    | '/barcode-generator'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
@@ -3013,6 +3035,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/activities'
     | '/_authenticated/barcode-demo'
+    | '/_authenticated/barcode-generator'
     | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/insights'
@@ -3197,6 +3220,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings",
         "/_authenticated/activities",
         "/_authenticated/barcode-demo",
+        "/_authenticated/barcode-generator",
         "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/insights",
@@ -3318,6 +3342,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/barcode-generator": {
+      "filePath": "_authenticated/barcode-generator.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/cash-book": {

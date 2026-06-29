@@ -210,6 +210,7 @@ export const invoiceApi = createApi({
 export const {
   useCreateInvoiceMutation,
   useGetInvoicesQuery,
+  useLazyGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
