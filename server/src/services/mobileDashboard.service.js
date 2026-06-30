@@ -144,7 +144,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
       ...billBaseMatch,
       ...billPeriodFilter,
     }).select('totalReceived serviceCharge latePaymentLoss netBillProfit status paymentMethod'),
-    SimSale.find(datedTxMatch).select('saleAmount purchaseAmount commission'),
+    SimSale.find(datedTxMatch).select('saleAmount purchaseAmount commission loadAmount'),
     CashWithdrawal.find(datedTxMatch).select('amount profit transactionType'),
     ServiceInvoice.find(datedTxMatch).select('totalAmount'),
     SalesReturn.find({
@@ -173,7 +173,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const salesProfit = invoices.reduce((sum, invoice) => sum + Number(invoice.totalProfit || 0), 0);
   const salesCash = calculateSalesCash(invoices);
 
-  const totalLoadSold = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const totalDirectLoadSold = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const totalLoadSoldProfit = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.profit || 0), 0);
   const loadCash = loadTransactions.reduce((sum, transaction) => {
     return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
@@ -208,6 +208,8 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     0,
   );
   const simSaleCount = simSales.length;
+  const totalSimSaleLoad = simSales.reduce((sum, sale) => sum + Number(sale.loadAmount || 0), 0);
+  const totalLoadSold = totalDirectLoadSold + totalSimSaleLoad;
 
   // User-facing Send = deposit; Received = withdrawal (see cash-transaction-labels)
   const cashSendTx = cashSendReceive.filter((tx) => tx.transactionType === 'deposit');
