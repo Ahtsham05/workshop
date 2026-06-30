@@ -25,6 +25,7 @@ interface ProductImportDialogProps {
 
 interface ImportProduct {
   name: string
+  nameUrdu?: string
   barcode?: string | null
   price: number
   cost: number
@@ -56,6 +57,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     const template = [
       {
         name: 'Sample Product 1',
+        nameUrdu: 'سیمپل پروڈکٹ 1',
         barcode: '1234567890',
         price: 100,
         cost: 80,
@@ -68,6 +70,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
       },
       {
         name: 'Sample Product 2',
+        nameUrdu: 'سیمپل پروڈکٹ 2',
         barcode: '0987654321',
         price: 250,
         cost: 200,
@@ -83,10 +86,11 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Products')
-    
+
     // Auto-size columns
     const colWidths = [
       { wch: 30 }, // name
+      { wch: 25 }, // nameUrdu
       { wch: 20 }, // barcode
       { wch: 15 }, // price
       { wch: 15 }, // cost
@@ -239,8 +243,11 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
             stockQuantity: Number(row.stockQuantity),
             unit: row.unit?.toString().trim() || 'pcs',
           }
-          
+
           // Add optional fields only if they have values
+          if (row.nameUrdu?.toString().trim()) {
+            product.nameUrdu = row.nameUrdu.toString().trim()
+          }
           if (row.category?.toString().trim()) {
             product.category = row.category.toString().trim()
           }
@@ -406,7 +413,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
                   <div className="space-y-2">
                     {parsedData.slice(0, 10).map((product, index) => (
                       <div key={index} className="text-xs border-b pb-1">
-                        <div className="font-medium">{product.name}</div>
+                        <div className="font-medium">{product.name}{product.nameUrdu && <span className="text-muted-foreground mr-2 font-normal"> · <span dir="rtl">{product.nameUrdu}</span></span>}</div>
                         <div className="text-muted-foreground">
                           Price: Rs{product.price} | Cost: Rs{product.cost} | Stock: {product.stockQuantity}
                           {product.barcode && ` | Barcode: ${product.barcode}`}

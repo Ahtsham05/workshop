@@ -46,6 +46,7 @@ import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
 import {
@@ -81,7 +82,7 @@ type SimSaleFormState = {
 }
 
 const makeEmptyForm = (): SimSaleFormState => ({
-  date: new Date().toISOString().split('T')[0],
+  date: getBusinessToday(),
   productId: '',
   productName: '',
   simAmount: '',
@@ -248,7 +249,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
     }
 
     const payload = {
-      date: form.date,
+      date: parseBusinessDateTimeLocal(form.date || getBusinessToday()),
       productId: form.productId || undefined,
       productName: form.productName || undefined,
       simAmount: Number(form.simAmount),
@@ -313,7 +314,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
   const handleEdit = (sale: any) => {
     setForm({
-      date: sale.date ? new Date(sale.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      date: sale.date ? toBusinessCalendarDate(new Date(sale.date)) : getBusinessToday(),
       productId: sale.productId?.id || sale.productId?._id || sale.productId || '',
       productName: sale.productName || '',
       simAmount: String(sale.simAmount ?? ''),

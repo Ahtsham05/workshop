@@ -86,6 +86,7 @@ import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
 import {
@@ -197,7 +198,7 @@ const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   walletType: '',
   transactionType: 'withdrawal',
   commissionRate: '0',
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
   entries: [makeEmptyBulkEntry()],
 })
 
@@ -212,7 +213,7 @@ const initialPurchaseForm: PurchaseFormState = {
   paymentWalletType: '',
   commissionRate: '0',
   extraCharge: '0',
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
 }
 
 const initialSaleForm: LoadSaleFormState = {
@@ -228,7 +229,7 @@ const initialSaleForm: LoadSaleFormState = {
   paymentMethod: 'cash',
   paymentWalletType: '',
   mobileNumber: '',
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
 }
 
 const initialWithdrawalForm: WithdrawalFormState = {
@@ -245,7 +246,7 @@ const initialWithdrawalForm: WithdrawalFormState = {
   commissionRate: '0',
   extraCharge: '0',
   notes: '',
-  date: format(new Date(), 'yyyy-MM-dd'),
+  date: getBusinessToday(),
 }
 
 function getCachedWalletsFromStore() {
@@ -958,7 +959,7 @@ function LoadManagementPage({
         paymentWalletType: purchaseForm.paymentMethod === 'wallet' ? purchaseForm.paymentWalletType : undefined,
         commissionRate: Number(purchaseForm.commissionRate),
         extraCharge: Number(purchaseForm.extraCharge),
-        date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
+        date: parseBusinessDateTimeLocal(purchaseForm.date || getBusinessToday()),
       }).unwrap()
       toast.success('Load purchase recorded!')
       setSavedReceipt(buildLoadPurchaseReceipt(created))
@@ -990,7 +991,7 @@ function LoadManagementPage({
         commissionRate: Number(saleForm.commissionRate),
         extraCharge: Number(saleForm.extraCharge),
         mobileNumber: saleForm.mobileNumber || 'N/A',
-        date: saleForm.date ? new Date(saleForm.date).toISOString() : new Date().toISOString(),
+        date: parseBusinessDateTimeLocal(saleForm.date || getBusinessToday()),
         type: 'normal',
         network: 'none',
         paymentMethod: saleForm.paymentMethod,
@@ -1033,7 +1034,7 @@ function LoadManagementPage({
         commissionRate: Number(withdrawalForm.commissionRate),
         extraCharge: Number(withdrawalForm.extraCharge),
         notes: withdrawalForm.notes.trim() || undefined,
-        date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
+        date: parseBusinessDateTimeLocal(withdrawalForm.date || getBusinessToday()),
       }).unwrap()
       toast.success('Cash transaction recorded!')
       setSavedReceipt(buildCashWithdrawalReceipt(cw))
@@ -1243,7 +1244,7 @@ function LoadManagementPage({
         walletType: bulkWithdrawalForm.walletType,
         transactionType: bulkWithdrawalForm.transactionType,
         commissionRate: Number(bulkWithdrawalForm.commissionRate) || 0,
-        date: new Date(bulkWithdrawalForm.date).toISOString(),
+        date: parseBusinessDateTimeLocal(bulkWithdrawalForm.date || getBusinessToday()),
         entries: validEntries.map(e => ({
           amount: Number(e.amount),
           customerName: e.customerName.trim() || undefined,
@@ -1326,7 +1327,7 @@ function LoadManagementPage({
       paymentWalletType: p.paymentWalletType || '',
       commissionRate: String(p.commissionRate || 0),
       extraCharge: String(p.extraCharge || 0),
-      date: format(new Date(p.date), 'yyyy-MM-dd'),
+      date: toBusinessCalendarDate(new Date(p.date)),
     })
     setIsPurchasePaidAmountManual(true)
     setEditingPurchase(p)
@@ -1348,7 +1349,7 @@ function LoadManagementPage({
           paymentWalletType: purchaseForm.paymentMethod === 'wallet' ? purchaseForm.paymentWalletType : undefined,
           commissionRate: Number(purchaseForm.commissionRate),
           extraCharge: Number(purchaseForm.extraCharge),
-          date: purchaseForm.date ? new Date(purchaseForm.date).toISOString() : new Date().toISOString(),
+          date: parseBusinessDateTimeLocal(purchaseForm.date || getBusinessToday()),
         },
       }).unwrap()
       toast.success('Purchase updated!')
@@ -1378,7 +1379,7 @@ function LoadManagementPage({
       paymentMethod: t.paymentMethod || 'cash',
       paymentWalletType: t.paymentWalletType || '',
       mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
-      date: format(new Date(t.date), 'yyyy-MM-dd'),
+      date: toBusinessCalendarDate(new Date(t.date)),
     })
     setIsSaleReceivedAmountManual(true)
     setEditingTransaction(t)
@@ -1403,7 +1404,7 @@ function LoadManagementPage({
           mobileNumber: saleForm.mobileNumber || 'N/A',
           paymentMethod: saleForm.paymentMethod,
           paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
-          date: saleForm.date ? new Date(saleForm.date).toISOString() : new Date().toISOString(),
+          date: parseBusinessDateTimeLocal(saleForm.date || getBusinessToday()),
         },
       }).unwrap()
       toast.success('Transaction updated!')
@@ -1434,7 +1435,7 @@ function LoadManagementPage({
       commissionRate: String(w.commissionRate || 0),
       extraCharge: String(w.extraCharge || 0),
       notes: w.notes || '',
-      date: format(new Date(w.date), 'yyyy-MM-dd'),
+      date: toBusinessCalendarDate(new Date(w.date)),
     })
     setIsWithdrawalCashAmountManual(true)
     setEditingWithdrawal(w)
@@ -1464,7 +1465,7 @@ function LoadManagementPage({
           commissionRate: Number(withdrawalForm.commissionRate),
           extraCharge: Number(withdrawalForm.extraCharge),
           notes: withdrawalForm.notes.trim() || undefined,
-          date: withdrawalForm.date ? new Date(withdrawalForm.date).toISOString() : new Date().toISOString(),
+          date: parseBusinessDateTimeLocal(withdrawalForm.date || getBusinessToday()),
         },
       }).unwrap()
       toast.success(`${cashTxLabel(withdrawalForm.transactionType)} transaction updated!`)
