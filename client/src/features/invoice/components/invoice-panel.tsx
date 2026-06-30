@@ -1087,19 +1087,22 @@ export function InvoicePanel({
       }
       
       // Always resolve customer name (needed for both printing and sending)
-      let resolvedCustomerName: string | null = null
-      let resolvedWalkInCustomerName: string | null = null
+      let resolvedCustomerName: string | undefined
+      let resolvedWalkInCustomerName: string | undefined
 
       if (result.customerId === 'walk-in') {
-        resolvedWalkInCustomerName = result.walkInCustomerName ||
+        resolvedWalkInCustomerName =
+          (result.walkInCustomerName as string | undefined) ||
           invoice.walkInCustomerName ||
-          editingInvoice?.walkInCustomerName || null
+          editingInvoice?.walkInCustomerName ||
+          undefined
       } else {
-        resolvedCustomerName = invoice.customerName ||
-          result.customerName ||
+        resolvedCustomerName =
+          invoice.customerName ||
+          (result.customerName as string | undefined) ||
           editingInvoice?.customerName ||
           customers.find(c => (c._id || c.id) === (result.customerId || invoice.customerId || editingInvoice?.customerId))?.name ||
-          null
+          undefined
       }
 
       let resolvedCustomerUrdu = ''
@@ -1118,20 +1121,22 @@ export function InvoicePanel({
       const invoiceEffect = invoiceTotal - invoicePaid
       const previousBalanceBeforeInvoice = updatedBalance - invoiceEffect
 
+      // Cast result as any so spread properties (type, subtotal, tax, etc.) remain accessible
+      const r = result as any
       const savedInvoicePayload = {
-        ...result,
-        invoiceNumber: result.invoiceNumber || editingInvoice?.invoiceNumber,
+        ...r,
+        invoiceNumber: r.invoiceNumber || editingInvoice?.invoiceNumber,
         items: validItems,
-        customerId: result.customerId || invoice.customerId || editingInvoice?.customerId,
+        customerId: r.customerId || invoice.customerId || editingInvoice?.customerId,
         customerName: resolvedCustomerName,
         customerNameUrdu: resolvedCustomerUrdu || undefined,
         walkInCustomerName: resolvedWalkInCustomerName,
         previousBalance: previousBalanceBeforeInvoice,
         newBalance: updatedBalance,
-        language: result.language || invoice.language,
-        isUrduOnly: result.isUrduOnly ?? invoice.isUrduOnly,
-        invoiceDate: result.invoiceDate || invoice.invoiceDate,
-        notes: result.notes ?? invoice.notes,
+        language: (r.language as string | undefined) || invoice.language,
+        isUrduOnly: (r.isUrduOnly as boolean | undefined) ?? invoice.isUrduOnly,
+        invoiceDate: (r.invoiceDate as string | undefined) || invoice.invoiceDate,
+        notes: (r.notes as string | undefined) ?? invoice.notes,
       }
 
       // Handle print
@@ -1151,26 +1156,26 @@ export function InvoicePanel({
           const customer = customers.find(c => String(c._id || c.id) === customerId) || null
           const custName = resolvedCustomerName || customer?.name || ''
 
-        if (sendMethod === 'sms') {
-          const phone = customer?.phone?.trim() || ''
-          if (!phone) {
-            toast.error(`No phone number for ${custName || 'this customer'}. Add it in the Customers section first.`)
-          } else {
-          const msg = buildInvoiceSmsMessage({
-            branchName: orgData?.name || branchData?.name,
-            invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
-            customerName: custName || undefined,
-            total: Number(savedInvoicePayload.total ?? 0),
-            paidAmount: Number(savedInvoicePayload.paidAmount ?? 0),
-            previousBalance: Number(savedInvoicePayload.previousBalance ?? 0),
-            newBalance: Number(savedInvoicePayload.newBalance ?? 0),
-          })
-          setSmsDialogPhone(phone)
-          setSmsDialogMessage(msg)
-          setSmsDialogCustomerName(custName)
-          setSmsDialogOpen(true)
-          }
-        } else if (sendMethod === 'whatsapp') {
+          if (sendMethod === 'sms') {
+            const phone = customer?.phone?.trim() || ''
+            if (!phone) {
+              toast.error(`No phone number for ${custName || 'this customer'}. Add it in the Customers section first.`)
+            } else {
+              const msg = buildInvoiceSmsMessage({
+                branchName: orgData?.name || branchData?.name,
+                invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
+                customerName: custName || undefined,
+                total: Number(savedInvoicePayload.total ?? 0),
+                paidAmount: Number(savedInvoicePayload.paidAmount ?? 0),
+                previousBalance: Number(savedInvoicePayload.previousBalance ?? 0),
+                newBalance: Number(savedInvoicePayload.newBalance ?? 0),
+              })
+              setSmsDialogPhone(phone)
+              setSmsDialogMessage(msg)
+              setSmsDialogCustomerName(custName)
+              setSmsDialogOpen(true)
+            }
+          } else if (sendMethod === 'whatsapp') {
           const prevBal = savedInvoicePayload.previousBalance ?? customerBalance
           const netBal = (prevBal || 0) + (savedInvoicePayload.total || 0) - (savedInvoicePayload.paidAmount || 0)
           const printData = withCustomerContactForPrint({
