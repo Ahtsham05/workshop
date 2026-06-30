@@ -8,13 +8,14 @@ import { toast } from 'sonner'
 import {
   useDisconnectCloudMutation,
   useGetCloudConnectionQuery,
+  useGetMetaHostedLinkQuery,
   useReconnectCloudMutation,
 } from '@/stores/whatsappCloud.api'
-import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
 
 export default function BusinessWhatsAppSettings() {
   const { data: connection, isLoading, refetch } = useGetCloudConnectionQuery()
-  const { connect: handleEmbeddedSignup, isLoading: starting } = useEmbeddedWhatsAppSignup()
+  const { data: metaLinkData, isLoading: starting } = useGetMetaHostedLinkQuery()
+  const handleMetaHostedLink = () => { if (metaLinkData?.link) window.location.href = metaLinkData.link }
   const [reconnect, { isLoading: reconnecting }] = useReconnectCloudMutation()
   const [disconnect, { isLoading: disconnecting }] = useDisconnectCloudMutation()
 
@@ -100,7 +101,7 @@ export default function BusinessWhatsAppSettings() {
                 <Button
                   type='button'
                   className='bg-[#25D366] hover:bg-[#20bd5a] text-white gap-2'
-                  onClick={handleEmbeddedSignup}
+                  onClick={handleMetaHostedLink}
                   disabled={starting}
                 >
                   {starting ? <Loader2 className='h-4 w-4 animate-spin' /> : <MessageCircle className='h-4 w-4' />}

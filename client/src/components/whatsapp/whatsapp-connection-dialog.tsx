@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, Loader2, MessageCircle, Settings, Unplug } from 'lucide-react'
-import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
+import { useGetMetaHostedLinkQuery } from '@/stores/whatsappCloud.api'
 
 type CloudConnection = {
   connected?: boolean
@@ -35,7 +35,8 @@ export function WhatsAppConnectionDialog({
   onDisconnect,
   disconnecting,
 }: Props) {
-  const { connect, isLoading: connecting } = useEmbeddedWhatsAppSignup()
+  const { data: metaLinkData, isLoading: connecting } = useGetMetaHostedLinkQuery()
+  const connect = () => { if (metaLinkData?.link) window.location.href = metaLinkData.link }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
