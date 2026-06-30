@@ -68,9 +68,9 @@ function DeviceCard({ device, onDelete }: { device: SmsDevice; onDelete: () => v
 }
 
 export default function SmsGatewaySettings() {
-  const { data: devices = [], isLoading, refetch } = useGetDevicesQuery()
+  const { data: devices = [], isLoading } = useGetDevicesQuery()
   const [registerDevice, { isLoading: registering }] = useRegisterDeviceMutation()
-  const [deleteDevice, { isLoading: deleting }] = useDeleteDeviceMutation()
+  const [deleteDevice] = useDeleteDeviceMutation()
 
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [deviceName, setDeviceName] = useState('')

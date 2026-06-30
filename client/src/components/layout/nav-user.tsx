@@ -1,11 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import {
-  BadgeCheck,
-  Bell,
   ChevronsUpDown,
-  CreditCard,
   LogOut,
-  Sparkles,
+  Settings,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -36,12 +33,11 @@ export function NavUser({
     avatar: string
   }
 }) {
-
   const auth = useSelector((state: any) => state.auth?.data?.user)
   const { isMobile } = useSidebar()
   const { t } = useLanguage()
   const { logout: handleLogout } = useLogout()
-  
+
   const logoutHandler = () => {
     void handleLogout()
   }
@@ -87,29 +83,10 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Sparkles />
-                {t('upgrade_to_pro') || 'Upgrade to Pro'}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link to='/settings/account'>
-                  <BadgeCheck />
-                  {t('account') || 'Account'}
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to='/settings'>
-                  <CreditCard />
-                  {t('billing') || 'Billing'}
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to='/settings/notifications'>
-                  <Bell />
-                  {t('notifications') || 'Notifications'}
+                  <Settings className='mr-2 h-4 w-4' />
+                  {t('settings') || 'Settings'}
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

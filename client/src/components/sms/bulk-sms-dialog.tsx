@@ -40,7 +40,6 @@ const STEP_LABELS: Record<Step, string> = {
   sending: 'Sending…',
   done: 'Report',
 }
-const STEPS: Step[] = ['select', 'compose', 'sending', 'done']
 
 function buildPersonalizedMessage(r: BulkSmsRecipient, entityType: 'customer' | 'supplier', branchName?: string) {
   return entityType === 'customer'
@@ -146,7 +145,6 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
   }, [selectedList, messageMode, template, entityType, branchName, sendSms, sendBulkSms])
 
   const pct = progress.total > 0 ? Math.round(((progress.sent + progress.failed) / progress.total) * 100) : 0
-  const stepIndex = STEPS.indexOf(step)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

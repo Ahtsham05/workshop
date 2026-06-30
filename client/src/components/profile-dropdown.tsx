@@ -16,7 +16,7 @@ import { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
-import { Building2, Download } from 'lucide-react'
+import { Building2, Download, Settings } from 'lucide-react'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
 import { useLogout } from '@/hooks/use-logout'
 
@@ -27,7 +27,7 @@ export function ProfileDropdown() {
   const { t } = useLanguage()
   const { isInstallable, install } = usePWAInstall()
   const { logout: safeLogout } = useLogout()
-  
+
   const logoutHandler = () => {
     void safeLogout()
   }
@@ -36,7 +36,7 @@ export function ProfileDropdown() {
     try {
       await install()
       toast.success('App installed! You can now access it from your home screen.')
-    } catch (error) {
+    } catch {
       toast.error('Installation failed. Try again or use "Add to home screen".')
     }
   }
@@ -89,31 +89,16 @@ export function ProfileDropdown() {
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link to='/settings'>
-              {t('profile')}
-              <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to='/settings'>
-              {t('billing')}
-              <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to='/settings'>
-              {t('settings')}
+              <Settings className='mr-2 h-4 w-4' />
+              {t('settings') || 'Settings'}
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>{t('new_team')}</DropdownMenuItem>
           {isInstallable && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleInstallApp}>
-                <Download className='mr-2 h-4 w-4' />
-                <span>Install App</span>
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onClick={handleInstallApp}>
+              <Download className='mr-2 h-4 w-4' />
+              <span>Install App</span>
+            </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
