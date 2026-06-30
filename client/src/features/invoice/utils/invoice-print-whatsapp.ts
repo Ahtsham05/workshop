@@ -2,6 +2,7 @@ import type { PrintInvoiceData } from './print-utils'
 import type { InvoiceLanguage } from './language'
 import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { resolveCustomerIdString } from './invoice-print-contact-bridge'
+import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
 
 /** Balance / amount due shown on the printed invoice (for PDF filename). */
 export function resolvePrintBalanceAmount(data: PrintInvoiceData): number {
@@ -217,18 +218,22 @@ export function buildPrintWindowActionsBlock(
   const customerName = resolvePrintCustomerLabel(data)
   const balance = resolvePrintBalanceAmount(data)
   const phone = data.customerPhone?.trim() || ''
-  const smsDefaultMessage = [
-    companyName ? `*${companyName}*` : '',
-    '',
-    customerName ? `Dear ${customerName},` : '',
-    '',
-    `Invoice: #${data.invoiceNumber}`,
-    `Total: Rs ${Number(data.total ?? 0).toFixed(0)}`,
-    data.paidAmount != null ? `Paid: Rs ${Number(data.paidAmount).toFixed(0)}` : '',
-    balance > 0 ? `Balance Due: Rs ${balance.toFixed(0)}` : '',
-    '',
-    'Thank you for your business!',
-  ].filter(l => l !== null && l !== undefined && !(l === '' && false)).join('\n').trim()
+  const isRegisteredCustomer = Boolean(customerIdStr) && data.customerId !== 'walk-in'
+  const previousBalance = data.previousBalance != null ? Number(data.previousBalance) : undefined
+  const newBalance = data.newBalance != null
+    ? Number(data.newBalance)
+    : previousBalance != null
+      ? previousBalance + Number(data.total ?? 0) - Number(data.paidAmount ?? 0)
+      : undefined
+  const smsDefaultMessage = buildInvoiceSmsMessage({
+    branchName: companyName || undefined,
+    invoiceNumber: data.invoiceNumber,
+    customerName: customerName !== 'Customer' ? customerName : undefined,
+    total: Number(data.total ?? 0),
+    paidAmount: data.paidAmount != null ? Number(data.paidAmount) : undefined,
+    previousBalance,
+    newBalance,
+  })
 
   const meta = {
     invoiceNumber: data.invoiceNumber,
@@ -250,7 +255,8 @@ export function buildPrintWindowActionsBlock(
     settingsPath: labels.settingsWhatsAppPath,
   }
   const metaJson = escapeJsonForHtmlScript(meta)
-  const showWhatsApp = WHATSAPP_UI_ENABLED && Boolean(customerIdStr) && data.customerId !== 'walk-in'
+  const showWhatsApp = WHATSAPP_UI_ENABLED && isRegisteredCustomer
+  const showSms = isRegisteredCustomer
 
   return `
   <script type="application/json" id="invoice-print-meta">${metaJson}</script>
@@ -267,9 +273,13 @@ export function buildPrintWindowActionsBlock(
       </button>`
           : ''
       }
-      <button type="button" id="btn-sms" onclick="window.__showInvoiceSmsDialog && window.__showInvoiceSmsDialog()" class="print-btn print-btn-sms">
+      ${
+        showSms
+          ? `<button type="button" id="btn-sms" onclick="window.__showInvoiceSmsDialog && window.__showInvoiceSmsDialog()" class="print-btn print-btn-sms">
         ${labels.send_sms}
-      </button>
+      </button>`
+          : ''
+      }
       <button type="button" id="btn-save-pdf" onclick="window.__saveInvoicePdf && window.__saveInvoicePdf()" class="print-btn print-btn-save-pdf">
         ${labels.save_pdf}
       </button>
@@ -579,8 +589,8 @@ export function buildPrintWindowActionsBlock(
     var phoneInput = document.createElement('input');
     phoneInput.type = 'text';
     phoneInput.value = meta.phone || '';
-    phoneInput.placeholder = '03001234567';
-    phoneInput.style.cssText = 'width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;margin-bottom:12px;box-sizing:border-box;font-size:14px;outline:none';
+    phoneInput.readOnly = true;
+    phoneInput.style.cssText = 'width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;margin-bottom:12px;box-sizing:border-box;font-size:14px;outline:none;background:#f3f4f6;color:#374151;cursor:default';
 
     var msgLabel = document.createElement('label');
     msgLabel.textContent = (meta.alerts.smsMessage || 'Message') + ':';
@@ -597,6 +607,9 @@ export function buildPrintWindowActionsBlock(
     msgTextarea.style.cssText = 'width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;margin-bottom:14px;box-sizing:border-box;font-size:13px;resize:vertical;line-height:1.5;outline:none';
     msgTextarea.addEventListener('input', function() {
       charCount.textContent = msgTextarea.value.length + ' chars';
+    });
+    msgTextarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendBtn.click(); }
     });
 
     var btnRow = document.createElement('div');
@@ -647,6 +660,7 @@ export function buildPrintWindowActionsBlock(
     dialog.appendChild(btnRow);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+    setTimeout(function() { msgTextarea.focus(); msgTextarea.selectionStart = msgTextarea.selectionEnd = msgTextarea.value.length; }, 50);
     phoneInput.focus();
   };
   <\/script>

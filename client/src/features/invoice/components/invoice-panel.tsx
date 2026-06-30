@@ -1148,7 +1148,7 @@ export function InvoicePanel({
 
       // Handle persistent send method (runs additionally after any save/print)
       if (sendMethod !== 'none') {
-        const customerId = String(savedInvoicePayload.customerId || '')
+        const customerId = resolveCustomerIdString(savedInvoicePayload.customerId)
         // SMS/WhatsApp only for registered customers — walk-in has no phone record
         if (!customerId || customerId === 'walk-in') {
           toast.info('SMS / WhatsApp is only available for registered customers.')
@@ -1157,7 +1157,9 @@ export function InvoicePanel({
           const custName = resolvedCustomerName || customer?.name || ''
 
           if (sendMethod === 'sms') {
-            const phone = customer?.phone?.trim() || ''
+            // Fetch fresh from API to ensure we have the phone field
+            const contact = await fetchAndStashPrintContact(customerId)
+            const phone = contact.phone?.trim() || customer?.phone?.trim() || ''
             if (!phone) {
               toast.error(`No phone number for ${custName || 'this customer'}. Add it in the Customers section first.`)
             } else {
