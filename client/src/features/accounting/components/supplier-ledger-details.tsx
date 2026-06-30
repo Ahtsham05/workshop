@@ -55,7 +55,10 @@ import {
   getSupplierLedgerFormPreset,
 } from '@/features/accounting/utils/supplier-ledger-entry-navigation';
 import { cn } from '@/lib/utils';
-import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button';
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildSupplierBalanceMessage, buildPaymentMadeMessage } from '@/utils/sms-messages'
 
 interface LedgerEntry {
   _id?: string;
@@ -444,6 +447,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
+  const branchName = useBranchName();
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
@@ -1055,6 +1059,24 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               isTrial={orgData?.subscription?.isTrial}
             />
           )}
+          {selectedPayment && supplier.phone && (
+            <div className="mt-3 flex items-center gap-2 border-t pt-3">
+              <span className="text-sm text-muted-foreground">Send payment confirmation via SMS:</span>
+              <SmsSendButton
+                phone={supplier.phone}
+                name={supplier.name}
+                showLabel
+                size="sm"
+                variant="outline"
+                defaultMessage={buildPaymentMadeMessage({
+                  branchName,
+                  name: supplier.name,
+                  amount: selectedPayment.entry.debit,
+                  remainingBalance: selectedPayment.currentBalance,
+                })}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1063,14 +1085,24 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           <CardTitle className="flex flex-wrap items-center gap-2">
             {supplier.name}
             {(supplier.phone || (supplier as { whatsapp?: string }).whatsapp) && (
-              <WhatsAppSendButton
-                phone={supplier.phone}
-                whatsapp={(supplier as { whatsapp?: string }).whatsapp}
-                name={supplier.name}
-                showLabel
-                size="sm"
-                variant="outline"
-              />
+              <>
+                <WhatsAppSendButton
+                  phone={supplier.phone}
+                  whatsapp={(supplier as { whatsapp?: string }).whatsapp}
+                  name={supplier.name}
+                  showLabel
+                  size="sm"
+                  variant="outline"
+                />
+                <SmsSendButton
+                  phone={supplier.phone}
+                  name={supplier.name}
+                  showLabel
+                  size="sm"
+                  variant="outline"
+                  defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: currentBalance ?? supplier.balance })}
+                />
+              </>
             )}
           </CardTitle>
           <CardDescription>

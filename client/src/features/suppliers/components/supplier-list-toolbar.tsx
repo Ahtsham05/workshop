@@ -9,6 +9,7 @@ type Props = {
   onSearchChange: (value: string) => void
   viewMode: SupplierListViewMode
   onViewModeChange: (mode: SupplierListViewMode) => void
+  actions?: React.ReactNode
 }
 
 export function SupplierListToolbar({
@@ -16,6 +17,7 @@ export function SupplierListToolbar({
   onSearchChange,
   viewMode,
   onViewModeChange,
+  actions,
 }: Props) {
   const { t } = useLanguage()
 
@@ -31,6 +33,7 @@ export function SupplierListToolbar({
           aria-label={t('search_suppliers')}
         />
       </div>
+      {actions && <div className='flex items-center gap-2'>{actions}</div>}
       <div className='flex items-center gap-1 rounded-lg border p-1'>
         <span className='px-2 text-xs text-muted-foreground'>{t('view')}</span>
         <Button

@@ -156,6 +156,18 @@ async function startApplication() {
     await new Promise((resolve, reject) => {
       server = app.listen(config.port, () => {
         logger.info(`Listening to port ${config.port}`);
+
+        // Attach SMS Gateway Socket.io
+        try {
+          const { initSmsGatewaySocket } = require('./socket/smsGateway.socket');
+          initSmsGatewaySocket(server, {
+            origin: (origin, cb) => cb(null, true),
+            methods: ['GET', 'POST'],
+          });
+          logger.info('SMS Gateway Socket.io initialized');
+        } catch (err) {
+          logger.warn('SMS Gateway socket skipped:', err.message);
+        }
         try {
           const { startPayrollScheduler } = require('./jobs/payrollScheduler');
           startPayrollScheduler();

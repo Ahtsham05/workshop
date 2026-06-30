@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { useLanguage } from '@/context/language-context'
@@ -25,6 +28,7 @@ type Props = {
 
 export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagination }: Props) {
   const { t } = useLanguage()
+  const branchName = useBranchName()
 
   const getBalanceColor = (balance: number) => {
     if (balance > 0) return 'text-red-600'
@@ -78,11 +82,18 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                       <div className='flex items-center gap-1'>
                         <span>{customer.phone || '-'}</span>
                         {(customer.phone || customer.whatsapp) && (
-                          <WhatsAppSendButton
-                            phone={customer.phone}
-                            whatsapp={customer.whatsapp}
-                            name={customer.name}
-                          />
+                          <>
+                            <WhatsAppSendButton
+                              phone={customer.phone}
+                              whatsapp={customer.whatsapp}
+                              name={customer.name}
+                            />
+                            <SmsSendButton
+                              phone={customer.phone}
+                              name={customer.name}
+                              defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                            />
+                          </>
                         )}
                       </div>
                     </TableCell>

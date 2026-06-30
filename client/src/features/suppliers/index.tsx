@@ -15,6 +15,10 @@ import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState } from 'react'
 import { fetchSuppliers } from '@/stores/supplier.slice'
+import { MessageSquare } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { BulkSmsDialog } from '@/components/sms/bulk-sms-dialog'
+import { useBranchName } from '@/hooks/use-branch-name'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 
@@ -30,6 +34,8 @@ export default function Suppliers() {
   const [searchInput, setSearchInput] = useState('')
   const [viewMode, setViewMode] = useState<SupplierListViewMode>(() => getStoredSupplierListViewMode())
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+  const [bulkSmsOpen, setBulkSmsOpen] = useState(false)
+  const branchName = useBranchName()
   const { t } = useLanguage()
   const columns = useSupplierColumns()
 
@@ -89,6 +95,12 @@ export default function Suppliers() {
             onSearchChange={setSearchInput}
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
+            actions={
+              <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {t('Send SMS')}
+              </Button>
+            }
           />
           {viewMode === 'cards' ? (
             <SupplierCardGrid
@@ -125,6 +137,14 @@ export default function Suppliers() {
         </div>
 
       <SupplierDialogs setFetch={setFetch} />
+
+      <BulkSmsDialog
+        open={bulkSmsOpen}
+        onOpenChange={setBulkSmsOpen}
+        recipients={suppliers}
+        entityType="supplier"
+        branchName={branchName}
+      />
     </SupplierProvider>
   )
 }

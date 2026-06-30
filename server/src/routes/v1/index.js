@@ -98,6 +98,7 @@ const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
 const accountsSystemRoute = require('./accountsSystem.route');
 const whatsappRoute = require('./whatsapp.route');
 const whatsappCloudRoute = require('./whatsappCloud.route');
+const smsGatewayRoute = require('./smsGateway.route');
 const whatsappEnterpriseRoute = require('./whatsappEnterprise.route');
 const restaurantRoute = require('./restaurant.route');
 const restaurantPublicRoute = require('./restaurantPublic.route');
@@ -512,6 +513,10 @@ const defaultRoutes = [
   {
     path: '/ai-assistant',
     route: aiAssistantRoute,
+  },
+  {
+    path: '/sms-gateway',
+    route: smsGatewayRoute,
   },
 ];
 

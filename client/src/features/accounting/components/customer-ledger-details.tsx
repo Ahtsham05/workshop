@@ -67,7 +67,10 @@ import {
 } from '@/features/accounting/utils/customer-ledger-entry-navigation';
 import { cn } from '@/lib/utils';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
-import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button';
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildCustomerBalanceMessage, buildPaymentReceivedMessage } from '@/utils/sms-messages'
 import {
   fetchAndStashPrintContact,
   resolveCustomerIdString,
@@ -745,6 +748,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
+  const branchName = useBranchName();
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en');
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
@@ -1510,6 +1514,24 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               isTrial={orgData?.subscription?.isTrial}
             />
           )}
+          {selectedPayment && customer.phone && (
+            <div className="mt-3 flex items-center gap-2 border-t pt-3">
+              <span className="text-sm text-muted-foreground">Send payment confirmation via SMS:</span>
+              <SmsSendButton
+                phone={customer.phone}
+                name={customer.name}
+                showLabel
+                size="sm"
+                variant="outline"
+                defaultMessage={buildPaymentReceivedMessage({
+                  branchName,
+                  name: customer.name,
+                  amount: selectedPayment.entry.credit,
+                  remainingBalance: selectedPayment.currentBalance,
+                })}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1518,14 +1540,24 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           <CardTitle className="flex flex-wrap items-center gap-2">
             {customer.name}
             {(customer.phone || customer.whatsapp) && (
-              <WhatsAppSendButton
-                phone={customer.phone}
-                whatsapp={customer.whatsapp}
-                name={customer.name}
-                showLabel
-                size="sm"
-                variant="outline"
-              />
+              <>
+                <WhatsAppSendButton
+                  phone={customer.phone}
+                  whatsapp={customer.whatsapp}
+                  name={customer.name}
+                  showLabel
+                  size="sm"
+                  variant="outline"
+                />
+                <SmsSendButton
+                  phone={customer.phone}
+                  name={customer.name}
+                  showLabel
+                  size="sm"
+                  variant="outline"
+                  defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance })}
+                />
+              </>
             )}
           </CardTitle>
           <CardDescription>{t('Transaction History and Balance')}</CardDescription>

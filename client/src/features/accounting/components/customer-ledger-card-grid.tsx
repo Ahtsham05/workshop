@@ -17,6 +17,9 @@ import {
 } from '@/components/entity-card-layout'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { formatCustomerBalanceDisplay } from '@/features/customers/utils/customer-list-view'
@@ -84,6 +87,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const isMobileShop = isMobileShopBusiness(user?.businessType)
+  const branchName = useBranchName()
 
   const visibleActions = useMemo(() => {
     const all = getCustomerQuickActions('sample')
@@ -186,6 +190,11 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
                           phone={customer.phone}
                           whatsapp={customer.whatsapp}
                           name={customer.name}
+                        />
+                        <SmsSendButton
+                          phone={customer.phone}
+                          name={customer.name}
+                          defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
                         />
                       </div>
                     ) : undefined

@@ -13,3 +13,6 @@ desktop/node_modules/
 desktop/dist/
 desktop/.env.production
 desktop/server.env
+
+# SMS Gateway React Native app — has its own git repo, push separately
+SMSGateway/node_modules

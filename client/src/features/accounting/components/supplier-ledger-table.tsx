@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { useLanguage } from '@/context/language-context'
@@ -25,6 +28,7 @@ type Props = {
 
 export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagination }: Props) {
   const { t } = useLanguage()
+  const branchName = useBranchName()
 
   const getBalanceColor = (balance: number) => {
     if (balance > 0) return 'text-red-600'
@@ -78,11 +82,18 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                       <div className='flex items-center gap-1'>
                         <span>{supplier.phone || '-'}</span>
                         {(supplier.phone || supplier.whatsapp) && (
-                          <WhatsAppSendButton
-                            phone={supplier.phone}
-                            whatsapp={supplier.whatsapp}
-                            name={supplier.name}
-                          />
+                          <>
+                            <WhatsAppSendButton
+                              phone={supplier.phone}
+                              whatsapp={supplier.whatsapp}
+                              name={supplier.name}
+                            />
+                            <SmsSendButton
+                              phone={supplier.phone}
+                              name={supplier.name}
+                              defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
+                            />
+                          </>
                         )}
                       </div>
                     </TableCell>

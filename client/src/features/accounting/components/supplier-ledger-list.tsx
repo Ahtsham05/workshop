@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/context/language-context';
-import { Download } from 'lucide-react';
+import { Download, MessageSquare } from 'lucide-react';
+import { BulkSmsDialog } from '@/components/sms/bulk-sms-dialog';
+import { useBranchName } from '@/hooks/use-branch-name';
 import * as XLSX from 'xlsx';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -51,6 +53,8 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
+  const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
+  const branchName = useBranchName();
   const [viewMode, setViewMode] = useState<LedgerListViewMode>(() =>
     getStoredLedgerListViewMode(VIEW_MODE_KEY),
   );
@@ -136,10 +140,16 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           actions={
-            <Button variant="outline" onClick={exportToExcel} className="shrink-0">
-              <Download className="w-4 h-4 mr-2" />
-              {t('Export to Excel')}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setBulkSmsOpen(true)} className="shrink-0">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {t('Send SMS')}
+              </Button>
+              <Button variant="outline" onClick={exportToExcel} className="shrink-0">
+                <Download className="w-4 h-4 mr-2" />
+                {t('Export to Excel')}
+              </Button>
+            </div>
           }
         />
 
@@ -159,6 +169,14 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
           />
         )}
       </CardContent>
+
+      <BulkSmsDialog
+        open={bulkSmsOpen}
+        onOpenChange={setBulkSmsOpen}
+        recipients={filteredSuppliers}
+        entityType="supplier"
+        branchName={branchName}
+      />
     </Card>
   );
 }

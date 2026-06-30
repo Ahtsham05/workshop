@@ -28,6 +28,7 @@ import { customerAccountTypeApi } from './customerAccountType.api';
 import { restaurantApi } from './restaurant.api';
 import { whatsappApi } from './whatsapp.api';
 import { whatsappCloudApi } from './whatsappCloud.api';
+import { smsGatewayApi } from './smsGateway.api';
 import { cashRegisterApi } from './cashRegister.api';
 import { imeiApi } from './imei.api';
 import { insightApi } from './insight.api';
@@ -74,6 +75,7 @@ export const store = configureStore({
     [restaurantApi.reducerPath]: restaurantApi.reducer,
     [whatsappApi.reducerPath]: whatsappApi.reducer,
     [whatsappCloudApi.reducerPath]: whatsappCloudApi.reducer,
+    [smsGatewayApi.reducerPath]: smsGatewayApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
     [imeiApi.reducerPath]: imeiApi.reducer,
     [insightApi.reducerPath]: insightApi.reducer,
@@ -114,6 +116,7 @@ export const store = configureStore({
       restaurantApi.middleware,
       whatsappApi.middleware,
       whatsappCloudApi.middleware,
+      smsGatewayApi.middleware,
       cashRegisterApi.middleware,
       imeiApi.middleware,
       insightApi.middleware,

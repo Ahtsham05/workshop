@@ -19,6 +19,9 @@ import {
 } from '@/components/entity-card-layout'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import {
@@ -126,6 +129,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const isMobileShop = isMobileShopBusiness(user?.businessType)
+  const branchName = useBranchName()
 
   const visibleActions = useMemo(() => {
     const all = getSupplierQuickActions('sample')
@@ -236,6 +240,11 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
                           phone={supplier.phone}
                           whatsapp={supplier.whatsapp}
                           name={supplier.name}
+                        />
+                        <SmsSendButton
+                          phone={supplier.phone}
+                          name={supplier.name}
+                          defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
                         />
                       </div>
                     ) : undefined

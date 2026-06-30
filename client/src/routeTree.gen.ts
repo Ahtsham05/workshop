@@ -72,6 +72,7 @@ import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authe
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
 import { Route as AuthenticatedSettingsSyncImport } from './routes/_authenticated/settings/sync'
+import { Route as AuthenticatedSettingsSmsGatewayImport } from './routes/_authenticated/settings/sms-gateway'
 import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authenticated/settings/offline'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
@@ -547,6 +548,13 @@ const AuthenticatedSettingsSyncRoute = AuthenticatedSettingsSyncImport.update({
   path: '/sync',
   getParentRoute: () => AuthenticatedSettingsRouteRoute,
 } as any)
+
+const AuthenticatedSettingsSmsGatewayRoute =
+  AuthenticatedSettingsSmsGatewayImport.update({
+    id: '/sms-gateway',
+    path: '/sms-gateway',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 
 const AuthenticatedSettingsOfflineRoute =
   AuthenticatedSettingsOfflineImport.update({
@@ -1451,6 +1459,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsOfflineImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/sms-gateway': {
+      id: '/_authenticated/settings/sms-gateway'
+      path: '/sms-gateway'
+      fullPath: '/settings/sms-gateway'
+      preLoaderRoute: typeof AuthenticatedSettingsSmsGatewayImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/sync': {
       id: '/_authenticated/settings/sync'
       path: '/sync'
@@ -2060,6 +2075,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOfflineRoute: typeof AuthenticatedSettingsOfflineRoute
+  AuthenticatedSettingsSmsGatewayRoute: typeof AuthenticatedSettingsSmsGatewayRoute
   AuthenticatedSettingsSyncRoute: typeof AuthenticatedSettingsSyncRoute
   AuthenticatedSettingsSyncConflictsRoute: typeof AuthenticatedSettingsSyncConflictsRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
@@ -2078,6 +2094,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsOfflineRoute: AuthenticatedSettingsOfflineRoute,
+    AuthenticatedSettingsSmsGatewayRoute: AuthenticatedSettingsSmsGatewayRoute,
     AuthenticatedSettingsSyncRoute: AuthenticatedSettingsSyncRoute,
     AuthenticatedSettingsSyncConflictsRoute:
       AuthenticatedSettingsSyncConflictsRoute,
@@ -2445,6 +2462,7 @@ export interface FileRoutesByFullPath {
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
@@ -2582,6 +2600,7 @@ export interface FileRoutesByTo {
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
@@ -2722,6 +2741,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/_authenticated/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/_authenticated/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
@@ -2864,6 +2884,7 @@ export interface FileRouteTypes {
     | '/settings/local-database'
     | '/settings/notifications'
     | '/settings/offline'
+    | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
     | '/settings/whatsapp'
@@ -3000,6 +3021,7 @@ export interface FileRouteTypes {
     | '/settings/local-database'
     | '/settings/notifications'
     | '/settings/offline'
+    | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
     | '/settings/whatsapp'
@@ -3138,6 +3160,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/offline'
+    | '/_authenticated/settings/sms-gateway'
     | '/_authenticated/settings/sync'
     | '/_authenticated/settings/sync-conflicts'
     | '/_authenticated/settings/whatsapp'
@@ -3369,6 +3392,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/local-database",
         "/_authenticated/settings/notifications",
         "/_authenticated/settings/offline",
+        "/_authenticated/settings/sms-gateway",
         "/_authenticated/settings/sync",
         "/_authenticated/settings/sync-conflicts",
         "/_authenticated/settings/whatsapp",
@@ -3604,6 +3628,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/offline": {
       "filePath": "_authenticated/settings/offline.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/sms-gateway": {
+      "filePath": "_authenticated/settings/sms-gateway.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/sync": {

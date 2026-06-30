@@ -9,6 +9,7 @@ type Props = {
   onSearchChange: (value: string) => void
   viewMode: CustomerListViewMode
   onViewModeChange: (mode: CustomerListViewMode) => void
+  actions?: React.ReactNode
 }
 
 export function CustomerListToolbar({
@@ -16,6 +17,7 @@ export function CustomerListToolbar({
   onSearchChange,
   viewMode,
   onViewModeChange,
+  actions,
 }: Props) {
   const { t } = useLanguage()
 
@@ -31,6 +33,7 @@ export function CustomerListToolbar({
           aria-label={t('search_customers')}
         />
       </div>
+      {actions && <div className='flex items-center gap-2'>{actions}</div>}
       <div className='flex items-center gap-1 rounded-lg border p-1'>
         <span className='px-2 text-xs text-muted-foreground'>{t('view')}</span>
         <Button

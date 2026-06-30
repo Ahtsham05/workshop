@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/language-context'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
 
 export function useSupplierColumns() {
   const { t, language } = useLanguage()
@@ -76,6 +77,7 @@ export function useSupplierColumns() {
         <div className='flex items-center gap-1'>
           <span className='text-sm'>{whatsapp || phone}</span>
           <WhatsAppSendButton phone={phone} whatsapp={whatsapp} name={row.original.name} />
+          <SmsSendButton phone={phone} name={row.original.name} />
         </div>
       )
     },

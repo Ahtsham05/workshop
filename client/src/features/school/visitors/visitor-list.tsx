@@ -10,7 +10,8 @@ import {
   useDeleteVisitorMutation,
 } from '@/stores/school.api';
 import { Plus, Search, Eye, Trash2, Phone, UserCheck, CalendarClock, TrendingUp, Users, ArrowRightLeft, XCircle } from 'lucide-react';
-import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button';
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button';
 import { useNavigate } from '@tanstack/react-router';
 import VisitorForm, { SOURCE_OPTIONS, STATUS_OPTIONS, statusBadge } from './visitor-form';
 import FollowUpDialog from './follow-up-dialog';
@@ -270,6 +271,7 @@ export default function VisitorList() {
                               message={followUpMessage(v.parentName)}
                               className='h-8 w-8'
                             />
+                            <SmsSendButton phone={v.phone} name={v.parentName} />
                             {/* Phone */}
                             <Button
                               variant="ghost" size="icon"

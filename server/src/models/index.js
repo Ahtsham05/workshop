@@ -123,3 +123,7 @@ module.exports.SyncRecord = require('./syncRecord.model');
 module.exports.SyncConflict = require('./syncConflict.model');
 
 module.exports.AuditLog = require('./auditLog.model');
+
+// SMS Gateway
+module.exports.SmsDevice = require('./smsDevice.model');
+module.exports.SmsGatewayMessage = require('./smsGatewayMessage.model');

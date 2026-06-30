@@ -13,6 +13,10 @@ import {
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState } from 'react'
+import { MessageSquare } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { BulkSmsDialog } from '@/components/sms/bulk-sms-dialog'
+import { useBranchName } from '@/hooks/use-branch-name'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { useLanguage } from '@/context/language-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -31,6 +35,8 @@ export default function Customers() {
   const [viewMode, setViewMode] = useState<CustomerListViewMode>(() => getStoredCustomerListViewMode())
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
 
+  const [bulkSmsOpen, setBulkSmsOpen] = useState(false)
+  const branchName = useBranchName()
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
   const columns = useCustomerColumns()
@@ -82,6 +88,12 @@ export default function Customers() {
             onSearchChange={setSearchInput}
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
+            actions={
+              <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {t('Send SMS')}
+              </Button>
+            }
           />
           {viewMode === 'cards' ? (
             <CustomerCardGrid
@@ -118,6 +130,14 @@ export default function Customers() {
         </div>
 
         <CustomerDialogs setFetch={setFetch} />
+
+        <BulkSmsDialog
+          open={bulkSmsOpen}
+          onOpenChange={setBulkSmsOpen}
+          recipients={customers}
+          entityType="customer"
+          branchName={branchName}
+        />
       </div>
     </CustomersProvider>
   )
