@@ -67,3 +67,38 @@ export function buildPaymentMadeMessage({ branchName, name, amount, remainingBal
       : ''
   return `${h}\n${greeting}We have made a payment of ${fmt(amount, currency)} to you.\n${remaining}\nThank you for your services!`
 }
+
+type InvoiceSmsCtx = {
+  branchName?: string | null
+  invoiceNumber?: string | number
+  customerName?: string
+  total?: number
+  paidAmount?: number
+  previousBalance?: number
+  newBalance?: number
+  currency?: string
+}
+
+export function buildInvoiceSmsMessage({
+  branchName,
+  invoiceNumber,
+  customerName,
+  total,
+  paidAmount,
+  previousBalance,
+  newBalance,
+  currency = 'Rs',
+}: InvoiceSmsCtx) {
+  const h = heading(branchName)
+  const greeting = customerName ? `Dear ${customerName},\n` : ''
+  const sep = '─────────────────'
+  const inv = invoiceNumber ? `Invoice: #${invoiceNumber}` : ''
+  const amt = `Invoice Amount: ${fmt(total, currency)}`
+  const paid = paidAmount != null ? `Amount Paid: ${fmt(paidAmount, currency)}` : ''
+  const prevBal = previousBalance != null ? `\n${sep}\nPrevious Balance: ${fmt(previousBalance, currency)}` : ''
+  const newBal = newBalance != null
+    ? `New Total Balance: ${newBalance <= 0 ? `${fmt(newBalance, currency)} (Credit)` : fmt(newBalance, currency)}`
+    : ''
+  const lines = [h, '', greeting, sep, inv, amt, paid, prevBal, newBal, sep, '', 'Thank you for your business!']
+  return lines.filter(l => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}

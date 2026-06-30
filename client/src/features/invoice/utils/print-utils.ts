@@ -14,6 +14,7 @@ import {
 } from './invoice-print-contact-bridge'
 import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge'
 import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
+import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 
 export type { PrintWindowContact }
 
@@ -1747,6 +1748,7 @@ export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContac
   ensureInvoicePrintContactBridge()
   ensureInvoiceWhatsAppSendBridge()
   ensureInvoicePrintPdfBridge()
+  ensureInvoiceSmsSendBridge()
   if (contact) stashPrintContact(contact)
 
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
@@ -1779,6 +1781,7 @@ export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowCont
   ensureInvoicePrintContactBridge()
   ensureInvoiceWhatsAppSendBridge()
   ensureInvoicePrintPdfBridge()
+  ensureInvoiceSmsSendBridge()
   if (contact) stashPrintContact(contact)
 
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })

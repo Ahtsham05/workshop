@@ -113,6 +113,7 @@ export type PrintActionsLabels = {
   print_primary: string
   close: string
   send_whatsapp: string
+  send_sms: string
   save_pdf: string
   alerts: {
     noPhone: string
@@ -125,6 +126,15 @@ export type PrintActionsLabels = {
     noBridge: string
     pdfHint: string
     savePdfFailed: string
+    smsSending: string
+    smsSent: string
+    smsFailed: string
+    smsNoBridge: string
+    smsPhone: string
+    smsMessage: string
+    smsTitle: string
+    smsCancel: string
+    smsSend: string
   }
   settingsWhatsAppPath: string
   whatsappMessage: (invoiceNumber: string, companyName: string) => string
@@ -142,6 +152,7 @@ export function buildPrintActionsLabels(
     print_primary: format === 'receipt' ? receiptPrintLabel : a4PrintLabel,
     close: en ? 'Close' : 'بند کریں',
     send_whatsapp: en ? 'Send on WhatsApp' : 'واٹس ایپ پر بھیجیں',
+    send_sms: en ? 'Send SMS' : 'ایس ایم ایس بھیجیں',
     save_pdf: en ? 'Save as PDF' : 'PDF محفوظ کریں',
     alerts: {
       noPhone: en
@@ -164,6 +175,17 @@ export function buildPrintActionsLabels(
         ? 'Sends invoice PDF through your connected WhatsApp — connect in Settings → WhatsApp.'
         : 'انوائس PDF آپ کے منسلک واٹس ایپ سے بھیجی جاتی ہے — Settings → WhatsApp میں منسلک کریں۔',
       savePdfFailed: en ? 'Could not save PDF' : 'PDF محفوظ نہیں ہو سکی',
+      smsSending: en ? 'Sending SMS…' : 'ایس ایم ایس بھیجا جا رہا ہے…',
+      smsSent: en ? 'SMS Sent!' : 'ایس ایم ایس بھیج دیا گیا!',
+      smsFailed: en ? 'Could not send SMS' : 'ایس ایم ایس نہیں بھیجا جا سکا',
+      smsNoBridge: en
+        ? 'Could not reach the app. Close this window and send again from the invoice screen.'
+        : 'ایپ سے رابطہ نہیں ہوا۔ یہ ونڈو بند کریں اور انوائس اسکرین سے دوبارہ بھیجیں۔',
+      smsPhone: en ? 'Phone Number' : 'فون نمبر',
+      smsMessage: en ? 'Message' : 'پیغام',
+      smsTitle: en ? 'Send Invoice SMS' : 'انوائس ایس ایم ایس بھیجیں',
+      smsCancel: en ? 'Cancel' : 'منسوخ کریں',
+      smsSend: en ? 'Send SMS' : 'ایس ایم ایس بھیجیں',
     },
     settingsWhatsAppPath: '/settings/whatsapp',
     whatsappMessage: (invoiceNumber, companyName) =>
@@ -192,19 +214,37 @@ export function buildPrintWindowActionsBlock(
     ''
   const customerIdStr = resolveCustomerIdString(data.customerId) || ''
   const pdfFilename = buildInvoicePdfDownloadFilename(data)
+  const customerName = resolvePrintCustomerLabel(data)
+  const balance = resolvePrintBalanceAmount(data)
+  const phone = data.customerPhone?.trim() || ''
+  const smsDefaultMessage = [
+    companyName ? `*${companyName}*` : '',
+    '',
+    customerName ? `Dear ${customerName},` : '',
+    '',
+    `Invoice: #${data.invoiceNumber}`,
+    `Total: Rs ${Number(data.total ?? 0).toFixed(0)}`,
+    data.paidAmount != null ? `Paid: Rs ${Number(data.paidAmount).toFixed(0)}` : '',
+    balance > 0 ? `Balance Due: Rs ${balance.toFixed(0)}` : '',
+    '',
+    'Thank you for your business!',
+  ].filter(l => l !== null && l !== undefined && !(l === '' && false)).join('\n').trim()
+
   const meta = {
     invoiceNumber: data.invoiceNumber,
     customerId: customerIdStr,
-    customerName: resolvePrintCustomerLabel(data),
+    customerName,
     invoiceDate: formatInvoiceDateForFilename(data),
-    balanceAmount: resolvePrintBalanceAmount(data),
+    balanceAmount: balance,
     pdfFilename,
-    phone: data.customerPhone || '',
-    whatsapp: data.customerWhatsapp || data.customerPhone || '',
+    phone,
+    whatsapp: data.customerWhatsapp?.trim() || phone,
     companyName,
     message: labels.whatsappMessage(data.invoiceNumber, companyName),
+    smsMessage: smsDefaultMessage,
     pdfHint: labels.alerts.pdfHint,
     btnLabel: labels.send_whatsapp,
+    btnSmsLabel: labels.send_sms,
     savePdfLabel: labels.save_pdf,
     alerts: labels.alerts,
     settingsPath: labels.settingsWhatsAppPath,
@@ -227,6 +267,9 @@ export function buildPrintWindowActionsBlock(
       </button>`
           : ''
       }
+      <button type="button" id="btn-sms" onclick="window.__showInvoiceSmsDialog && window.__showInvoiceSmsDialog()" class="print-btn print-btn-sms">
+        ${labels.send_sms}
+      </button>
       <button type="button" id="btn-save-pdf" onclick="window.__saveInvoicePdf && window.__saveInvoicePdf()" class="print-btn print-btn-save-pdf">
         ${labels.save_pdf}
       </button>
@@ -515,6 +558,97 @@ export function buildPrintWindowActionsBlock(
       }
     }
   };
+
+  window.__showInvoiceSmsDialog = function () {
+    var meta = JSON.parse(document.getElementById('invoice-print-meta').textContent);
+    var overlay = document.createElement('div');
+    overlay.id = 'sms-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+    var dialog = document.createElement('div');
+    dialog.style.cssText = 'background:#fff;border-radius:10px;padding:22px 24px;max-width:420px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,0.22);font-family:sans-serif';
+
+    var title = document.createElement('h3');
+    title.textContent = meta.alerts.smsTitle || 'Send Invoice SMS';
+    title.style.cssText = 'margin:0 0 16px;font-size:15px;font-weight:700;color:#111';
+
+    var phoneLabel = document.createElement('label');
+    phoneLabel.textContent = (meta.alerts.smsPhone || 'Phone Number') + ':';
+    phoneLabel.style.cssText = 'display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151';
+
+    var phoneInput = document.createElement('input');
+    phoneInput.type = 'text';
+    phoneInput.value = meta.phone || '';
+    phoneInput.placeholder = '03001234567';
+    phoneInput.style.cssText = 'width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;margin-bottom:12px;box-sizing:border-box;font-size:14px;outline:none';
+
+    var msgLabel = document.createElement('label');
+    msgLabel.textContent = (meta.alerts.smsMessage || 'Message') + ':';
+    msgLabel.style.cssText = 'display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151';
+
+    var charCount = document.createElement('span');
+    charCount.style.cssText = 'float:right;font-size:11px;color:#6b7280;font-weight:400';
+    charCount.textContent = (meta.smsMessage || '').length + ' chars';
+    msgLabel.appendChild(charCount);
+
+    var msgTextarea = document.createElement('textarea');
+    msgTextarea.rows = 7;
+    msgTextarea.value = meta.smsMessage || '';
+    msgTextarea.style.cssText = 'width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;margin-bottom:14px;box-sizing:border-box;font-size:13px;resize:vertical;line-height:1.5;outline:none';
+    msgTextarea.addEventListener('input', function() {
+      charCount.textContent = msgTextarea.value.length + ' chars';
+    });
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = meta.alerts.smsCancel || 'Cancel';
+    cancelBtn.style.cssText = 'padding:8px 18px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;font-weight:500';
+    cancelBtn.onclick = function() { document.body.removeChild(overlay); };
+
+    var sendBtn = document.createElement('button');
+    sendBtn.textContent = meta.alerts.smsSend || 'Send SMS';
+    sendBtn.style.cssText = 'padding:8px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;font-weight:600';
+    sendBtn.onclick = async function() {
+      var phone = phoneInput.value.trim();
+      var msg = msgTextarea.value.trim();
+      if (!phone || !msg) { alert('Phone and message are required'); return; }
+      if (!window.opener || !window.opener.__sendInvoiceSmsViaGateway) {
+        alert(meta.alerts.smsNoBridge || 'Could not reach the app. Close this window and send again.');
+        return;
+      }
+      sendBtn.disabled = true;
+      cancelBtn.disabled = true;
+      sendBtn.textContent = meta.alerts.smsSending || 'Sending…';
+      var result = await window.opener.__sendInvoiceSmsViaGateway({ to: phone, message: msg, source: 'invoice-print' });
+      if (result && result.success) {
+        document.body.removeChild(overlay);
+        var toast = document.createElement('div');
+        toast.textContent = meta.alerts.smsSent || 'SMS Sent!';
+        toast.style.cssText = 'position:fixed;top:16px;right:16px;background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:700;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.2)';
+        document.body.appendChild(toast);
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 2500);
+      } else {
+        sendBtn.disabled = false;
+        cancelBtn.disabled = false;
+        sendBtn.textContent = meta.alerts.smsSend || 'Send SMS';
+        alert((meta.alerts.smsFailed || 'Could not send SMS') + (result && result.error ? ': ' + result.error : ' — is a device connected?'));
+      }
+    };
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(sendBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(phoneLabel);
+    dialog.appendChild(phoneInput);
+    dialog.appendChild(msgLabel);
+    dialog.appendChild(msgTextarea);
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    phoneInput.focus();
+  };
   <\/script>
   `
 }
@@ -558,6 +692,10 @@ export const printActionsBarStyles = `
     }
     .print-btn-whatsapp {
       background: #25d366;
+      color: white;
+    }
+    .print-btn-sms {
+      background: #2563eb;
       color: white;
     }
     .print-btn-save-pdf {
