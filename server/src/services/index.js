@@ -97,3 +97,4 @@ module.exports.systemService = require('./system.service.js');
 module.exports.whatsappEnterprise = require('./whatsapp/index.js');
 module.exports.aiAssistantService = require('./aiAssistant.service.js');
 module.exports.agentBillService = require('./agentBill.service.js');
+module.exports.recurringExpenseService = require('./recurringExpense.service.js');

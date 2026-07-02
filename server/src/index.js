@@ -204,6 +204,12 @@ async function startApplication() {
         } catch (schedulerError) {
           logger.warn('Seasonality scheduler skipped:', schedulerError.message);
         }
+        try {
+          const { startRecurringExpenseScheduler } = require('./jobs/recurringExpenseScheduler');
+          startRecurringExpenseScheduler();
+        } catch (schedulerError) {
+          logger.warn('Recurring expense scheduler skipped:', schedulerError.message);
+        }
         resolve(server);
       });
       server.on('error', reject);

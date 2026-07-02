@@ -49,6 +49,7 @@ const purchaseReturnRoute = require('./purchaseReturn.route');
 const utilityCompanyRoute = require('./utilityCompany.route');
 const billPaymentRoute = require('./billPayment.route');
 const agentBillRoute = require('./agentBill.route');
+const recurringExpenseRoute = require('./recurringExpense.route');
 const repairStockItemRoute = require('./repairStockItem.route');
 const installmentRoute = require('./installment.route');
 const auditLogRoute = require('./auditLog.route');
@@ -329,6 +330,10 @@ const defaultRoutes = [
   {
     path: '/agent-bills',
     route: agentBillRoute,
+  },
+  {
+    path: '/recurring-expenses',
+    route: recurringExpenseRoute,
   },
   // HR Routes
   {

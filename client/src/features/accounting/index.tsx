@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useSearch } from '@tanstack/react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Receipt, 
-  Users, 
-  Building2, 
+import {
+  Receipt,
+  Users,
+  Building2,
   BarChart3,
-  Wallet
+  Wallet,
+  CalendarClock,
 } from 'lucide-react';
 import { ExpenseManagement } from './components/expense-management';
 import { CustomerLedger } from './components/customer-ledger';
 import { SupplierLedger } from './components/supplier-ledger';
 import { AccountsDashboard } from './components/accounts-dashboard';
 import { PersonalLedger } from './components/personal-ledger';
+import { RecurringExpenseManager } from './components/recurring-expense-manager';
 import { useLanguage } from '@/context/language-context';
 import { fetchAndStashPrintContact } from '@/features/invoice/utils/invoice-print-contact-bridge';
 
@@ -29,7 +31,7 @@ export default function AccountingPage() {
     ? 'customers' 
     : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId 
     ? 'suppliers'
-    : searchParams?.tab && ['dashboard', 'expenses', 'customers', 'suppliers', 'wallet'].includes(searchParams.tab)
+    : searchParams?.tab && ['dashboard', 'expenses', 'recurring', 'customers', 'suppliers', 'wallet'].includes(searchParams.tab)
     ? searchParams.tab
     : 'dashboard';
 
@@ -103,6 +105,10 @@ export default function AccountingPage() {
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">{t('Suppliers')}</span>
           </TabsTrigger>
+          <TabsTrigger value="recurring" className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('Recurring')}</span>
+          </TabsTrigger>
           <TabsTrigger value="wallet" className="flex items-center gap-2">
             <Wallet className="h-4 w-4" />
             <span className="hidden sm:inline">{t('My Account')}</span>
@@ -127,6 +133,11 @@ export default function AccountingPage() {
         {/* Supplier Ledger Tab */}
         <TabsContent value="suppliers">
           <SupplierLedger initialSupplier={initialSupplier} initialLedgerEntry={initialLedgerEntry} />
+        </TabsContent>
+
+        {/* Recurring Expenses Tab */}
+        <TabsContent value="recurring">
+          <RecurringExpenseManager />
         </TabsContent>
 
         {/* Personal Wallet Tab */}
