@@ -528,6 +528,9 @@ export interface AgentBillRecord {
   overdueAmount: number
   profit: number
   totalAmount: number
+  isPaid: boolean
+  paidDate?: string | null
+  overdueCharged: boolean
   createdAt: string
 }
 
@@ -1088,17 +1091,24 @@ export const mobileShopApi = createApi({
     }),
 
     // ─── Agent Bills (bilalmulazim7086@gmail.com) ─────────────────────────────
-    getAgentBills: builder.query<PaginatedResult<AgentBillRecord>, { page?: number; limit?: number } | void>({
+    getAgentBills: builder.query<PaginatedResult<AgentBillRecord>, { page?: number; limit?: number; search?: string; startDate?: string; endDate?: string } | void>({
       query: (params) => {
-        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 50) })
-        if ((params as any)?.page) p.set('page', String((params as any).page))
-        return `/agent-bills?${p.toString()}`
+        const p: Record<string, string> = { limit: String((params as any)?.limit ?? 20) }
+        if ((params as any)?.page) p.page = String((params as any).page)
+        if ((params as any)?.search) p.search = (params as any).search
+        if ((params as any)?.startDate) p.startDate = (params as any).startDate
+        if ((params as any)?.endDate) p.endDate = (params as any).endDate
+        return { url: '/agent-bills', params: p }
       },
       providesTags: ['AgentBills'],
     }),
     createAgentBillsBatch: builder.mutation<AgentBillRecord[], CreateAgentBillsBatchInput>({
       query: (body) => ({ url: '/agent-bills/batch', method: 'POST', body }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
+    }),
+    updateAgentBill: builder.mutation<AgentBillRecord, { id: string } & Partial<AgentBillRecord>>({
+      query: ({ id, ...body }) => ({ url: `/agent-bills/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['AgentBills'],
     }),
     deleteAgentBill: builder.mutation<void, string>({
       query: (id) => ({ url: `/agent-bills/${id}`, method: 'DELETE' }),
@@ -1188,5 +1198,6 @@ export const {
   // Agent Bills
   useGetAgentBillsQuery,
   useCreateAgentBillsBatchMutation,
+  useUpdateAgentBillMutation,
   useDeleteAgentBillMutation,
 } = mobileShopApi

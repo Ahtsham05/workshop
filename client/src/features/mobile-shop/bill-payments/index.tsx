@@ -46,11 +46,13 @@ import {
   Plus,
   Loader2,
   AlertCircle,
+  CheckCircle,
+  Pencil,
+  Search,
   Clock,
   TrendingUp,
   Banknote,
   FileText,
-  Search,
   CheckCircle2,
   CalendarDays,
   Calendar,
@@ -70,6 +72,7 @@ import {
   useGetBillDueSummaryQuery,
   useGetWalletsQuery,
   useGetAgentBillsQuery,
+  useUpdateAgentBillMutation,
   useDeleteAgentBillMutation,
   BILL_TYPES,
   type BillPaymentRecord,
@@ -700,12 +703,24 @@ export default function BillPaymentsPage() {
 
   // Agent Bill Records (bilalmulazim7086@gmail.com only)
   const [agentBillPage, setAgentBillPage] = useState(1)
+  const [agentBillSearch, setAgentBillSearch] = useState('')
+  const [editingAgentBill, setEditingAgentBill] = useState<AgentBillRecord | null>(null)
   const agentBillLimit = 10
-  const { data: agentBillData, isLoading: agentBillsLoading } = useGetAgentBillsQuery(
-    isAgentUser ? { page: agentBillPage, limit: agentBillLimit } : undefined,
-    { skip: !isAgentUser },
-  )
+  const agentBillQueryParams = isAgentUser
+    ? {
+        page: agentBillPage,
+        limit: agentBillLimit,
+        ...(agentBillSearch ? { search: agentBillSearch } : {}),
+        ...(dueStartDate ? { startDate: dueStartDate } : {}),
+        ...(dueEndDate ? { endDate: dueEndDate } : {}),
+      }
+    : undefined
+  const { data: agentBillData, isLoading: agentBillsLoading } = useGetAgentBillsQuery(agentBillQueryParams, {
+    skip: !isAgentUser,
+  })
+  const [updateAgentBill] = useUpdateAgentBillMutation()
   const [deleteAgentBill, { isLoading: isDeletingAgentBill }] = useDeleteAgentBillMutation()
+  const [payingBillIds, setPayingBillIds] = useState<Set<string>>(new Set())
   const agentBills = agentBillData?.results ?? []
   const agentBillTotalPages = agentBillData?.totalPages ?? 1
 
@@ -1144,8 +1159,19 @@ export default function BillPaymentsPage() {
             {/* ── Agent Bill Records (bilalmulazim7086@gmail.com only) ── */}
             {isAgentUser && (
               <Card>
-                <CardHeader>
-                  <CardTitle className='text-base'>Agent Bill Records</CardTitle>
+                <CardHeader className='pb-2'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <CardTitle className='text-base'>Agent Bill Records</CardTitle>
+                    <div className='relative w-72'>
+                      <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+                      <input
+                        className='h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-ring'
+                        placeholder='Search name, ref #, mobile...'
+                        value={agentBillSearch}
+                        onChange={(e) => { setAgentBillSearch(e.target.value); setAgentBillPage(1) }}
+                      />
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className='p-0'>
                   {agentBillsLoading ? (
@@ -1169,12 +1195,13 @@ export default function BillPaymentsPage() {
                           <TableHead className='text-right'>Overdue</TableHead>
                           <TableHead className='text-right'>Profit</TableHead>
                           <TableHead className='text-right'>Total</TableHead>
+                          <TableHead>Status</TableHead>
                           <TableHead className='text-right'>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {agentBills.map((bill: AgentBillRecord, idx: number) => (
-                          <TableRow key={bill.id}>
+                          <TableRow key={bill.id} className={bill.isPaid ? 'opacity-60' : ''}>
                             <TableCell className='text-muted-foreground text-xs'>
                               {(agentBillPage - 1) * agentBillLimit + idx + 1}
                             </TableCell>
@@ -1198,15 +1225,115 @@ export default function BillPaymentsPage() {
                               {bill.previousBillAmount > 0 ? `Rs. ${bill.previousBillAmount.toLocaleString('en-PK')}` : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
-                              {bill.overdueAmount > 0 ? `Rs. ${bill.overdueAmount.toLocaleString('en-PK')}` : '—'}
+                              {bill.overdueAmount > 0 ? (
+                                <span className={bill.overdueCharged ? 'text-red-600' : 'text-orange-500'}>
+                                  Rs. {bill.overdueAmount.toLocaleString('en-PK')}
+                                  {!bill.overdueCharged && (
+                                    <span className='ml-1 text-xs text-muted-foreground'>(pending)</span>
+                                  )}
+                                </span>
+                              ) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
                               {bill.profit > 0 ? `Rs. ${bill.profit.toLocaleString('en-PK')}` : '—'}
                             </TableCell>
                             <TableCell className='text-right font-semibold text-sm'>
-                              Rs. {bill.totalAmount.toLocaleString('en-PK')}
+                              {(() => {
+                                const base = bill.currentBillAmount + bill.previousBillAmount
+                                const isOverdue = bill.overdueAmount > 0
+                                const duePassed = bill.dueDate ? new Date(bill.dueDate) < new Date() : false
+                                if (!isOverdue) return <span>Rs. {base.toLocaleString('en-PK')}</span>
+                                if (bill.overdueCharged) {
+                                  return (
+                                    <div>
+                                      <div>Rs. {bill.totalAmount.toLocaleString('en-PK')}</div>
+                                      <div className='text-xs text-red-600 font-normal'>overdue charged</div>
+                                    </div>
+                                  )
+                                }
+                                if (duePassed) {
+                                  return (
+                                    <div>
+                                      <div className='text-red-700'>Rs. {bill.totalAmount.toLocaleString('en-PK')}</div>
+                                      <div className='text-xs text-red-600 font-normal'>⚠️ pay now (incl. overdue)</div>
+                                    </div>
+                                  )
+                                }
+                                return (
+                                  <div>
+                                    <div>Rs. {base.toLocaleString('en-PK')}</div>
+                                    <div className='text-xs text-orange-500 font-normal'>
+                                      after due: Rs. {bill.totalAmount.toLocaleString('en-PK')}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const duePassed = bill.dueDate ? new Date(bill.dueDate) < new Date() : false
+                                const overdueWarning = bill.overdueAmount > 0 && duePassed && !bill.overdueCharged
+                                if (bill.isPaid) {
+                                  return (
+                                    <span className='inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full'>
+                                      <CheckCircle className='h-3 w-3' /> Paid
+                                    </span>
+                                  )
+                                }
+                                if (overdueWarning) {
+                                  return (
+                                    <span className='inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full'>
+                                      ⚠️ Overdue
+                                    </span>
+                                  )
+                                }
+                                return (
+                                  <span className='inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full'>
+                                    Pending
+                                  </span>
+                                )
+                              })()}
                             </TableCell>
                             <TableCell className='text-right'>
+                              {/* Pay / Unpay toggle */}
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                title={bill.isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
+                                disabled={payingBillIds.has(bill.id)}
+                                onClick={async () => {
+                                  if (payingBillIds.has(bill.id)) return
+                                  setPayingBillIds(prev => new Set([...prev, bill.id]))
+                                  try {
+                                    await updateAgentBill({
+                                      id: bill.id,
+                                      isPaid: !bill.isPaid,
+                                      paidDate: !bill.isPaid ? new Date().toISOString() : null,
+                                    }).unwrap()
+                                  } finally {
+                                    setPayingBillIds(prev => {
+                                      const next = new Set(prev)
+                                      next.delete(bill.id)
+                                      return next
+                                    })
+                                  }
+                                }}
+                              >
+                                {payingBillIds.has(bill.id)
+                                  ? <Loader2 className='h-4 w-4 animate-spin' />
+                                  : <CheckCircle className={`h-4 w-4 ${bill.isPaid ? 'text-green-600' : 'text-muted-foreground'}`} />
+                                }
+                              </Button>
+                              {/* Edit */}
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                title='Edit'
+                                onClick={() => setEditingAgentBill(bill)}
+                              >
+                                <Pencil className='h-4 w-4' />
+                              </Button>
+                              {/* Print */}
                               <Button
                                 size='icon'
                                 variant='ghost'
@@ -1215,6 +1342,7 @@ export default function BillPaymentsPage() {
                               >
                                 <Printer className='h-4 w-4' />
                               </Button>
+                              {/* Delete */}
                               <Button
                                 size='icon'
                                 variant='ghost'
@@ -1243,6 +1371,15 @@ export default function BillPaymentsPage() {
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Edit Agent Bill Dialog */}
+            {isAgentUser && editingAgentBill && (
+              <AgentBillDialog
+                open={!!editingAgentBill}
+                onOpenChange={(open) => { if (!open) setEditingAgentBill(null) }}
+                editBill={editingAgentBill}
+              />
             )}
             </div>
           )}

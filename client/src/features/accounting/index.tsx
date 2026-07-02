@@ -88,7 +88,7 @@ export default function AccountingPage() {
 
       {/* Main Content Tabs */}
       <Tabs value={manualTab || activeTab} onValueChange={setManualTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
+        <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
           <TabsTrigger value="dashboard" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">{t('Dashboard')}</span>

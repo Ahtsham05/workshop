@@ -176,24 +176,15 @@ export function generateAgentBillReceiptHTML(
   </div>
 
   <div class="totals">
-    ${
-      bill.currentBillAmount > 0
-        ? `<div class="total-row"><span>Current Bill:</span><span>${fmt(bill.currentBillAmount)}</span></div>`
-        : ''
-    }
-    ${
-      bill.previousBillAmount > 0
-        ? `<div class="total-row"><span>Previous Bill:</span><span>${fmt(bill.previousBillAmount)}</span></div>`
-        : ''
-    }
-    ${
-      bill.overdueAmount > 0
-        ? `<div class="total-row"><span>Overdue Amount:</span><span>${fmt(bill.overdueAmount)}</span></div>`
-        : ''
-    }
     <div class="grand-total">
-      <span>Total Amount:</span>
-      <span>${fmt(bill.totalAmount)}</span>
+      <span>Amount Paid:</span>
+      <span>${fmt(bill.currentBillAmount)}</span>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin:12px 0;">
+    <div style="display:inline-block;border:3px solid #16a34a;color:#16a34a;font-size:22px;font-weight:900;padding:4px 18px;border-radius:4px;letter-spacing:3px;transform:rotate(-5deg);opacity:0.85;">
+      PAID
     </div>
   </div>
 

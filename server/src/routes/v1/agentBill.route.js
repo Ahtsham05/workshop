@@ -9,6 +9,6 @@ router.use(auth(), branchScope());
 
 router.route('/batch').post(agentBillController.createAgentBillsBatch);
 router.route('/').get(agentBillController.getAgentBills);
-router.route('/:id').delete(agentBillController.deleteAgentBill);
+router.route('/:id').patch(agentBillController.updateAgentBill).delete(agentBillController.deleteAgentBill);
 
 module.exports = router;

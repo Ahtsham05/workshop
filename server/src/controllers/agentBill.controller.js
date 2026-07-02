@@ -16,9 +16,14 @@ const createAgentBillsBatch = catchAsync(async (req, res) => {
 const getAgentBills = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate']);
   const result = await agentBillService.getAgentBills(filter, options);
   res.send(result);
+});
+
+const updateAgentBill = catchAsync(async (req, res) => {
+  const bill = await agentBillService.updateAgentBillById(req.params.id, req.body);
+  res.send(bill);
 });
 
 const deleteAgentBill = catchAsync(async (req, res) => {
@@ -26,4 +31,4 @@ const deleteAgentBill = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
-module.exports = { createAgentBillsBatch, getAgentBills, deleteAgentBill };
+module.exports = { createAgentBillsBatch, getAgentBills, updateAgentBill, deleteAgentBill };

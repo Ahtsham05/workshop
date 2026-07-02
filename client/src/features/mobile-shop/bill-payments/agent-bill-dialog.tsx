@@ -34,6 +34,7 @@ import {
   useGetWalletsQuery,
   useGetUtilityCompaniesQuery,
   useCreateAgentBillsBatchMutation,
+  useUpdateAgentBillMutation,
   type AgentBillRecord,
 } from '@/stores/mobile-shop.api'
 import {
@@ -75,9 +76,10 @@ const rowTotal = (r: BillRow) =>
 interface AgentBillDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  editBill?: AgentBillRecord | null
 }
 
-export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
+export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialogProps) {
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery()
@@ -97,12 +99,27 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
   const companies = (companiesData as any)?.results ?? companiesData ?? []
 
   const [createBatch, { isLoading: saving }] = useCreateAgentBillsBatchMutation()
+  const [updateBill, { isLoading: updating }] = useUpdateAgentBillMutation()
 
-  const [companyId, setCompanyId] = useState('')
-  const [companyName, setCompanyName] = useState('')
-  const [dueDate, setDueDate] = useState(getBusinessToday())
-  const [paymentMethodOption, setPaymentMethodOption] = useState('cash')
-  const [rows, setRows] = useState<BillRow[]>([emptyRow()])
+  const isEditMode = !!editBill
+
+  const [companyId, setCompanyId] = useState(() => editBill?.companyId ?? '')
+  const [companyName, setCompanyName] = useState(() => editBill?.companyName ?? '')
+  const [dueDate, setDueDate] = useState(() => editBill?.dueDate?.slice(0, 10) ?? getBusinessToday())
+  const [paymentMethodOption, setPaymentMethodOption] = useState(() => editBill?.paymentMethod ?? 'cash')
+  const [rows, setRows] = useState<BillRow[]>(() =>
+    editBill
+      ? [{
+          customerName: editBill.customerName,
+          referenceNumber: editBill.referenceNumber,
+          mobileNo: editBill.mobileNo ?? '',
+          currentBillAmount: String(editBill.currentBillAmount),
+          previousBillAmount: String(editBill.previousBillAmount),
+          overdueAmount: String(editBill.overdueAmount),
+          profit: String(editBill.profit),
+        }]
+      : [emptyRow()]
+  )
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const setRef = (i: number, f: string) => (el: HTMLInputElement | null) => {
@@ -208,8 +225,10 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
     }
 
     try {
-      const saved = await createBatch({
-        bills: validRows.map((r) => ({
+      if (isEditMode && editBill) {
+        const r = validRows[0]
+        const updated = await updateBill({
+          id: editBill.id,
           customerName: r.customerName.trim(),
           referenceNumber: r.referenceNumber.trim(),
           mobileNo: r.mobileNo.trim() || undefined,
@@ -217,28 +236,57 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
           previousBillAmount: parseNum(r.previousBillAmount),
           overdueAmount: parseNum(r.overdueAmount),
           profit: parseNum(r.profit),
-        })),
-        companyId: companyId || undefined,
-        companyName: companyName || undefined,
-        dueDate: new Date(dueDate).toISOString(),
-        paymentMethod: resolvedPaymentMethod,
-        walletType: resolvedWalletType,
-      }).unwrap()
+          totalAmount: parseNum(r.currentBillAmount) + parseNum(r.previousBillAmount) + parseNum(r.overdueAmount),
+          companyId: companyId || undefined,
+          companyName: companyName || undefined,
+          dueDate: new Date(dueDate).toISOString(),
+          paymentMethod: resolvedPaymentMethod,
+          walletType: resolvedWalletType,
+        }).unwrap()
+        toast.success('Bill updated')
+        openAgentBillPrintWindow(updated, {
+          orgName: orgData?.name,
+          branchDetails: {
+            name: branchData?.name,
+            address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+            phone: branchData?.phone,
+            email: branchData?.email,
+          },
+        })
+        onOpenChange(false)
+      } else {
+        const saved = await createBatch({
+          bills: validRows.map((r) => ({
+            customerName: r.customerName.trim(),
+            referenceNumber: r.referenceNumber.trim(),
+            mobileNo: r.mobileNo.trim() || undefined,
+            currentBillAmount: parseNum(r.currentBillAmount),
+            previousBillAmount: parseNum(r.previousBillAmount),
+            overdueAmount: parseNum(r.overdueAmount),
+            profit: parseNum(r.profit),
+          })),
+          companyId: companyId || undefined,
+          companyName: companyName || undefined,
+          dueDate: new Date(dueDate).toISOString(),
+          paymentMethod: resolvedPaymentMethod,
+          walletType: resolvedWalletType,
+        }).unwrap()
 
-      toast.success(`${saved.length} bill(s) saved`)
+        toast.success(`${saved.length} bill(s) saved`)
 
-      openAgentBillsBatchPrint(saved, {
-        orgName: orgData?.name,
-        branchDetails: {
-          name: branchData?.name,
-          address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
-          phone: branchData?.phone,
-          email: branchData?.email,
-        },
-      })
+        openAgentBillsBatchPrint(saved, {
+          orgName: orgData?.name,
+          branchDetails: {
+            name: branchData?.name,
+            address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+            phone: branchData?.phone,
+            email: branchData?.email,
+          },
+        })
 
-      reset()
-      onOpenChange(false)
+        reset()
+        onOpenChange(false)
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || 'Failed to save bills')
     }
@@ -250,9 +298,9 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[95vh] overflow-y-auto sm:max-w-[1150px]'>
+      <DialogContent className='max-h-[95vh] overflow-y-auto sm:max-w-[1350px]'>
         <DialogHeader>
-          <DialogTitle>Agent Bill Collection</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Agent Bill' : 'Agent Bill Collection'}</DialogTitle>
         </DialogHeader>
 
         <div className='space-y-4'>
@@ -326,9 +374,9 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
               <TableHeader>
                 <TableRow className='bg-muted/50'>
                   <TableHead className='w-8 text-center'>#</TableHead>
-                  <TableHead className='min-w-[130px]'>Customer Name *</TableHead>
-                  <TableHead className='min-w-[110px]'>Reference #</TableHead>
-                  <TableHead className='min-w-[110px]'>Mobile No</TableHead>
+                  <TableHead className='min-w-[170px]'>Customer Name *</TableHead>
+                  <TableHead className='min-w-[145px]'>Reference #</TableHead>
+                  <TableHead className='min-w-[135px]'>Mobile No</TableHead>
                   <TableHead className='min-w-[110px] text-right'>Current Bill (Rs.)</TableHead>
                   <TableHead className='min-w-[110px] text-right'>Previous Bill (Rs.)</TableHead>
                   <TableHead className='min-w-[100px] text-right'>Overdue (Rs.)</TableHead>
@@ -458,10 +506,12 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
             </Table>
           </div>
 
-          <Button variant='outline' size='sm' onClick={addRow} className='gap-1'>
-            <Plus className='h-3.5 w-3.5' />
-            Add Bill
-          </Button>
+          {!isEditMode && (
+            <Button variant='outline' size='sm' onClick={addRow} className='gap-1'>
+              <Plus className='h-3.5 w-3.5' />
+              Add Bill
+            </Button>
+          )}
 
           {/* ── Summary ── */}
           <div className='rounded-md border bg-muted/30 p-4 space-y-1 text-sm'>
@@ -502,7 +552,7 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : `Save ${validCount || 0} Bill(s) & Print`}
+            {(saving || updating) ? 'Saving...' : isEditMode ? 'Update Bill & Print' : `Save ${validCount || 0} Bill(s) & Print`}
           </Button>
         </DialogFooter>
       </DialogContent>
