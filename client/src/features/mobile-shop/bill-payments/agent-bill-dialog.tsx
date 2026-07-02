@@ -40,7 +40,6 @@ import {
   buildMergedPaymentOptions,
   getWalletTypeFromOptionValue,
   isWalletOptionValue,
-  toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
 import { openAgentBillsBatchPrint, openAgentBillPrintWindow } from './agent-bill-receipt-utils'
 import { getBusinessToday } from '@/lib/business-timezone'
@@ -171,7 +170,7 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
         orgName: orgData?.name,
         branchDetails: {
           name: branchData?.name,
-          address: branchData?.address,
+          address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
           phone: branchData?.phone,
           email: branchData?.email,
         },
@@ -232,7 +231,7 @@ export function AgentBillDialog({ open, onOpenChange }: AgentBillDialogProps) {
         orgName: orgData?.name,
         branchDetails: {
           name: branchData?.name,
-          address: branchData?.address,
+          address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
           phone: branchData?.phone,
           email: branchData?.email,
         },
