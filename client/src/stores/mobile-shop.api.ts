@@ -513,10 +513,45 @@ export interface CreateSimSaleInput {
   notes?: string
 }
 
+export interface AgentBillRecord {
+  id: string
+  companyId?: string
+  companyName?: string
+  dueDate?: string
+  paymentMethod?: 'cash' | 'bank' | 'wallet'
+  walletType?: string
+  customerName: string
+  referenceNumber: string
+  mobileNo?: string
+  currentBillAmount: number
+  previousBillAmount: number
+  overdueAmount: number
+  profit: number
+  totalAmount: number
+  createdAt: string
+}
+
+export interface CreateAgentBillsBatchInput {
+  bills: {
+    customerName: string
+    referenceNumber: string
+    mobileNo?: string
+    currentBillAmount: number
+    previousBillAmount: number
+    overdueAmount: number
+    profit: number
+  }[]
+  companyId?: string
+  companyName?: string
+  dueDate: string
+  paymentMethod: 'cash' | 'bank' | 'wallet'
+  walletType?: string
+}
+
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer', 'AgentBills'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -1051,6 +1086,24 @@ export const mobileShopApi = createApi({
       query: (id) => ({ url: `/sim-sales/${id}`, method: 'DELETE' }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
+
+    // ─── Agent Bills (bilalmulazim7086@gmail.com) ─────────────────────────────
+    getAgentBills: builder.query<PaginatedResult<AgentBillRecord>, { page?: number; limit?: number } | void>({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 50) })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        return `/agent-bills?${p.toString()}`
+      },
+      providesTags: ['AgentBills'],
+    }),
+    createAgentBillsBatch: builder.mutation<AgentBillRecord[], CreateAgentBillsBatchInput>({
+      query: (body) => ({ url: '/agent-bills/batch', method: 'POST', body }),
+      invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
+    }),
+    deleteAgentBill: builder.mutation<void, string>({
+      query: (id) => ({ url: `/agent-bills/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
+    }),
   }),
 })
 
@@ -1132,4 +1185,8 @@ export const {
   useCreateSimSaleMutation,
   useUpdateSimSaleMutation,
   useDeleteSimSaleMutation,
+  // Agent Bills
+  useGetAgentBillsQuery,
+  useCreateAgentBillsBatchMutation,
+  useDeleteAgentBillMutation,
 } = mobileShopApi

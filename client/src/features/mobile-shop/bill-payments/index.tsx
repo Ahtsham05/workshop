@@ -44,6 +44,7 @@ import {
   Printer,
   Trash2,
   Plus,
+  Loader2,
   AlertCircle,
   Clock,
   TrendingUp,
@@ -68,8 +69,11 @@ import {
   useGetBillPaymentReceiptQuery,
   useGetBillDueSummaryQuery,
   useGetWalletsQuery,
+  useGetAgentBillsQuery,
+  useDeleteAgentBillMutation,
   BILL_TYPES,
   type BillPaymentRecord,
+  type AgentBillRecord,
   // type CreateBillPaymentInput,
   type CreateBillPaymentsBatchInput,
 } from '@/stores/mobile-shop.api'
@@ -80,8 +84,10 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
 import { openBillReceiptPrintWindow } from './bill-receipt-utils'
+import { openAgentBillPrintWindow } from './agent-bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
 import { formatBusinessDate, getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
+import { AgentBillDialog } from './agent-bill-dialog'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -604,12 +610,32 @@ function PrintReceiptButton({ billId }: { billId: string }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+const AGENT_BILL_EMAIL = 'bilalmulazim7086@gmail.com'
+
 export default function BillPaymentsPage() {
   const routeSearch = useSearch({ from: '/_authenticated/mobile-shop/bill-payments' })
   const initialFilters = getInitialBillListFilters(routeSearch.filter)
 
+  const currentUser = useSelector((state: RootState) => state.auth.data?.user)
+  const isAgentUser = currentUser?.email === AGENT_BILL_EMAIL
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !currentUser?.organizationId })
+  const agentBillReceiptOptions = {
+    orgName: branchData?.name || orgData?.name,
+    branchDetails: {
+      name: branchData?.name,
+      address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', '),
+      phone: branchData?.phone,
+      email: branchData?.email,
+      invoiceNote: branchData?.invoiceNote,
+    },
+    logo: orgData?.logo?.url,
+  }
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('bills')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [agentBillOpen, setAgentBillOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<BillPaymentRecord | null>(null)
   const [markPaidTarget, setMarkPaidTarget] = useState<BillPaymentRecord | null>(null)
   const [page, setPage] = useState(1)
@@ -671,6 +697,17 @@ export default function BillPaymentsPage() {
 
   const bills = data?.results ?? []
   const totalPages = data?.totalPages ?? 1
+
+  // Agent Bill Records (bilalmulazim7086@gmail.com only)
+  const [agentBillPage, setAgentBillPage] = useState(1)
+  const agentBillLimit = 10
+  const { data: agentBillData, isLoading: agentBillsLoading } = useGetAgentBillsQuery(
+    isAgentUser ? { page: agentBillPage, limit: agentBillLimit } : undefined,
+    { skip: !isAgentUser },
+  )
+  const [deleteAgentBill, { isLoading: isDeletingAgentBill }] = useDeleteAgentBillMutation()
+  const agentBills = agentBillData?.results ?? []
+  const agentBillTotalPages = agentBillData?.totalPages ?? 1
 
   const svcCharge = parseFloat(form.serviceCharge || '0') || 0
   const billsTotal = form.bills.reduce((sum, b) => sum + (parseFloat(b.billAmount) || 0), 0)
@@ -927,10 +964,18 @@ export default function BillPaymentsPage() {
               <TabsTrigger value='companies'>Companies</TabsTrigger>
             </TabsList>
             {activeTab === 'bills' && (
-              <Button onClick={() => { setOutstandingByRow({}); setDialogOpen(true) }}>
-                <Plus className='mr-1 h-4 w-4' />
-                New Bill
-              </Button>
+              <div className='flex items-center gap-2'>
+                {isAgentUser && (
+                  <Button variant='outline' onClick={() => setAgentBillOpen(true)}>
+                    <Plus className='mr-1 h-4 w-4' />
+                    Agent Bill
+                  </Button>
+                )}
+                <Button onClick={() => { setOutstandingByRow({}); setDialogOpen(true) }}>
+                  <Plus className='mr-1 h-4 w-4' />
+                  New Bill
+                </Button>
+              </div>
             )}
           </div>
 
@@ -1095,6 +1140,110 @@ export default function BillPaymentsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* ── Agent Bill Records (bilalmulazim7086@gmail.com only) ── */}
+            {isAgentUser && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className='text-base'>Agent Bill Records</CardTitle>
+                </CardHeader>
+                <CardContent className='p-0'>
+                  {agentBillsLoading ? (
+                    <div className='flex justify-center py-8'>
+                      <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+                    </div>
+                  ) : agentBills.length === 0 ? (
+                    <div className='py-10 text-center text-sm text-muted-foreground'>No agent bills found.</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>#</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Ref #</TableHead>
+                          <TableHead>Mobile</TableHead>
+                          <TableHead>Company</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className='text-right'>Current Bill</TableHead>
+                          <TableHead className='text-right'>Previous Bill</TableHead>
+                          <TableHead className='text-right'>Overdue</TableHead>
+                          <TableHead className='text-right'>Profit</TableHead>
+                          <TableHead className='text-right'>Total</TableHead>
+                          <TableHead className='text-right'>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {agentBills.map((bill: AgentBillRecord, idx: number) => (
+                          <TableRow key={bill.id}>
+                            <TableCell className='text-muted-foreground text-xs'>
+                              {(agentBillPage - 1) * agentBillLimit + idx + 1}
+                            </TableCell>
+                            <TableCell className='font-medium'>{bill.customerName}</TableCell>
+                            <TableCell className='font-mono text-xs'>{bill.referenceNumber}</TableCell>
+                            <TableCell className='text-sm'>{bill.mobileNo || '—'}</TableCell>
+                            <TableCell className='text-sm'>{bill.companyName || '—'}</TableCell>
+                            <TableCell className='text-sm'>
+                              {bill.dueDate
+                                ? new Date(bill.dueDate).toLocaleDateString('en-PK', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {bill.currentBillAmount > 0 ? `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {bill.previousBillAmount > 0 ? `Rs. ${bill.previousBillAmount.toLocaleString('en-PK')}` : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {bill.overdueAmount > 0 ? `Rs. ${bill.overdueAmount.toLocaleString('en-PK')}` : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {bill.profit > 0 ? `Rs. ${bill.profit.toLocaleString('en-PK')}` : '—'}
+                            </TableCell>
+                            <TableCell className='text-right font-semibold text-sm'>
+                              Rs. {bill.totalAmount.toLocaleString('en-PK')}
+                            </TableCell>
+                            <TableCell className='text-right'>
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                title='Print receipt'
+                                onClick={() => openAgentBillPrintWindow(bill, agentBillReceiptOptions)}
+                              >
+                                <Printer className='h-4 w-4' />
+                              </Button>
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                title='Delete'
+                                disabled={isDeletingAgentBill}
+                                onClick={async () => {
+                                  if (!confirm(`Delete bill for ${bill.customerName}?`)) return
+                                  await deleteAgentBill(bill.id)
+                                }}
+                              >
+                                <Trash2 className='h-4 w-4 text-destructive' />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                  <div className='mt-4 px-4 pb-4'>
+                    <SimplePagination
+                      currentPage={agentBillPage}
+                      totalPages={agentBillTotalPages}
+                      limit={agentBillLimit}
+                      onPageChange={setAgentBillPage}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             </div>
           )}
 
@@ -1102,6 +1251,11 @@ export default function BillPaymentsPage() {
           {activeTab === 'companies' && <UtilityCompanyManager />}
         </Tabs>
       </div>
+
+      {/* ── Agent Bill Dialog (bilalmulazim7086@gmail.com only) ── */}
+      {isAgentUser && (
+        <AgentBillDialog open={agentBillOpen} onOpenChange={setAgentBillOpen} />
+      )}
 
       {/* ── Mark as Paid Dialog ── */}
       <MarkPaidDialog bill={markPaidTarget} onClose={() => setMarkPaidTarget(null)} />

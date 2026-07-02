@@ -56,6 +56,7 @@ module.exports.InventoryTransaction = require('./inventoryTransaction.model');
 // Utility Bill Models
 module.exports.UtilityCompany = require('./utilityCompany.model');
 module.exports.BillPayment = require('./billPayment.model');
+module.exports.AgentBill = require('./agentBill.model');
 
 // School Accounting Models
 module.exports.FeeCategory = require('./feeCategory.model');

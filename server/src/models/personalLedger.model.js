@@ -65,6 +65,14 @@ const personalLedgerSchema = new mongoose.Schema({
   notes: {
     type: String,
   },
+  referenceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true,
+  },
+  referenceModel: {
+    type: String,
+    trim: true,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

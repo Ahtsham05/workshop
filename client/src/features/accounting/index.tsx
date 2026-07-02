@@ -105,7 +105,7 @@ export default function AccountingPage() {
           </TabsTrigger>
           <TabsTrigger value="wallet" className="flex items-center gap-2">
             <Wallet className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('My Wallet')}</span>
+            <span className="hidden sm:inline">{t('My Account')}</span>
           </TabsTrigger>
         </TabsList>
 
