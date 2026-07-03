@@ -106,7 +106,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
   const [companyId, setCompanyId] = useState(() => editBill?.companyId ?? '')
   const [companyName, setCompanyName] = useState(() => editBill?.companyName ?? '')
   const [dueDate, setDueDate] = useState(() => editBill?.dueDate?.slice(0, 10) ?? getBusinessToday())
-  const [paymentMethodOption, setPaymentMethodOption] = useState(() => editBill?.paymentMethod ?? 'cash')
+  const [paymentMethodOption, setPaymentMethodOption] = useState<string>(() => editBill?.paymentMethod ?? 'cash')
   const [rows, setRows] = useState<BillRow[]>(() =>
     editBill
       ? [{
@@ -181,6 +181,8 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         overdueAmount: parseNum(row.overdueAmount),
         profit: parseNum(row.profit),
         totalAmount: rowTotal(row),
+        isPaid: false,
+        overdueCharged: false,
         createdAt: new Date().toISOString(),
       }
       openAgentBillPrintWindow(pseudo, {
