@@ -4,8 +4,6 @@ const ApiError = require('../utils/ApiError');
 const {
   parseBusinessDateTime,
   toBusinessCalendarDate,
-  startOfBusinessDay,
-  endOfBusinessDay,
   applyBusinessDateRange,
 } = require('../utils/businessTimezone');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
@@ -175,16 +173,30 @@ const buildInvoiceNumber = async (scope, date) => {
   const d = parseBusinessDateTime(date) || new Date();
   const calendar = toBusinessCalendarDate(d);
   const [yyyy, mm, dd] = calendar.split('-');
-  const startOfDay = startOfBusinessDay(calendar);
-  const endOfDay = endOfBusinessDay(calendar);
+  const prefix = `SVC-${yyyy}${mm}${dd}-`;
 
-  const count = await ServiceInvoice.countDocuments({
+  // Derive the next sequence from existing invoiceNumber strings for this day's
+  // prefix rather than counting by the `date` field range: a record whose `date`
+  // doesn't fall in this calendar day (e.g. legacy/edited data) would otherwise
+  // be invisible to the count, letting the generator hand out an already-used
+  // number and hit E11000 on every retry.
+  const existing = await ServiceInvoice.find({
     organizationId: scope.organizationId,
     branchId: scope.branchId,
-    date: { $gte: startOfDay, $lte: endOfDay },
+    invoiceNumber: { $regex: `^${prefix}\\d+$` },
+  })
+    .select('invoiceNumber')
+    .lean();
+
+  let maxSeq = 0;
+  existing.forEach((inv) => {
+    const seq = parseInt(inv.invoiceNumber.slice(prefix.length), 10);
+    if (Number.isFinite(seq)) {
+      maxSeq = Math.max(maxSeq, seq);
+    }
   });
 
-  return `SVC-${yyyy}${mm}${dd}-${String(count + 1).padStart(3, '0')}`;
+  return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`;
 };
 
 const createServiceInvoice = async (invoiceBody) => {
@@ -225,32 +237,47 @@ const createServiceInvoice = async (invoiceBody) => {
   });
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const invoiceNumber = await buildInvoiceNumber(normalizedBody, normalizedBody.date);
   const linkedCustomer = await resolveLinkedCustomer({
     customerId: normalizedBody.customerId,
     organizationId: normalizedBody.organizationId,
     branchId: normalizedBody.branchId,
   });
 
-  const invoice = await ServiceInvoice.create({
-    organizationId: normalizedBody.organizationId,
-    branchId: normalizedBody.branchId,
-    invoiceNumber,
-    customerId: linkedCustomer ? linkedCustomer._id : undefined,
-    customerName: normalizedBody.customerName || (linkedCustomer ? linkedCustomer.name : '') || '',
-    customerPhone:
-      normalizedBody.customerPhone ||
-      (linkedCustomer ? linkedCustomer.phone || linkedCustomer.mobile || '' : '') ||
-      '',
-    items,
-    subtotal,
-    totalAmount: subtotal,
-    paymentMethod: normalizedBody.paymentMethod || 'cash',
-    date: normalizedBody.date || new Date(),
-    notes: normalizedBody.notes || '',
-    createdBy: normalizedBody.createdBy,
-    updatedBy: normalizedBody.updatedBy,
-  });
+  // Save with retry for duplicate invoice number race condition (E11000),
+  // matching the pattern used in invoice.service.js / expense.service.js.
+  let invoice;
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
+    const invoiceNumber = await buildInvoiceNumber(normalizedBody, normalizedBody.date);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      invoice = await ServiceInvoice.create({
+        organizationId: normalizedBody.organizationId,
+        branchId: normalizedBody.branchId,
+        invoiceNumber,
+        customerId: linkedCustomer ? linkedCustomer._id : undefined,
+        customerName: normalizedBody.customerName || (linkedCustomer ? linkedCustomer.name : '') || '',
+        customerPhone:
+          normalizedBody.customerPhone ||
+          (linkedCustomer ? linkedCustomer.phone || linkedCustomer.mobile || '' : '') ||
+          '',
+        items,
+        subtotal,
+        totalAmount: subtotal,
+        paymentMethod: normalizedBody.paymentMethod || 'cash',
+        date: normalizedBody.date || new Date(),
+        notes: normalizedBody.notes || '',
+        createdBy: normalizedBody.createdBy,
+        updatedBy: normalizedBody.updatedBy,
+      });
+      break;
+    } catch (err) {
+      if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
 
   await syncServiceInvoiceRecords(invoice);
   return invoice;
