@@ -125,7 +125,7 @@ export default function ServicesPage({
   const { data: invoiceData } = useGetServiceInvoicesQuery(
     invoiceSearch.trim() ? { page: 1, limit: 1000 } : { page: invoicePage, limit: invoiceLimit },
   )
-  const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
 
   const customers = useMemo(
     () => (Array.isArray(customersData) ? customersData : EMPTY_CUSTOMERS),
@@ -135,10 +135,11 @@ export default function ServicesPage({
   const customerSelectOptions = useMemo(
     () =>
       customers
-        .map((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string }) => ({
+        .map((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string; isEmployeeAccount?: boolean }) => ({
           value: c.id || c._id || '',
           label: c.name || '',
           sublabel: c.phone || c.mobile || undefined,
+          badge: c.isEmployeeAccount ? 'Employee' : undefined,
         }))
         .filter((option) => option.value),
     [customers],

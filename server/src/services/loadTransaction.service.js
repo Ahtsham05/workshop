@@ -4,6 +4,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
+const employeeLedgerService = require('./employeeLedger.service');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 
 const ApiError = require('../utils/ApiError');
@@ -151,6 +152,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
   await customerLedgerService.deleteLedgerEntriesByReference(transaction._id);
 
   if (!transaction.customerId) {
+    await employeeLedgerService.deletePurchaseAdvanceForReference(transaction._id, 'LoadTransaction');
     return;
   }
 
@@ -159,6 +161,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
   const ledgerNotes =
     transaction.notes ||
     `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`;
+  const unpaid = Number(transaction.amount || 0) - Number(transaction.receivedAmount || 0);
 
   const ledgerEntries = buildCustomerSaleLedgerEntries({
     organizationId: transaction.organizationId,
@@ -174,12 +177,26 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     invoiceType: 'cash',
     paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
     notes: ledgerNotes,
-    balance: Number(transaction.amount || 0) - Number(transaction.receivedAmount || 0),
+    balance: unpaid,
   });
 
   for (const entry of ledgerEntries) {
     await customerLedgerService.createLedgerEntry(entry);
   }
+
+  await employeeLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: transaction.organizationId,
+    branchId: transaction.branchId,
+    customerId: transaction.customerId,
+    referenceId: transaction._id,
+    referenceModel: 'LoadTransaction',
+    reference,
+    description: saleDescription,
+    unpaidAmount: unpaid,
+    transactionDate: transaction.date,
+    createdBy: transaction.createdBy,
+    updatedBy: transaction.updatedBy,
+  });
 };
 
 const createLoadTransaction = async (transactionBody) => {
@@ -322,6 +339,7 @@ const deleteLoadTransaction = async (transactionId) => {
   await cashBookService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
   await walletEntryService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
   await customerLedgerService.deleteLedgerEntriesByReference(transaction._id);
+  await employeeLedgerService.deletePurchaseAdvanceForReference(transaction._id, 'LoadTransaction');
   if (transaction.paymentMethod === 'wallet' && transaction.paymentWalletType && Number(transaction.receivedAmount || 0) > 0) {
     await walletService.adjustWalletBalance({
       organizationId: transaction.organizationId,

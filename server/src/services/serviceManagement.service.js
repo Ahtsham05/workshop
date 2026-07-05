@@ -9,6 +9,7 @@ const {
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
+const employeeLedgerService = require('./employeeLedger.service');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -67,7 +68,10 @@ const syncServiceInvoiceCashEntry = async (invoice) => {
 const syncServiceInvoiceCustomerLedger = async (invoice) => {
   await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
 
-  if (!invoice.customerId) return;
+  if (!invoice.customerId) {
+    await employeeLedgerService.deletePurchaseAdvanceForReference(invoice._id, 'ServiceInvoice');
+    return;
+  }
 
   const serviceNames = (invoice.items || []).map((item) => item.serviceName).filter(Boolean);
   const description = `Service invoice ${invoice.invoiceNumber}${serviceNames.length ? ` (${serviceNames.join(', ')})` : ''}`;
@@ -91,6 +95,20 @@ const syncServiceInvoiceCustomerLedger = async (invoice) => {
   for (const entry of ledgerEntries) {
     await customerLedgerService.createLedgerEntry(entry);
   }
+
+  await employeeLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    customerId: invoice.customerId,
+    referenceId: invoice._id,
+    referenceModel: 'ServiceInvoice',
+    reference: invoice.invoiceNumber,
+    description,
+    unpaidAmount: invoice.totalAmount,
+    transactionDate: invoice.date,
+    createdBy: invoice.createdBy,
+    updatedBy: invoice.updatedBy,
+  });
 };
 
 const syncServiceInvoiceRecords = async (invoice) => {
@@ -395,6 +413,7 @@ const deleteServiceInvoiceById = async (invoiceId) => {
   const invoice = await getServiceInvoiceById(invoiceId);
   await cashBookService.deleteEntriesByReference(invoice._id, 'ServiceInvoice');
   await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
+  await employeeLedgerService.deletePurchaseAdvanceForReference(invoice._id, 'ServiceInvoice');
   await invoice.deleteOne();
   return invoice;
 };

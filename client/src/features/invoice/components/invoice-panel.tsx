@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase } from 'lucide-react'
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useLanguage } from '@/context/language-context'
@@ -857,7 +857,7 @@ export function InvoicePanel({
   const handleQuickCreated = useCallback(
     async (type: 'customer' | 'supplier' | 'product', entity: any) => {
       if (type === 'customer') {
-        const data = await dispatch(fetchCustomers({ page: 1, limit: 1000 })).unwrap()
+        const data = await dispatch(fetchCustomers({ page: 1, limit: 1000, includeEmployees: true })).unwrap()
         const list = data?.results || (Array.isArray(data) ? data : [])
         setCustomers?.(list)
         const customerId = entity._id || entity.id
@@ -1385,6 +1385,9 @@ export function InvoicePanel({
                                       <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate shrink-0')} title={selectedCustomer.name}>
                                         {selectedCustomer.name}
                                       </span>
+                                      {selectedCustomer.isEmployeeAccount ? (
+                                        <Briefcase className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('Employee')} />
+                                      ) : null}
                                       {urdu ? (
                                         <span dir="rtl" className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))} title={urdu}>
                                           {urdu}
@@ -1519,6 +1522,12 @@ export function InvoicePanel({
                                     <span className={getTextClasses(customer.name, 'truncate font-medium shrink-0')} title={customer.name}>
                                       {customer.name}
                                     </span>
+                                    {customer.isEmployeeAccount ? (
+                                      <Badge variant="outline" className="flex items-center gap-1 shrink-0 px-1.5 py-0 text-[10px] font-normal">
+                                        <Briefcase className="h-2.5 w-2.5" />
+                                        {t('Employee')}
+                                      </Badge>
+                                    ) : null}
                                     {customer.nameUrdu?.trim() ? (
                                       <span
                                         dir="rtl"

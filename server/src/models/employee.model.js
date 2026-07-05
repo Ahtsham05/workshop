@@ -153,6 +153,13 @@ const employeeSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Shadow Customer record so this employee can be billed through the
+    // normal Invoice screen (products/services sold "on account"). Hidden
+    // from the Customers list; see customer.model.js isEmployeeAccount.
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+    },
   },
   {
     timestamps: true,

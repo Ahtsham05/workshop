@@ -16,6 +16,9 @@ const createCustomer = catchAsync(async (req, res) => {
 const getCustomers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'email', 'phone']);
   applyBranchFilter(filter, req);
+  if (req.query.includeEmployees !== 'true' && req.query.includeEmployees !== true) {
+    filter.isEmployeeAccount = { $ne: true };
+  }
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await customerService.queryCustomers(filter, options);
   res.send(result);
@@ -42,7 +45,9 @@ const deleteCustomer = catchAsync(async (req, res) => {
 const getAllCustomers = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
-  const customers = await customerService.getAllCustomers(filter);
+  const customers = await customerService.getAllCustomers(filter, {
+    includeEmployees: req.query.includeEmployees === 'true',
+  });
   res.send(customers);
 })
 

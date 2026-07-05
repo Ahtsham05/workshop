@@ -116,7 +116,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: walletsData } = useGetWalletsQuery()
-  const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
   const { data: salesData, isLoading } = useGetSimSalesQuery(
     simSearch.trim() ? { page: 1, limit: 1000 } : { page, limit },
   )
@@ -452,6 +452,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       value: c.id || c._id,
                       label: c.name,
                       sublabel: c.phone || c.mobile || undefined,
+                      badge: c.isEmployeeAccount ? 'Employee' : undefined,
                     }))}
                     value={form.customerId}
                     onValueChange={v => handleChange('customerId', v)}

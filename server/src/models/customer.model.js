@@ -43,6 +43,19 @@ const CustomerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AccountHead',
   },
+  // Shadow customer record auto-provisioned for an Employee so staff can be
+  // billed through the normal Invoice flow. Hidden from the Customers list by
+  // default; unpaid purchases are mirrored into that employee's ledger.
+  isEmployeeAccount: {
+    type: Boolean,
+    default: false,
+  },
+  linkedEmployeeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    index: true,
+    sparse: true,
+  },
 }, {
   timestamps: true,
 });

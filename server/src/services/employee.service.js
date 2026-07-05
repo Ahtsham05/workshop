@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Employee, Payroll, EmployeeLedger, Attendance, Leave, PerformanceReview } = require('../models');
+const { Employee, Payroll, EmployeeLedger, Attendance, Leave, PerformanceReview, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const expenseCategoryService = require('./expenseCategory.service');
 const cashBookService = require('./cashBook.service');
@@ -87,6 +87,37 @@ const createEmployee = async (employeeBody) => {
     );
   }
 
+  await ensureEmployeeCustomerAccount(employee);
+
+  return employee;
+};
+
+/**
+ * Every employee gets a hidden "shadow" Customer record so the normal
+ * Invoice screen can sell products/services to them on account. It never
+ * appears in the Customers list (isEmployeeAccount) and unpaid balances are
+ * mirrored into this employee's ledger by employeeLedger.service.js.
+ * Idempotent — safe to call on employees created before this feature shipped.
+ * @param {Employee} employee
+ * @returns {Promise<Employee>}
+ */
+const ensureEmployeeCustomerAccount = async (employee) => {
+  if (employee.customerId) return employee;
+
+  const name = `${employee.firstName} ${employee.lastName}`.trim() || employee.employeeId;
+  const customer = await Customer.create({
+    organizationId: employee.organizationId,
+    branchId: employee.branchId,
+    createdBy: employee.createdBy,
+    name,
+    email: employee.email,
+    phone: employee.phone,
+    isEmployeeAccount: true,
+    linkedEmployeeId: employee._id,
+  });
+
+  employee.customerId = customer._id;
+  await employee.save();
   return employee;
 };
 
@@ -206,6 +237,14 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
     );
   }
 
+  await ensureEmployeeCustomerAccount(employee);
+  if (employee.customerId) {
+    await Customer.updateOne(
+      { _id: employee.customerId },
+      { name: newName || employee.employeeId, email: employee.email, phone: employee.phone },
+    );
+  }
+
   return employee;
 };
 
@@ -269,4 +308,5 @@ module.exports = {
   deleteEmployeeById,
   getEmployeesByDepartment,
   getActiveEmployeesCount,
+  ensureEmployeeCustomerAccount,
 };

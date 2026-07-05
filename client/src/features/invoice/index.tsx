@@ -531,10 +531,12 @@ export default function InvoicePage() {
         toast.error('Failed to fetch products')
       })
 
-    // Fetch customers
+    // Fetch customers (including employees' shadow accounts, so staff can be
+    // billed like a customer through this same search box)
     const fetchCustomersPromise = dispatch(fetchCustomers({
       page: 1,
-      limit: 1000
+      limit: 1000,
+      includeEmployees: true
     }))
       .then((data) => {
         console.log('Customers response:', data)

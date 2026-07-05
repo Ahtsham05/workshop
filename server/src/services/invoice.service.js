@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const customerLedgerService = require('./customerLedger.service');
+const employeeLedgerService = require('./employeeLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
@@ -422,6 +423,14 @@ const createInvoice = async (invoiceBody, userId) => {
       console.error('Failed to create customer ledger entry:', error);
       // Don't fail the invoice creation if ledger entry fails
     }
+  }
+
+  // If this was sold to an employee's shadow customer account, mirror the
+  // unpaid balance into their salary ledger.
+  try {
+    await employeeLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync employee ledger for invoice:', error);
   }
 
   // Update product stock quantities (quotations do not affect stock until converted).
@@ -978,7 +987,14 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       // Don't fail the invoice update if ledger update fails
     }
   }
-  
+
+  // Keep the employee ledger mirror (if any) in sync with the latest balance.
+  try {
+    await employeeLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync employee ledger for invoice:', error);
+  }
+
   // Return populated invoice with customerName
   return getInvoiceById(invoiceId);
 };
@@ -1042,6 +1058,12 @@ const deleteInvoiceById = async (invoiceId) => {
       console.error('Failed to delete customer ledger entries:', error);
       // Don't fail the invoice deletion if ledger deletion fails
     }
+  }
+
+  try {
+    await employeeLedgerService.deletePurchaseAdvanceForInvoice(invoice._id);
+  } catch (error) {
+    console.error('Failed to delete employee ledger entry for invoice:', error);
   }
 
   await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
@@ -1251,6 +1273,12 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
     } catch (error) {
       console.error('Failed to create customer ledger entry on quotation conversion:', error);
     }
+  }
+
+  try {
+    await employeeLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync employee ledger on quotation conversion:', error);
   }
 
   return getInvoiceById(invoice._id);

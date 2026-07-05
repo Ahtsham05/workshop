@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Command,
   CommandEmpty,
@@ -16,6 +17,8 @@ export type SearchableSelectOption = {
   value: string
   label: string
   sublabel?: string
+  /** Optional small tag rendered next to the label (e.g. "Employee") */
+  badge?: string
 }
 
 type SearchableSelectProps = {
@@ -78,7 +81,14 @@ export function SearchableSelect({
           onKeyDownCapture={handleTriggerKeyDownCapture}
           className={cn('w-full justify-between font-normal', !selected && 'text-muted-foreground', className)}
         >
-          <span className='truncate'>{selected ? selected.label : placeholder}</span>
+          <span className='flex min-w-0 flex-1 items-center gap-2'>
+            <span className='truncate'>{selected ? selected.label : placeholder}</span>
+            {selected?.badge && (
+              <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[10px] font-normal'>
+                {selected.badge}
+              </Badge>
+            )}
+          </span>
           <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
         </Button>
       </PopoverTrigger>
@@ -116,6 +126,11 @@ export function SearchableSelect({
                 >
                   <Check className={cn('mr-2 h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />
                   <span className='flex-1 truncate'>{option.label}</span>
+                  {option.badge && (
+                    <Badge variant='outline' className='ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal'>
+                      {option.badge}
+                    </Badge>
+                  )}
                   {option.sublabel && (
                     <span className='ml-2 text-xs text-muted-foreground truncate'>{option.sublabel}</span>
                   )}

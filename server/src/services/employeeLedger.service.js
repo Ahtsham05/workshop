@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { EmployeeLedger, Employee } = require('../models');
+const { EmployeeLedger, Employee, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const expenseService = require('./expense.service');
@@ -10,6 +10,10 @@ const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
 
 const shouldSyncCashBook = (entry) => {
   if (!entry) return false;
+  // Goods/services sold to an employee on account never had cash leave the
+  // register at the time of the "advance" — any cash actually collected was
+  // already recorded by the Invoice itself. Skip, or this would double-count.
+  if (entry.referenceModel === 'Invoice') return false;
   return CASHBOOK_SYNC_TYPES.has(String(entry.transactionType || '').toLowerCase());
 };
 
@@ -465,6 +469,127 @@ const upsertAdvancePaymentFromPayroll = async (payroll, paymentDate, paymentMeth
   return created;
 };
 
+/**
+ * Remove any purchase-advance ledger entry mirrored from a source document
+ * (e.g. it was voided, fully refunded, or reassigned away from an employee).
+ * @param {ObjectId} referenceId
+ * @param {string} referenceModel - e.g. 'Invoice', 'LoadTransaction', 'SimSale', 'ServiceInvoice'
+ */
+const deletePurchaseAdvanceForReference = async (referenceId, referenceModel) => {
+  const existing = await EmployeeLedger.findOne({ referenceId, referenceModel });
+  if (!existing) return null;
+  const employeeId = existing.employee;
+  await existing.deleteOne();
+  await recalculateBalances(employeeId);
+  return null;
+};
+
+/**
+ * Mirror an employee's unpaid store purchase — from ANY sale-to-customer
+ * module (Invoice, mobile Load top-up, SIM sale, Service/repair invoice,
+ * etc.) sold to their shadow Customer account — into their ledger as a debt
+ * against future salary, the same way a cash advance is recovered. Fully
+ * paid amounts don't touch the balance (nothing is owed); the source
+ * document itself is the history. Safe to call on every save of the source
+ * document — it's a no-op for non-employee customers and keeps the mirrored
+ * entry in sync as that document is edited.
+ * @param {Object} params
+ * @param {string} params.customerId
+ * @param {ObjectId} params.referenceId - id of the source document (invoice, load transaction, etc.)
+ * @param {string} params.referenceModel - e.g. 'Invoice', 'LoadTransaction', 'SimSale', 'ServiceInvoice'
+ * @param {string} params.reference - short human label, e.g. "Invoice #123"
+ * @param {string} params.description - what was bought, e.g. item/service names
+ * @param {number} params.unpaidAmount
+ * @param {Date} [params.transactionDate]
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.branchId
+ * @param {ObjectId} [params.createdBy]
+ * @param {ObjectId} [params.updatedBy]
+ */
+const syncPurchaseFromCustomerSale = async ({
+  organizationId,
+  branchId,
+  customerId,
+  referenceId,
+  referenceModel,
+  reference,
+  description,
+  unpaidAmount,
+  transactionDate,
+  createdBy,
+  updatedBy,
+}) => {
+  if (!customerId || customerId === 'walk-in') {
+    return deletePurchaseAdvanceForReference(referenceId, referenceModel);
+  }
+
+  const customer = await Customer.findById(customerId).select('isEmployeeAccount linkedEmployeeId');
+  if (!customer || !customer.isEmployeeAccount || !customer.linkedEmployeeId) {
+    return deletePurchaseAdvanceForReference(referenceId, referenceModel);
+  }
+
+  const unpaid = Number(unpaidAmount || 0);
+  if (unpaid <= 0) {
+    return deletePurchaseAdvanceForReference(referenceId, referenceModel);
+  }
+
+  const existing = await EmployeeLedger.findOne({
+    employee: customer.linkedEmployeeId,
+    referenceId,
+    referenceModel,
+  });
+
+  const payload = {
+    organizationId,
+    branchId,
+    employee: customer.linkedEmployeeId,
+    transactionType: 'advance_payment',
+    transactionDate: transactionDate || new Date(),
+    reference: reference || 'Store Purchase',
+    referenceId,
+    referenceModel,
+    description: description || 'Store purchase',
+    debit: 0,
+    credit: unpaid,
+    paymentMethod: 'Store Credit',
+    notes: `Unpaid balance on ${reference || 'store purchase'}, deducted from salary`,
+    createdBy: updatedBy || createdBy,
+    updatedBy: updatedBy || createdBy,
+  };
+
+  if (existing) {
+    Object.assign(existing, payload);
+    await existing.save();
+    await recalculateBalances(customer.linkedEmployeeId);
+    return existing;
+  }
+
+  return createLedgerEntry(payload);
+};
+
+/**
+ * Convenience wrapper for the Invoice module (see invoice.service.js).
+ * @param {Invoice} invoice
+ */
+const syncPurchaseFromInvoice = async (invoice) => {
+  const itemNames = (invoice.items || []).map((item) => item.name).filter(Boolean).join(', ');
+  return syncPurchaseFromCustomerSale({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    customerId: invoice.customerId,
+    referenceId: invoice._id,
+    referenceModel: 'Invoice',
+    reference: `Invoice #${invoice.invoiceNumber}`,
+    description: itemNames ? `Store purchase: ${itemNames}` : `Store purchase - Invoice #${invoice.invoiceNumber}`,
+    unpaidAmount: invoice.balance,
+    transactionDate: invoice.invoiceDate,
+    createdBy: invoice.createdBy,
+    updatedBy: invoice.updatedBy,
+  });
+};
+
+const deletePurchaseAdvanceForInvoice = (invoiceId) => deletePurchaseAdvanceForReference(invoiceId, 'Invoice');
+
 module.exports = {
   createLedgerEntry,
   updateLedgerEntryById,
@@ -478,4 +603,8 @@ module.exports = {
   upsertSalaryPayableFromPayroll,
   upsertSalaryPaymentFromPayroll,
   upsertAdvancePaymentFromPayroll,
+  syncPurchaseFromInvoice,
+  deletePurchaseAdvanceForInvoice,
+  syncPurchaseFromCustomerSale,
+  deletePurchaseAdvanceForReference,
 };

@@ -103,7 +103,8 @@ export const customerApi = createApi({
 
     // Get all customers (for dropdowns)
     getAllCustomers: builder.query({
-      query: () => '/all',
+      query: (params?: { includeEmployees?: boolean }) =>
+        params?.includeEmployees ? '/all?includeEmployees=true' : '/all',
       providesTags: ['Customer'],
     }),
   }),

@@ -5,6 +5,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
+const employeeLedgerService = require('./employeeLedger.service');
 const inventorySyncService = require('./inventorySync.service');
 
 const sanitizeId = (value) => {
@@ -183,7 +184,13 @@ const releaseProductStockForSimSale = async ({ productId, organizationId, branch
 const syncCustomerLedgerForSimSale = async (sale) => {
   await customerLedgerService.deleteLedgerEntriesByReference(sale._id);
 
-  if (!sale.customerId) return;
+  if (!sale.customerId) {
+    await employeeLedgerService.deletePurchaseAdvanceForReference(sale._id, 'SimSale');
+    return;
+  }
+
+  const reference = `SIM-SALE-${String(sale._id).slice(-6).toUpperCase()}`;
+  const description = `Sim sale #${sale.jobNumber}${sale.productName ? ` (${sale.productName})` : ''}`;
 
   await customerLedgerService.createLedgerEntry({
     organizationId: sale.organizationId,
@@ -191,14 +198,28 @@ const syncCustomerLedgerForSimSale = async (sale) => {
     customer: sale.customerId,
     transactionType: 'sale',
     transactionDate: sale.date,
-    reference: `SIM-SALE-${String(sale._id).slice(-6).toUpperCase()}`,
+    reference,
     referenceId: sale._id,
-    description: `Sim sale #${sale.jobNumber}${sale.productName ? ` (${sale.productName})` : ''}`,
+    description,
     debit: Number(sale.saleAmount) || 0,
     credit: 0,
     paymentMethod: getLedgerPaymentMethodLabel(sale.paymentMethod),
     invoiceType: 'cash',
     notes: sale.notes || '',
+  });
+
+  await employeeLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: sale.organizationId,
+    branchId: sale.branchId,
+    customerId: sale.customerId,
+    referenceId: sale._id,
+    referenceModel: 'SimSale',
+    reference,
+    description,
+    unpaidAmount: sale.saleAmount,
+    transactionDate: sale.date,
+    createdBy: sale.createdBy,
+    updatedBy: sale.updatedBy,
   });
 };
 
@@ -468,6 +489,7 @@ const deleteSimSale = async (saleId) => {
   await cashBookService.deleteEntriesByReference(sale._id, 'SimSale');
   await walletEntryService.deleteEntriesByReference(sale._id, 'SimSale');
   await customerLedgerService.deleteLedgerEntriesByReference(sale._id);
+  await employeeLedgerService.deletePurchaseAdvanceForReference(sale._id, 'SimSale');
 
   if (sale.paymentMethod === 'wallet' && sale.paymentWalletType && Number(sale.saleAmount || 0) > 0) {
     await walletService.adjustWalletBalance({

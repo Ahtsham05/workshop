@@ -569,7 +569,7 @@ function LoadManagementPage({
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
-  const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
   const suppliersRedux = useSelector((state: RootState) => state.supplier.data)
   const { data: purchasesData, refetch: refetchPurchases } = useGetLoadPurchasesQuery(
     purchaseSearch.trim() ? { page: 1, limit: 1000 } : { page: purchasePage, limit: purchaseLimit },
@@ -1866,6 +1866,7 @@ function LoadManagementPage({
                         value: c.id || c._id,
                         label: c.name,
                         sublabel: c.phone || c.mobile || undefined,
+                        badge: c.isEmployeeAccount ? 'Employee' : undefined,
                       }))}
                       value={saleForm.customerId}
                       onValueChange={(v) => handleSaleChange('customerId', v)}
@@ -2406,6 +2407,7 @@ function LoadManagementPage({
                           value: c.id || c._id,
                           label: c.name,
                           sublabel: c.phone || c.mobile || undefined,
+                          badge: c.isEmployeeAccount ? 'Employee' : undefined,
                         })),
                       ]}
                       value={withdrawalForm.customerId}

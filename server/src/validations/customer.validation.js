@@ -32,6 +32,10 @@ const getCustomers = {
     search: Joi.string(),
     sortBy: Joi.string(),
     fieldName: Joi.string(),
+    // Employees get a hidden shadow Customer record so they can be billed
+    // through the Invoice screen. Regular customer lists/pickers must not
+    // show them unless a caller (e.g. the Invoice customer picker) opts in.
+    includeEmployees: Joi.boolean(),
   }),
 };
 

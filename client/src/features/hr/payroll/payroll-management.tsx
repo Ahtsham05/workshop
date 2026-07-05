@@ -13,6 +13,7 @@ import {
   useCreateEmployeeAdvancePaymentMutation,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,6 +49,7 @@ import {
   ChevronRight,
   Pencil,
   Trash2,
+  ShoppingBag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmployeePayrollMonthlySummary } from './employee-payroll-monthly';
@@ -851,13 +853,31 @@ export default function PayrollManagement() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          advanceLedgerEntries.map((entry: any) => (
+                          advanceLedgerEntries.map((entry: any) => {
+                            const isStorePurchase = entry.referenceModel === 'Invoice';
+                            return (
                             <TableRow key={entry.id}>
                               <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
                               <TableCell>
-                                {entry.transactionType === 'advance_payment' ? t('Advance Given') : t('Advance Recovered')}
+                                {isStorePurchase ? (
+                                  <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700">
+                                    <ShoppingBag className="h-3 w-3" />
+                                    {t('Store Purchase')}
+                                  </Badge>
+                                ) : entry.transactionType === 'advance_payment' ? (
+                                  t('Advance Given')
+                                ) : (
+                                  t('Advance Recovered')
+                                )}
                               </TableCell>
-                              <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span>{entry.reference || entry.notes || '-'}</span>
+                                  {isStorePurchase && entry.description ? (
+                                    <span className="text-xs text-muted-foreground">{entry.description}</span>
+                                  ) : null}
+                                </div>
+                              </TableCell>
                               <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
@@ -877,7 +897,8 @@ export default function PayrollManagement() {
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))
+                            );
+                          })
                         )}
                       </TableBody>
                     </Table>
