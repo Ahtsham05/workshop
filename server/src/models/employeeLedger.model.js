@@ -79,6 +79,13 @@ const employeeLedgerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // When false, this entry is kept out of the Cash Book and Expense report
+    // (e.g. the cash/expense side was already recorded elsewhere and posting
+    // it again here would double-count). Defaults to the normal behavior.
+    affectsBooks: {
+      type: Boolean,
+      default: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

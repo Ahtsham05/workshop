@@ -22,6 +22,8 @@ const payEmployee = {
       transactionDate: Joi.date(),
       paymentMethod: Joi.string().allow('', null),
       notes: Joi.string().allow('', null),
+      // Pay Employee dialog's "Affect Expense & Cash Book" switch. Defaults on.
+      affectsBooks: Joi.boolean().default(true),
     }),
 };
 

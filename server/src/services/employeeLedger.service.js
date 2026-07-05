@@ -10,6 +10,9 @@ const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
 
 const shouldSyncCashBook = (entry) => {
   if (!entry) return false;
+  // Explicit opt-out (the "Affect Expense & Cash Book" switch on Pay Employee)
+  // — the cash side of this payment was already recorded elsewhere.
+  if (entry.affectsBooks === false) return false;
   // Goods/services sold to an employee on account never had cash leave the
   // register at the time of the "advance" — any cash actually collected was
   // already recorded by the Invoice itself. Skip, or this would double-count.
@@ -61,6 +64,10 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
 const syncExpenseFromEmployeePayment = async ({ ledgerEntry, employeeDoc }) => {
   if (!ledgerEntry || !employeeDoc) return null;
   if (!EXPENSE_SYNC_TYPES.has(String(ledgerEntry.transactionType || '').toLowerCase())) {
+    return null;
+  }
+  if (ledgerEntry.affectsBooks === false) {
+    await expenseService.deleteExpenseByLedgerReference(ledgerEntry._id, ledgerEntry, employeeDoc);
     return null;
   }
   const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
@@ -267,6 +274,7 @@ const payEmployee = async (paymentBody) => {
     branchId,
     createdBy,
     updatedBy,
+    affectsBooks = true,
   } = paymentBody;
   const numericAmount = Number(amount || 0);
   const recoveryAmount = Number(advanceRecovery || 0);
@@ -314,6 +322,7 @@ const payEmployee = async (paymentBody) => {
       credit: numericAmount,
       paymentMethod: paymentMethod || 'Cash',
       notes: normalizedNotes,
+      affectsBooks,
       createdBy,
       updatedBy,
     });
@@ -339,6 +348,7 @@ const payEmployee = async (paymentBody) => {
       credit: recoveryAmount,
       paymentMethod: paymentMethod || 'Cash',
       notes: normalizedNotes,
+      affectsBooks,
       createdBy,
       updatedBy,
     });

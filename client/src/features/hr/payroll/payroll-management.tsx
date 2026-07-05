@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -62,6 +63,14 @@ const toLocalDateInputValue = (value = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+const PAY_AFFECTS_BOOKS_STORAGE_KEY = 'hr-payroll-pay-affects-books';
+
+const loadPayAffectsBooksPreference = () => {
+  if (typeof window === 'undefined') return true;
+  const stored = window.localStorage.getItem(PAY_AFFECTS_BOOKS_STORAGE_KEY);
+  return stored === null ? true : stored === 'true';
+};
+
 export default function PayrollManagement() {
   const { t } = useLanguage();
   const [page, setPage] = useState(1);
@@ -92,6 +101,12 @@ export default function PayrollManagement() {
     paymentDate: toLocalDateInputValue(),
     notes: '',
   });
+  const [payAffectsBooks, setPayAffectsBooks] = useState(loadPayAffectsBooksPreference);
+
+  const handlePayAffectsBooksChange = (checked: boolean) => {
+    setPayAffectsBooks(checked);
+    window.localStorage.setItem(PAY_AFFECTS_BOOKS_STORAGE_KEY, String(checked));
+  };
   const [ledgerAdvanceData, setLedgerAdvanceData] = useState({
     amount: '',
     paymentDate: toLocalDateInputValue(),
@@ -180,6 +195,7 @@ export default function PayrollManagement() {
         transactionDate: ledgerPaymentData.paymentDate,
         paymentMethod: 'Cash',
         notes: ledgerPaymentData.notes || undefined,
+        affectsBooks: payAffectsBooks,
       }).unwrap();
       if (Number(result?.advanceRecoveryAmount || 0) > 0) {
         toast.success(t('Payment saved. Advance recovery recorded.'));
@@ -1045,6 +1061,19 @@ export default function PayrollManagement() {
                 value={ledgerPaymentData.notes}
                 onChange={(e) => setLedgerPaymentData({ ...ledgerPaymentData, notes: e.target.value })}
                 placeholder={t('Optional notes')}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="pr-4">
+                <Label htmlFor="pay-affects-books">{t('Affect Expense & Cash Book')}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('When on, this payment is posted to the Expense report and Cash Book as usual. Turn off if the cash side is already recorded elsewhere.')}
+                </p>
+              </div>
+              <Switch
+                id="pay-affects-books"
+                checked={payAffectsBooks}
+                onCheckedChange={handlePayAffectsBooksChange}
               />
             </div>
           </div>
