@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const { AgentBill, Expense, PersonalLedger, CashBookEntry } = require('../models');
 const walletEntryService = require('./walletEntry.service');
@@ -6,16 +7,23 @@ const personalLedgerService = require('./personalLedger.service');
 const expenseService = require('./expense.service');
 const ApiError = require('../utils/ApiError');
 
+const toObjectId = (id) =>
+  id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
+
 /**
  * Accounting per bill row:
- *   currentBillAmount  → cash book income (if cash/bank) or wallet-in (if wallet)
- *   previousBillAmount → PersonalLedger income entry ("My Wallet" tab in Accounts)
- *   overdueAmount      → Expense table (auto-category "Overdue")
+ *   currentBillAmount      → cash book income (if cash/bank) or wallet-in (if wallet)
+ *   previousBillAmount     → PersonalLedger income entry ("My Wallet" tab in Accounts)
+ *   overdueAmount          → Expense table (auto-category "Overdue"), charged later by
+ *                            scheduler once this bill's own due date passes unpaid
+ *   previousOverdueAmount  → Expense table (auto-category "Overdue"), charged instantly
+ *                            since it's arrears already overdue from a prior cycle
  */
 const createAgentBillsBatch = async ({
   bills,
   companyId,
   companyName,
+  collectionDate,
   dueDate,
   paymentMethod,
   walletType,
@@ -29,15 +37,18 @@ const createAgentBillsBatch = async ({
     const currentBill = Number(bill.currentBillAmount || 0);
     const previousBill = Number(bill.previousBillAmount || 0);
     const overdue = Number(bill.overdueAmount || 0);
+    const previousOverdue = Number(bill.previousOverdueAmount || 0);
     const profit = Number(bill.profit || 0);
-    const total = currentBill + previousBill + overdue;
+    const total = currentBill + previousBill + overdue + previousOverdue;
     const entryDate = dueDate ? new Date(dueDate) : new Date();
+    const collectedOn = collectionDate ? new Date(collectionDate) : new Date();
 
     const agentBill = new AgentBill({
       organizationId,
       branchId,
       companyId,
       companyName,
+      collectionDate: collectedOn,
       dueDate: entryDate,
       paymentMethod,
       walletType,
@@ -47,6 +58,7 @@ const createAgentBillsBatch = async ({
       currentBillAmount: currentBill,
       previousBillAmount: previousBill,
       overdueAmount: overdue,
+      previousOverdueAmount: previousOverdue,
       profit,
       totalAmount: total,
       createdBy,
@@ -63,6 +75,8 @@ const createAgentBillsBatch = async ({
     };
 
     // Current bill → cash in hand (cash book income) or wallet-in
+    // Dated on the collection date (when the cash actually changed hands), not the
+    // due date, so it shows up in "today"/date-range reports immediately.
     if (currentBill > 0) {
       const isWallet = paymentMethod === 'wallet' && walletType;
       if (isWallet) {
@@ -76,7 +90,7 @@ const createAgentBillsBatch = async ({
           paymentMethod: 'wallet',
           walletType,
           description: `Current bill: ${bill.customerName} – Ref# ${bill.referenceNumber}`,
-          date: entryDate,
+          date: collectedOn,
           createdBy,
         });
       } else {
@@ -85,7 +99,7 @@ const createAgentBillsBatch = async ({
           type: 'income',
           paymentMethod: paymentMethod || 'cash',
           amount: currentBill,
-          date: entryDate,
+          date: collectedOn,
           description: `Current bill (cash): ${bill.customerName} – Ref# ${bill.referenceNumber}`,
         });
       }
@@ -97,7 +111,7 @@ const createAgentBillsBatch = async ({
         organizationId,
         branchId,
         transactionType: 'income',
-        transactionDate: entryDate,
+        transactionDate: collectedOn,
         description: `Previous bill: ${bill.customerName} – Ref# ${bill.referenceNumber}`,
         category: 'Bill Collection',
         reference: bill.referenceNumber,
@@ -115,7 +129,25 @@ const createAgentBillsBatch = async ({
       }
     }
 
-    // Overdue → charged later by scheduler when due date passes, not on save
+    // Previous overdue → charged instantly (arrears already overdue at creation time)
+    if (previousOverdue > 0) {
+      await expenseService.createExpense({
+        organizationId,
+        branchId,
+        category: 'Overdue',
+        description: `Previous overdue charge: ${bill.customerName} – Ref# ${bill.referenceNumber}`,
+        amount: previousOverdue,
+        paymentMethod: 'Cash',
+        date: collectedOn,
+        reference: bill.referenceNumber,
+        vendor: bill.customerName,
+        referenceId: agentBill._id,
+        referenceModel: 'AgentBill',
+        createdBy,
+      }, { skipCashBookSync: true });
+    }
+
+    // Current-cycle overdue → charged later by scheduler when due date passes, not on save
 
     results.push(agentBill);
   }
@@ -157,10 +189,10 @@ const updateAgentBillById = async (id, updateBody) => {
     const overdueApplies = duePassed && bill.overdueAmount > 0;
 
     // Total paid to government:
-    //   before due date → current + previous (no penalty)
-    //   after  due date → current + previous + overdue (penalty applies)
+    //   always            → current + previous + previous overdue (already-due arrears)
+    //   after due date    → + current-cycle overdue (penalty applies once due date passes)
     const overdueOut = overdueApplies ? bill.overdueAmount : 0;
-    const totalPaid = bill.currentBillAmount + bill.previousBillAmount + overdueOut;
+    const totalPaid = bill.currentBillAmount + bill.previousBillAmount + bill.previousOverdueAmount + overdueOut;
 
     // Create a DEBIT entry (cashbook decreases — agent paid to government)
     // Uses source 'agent_bill_payment' so it is separate from the income entry created at collection time.
@@ -278,6 +310,7 @@ const chargeOverdueBills = async () => {
 
   let charged = 0;
   let errors = 0;
+  const now = new Date();
   for (const bill of dueBills) {
     try {
       // skipCashBookSync: cashbook will be updated when user pays the bill
@@ -305,4 +338,171 @@ const chargeOverdueBills = async () => {
   return { charged, errors, total: dueBills.length };
 };
 
-module.exports = { createAgentBillsBatch, getAgentBills, updateAgentBillById, deleteAgentBillById, chargeOverdueBills };
+/**
+ * Aggregated report for agent bills — summary cards, daily trend, and
+ * breakdown by company. Date range filters on collectionDate, since that's
+ * when the cash actually changed hands (dueDate is only the remittance
+ * deadline to the utility company).
+ */
+const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate, companyId }) => {
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+  const baseFilter = { organizationId: toObjectId(organizationId) };
+  if (branchId) baseFilter.branchId = toObjectId(branchId);
+  if (companyId) baseFilter.companyId = toObjectId(companyId);
+
+  const rangeFilter = { ...baseFilter };
+  if (startDate || endDate) {
+    rangeFilter.collectionDate = {};
+    if (startDate) rangeFilter.collectionDate.$gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      rangeFilter.collectionDate.$lte = end;
+    }
+  }
+
+  // A bill's overdue portion counts once it's already been charged to Expense
+  // (overdueCharged), or once its due date has passed even if not yet charged.
+  const overdueAppliesExpr = {
+    $or: [
+      '$overdueCharged',
+      { $and: [{ $gt: ['$overdueAmount', 0] }, { $lt: ['$dueDate', today] }] },
+    ],
+  };
+
+  const [
+    summaryAgg,
+    trendAgg,
+    byCompanyAgg,
+    pendingCount,
+    dueTodayCount,
+    overdueCount,
+    bills,
+    pendingPayableAgg,
+    overduePaidAgg,
+  ] = await Promise.all([
+    AgentBill.aggregate([
+      { $match: rangeFilter },
+      {
+        $group: {
+          _id: null,
+          totalBills: { $sum: 1 },
+          totalCurrentBill: { $sum: '$currentBillAmount' },
+          totalPreviousBill: { $sum: '$previousBillAmount' },
+          totalOverdue: { $sum: '$overdueAmount' },
+          totalPreviousOverdue: { $sum: '$previousOverdueAmount' },
+          totalCollection: { $sum: '$totalAmount' },
+          totalProfit: { $sum: '$profit' },
+        },
+      },
+    ]),
+    AgentBill.aggregate([
+      { $match: rangeFilter },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$collectionDate' } },
+          billCount: { $sum: 1 },
+          totalCollection: { $sum: '$totalAmount' },
+          totalProfit: { $sum: '$profit' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    AgentBill.aggregate([
+      { $match: rangeFilter },
+      {
+        $group: {
+          _id: '$companyName',
+          billCount: { $sum: 1 },
+          totalCollection: { $sum: '$totalAmount' },
+          totalProfit: { $sum: '$profit' },
+        },
+      },
+      { $sort: { totalCollection: -1 } },
+      { $limit: 10 },
+    ]),
+    AgentBill.countDocuments({ ...baseFilter, isPaid: false }),
+    AgentBill.countDocuments({ ...baseFilter, isPaid: false, dueDate: { $gte: startOfToday, $lte: endOfToday } }),
+    AgentBill.countDocuments({ ...baseFilter, isPaid: false, dueDate: { $lt: startOfToday } }),
+    // Full bill list for the detailed report table
+    AgentBill.find(rangeFilter).sort({ collectionDate: -1, createdAt: -1 }),
+    // Pending bills: what's actually payable right now — overdue only counted
+    // in once its own due date has passed (or it's already been charged).
+    AgentBill.aggregate([
+      { $match: { ...baseFilter, isPaid: false } },
+      { $addFields: { overdueApplies: overdueAppliesExpr } },
+      {
+        $group: {
+          _id: null,
+          totalPendingPayable: {
+            $sum: {
+              $add: [
+                '$currentBillAmount',
+                '$previousBillAmount',
+                '$previousOverdueAmount',
+                { $cond: ['$overdueApplies', '$overdueAmount', 0] },
+              ],
+            },
+          },
+          totalPendingOverdueIncluded: { $sum: { $cond: ['$overdueApplies', '$overdueAmount', 0] } },
+        },
+      },
+    ]),
+    // Paid bills: how much of the overdue amount has actually been remitted already.
+    AgentBill.aggregate([
+      { $match: { ...baseFilter, isPaid: true } },
+      {
+        $group: {
+          _id: null,
+          totalOverduePaid: {
+            $sum: { $add: ['$previousOverdueAmount', { $cond: ['$overdueCharged', '$overdueAmount', 0] }] },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const summary = summaryAgg[0] || {
+    totalBills: 0,
+    totalCurrentBill: 0,
+    totalPreviousBill: 0,
+    totalOverdue: 0,
+    totalPreviousOverdue: 0,
+    totalCollection: 0,
+    totalProfit: 0,
+  };
+
+  const pendingPayable = pendingPayableAgg[0] || { totalPendingPayable: 0, totalPendingOverdueIncluded: 0 };
+  const overduePaid = overduePaidAgg[0] || { totalOverduePaid: 0 };
+
+  return {
+    totalBills: summary.totalBills,
+    totalCurrentBill: summary.totalCurrentBill,
+    totalPreviousBill: summary.totalPreviousBill,
+    totalOverdue: summary.totalOverdue,
+    totalPreviousOverdue: summary.totalPreviousOverdue,
+    totalCollection: summary.totalCollection,
+    totalProfit: summary.totalProfit,
+    totalPending: pendingCount,
+    totalDueToday: dueTodayCount,
+    totalOverdueBills: overdueCount,
+    totalPendingPayable: pendingPayable.totalPendingPayable,
+    totalPendingOverdueIncluded: pendingPayable.totalPendingOverdueIncluded,
+    totalOverduePaid: overduePaid.totalOverduePaid,
+    trend: trendAgg,
+    byCompany: byCompanyAgg,
+    bills,
+  };
+};
+
+module.exports = {
+  createAgentBillsBatch,
+  getAgentBills,
+  updateAgentBillById,
+  deleteAgentBillById,
+  chargeOverdueBills,
+  getAgentBillReport,
+};

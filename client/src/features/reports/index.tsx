@@ -33,6 +33,8 @@ import { LoadReport } from './components/load-report'
 import { RepairReport } from './components/repair-report'
 import { ServiceReport } from './components/service-report'
 import { BillPaymentReport } from './components/bill-payment-report'
+import { AgentBillReport } from './components/agent-bill-report'
+import { AGENT_BILL_EMAIL } from '../mobile-shop/bill-payments'
 import { RoiReport } from './components/roi-report'
 import { SimSaleReport } from './components/sim-sale-report'
 import { InstallmentReport } from './components/installment-report'
@@ -257,6 +259,9 @@ export default function ReportsPage() {
             {isMobileShop && canAccess('bill_payment') && (
               <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
             )}
+            {isMobileShop && user?.email === AGENT_BILL_EMAIL && (
+              <TabsTrigger value='agent-bills' className='text-xs sm:text-sm px-2 sm:px-3'>Agent Bills</TabsTrigger>
+            )}
             {canAccess('profit_loss') && (
               <TabsTrigger value='profit-loss' className='text-xs sm:text-sm px-2 sm:px-3'>{t('profit_loss')}</TabsTrigger>
             )}
@@ -363,6 +368,12 @@ export default function ReportsPage() {
             {canAccess('bill_payment')
               ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
               : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isMobileShop && user?.email === AGENT_BILL_EMAIL && (
+          <TabsContent value='agent-bills' className='mt-6'>
+            <AgentBillReport ref={activeTab === 'agent-bills' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 

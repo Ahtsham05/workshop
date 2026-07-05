@@ -517,6 +517,7 @@ export interface AgentBillRecord {
   id: string
   companyId?: string
   companyName?: string
+  collectionDate?: string
   dueDate?: string
   paymentMethod?: 'cash' | 'bank' | 'wallet'
   walletType?: string
@@ -526,12 +527,46 @@ export interface AgentBillRecord {
   currentBillAmount: number
   previousBillAmount: number
   overdueAmount: number
+  previousOverdueAmount: number
   profit: number
   totalAmount: number
   isPaid: boolean
   paidDate?: string | null
   overdueCharged: boolean
   createdAt: string
+}
+
+export interface AgentBillTrendItem {
+  _id: string
+  billCount: number
+  totalCollection: number
+  totalProfit: number
+}
+
+export interface AgentBillCompanyBreakdownItem {
+  _id: string
+  billCount: number
+  totalCollection: number
+  totalProfit: number
+}
+
+export interface AgentBillReport {
+  totalBills: number
+  totalCurrentBill: number
+  totalPreviousBill: number
+  totalOverdue: number
+  totalPreviousOverdue: number
+  totalCollection: number
+  totalProfit: number
+  totalPending: number
+  totalDueToday: number
+  totalOverdueBills: number
+  totalPendingPayable: number
+  totalPendingOverdueIncluded: number
+  totalOverduePaid: number
+  trend: AgentBillTrendItem[]
+  byCompany: AgentBillCompanyBreakdownItem[]
+  bills: AgentBillRecord[]
 }
 
 export interface CreateAgentBillsBatchInput {
@@ -542,10 +577,12 @@ export interface CreateAgentBillsBatchInput {
     currentBillAmount: number
     previousBillAmount: number
     overdueAmount: number
+    previousOverdueAmount: number
     profit: number
   }[]
   companyId?: string
   companyName?: string
+  collectionDate?: string
   dueDate: string
   paymentMethod: 'cash' | 'bank' | 'wallet'
   walletType?: string
@@ -1114,6 +1151,17 @@ export const mobileShopApi = createApi({
       query: (id) => ({ url: `/agent-bills/${id}`, method: 'DELETE' }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
     }),
+    getAgentBillReport: builder.query<AgentBillReport, { startDate?: string; endDate?: string; companyId?: string } | void>({
+      query: (params) => {
+        const p = new URLSearchParams()
+        if ((params as any)?.startDate) p.set('startDate', (params as any).startDate)
+        if ((params as any)?.endDate) p.set('endDate', (params as any).endDate)
+        if ((params as any)?.companyId) p.set('companyId', (params as any).companyId)
+        const qs = p.toString()
+        return qs ? `/agent-bills/report?${qs}` : '/agent-bills/report'
+      },
+      providesTags: ['AgentBills'],
+    }),
   }),
 })
 
@@ -1200,4 +1248,5 @@ export const {
   useCreateAgentBillsBatchMutation,
   useUpdateAgentBillMutation,
   useDeleteAgentBillMutation,
+  useGetAgentBillReportQuery,
 } = mobileShopApi

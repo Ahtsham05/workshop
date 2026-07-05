@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 router.route('/batch').post(agentBillController.createAgentBillsBatch);
+router.route('/report').get(agentBillController.getAgentBillReport);
 router.route('/').get(agentBillController.getAgentBills);
 router.route('/:id').patch(agentBillController.updateAgentBill).delete(agentBillController.deleteAgentBill);
 

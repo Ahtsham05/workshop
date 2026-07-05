@@ -29,6 +29,13 @@ export function generateAgentBillReceiptHTML(
     minute: '2-digit',
   })
 
+  // Current/previous overdue amounts are folded into their bill's line so the
+  // customer just sees "Current Bill" / "Previous Bill" — the overdue split is
+  // an internal accounting detail, not something to print on the receipt.
+  const currentLine = bill.currentBillAmount + bill.overdueAmount
+  const previousLine = bill.previousBillAmount + bill.previousOverdueAmount
+  const grandTotal = currentLine + previousLine
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -171,14 +178,17 @@ export function generateAgentBillReceiptHTML(
     ${bill.mobileNo ? `<div class="row"><span class="label">Mobile:</span><span>${bill.mobileNo}</span></div>` : ''}
     <div class="row"><span class="label">Reference #:</span><span>${bill.referenceNumber}</span></div>
     ${bill.companyName ? `<div class="row"><span class="label">Company:</span><span>${bill.companyName}</span></div>` : ''}
+    ${bill.collectionDate ? `<div class="row"><span class="label">Collection Date:</span><span>${fmtDate(bill.collectionDate)}</span></div>` : ''}
     ${bill.dueDate ? `<div class="row"><span class="label">Due Date:</span><span>${fmtDate(bill.dueDate)}</span></div>` : ''}
     <div class="row"><span class="label">Printed:</span><span>${printedAt}</span></div>
   </div>
 
   <div class="totals">
+    ${currentLine > 0 ? `<div class="total-row"><span>Current Bill:</span><span>${fmt(currentLine)}</span></div>` : ''}
+    ${previousLine > 0 ? `<div class="total-row"><span>Previous Bill:</span><span>${fmt(previousLine)}</span></div>` : ''}
     <div class="grand-total">
       <span>Amount Paid:</span>
-      <span>${fmt(bill.currentBillAmount)}</span>
+      <span>${fmt(grandTotal)}</span>
     </div>
   </div>
 

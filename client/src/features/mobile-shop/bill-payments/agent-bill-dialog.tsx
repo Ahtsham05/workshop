@@ -52,8 +52,9 @@ type BillRow = {
   referenceNumber: string
   mobileNo: string
   currentBillAmount: string
-  previousBillAmount: string
   overdueAmount: string
+  previousBillAmount: string
+  previousOverdueAmount: string
   profit: string
 }
 
@@ -62,14 +63,18 @@ const emptyRow = (): BillRow => ({
   referenceNumber: '',
   mobileNo: '',
   currentBillAmount: '0',
-  previousBillAmount: '0',
   overdueAmount: '0',
+  previousBillAmount: '0',
+  previousOverdueAmount: '0',
   profit: '0',
 })
 
 const parseNum = (v: string) => Math.max(0, Number(v) || 0)
 const rowTotal = (r: BillRow) =>
-  parseNum(r.currentBillAmount) + parseNum(r.previousBillAmount) + parseNum(r.overdueAmount)
+  parseNum(r.currentBillAmount) +
+  parseNum(r.overdueAmount) +
+  parseNum(r.previousBillAmount) +
+  parseNum(r.previousOverdueAmount)
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -105,6 +110,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
 
   const [companyId, setCompanyId] = useState(() => editBill?.companyId ?? '')
   const [companyName, setCompanyName] = useState(() => editBill?.companyName ?? '')
+  const [collectionDate, setCollectionDate] = useState(() => editBill?.collectionDate?.slice(0, 10) ?? getBusinessToday())
   const [dueDate, setDueDate] = useState(() => editBill?.dueDate?.slice(0, 10) ?? getBusinessToday())
   const [paymentMethodOption, setPaymentMethodOption] = useState<string>(() => editBill?.paymentMethod ?? 'cash')
   const [rows, setRows] = useState<BillRow[]>(() =>
@@ -114,8 +120,9 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
           referenceNumber: editBill.referenceNumber,
           mobileNo: editBill.mobileNo ?? '',
           currentBillAmount: String(editBill.currentBillAmount),
-          previousBillAmount: String(editBill.previousBillAmount),
           overdueAmount: String(editBill.overdueAmount),
+          previousBillAmount: String(editBill.previousBillAmount),
+          previousOverdueAmount: String(editBill.previousOverdueAmount),
           profit: String(editBill.profit),
         }]
       : [emptyRow()]
@@ -126,7 +133,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
     inputRefs.current[`${i}-${f}`] = el
   }
   const focusNext = (rowIdx: number, currentField: string) => {
-    const order = ['customerName', 'referenceNumber', 'mobileNo', 'currentBillAmount', 'previousBillAmount', 'overdueAmount', 'profit']
+    const order = ['customerName', 'referenceNumber', 'mobileNo', 'currentBillAmount', 'overdueAmount', 'previousBillAmount', 'previousOverdueAmount', 'profit']
     const idx = order.indexOf(currentField)
     if (idx < order.length - 1) {
       inputRefs.current[`${rowIdx}-${order[idx + 1]}`]?.focus()
@@ -170,6 +177,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
       const pseudo: AgentBillRecord = {
         id: `preview-${idx}`,
         companyName,
+        collectionDate,
         dueDate,
         paymentMethod: resolvedPaymentMethod,
         walletType: resolvedWalletType,
@@ -177,8 +185,9 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         referenceNumber: row.referenceNumber || '—',
         mobileNo: row.mobileNo,
         currentBillAmount: parseNum(row.currentBillAmount),
-        previousBillAmount: parseNum(row.previousBillAmount),
         overdueAmount: parseNum(row.overdueAmount),
+        previousBillAmount: parseNum(row.previousBillAmount),
+        previousOverdueAmount: parseNum(row.previousOverdueAmount),
         profit: parseNum(row.profit),
         totalAmount: rowTotal(row),
         isPaid: false,
@@ -195,13 +204,14 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         },
       })
     },
-    [companyName, dueDate, resolvedPaymentMethod, resolvedWalletType, orgData, branchData],
+    [companyName, collectionDate, dueDate, resolvedPaymentMethod, resolvedWalletType, orgData, branchData],
   )
 
   const reset = () => {
     setRows([emptyRow()])
     setCompanyId('')
     setCompanyName('')
+    setCollectionDate(getBusinessToday())
     setDueDate(getBusinessToday())
     setPaymentMethodOption('cash')
   }
@@ -213,7 +223,8 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         r.referenceNumber.trim() &&
         (parseNum(r.currentBillAmount) > 0 ||
           parseNum(r.previousBillAmount) > 0 ||
-          parseNum(r.overdueAmount) > 0),
+          parseNum(r.overdueAmount) > 0 ||
+          parseNum(r.previousOverdueAmount) > 0),
     )
 
     if (validRows.length === 0) {
@@ -235,12 +246,14 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
           referenceNumber: r.referenceNumber.trim(),
           mobileNo: r.mobileNo.trim() || undefined,
           currentBillAmount: parseNum(r.currentBillAmount),
-          previousBillAmount: parseNum(r.previousBillAmount),
           overdueAmount: parseNum(r.overdueAmount),
+          previousBillAmount: parseNum(r.previousBillAmount),
+          previousOverdueAmount: parseNum(r.previousOverdueAmount),
           profit: parseNum(r.profit),
-          totalAmount: parseNum(r.currentBillAmount) + parseNum(r.previousBillAmount) + parseNum(r.overdueAmount),
+          totalAmount: rowTotal(r),
           companyId: companyId || undefined,
           companyName: companyName || undefined,
+          collectionDate: new Date(collectionDate).toISOString(),
           dueDate: new Date(dueDate).toISOString(),
           paymentMethod: resolvedPaymentMethod,
           walletType: resolvedWalletType,
@@ -263,12 +276,14 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
             referenceNumber: r.referenceNumber.trim(),
             mobileNo: r.mobileNo.trim() || undefined,
             currentBillAmount: parseNum(r.currentBillAmount),
-            previousBillAmount: parseNum(r.previousBillAmount),
             overdueAmount: parseNum(r.overdueAmount),
+            previousBillAmount: parseNum(r.previousBillAmount),
+            previousOverdueAmount: parseNum(r.previousOverdueAmount),
             profit: parseNum(r.profit),
           })),
           companyId: companyId || undefined,
           companyName: companyName || undefined,
+          collectionDate: new Date(collectionDate).toISOString(),
           dueDate: new Date(dueDate).toISOString(),
           paymentMethod: resolvedPaymentMethod,
           walletType: resolvedWalletType,
@@ -307,7 +322,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
 
         <div className='space-y-4'>
           {/* ── Header ── */}
-          <div className='grid gap-4 sm:grid-cols-3'>
+          <div className='grid gap-4 sm:grid-cols-4'>
             {/* Company */}
             <div>
               <Label>Company</Label>
@@ -327,6 +342,16 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
                   )}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Collection Date */}
+            <div>
+              <Label>Collection Date *</Label>
+              <Input
+                type='date'
+                value={collectionDate}
+                onChange={(e) => setCollectionDate(e.target.value)}
+              />
             </div>
 
             {/* Due Date */}
@@ -358,15 +383,18 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
           </div>
 
           {/* ── Info hints ── */}
-          <div className='grid grid-cols-3 gap-3 text-xs text-muted-foreground'>
+          <div className='grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-muted-foreground'>
             <div className='rounded border border-dashed px-3 py-2 bg-green-50 dark:bg-green-950/20'>
               <span className='font-semibold text-green-700'>Current Bill</span> → Cash in hand / {isWallet ? resolvedWalletType : paymentMethodOption}
+            </div>
+            <div className='rounded border border-dashed px-3 py-2 bg-orange-50 dark:bg-orange-950/20'>
+              <span className='font-semibold text-orange-700'>Current Overdue</span> → Expense, charged once due date passes unpaid
             </div>
             <div className='rounded border border-dashed px-3 py-2 bg-blue-50 dark:bg-blue-950/20'>
               <span className='font-semibold text-blue-700'>Previous Bill</span> → My Wallet (Accounts)
             </div>
-            <div className='rounded border border-dashed px-3 py-2 bg-orange-50 dark:bg-orange-950/20'>
-              <span className='font-semibold text-orange-700'>Overdue</span> → Expense table (category: Overdue)
+            <div className='rounded border border-dashed px-3 py-2 bg-red-50 dark:bg-red-950/20'>
+              <span className='font-semibold text-red-700'>Previous Overdue</span> → Expense, charged instantly
             </div>
           </div>
 
@@ -380,8 +408,9 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
                   <TableHead className='min-w-[145px]'>Reference #</TableHead>
                   <TableHead className='min-w-[135px]'>Mobile No</TableHead>
                   <TableHead className='min-w-[110px] text-right'>Current Bill (Rs.)</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Current Overdue (Rs.)</TableHead>
                   <TableHead className='min-w-[110px] text-right'>Previous Bill (Rs.)</TableHead>
-                  <TableHead className='min-w-[100px] text-right'>Overdue (Rs.)</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Previous Overdue (Rs.)</TableHead>
                   <TableHead className='min-w-[90px] text-right'>Profit (Rs.)</TableHead>
                   <TableHead className='min-w-[105px] text-right bg-muted font-semibold'>Total (Rs.)</TableHead>
                   <TableHead className='w-20 text-center'>Actions</TableHead>
@@ -439,6 +468,18 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
 
                     <TableCell>
                       <Input
+                        ref={setRef(idx, 'overdueAmount')}
+                        type='number' min='0' step='1'
+                        value={row.overdueAmount}
+                        onChange={(e) => handleRowChange(idx, 'overdueAmount', e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && focusNext(idx, 'overdueAmount')}
+                        onFocus={(e) => e.target.select()}
+                        className='h-8 text-sm text-right'
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <Input
                         ref={setRef(idx, 'previousBillAmount')}
                         type='number' min='0' step='1'
                         value={row.previousBillAmount}
@@ -451,11 +492,11 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
 
                     <TableCell>
                       <Input
-                        ref={setRef(idx, 'overdueAmount')}
+                        ref={setRef(idx, 'previousOverdueAmount')}
                         type='number' min='0' step='1'
-                        value={row.overdueAmount}
-                        onChange={(e) => handleRowChange(idx, 'overdueAmount', e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && focusNext(idx, 'overdueAmount')}
+                        value={row.previousOverdueAmount}
+                        onChange={(e) => handleRowChange(idx, 'previousOverdueAmount', e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && focusNext(idx, 'previousOverdueAmount')}
                         onFocus={(e) => e.target.select()}
                         className='h-8 text-sm text-right'
                       />
@@ -527,15 +568,21 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
               </span>
             </div>
             <div className='flex justify-between'>
+              <span className='text-muted-foreground'>Current Overdue → Expense (on due date):</span>
+              <span className='font-medium text-orange-600'>
+                Rs. {rows.reduce((s, r) => s + parseNum(r.overdueAmount), 0).toLocaleString()}
+              </span>
+            </div>
+            <div className='flex justify-between'>
               <span className='text-muted-foreground'>My Wallet / Accounts (previous bill):</span>
               <span className='font-medium text-blue-700'>
                 Rs. {rows.reduce((s, r) => s + parseNum(r.previousBillAmount), 0).toLocaleString()}
               </span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-muted-foreground'>Overdue → Expense:</span>
-              <span className='font-medium text-orange-600'>
-                Rs. {rows.reduce((s, r) => s + parseNum(r.overdueAmount), 0).toLocaleString()}
+              <span className='text-muted-foreground'>Previous Overdue → Expense (instant):</span>
+              <span className='font-medium text-red-600'>
+                Rs. {rows.reduce((s, r) => s + parseNum(r.previousOverdueAmount), 0).toLocaleString()}
               </span>
             </div>
             <div className='flex justify-between'>

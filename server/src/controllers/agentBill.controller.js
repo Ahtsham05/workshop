@@ -31,4 +31,16 @@ const deleteAgentBill = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
-module.exports = { createAgentBillsBatch, getAgentBills, updateAgentBill, deleteAgentBill };
+const getAgentBillReport = catchAsync(async (req, res) => {
+  const { startDate, endDate, companyId } = req.query;
+  const report = await agentBillService.getAgentBillReport({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    startDate,
+    endDate,
+    companyId,
+  });
+  res.send(report);
+});
+
+module.exports = { createAgentBillsBatch, getAgentBills, updateAgentBill, deleteAgentBill, getAgentBillReport };

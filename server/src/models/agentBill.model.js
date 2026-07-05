@@ -17,6 +17,7 @@ const agentBillSchema = new mongoose.Schema(
     },
     companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'UtilityCompany' },
     companyName: { type: String, trim: true },
+    collectionDate: { type: Date },
     dueDate: { type: Date },
     paymentMethod: {
       type: String,
@@ -29,7 +30,12 @@ const agentBillSchema = new mongoose.Schema(
     mobileNo: { type: String, trim: true },
     currentBillAmount: { type: Number, default: 0, min: 0 },
     previousBillAmount: { type: Number, default: 0, min: 0 },
+    // Overdue amount tied to THIS bill's own due date — charged to Expense
+    // once the due date passes unpaid (see agentBill.service.chargeOverdueBills).
     overdueAmount: { type: Number, default: 0, min: 0 },
+    // Arrears already overdue from a previous cycle — charged to Expense
+    // immediately on creation, regardless of due date.
+    previousOverdueAmount: { type: Number, default: 0, min: 0 },
     profit: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },
     isPaid: { type: Boolean, default: false, index: true },

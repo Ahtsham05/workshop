@@ -613,7 +613,7 @@ function PrintReceiptButton({ billId }: { billId: string }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const AGENT_BILL_EMAIL = 'bilalmulazim7086@gmail.com'
+export const AGENT_BILL_EMAIL = 'bilalmulazim7086@gmail.com'
 
 export default function BillPaymentsPage() {
   const routeSearch = useSearch({ from: '/_authenticated/mobile-shop/bill-payments' })
@@ -1189,10 +1189,12 @@ export default function BillPaymentsPage() {
                           <TableHead>Ref #</TableHead>
                           <TableHead>Mobile</TableHead>
                           <TableHead>Company</TableHead>
+                          <TableHead>Collection Date</TableHead>
                           <TableHead>Due Date</TableHead>
                           <TableHead className='text-right'>Current Bill</TableHead>
+                          <TableHead className='text-right'>Current Overdue</TableHead>
                           <TableHead className='text-right'>Previous Bill</TableHead>
-                          <TableHead className='text-right'>Overdue</TableHead>
+                          <TableHead className='text-right'>Previous Overdue</TableHead>
                           <TableHead className='text-right'>Profit</TableHead>
                           <TableHead className='text-right'>Total</TableHead>
                           <TableHead>Status</TableHead>
@@ -1210,6 +1212,15 @@ export default function BillPaymentsPage() {
                             <TableCell className='text-sm'>{bill.mobileNo || '—'}</TableCell>
                             <TableCell className='text-sm'>{bill.companyName || '—'}</TableCell>
                             <TableCell className='text-sm'>
+                              {bill.collectionDate
+                                ? new Date(bill.collectionDate).toLocaleDateString('en-PK', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </TableCell>
+                            <TableCell className='text-sm'>
                               {bill.dueDate
                                 ? new Date(bill.dueDate).toLocaleDateString('en-PK', {
                                     day: '2-digit',
@@ -1222,9 +1233,6 @@ export default function BillPaymentsPage() {
                               {bill.currentBillAmount > 0 ? `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
-                              {bill.previousBillAmount > 0 ? `Rs. ${bill.previousBillAmount.toLocaleString('en-PK')}` : '—'}
-                            </TableCell>
-                            <TableCell className='text-right text-sm'>
                               {bill.overdueAmount > 0 ? (
                                 <span className={bill.overdueCharged ? 'text-red-600' : 'text-orange-500'}>
                                   Rs. {bill.overdueAmount.toLocaleString('en-PK')}
@@ -1235,11 +1243,21 @@ export default function BillPaymentsPage() {
                               ) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
+                              {bill.previousBillAmount > 0 ? `Rs. ${bill.previousBillAmount.toLocaleString('en-PK')}` : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {bill.previousOverdueAmount > 0 ? (
+                                <span className='text-red-600'>
+                                  Rs. {bill.previousOverdueAmount.toLocaleString('en-PK')}
+                                </span>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className='text-right text-sm'>
                               {bill.profit > 0 ? `Rs. ${bill.profit.toLocaleString('en-PK')}` : '—'}
                             </TableCell>
                             <TableCell className='text-right font-semibold text-sm'>
                               {(() => {
-                                const base = bill.currentBillAmount + bill.previousBillAmount
+                                const base = bill.currentBillAmount + bill.previousBillAmount + bill.previousOverdueAmount
                                 const isOverdue = bill.overdueAmount > 0
                                 const duePassed = bill.dueDate ? new Date(bill.dueDate) < new Date() : false
                                 if (!isOverdue) return <span>Rs. {base.toLocaleString('en-PK')}</span>
