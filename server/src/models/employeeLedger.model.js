@@ -5,6 +5,7 @@ const transactionTypes = {
   SALARY_PAYABLE: 'salary_payable',
   SALARY_PAYMENT: 'salary_payment',
   ADVANCE_PAYMENT: 'advance_payment',
+  ADVANCE_RECOVERY: 'advance_recovery',
   ADJUSTMENT: 'adjustment',
 };
 

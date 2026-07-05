@@ -13,19 +13,22 @@ const createAdvancePayment = {
 };
 
 const payEmployee = {
-  body: Joi.object().keys({
-    employee: Joi.string().custom(objectId).required(),
-    amount: Joi.number().min(0.01).required(),
-    transactionDate: Joi.date(),
-    paymentMethod: Joi.string().allow('', null),
-    notes: Joi.string().allow('', null),
-  }),
+  body: Joi.object()
+    .keys({
+      employee: Joi.string().custom(objectId).required(),
+      amount: Joi.number().min(0).default(0),
+      advanceRecovery: Joi.number().min(0).default(0),
+      recoverySource: Joi.string().valid('pay', 'standalone').default('pay'),
+      transactionDate: Joi.date(),
+      paymentMethod: Joi.string().allow('', null),
+      notes: Joi.string().allow('', null),
+    }),
 };
 
 const getLedgerEntries = {
   query: Joi.object().keys({
     employee: Joi.string().custom(objectId),
-    transactionType: Joi.string().valid('salary_payable', 'salary_payment', 'advance_payment', 'adjustment'),
+    transactionType: Joi.string().valid('salary_payable', 'salary_payment', 'advance_payment', 'advance_recovery', 'adjustment'),
     search: Joi.string().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),

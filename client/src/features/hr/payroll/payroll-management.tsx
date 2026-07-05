@@ -10,6 +10,7 @@ import {
   useGetEmployeeLedgerEntriesQuery,
   useGetEmployeeLedgerSummaryQuery,
   useCreateEmployeePaymentMutation,
+  useCreateEmployeeAdvancePaymentMutation,
 } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DollarSign,
   Plus,
@@ -67,6 +69,8 @@ export default function PayrollManagement() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showLedgerPayDialog, setShowLedgerPayDialog] = useState(false);
+  const [showLedgerAdvanceDialog, setShowLedgerAdvanceDialog] = useState(false);
+  const [showLedgerRecoverDialog, setShowLedgerRecoverDialog] = useState(false);
   const [showLedgerEditDialog, setShowLedgerEditDialog] = useState(false);
   const [showLedgerDeleteDialog, setShowLedgerDeleteDialog] = useState(false);
   const [selectedEmployeeLedger, setSelectedEmployeeLedger] = useState('');
@@ -81,6 +85,17 @@ export default function PayrollManagement() {
     notes: '',
   });
   const [ledgerPaymentData, setLedgerPaymentData] = useState({
+    amount: '',
+    advanceRecovery: '',
+    paymentDate: toLocalDateInputValue(),
+    notes: '',
+  });
+  const [ledgerAdvanceData, setLedgerAdvanceData] = useState({
+    amount: '',
+    paymentDate: toLocalDateInputValue(),
+    notes: '',
+  });
+  const [ledgerRecoverData, setLedgerRecoverData] = useState({
     amount: '',
     paymentDate: toLocalDateInputValue(),
     notes: '',
@@ -105,6 +120,7 @@ export default function PayrollManagement() {
   const [updateEmployeeLedgerEntry, { isLoading: isUpdatingLedgerEntry }] = useUpdateEmployeeLedgerEntryMutation();
   const [deleteEmployeeLedgerEntry, { isLoading: isDeletingLedgerEntry }] = useDeleteEmployeeLedgerEntryMutation();
   const [createEmployeePayment, { isLoading: isPayingEmployee }] = useCreateEmployeePaymentMutation();
+  const [createEmployeeAdvancePayment, { isLoading: isCreatingAdvance }] = useCreateEmployeeAdvancePaymentMutation();
 
   const [generateData, setGenerateData] = useState({
     employee: '',
@@ -157,19 +173,21 @@ export default function PayrollManagement() {
     try {
       const result: any = await createEmployeePayment({
         employee: selectedEmployeeLedger,
-        amount: Number(ledgerPaymentData.amount),
+        amount: Number(ledgerPaymentData.amount || 0),
+        advanceRecovery: Number(ledgerPaymentData.advanceRecovery || 0),
         transactionDate: ledgerPaymentData.paymentDate,
         paymentMethod: 'Cash',
         notes: ledgerPaymentData.notes || undefined,
       }).unwrap();
-      if (Number(result?.extraAdvanceAmount || 0) > 0) {
-        toast.success(t('Payment saved. Extra amount posted as advance.'));
+      if (Number(result?.advanceRecoveryAmount || 0) > 0) {
+        toast.success(t('Payment saved. Advance recovery recorded.'));
       } else {
         toast.success(t('Payment saved'));
       }
       setShowLedgerPayDialog(false);
       setLedgerPaymentData({
         amount: '',
+        advanceRecovery: '',
         paymentDate: toLocalDateInputValue(),
         notes: '',
       });
@@ -178,6 +196,64 @@ export default function PayrollManagement() {
       refetchEmployeeLedgerSummary();
     } catch (error: any) {
       toast.error(error?.data?.message || t('Failed to save payment'));
+    }
+  };
+
+  const handleLedgerAdvance = async () => {
+    if (!selectedEmployeeLedger) {
+      toast.error(t('Please select employee'));
+      return;
+    }
+    try {
+      await createEmployeeAdvancePayment({
+        employee: selectedEmployeeLedger,
+        amount: Number(ledgerAdvanceData.amount),
+        transactionDate: ledgerAdvanceData.paymentDate,
+        paymentMethod: 'Cash',
+        notes: ledgerAdvanceData.notes || undefined,
+      }).unwrap();
+      toast.success(t('Advance recorded'));
+      setShowLedgerAdvanceDialog(false);
+      setLedgerAdvanceData({
+        amount: '',
+        paymentDate: toLocalDateInputValue(),
+        notes: '',
+      });
+      refetch();
+      refetchEmployeeLedger();
+      refetchEmployeeLedgerSummary();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to save advance'));
+    }
+  };
+
+  const handleLedgerRecover = async () => {
+    if (!selectedEmployeeLedger) {
+      toast.error(t('Please select employee'));
+      return;
+    }
+    try {
+      await createEmployeePayment({
+        employee: selectedEmployeeLedger,
+        amount: 0,
+        advanceRecovery: Number(ledgerRecoverData.amount),
+        recoverySource: 'standalone',
+        transactionDate: ledgerRecoverData.paymentDate,
+        paymentMethod: 'Cash',
+        notes: ledgerRecoverData.notes || undefined,
+      }).unwrap();
+      toast.success(t('Advance recovery recorded'));
+      setShowLedgerRecoverDialog(false);
+      setLedgerRecoverData({
+        amount: '',
+        paymentDate: toLocalDateInputValue(),
+        notes: '',
+      });
+      refetch();
+      refetchEmployeeLedger();
+      refetchEmployeeLedgerSummary();
+    } catch (error: any) {
+      toast.error(error?.data?.message || t('Failed to record advance recovery'));
     }
   };
 
@@ -330,6 +406,25 @@ export default function PayrollManagement() {
       return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
     });
   }, [employeeLedgerData?.results]);
+
+  const advanceLedgerEntries = useMemo(() => {
+    return sortedLedgerEntries.filter((entry: any) =>
+      entry.transactionType === 'advance_payment' || entry.transactionType === 'advance_recovery'
+    );
+  }, [sortedLedgerEntries]);
+
+  const salaryLedgerEntries = useMemo(() => {
+    // A recovery entered alongside a Pay ("Deduct from Advance") is really
+    // "salary paid from advance" and belongs in the Ledger view too. A bare
+    // advance_payment (money given, not yet earned back), or a standalone
+    // recovery from the Advances tab's "Recover Advance" button, stays out of
+    // the Ledger view — those only show under Advances.
+    return sortedLedgerEntries.filter((entry: any) => {
+      if (entry.transactionType === 'advance_payment') return false;
+      if (entry.transactionType === 'advance_recovery') return entry.description === 'Salary paid from advance';
+      return true;
+    });
+  }, [sortedLedgerEntries]);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -617,77 +712,178 @@ export default function PayrollManagement() {
                 onYearChange={setSummaryYear}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="p-3 rounded-lg bg-blue-50">
-                  <p className="text-xs text-muted-foreground">{t('Total Payable')}</p>
-                  <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalPayable || 0)}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-green-50">
-                  <p className="text-xs text-muted-foreground">{t('Salary Paid')}</p>
-                  <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalSalaryPaid || 0)}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-orange-50">
-                  <p className="text-xs text-muted-foreground">{t('Advance Paid')}</p>
-                  <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalAdvancePaid || 0)}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-red-50">
-                  <p className="text-xs text-muted-foreground">{t('Remaining Payable')}</p>
-                  <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.remainingPayable || 0)}</p>
-                </div>
-              </div>
+              <Tabs defaultValue="ledger" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="ledger">{t('Ledger')}</TabsTrigger>
+                  <TabsTrigger value="advances">{t('Advances')}</TabsTrigger>
+                </TabsList>
 
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('Date')}</TableHead>
-                      <TableHead>{t('Reference')}</TableHead>
-                      <TableHead>{t('Debit')}</TableHead>
-                      <TableHead>{t('Credit')}</TableHead>
-                      <TableHead>{t('Balance')}</TableHead>
-                      <TableHead className="text-right">{t('Actions')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(employeeLedgerData?.results || []).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                          {t('No ledger entries found')}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      sortedLedgerEntries.map((entry: any) => {
-                        return (
-                          <TableRow key={entry.id}>
-                            <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
-                            <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
-                            <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
-                            <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
-                            <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
-                                  <Pencil className="h-4 w-4 mr-1" />
-                                  {t('Edit')}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-red-600 hover:text-red-700"
-                                  onClick={() => openLedgerDeleteDialog(entry)}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  {t('Delete')}
-                                </Button>
-                              </div>
+                <TabsContent value="ledger" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div className="p-3 rounded-lg bg-blue-50">
+                      <p className="text-xs text-muted-foreground">{t('Total Payable')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalPayable || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-green-50">
+                      <p className="text-xs text-muted-foreground">{t('Salary Paid')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalSalaryPaid || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-orange-50">
+                      <p className="text-xs text-muted-foreground">{t('Advance Paid')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalAdvancePaid || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-purple-50">
+                      <p className="text-xs text-muted-foreground">{t('Outstanding Advance')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.outstandingAdvance || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-red-50">
+                      <p className="text-xs text-muted-foreground">{t('Remaining Payable')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.remainingPayable || 0)}</p>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('Date')}</TableHead>
+                          <TableHead>{t('Reference')}</TableHead>
+                          <TableHead>{t('Debit')}</TableHead>
+                          <TableHead>{t('Credit')}</TableHead>
+                          <TableHead>{t('Balance')}</TableHead>
+                          <TableHead className="text-right">{t('Actions')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {salaryLedgerEntries.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                              {t('No ledger entries found')}
                             </TableCell>
                           </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                        ) : (
+                          salaryLedgerEntries.map((entry: any) => {
+                            return (
+                              <TableRow key={entry.id}>
+                                <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
+                                <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
+                                <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
+                                <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
+                                <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                      <Pencil className="h-4 w-4 mr-1" />
+                                      {t('Edit')}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 hover:text-red-700"
+                                      onClick={() => openLedgerDeleteDialog(entry)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-1" />
+                                      {t('Delete')}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="advances" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      {t('Advances given to this employee and how much has been recovered. These do not appear in the Expense report.')}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setShowLedgerAdvanceDialog(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        {t('Give Advance')}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowLedgerRecoverDialog(true)}
+                        disabled={!(Number(employeeLedgerSummary?.outstandingAdvance || 0) > 0)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        {t('Recover Advance')}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-lg bg-orange-50">
+                      <p className="text-xs text-muted-foreground">{t('Advance Given')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalAdvancePaid || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-green-50">
+                      <p className="text-xs text-muted-foreground">{t('Advance Recovered')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.totalAdvanceRecovered || 0)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-purple-50">
+                      <p className="text-xs text-muted-foreground">{t('Outstanding Advance')}</p>
+                      <p className="font-semibold">{formatCurrency(employeeLedgerSummary?.outstandingAdvance || 0)}</p>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('Date')}</TableHead>
+                          <TableHead>{t('Type')}</TableHead>
+                          <TableHead>{t('Reference')}</TableHead>
+                          <TableHead>{t('Amount')}</TableHead>
+                          <TableHead className="text-right">{t('Actions')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {advanceLedgerEntries.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                              {t('No advances recorded')}
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          advanceLedgerEntries.map((entry: any) => (
+                            <TableRow key={entry.id}>
+                              <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
+                              <TableCell>
+                                {entry.transactionType === 'advance_payment' ? t('Advance Given') : t('Advance Recovered')}
+                              </TableCell>
+                              <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
+                              <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                    <Pencil className="h-4 w-4 mr-1" />
+                                    {t('Edit')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 hover:text-red-700"
+                                    onClick={() => openLedgerDeleteDialog(entry)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    {t('Delete')}
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </>
           )}
         </CardContent>
@@ -789,15 +985,31 @@ export default function PayrollManagement() {
               <Label>{t('Amount')}</Label>
               <Input
                 type="number"
-                min="0.01"
+                min="0"
                 step="0.01"
                 value={ledgerPaymentData.amount}
                 onChange={(e) => setLedgerPaymentData({ ...ledgerPaymentData, amount: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                {t('Remaining Payable')}: {formatCurrency(employeeLedgerSummary?.remainingPayable || 0)}
+                {t('You can pay up to')}: {formatCurrency(employeeLedgerSummary?.payableNow || 0)}
               </p>
             </div>
+            {Number(employeeLedgerSummary?.outstandingAdvance || 0) > 0 && (
+              <div className="space-y-2">
+                <Label>{t('Deduct from Advance')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  max={employeeLedgerSummary?.outstandingAdvance || 0}
+                  value={ledgerPaymentData.advanceRecovery}
+                  onChange={(e) => setLedgerPaymentData({ ...ledgerPaymentData, advanceRecovery: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('Outstanding Advance')}: {formatCurrency(employeeLedgerSummary?.outstandingAdvance || 0)}
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>{t('Payment Date')}</Label>
               <Input
@@ -819,8 +1031,115 @@ export default function PayrollManagement() {
             <Button variant="outline" onClick={() => setShowLedgerPayDialog(false)}>
               {t('Cancel')}
             </Button>
-            <Button onClick={handleLedgerPay} disabled={isPayingEmployee || !ledgerPaymentData.amount}>
+            <Button
+              onClick={handleLedgerPay}
+              disabled={isPayingEmployee || (!Number(ledgerPaymentData.amount) && !Number(ledgerPaymentData.advanceRecovery))}
+            >
               {isPayingEmployee ? t('Processing...') : t('Pay')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ledger Advance Dialog */}
+      <Dialog open={showLedgerAdvanceDialog} onOpenChange={setShowLedgerAdvanceDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Give Advance')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Amount')}</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={ledgerAdvanceData.amount}
+                onChange={(e) => setLedgerAdvanceData({ ...ledgerAdvanceData, amount: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('This will not appear in the Expense report; it will still be recorded in the Cash Book and can be recovered later from a salary payment.')}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Payment Date')}</Label>
+              <Input
+                type="date"
+                value={ledgerAdvanceData.paymentDate}
+                onChange={(e) => setLedgerAdvanceData({ ...ledgerAdvanceData, paymentDate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Notes')}</Label>
+              <Input
+                value={ledgerAdvanceData.notes}
+                onChange={(e) => setLedgerAdvanceData({ ...ledgerAdvanceData, notes: e.target.value })}
+                placeholder={t('Optional notes')}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLedgerAdvanceDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleLedgerAdvance} disabled={isCreatingAdvance || !ledgerAdvanceData.amount}>
+              {isCreatingAdvance ? t('Processing...') : t('Give Advance')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ledger Recover Advance Dialog */}
+      <Dialog open={showLedgerRecoverDialog} onOpenChange={setShowLedgerRecoverDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Recover Advance')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('Amount')}</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                max={employeeLedgerSummary?.outstandingAdvance || 0}
+                value={ledgerRecoverData.amount}
+                onChange={(e) => setLedgerRecoverData({ ...ledgerRecoverData, amount: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('Outstanding Advance')}: {formatCurrency(employeeLedgerSummary?.outstandingAdvance || 0)} — {t('this is a bookkeeping entry only, no cash moves, so it will not affect the Cash Book or Expense report.')}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Date')}</Label>
+              <Input
+                type="date"
+                value={ledgerRecoverData.paymentDate}
+                onChange={(e) => setLedgerRecoverData({ ...ledgerRecoverData, paymentDate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Notes')}</Label>
+              <Input
+                value={ledgerRecoverData.notes}
+                onChange={(e) => setLedgerRecoverData({ ...ledgerRecoverData, notes: e.target.value })}
+                placeholder={t('Optional notes')}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLedgerRecoverDialog(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button
+              onClick={handleLedgerRecover}
+              disabled={
+                isPayingEmployee ||
+                !ledgerRecoverData.amount ||
+                Number(ledgerRecoverData.amount) > Number(employeeLedgerSummary?.outstandingAdvance || 0)
+              }
+            >
+              {isPayingEmployee ? t('Processing...') : t('Recover Advance')}
             </Button>
           </DialogFooter>
         </DialogContent>

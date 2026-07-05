@@ -5,11 +5,12 @@ const cashBookService = require('./cashBook.service');
 const expenseService = require('./expense.service');
 const expenseCategoryService = require('./expenseCategory.service');
 
-const PAYMENT_TRANSACTION_TYPES = new Set(['salary_payment', 'advance_payment']);
+const EXPENSE_SYNC_TYPES = new Set(['salary_payment']);
+const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
 
 const shouldSyncCashBook = (entry) => {
   if (!entry) return false;
-  return PAYMENT_TRANSACTION_TYPES.has(String(entry.transactionType || '').toLowerCase());
+  return CASHBOOK_SYNC_TYPES.has(String(entry.transactionType || '').toLowerCase());
 };
 
 const getCashBookAmount = (entry) => {
@@ -55,7 +56,7 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
 
 const syncExpenseFromEmployeePayment = async ({ ledgerEntry, employeeDoc }) => {
   if (!ledgerEntry || !employeeDoc) return null;
-  if (!PAYMENT_TRANSACTION_TYPES.has(String(ledgerEntry.transactionType || '').toLowerCase())) {
+  if (!EXPENSE_SYNC_TYPES.has(String(ledgerEntry.transactionType || '').toLowerCase())) {
     return null;
   }
   const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
@@ -69,7 +70,7 @@ const syncExpenseFromEmployeePayment = async ({ ledgerEntry, employeeDoc }) => {
 };
 
 const syncExpenseForLedgerEntry = async (entry) => {
-  if (!entry || !PAYMENT_TRANSACTION_TYPES.has(String(entry.transactionType || '').toLowerCase())) {
+  if (!entry || !EXPENSE_SYNC_TYPES.has(String(entry.transactionType || '').toLowerCase())) {
     return null;
   }
   const employeeId = entry.employee?._id || entry.employee;
@@ -85,7 +86,12 @@ const recalculateBalances = async (employeeId) => {
   let runningBalance = 0;
 
   for (const entry of entries) {
-    runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+    // advance_recovery is a bookkeeping memo (no new cash movement, already
+    // accounted for when the advance_payment credit hit the balance), so it
+    // must not reduce the running balance a second time.
+    if (entry.transactionType !== 'advance_recovery') {
+      runningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+    }
     if (entry.balance !== runningBalance) {
       entry.balance = runningBalance;
       await entry.save();
@@ -176,20 +182,36 @@ const getEmployeeLedgerSummary = async (employeeId, scope = {}) => {
   let totalPayable = 0;
   let totalSalaryPaid = 0;
   let totalAdvancePaid = 0;
+  let totalAdvanceRecovered = 0;
 
   entries.forEach((entry) => {
     if (entry.transactionType === 'salary_payable') totalPayable += Number(entry.debit || 0);
     if (entry.transactionType === 'salary_payment') totalSalaryPaid += Number(entry.credit || 0);
     if (entry.transactionType === 'advance_payment') totalAdvancePaid += Number(entry.credit || 0);
+    if (entry.transactionType === 'advance_recovery') totalAdvanceRecovered += Number(entry.credit || 0);
   });
 
-  const remainingPayable = Math.max(0, totalPayable - totalSalaryPaid - totalAdvancePaid);
+  // Advance is real cash paid out, so it reduces the running ledger balance
+  // immediately (same as a salary payment). advance_recovery is a bookkeeping
+  // memo only used to track how much of that advance is considered "settled" —
+  // it does not touch the balance again (that would double-count the cash).
+  const outstandingAdvance = Math.max(0, totalAdvancePaid - totalAdvanceRecovered);
+  const currentBalance = totalPayable - totalSalaryPaid - totalAdvancePaid;
+  // payableNow is the actual cash cap the Pay button enforces — it accounts for
+  // advances already given, so the same cash can't be paid out twice.
+  const payableNow = Math.max(0, currentBalance);
+  // remainingPayable is a display-only figure: gross salary that hasn't gone
+  // through a salary_payment yet, deliberately ignoring any advance given.
+  const remainingPayable = Math.max(0, totalPayable - totalSalaryPaid);
   return {
     totalPayable,
     totalSalaryPaid,
     totalAdvancePaid,
+    totalAdvanceRecovered,
+    outstandingAdvance,
     remainingPayable,
-    currentBalance: totalPayable - (totalSalaryPaid + totalAdvancePaid),
+    payableNow,
+    currentBalance,
     transactionCount: entries.length,
   };
 };
@@ -229,16 +251,40 @@ const createAdvancePayment = async (advanceBody) => {
 };
 
 const payEmployee = async (paymentBody) => {
-  const { employee, amount, transactionDate, paymentMethod, notes, organizationId, branchId, createdBy, updatedBy } = paymentBody;
+  const {
+    employee,
+    amount,
+    advanceRecovery,
+    recoverySource,
+    transactionDate,
+    paymentMethod,
+    notes,
+    organizationId,
+    branchId,
+    createdBy,
+    updatedBy,
+  } = paymentBody;
   const numericAmount = Number(amount || 0);
-  if (numericAmount <= 0) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Payment amount must be greater than 0');
+  const recoveryAmount = Number(advanceRecovery || 0);
+
+  if (numericAmount <= 0 && recoveryAmount <= 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Enter a payment amount or an advance recovery amount');
   }
 
   const summary = await getEmployeeLedgerSummary(employee, { organizationId, branchId });
   const outstandingPayable = Math.max(0, Number(summary.currentBalance || 0)); // company owes employee
-  const salaryPaymentAmount = Math.min(numericAmount, outstandingPayable);
-  const extraAdvanceAmount = Math.max(0, numericAmount - salaryPaymentAmount);
+  const outstandingAdvance = Math.max(0, Number(summary.outstandingAdvance || 0));
+
+  if (numericAmount > outstandingPayable) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Amount exceeds payable salary of Rs ${outstandingPayable}. Use the Advance button to pay extra.`
+    );
+  }
+
+  if (recoveryAmount > outstandingAdvance) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Advance recovery exceeds outstanding advance of Rs ${outstandingAdvance}`);
+  }
 
   const employeeDoc = await Employee.findById(employee);
   if (!employeeDoc) {
@@ -246,67 +292,59 @@ const payEmployee = async (paymentBody) => {
   }
 
   let salaryEntry = null;
-  let advanceEntry = null;
+  let recoveryEntry = null;
+  const normalizedNotes = String(notes || '').trim();
+  const entryDate = transactionDate ? new Date(transactionDate) : new Date();
 
-  if (salaryPaymentAmount > 0) {
-    const normalizedNotes = String(notes || '').trim();
+  if (numericAmount > 0) {
     salaryEntry = await createLedgerEntry({
       organizationId,
       branchId,
       employee,
       transactionType: 'salary_payment',
-      transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+      transactionDate: entryDate,
       reference: normalizedNotes || 'MANUAL-PAYMENT',
       referenceModel: 'EmployeeLedger',
       description: 'Salary payment to employee',
       debit: 0,
-      credit: salaryPaymentAmount,
+      credit: numericAmount,
       paymentMethod: paymentMethod || 'Cash',
       notes: normalizedNotes,
       createdBy,
       updatedBy,
     });
+    await syncExpenseFromEmployeePayment({ ledgerEntry: salaryEntry, employeeDoc });
   }
 
-  if (extraAdvanceAmount > 0) {
-    const normalizedNotes = String(notes || '').trim();
-    advanceEntry = await createLedgerEntry({
+  if (recoveryAmount > 0) {
+    // A recovery entered alongside a Pay is "salary paid from advance" and
+    // belongs in the Ledger view too. A standalone recovery (from the Advances
+    // tab's "Recover Advance" button, with no salary payment attached) is an
+    // advance-only adjustment and should stay out of the Ledger view.
+    const isStandalone = recoverySource === 'standalone';
+    recoveryEntry = await createLedgerEntry({
       organizationId,
       branchId,
       employee,
-      transactionType: 'advance_payment',
-      transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-      reference: normalizedNotes || 'MANUAL-ADVANCE',
+      transactionType: 'advance_recovery',
+      transactionDate: entryDate,
+      reference: normalizedNotes || (isStandalone ? 'ADVANCE-RECOVERY' : 'SALARY-FROM-ADVANCE'),
       referenceModel: 'EmployeeLedger',
-      description: 'Advance paid to employee',
+      description: isStandalone ? 'Advance recovery adjustment' : 'Salary paid from advance',
       debit: 0,
-      credit: extraAdvanceAmount,
+      credit: recoveryAmount,
       paymentMethod: paymentMethod || 'Cash',
       notes: normalizedNotes,
       createdBy,
       updatedBy,
-    });
-  }
-
-  if (salaryPaymentAmount > 0) {
-    await syncExpenseFromEmployeePayment({
-      ledgerEntry: salaryEntry,
-      employeeDoc,
-    });
-  }
-
-  if (extraAdvanceAmount > 0) {
-    await syncExpenseFromEmployeePayment({
-      ledgerEntry: advanceEntry,
-      employeeDoc,
     });
   }
 
   return {
-    salaryPaymentAmount,
-    extraAdvanceAmount,
+    salaryPaymentAmount: numericAmount,
+    advanceRecoveryAmount: recoveryAmount,
     salaryEntry,
-    advanceEntry,
+    recoveryEntry,
   };
 };
 
