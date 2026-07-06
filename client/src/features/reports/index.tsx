@@ -41,6 +41,7 @@ import { InstallmentReport } from './components/installment-report'
 import { MyWalletReport } from './components/my-wallet-report'
 import { ActivitySummaryReport } from './components/activity-summary-report'
 import { SalesPurchaseSummaryReport } from './components/sales-purchase-summary-report'
+import { CompleteReport } from './components/complete-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -233,6 +234,9 @@ export default function ReportsPage() {
           <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full sm:min-w-0'>
             <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
             <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
+            {isMobileShop && (
+              <TabsTrigger value='complete' className='text-xs sm:text-sm px-2 sm:px-3'>Complete Report</TabsTrigger>
+            )}
             <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
             <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
@@ -284,6 +288,12 @@ export default function ReportsPage() {
         <TabsContent value='summary' className='mt-6'>
           <ActivitySummaryReport ref={activeTab === 'summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
+
+        {isMobileShop && (
+          <TabsContent value='complete' className='mt-6'>
+            <CompleteReport ref={activeTab === 'complete' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
         <TabsContent value='sales' className='mt-6'>
           <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />

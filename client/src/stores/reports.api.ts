@@ -783,10 +783,50 @@ export interface SalesPurchaseSummaryReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface WalletWiseTransaction {
+  id: string
+  date: string
+  [key: string]: unknown
+}
+
+export interface WalletWiseEntry {
+  walletId: string | null
+  walletType: string
+  currentBalance: number
+  isLoadWallet: boolean
+  cash: {
+    withdrawals: number
+    deposits: number
+    withdrawalAmount: number
+    depositAmount: number
+    profit: number
+    transactions: WalletWiseTransaction[]
+  }
+  load: {
+    sold: number
+    purchased: number
+    profit: number
+    transactions: WalletWiseTransaction[]
+  }
+  simSale: {
+    count: number
+    saleAmount: number
+    loadAmount: number
+    commission: number
+    transactions: WalletWiseTransaction[]
+  }
+  totals: { transactions: number; profit: number }
+}
+
+export interface WalletWiseReport {
+  wallets: WalletWiseEntry[]
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1003,6 +1043,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['LoadReport'],
     }),
+    getWalletWiseReport: builder.query<WalletWiseReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/wallet-wise?${searchParams.toString()}`
+      },
+      providesTags: ['WalletWiseReport'],
+    }),
     getWalletBalanceStatement: builder.query<WalletBalanceStatement, { walletType: string; startDate?: string; endDate?: string }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
@@ -1114,6 +1163,7 @@ export const {
   useGetSalesReturnsReportQuery,
   useGetPurchaseReturnsReportQuery,
   useGetLoadReportQuery,
+  useGetWalletWiseReportQuery,
   useGetWalletBalanceStatementQuery,
   useGetRepairReportQuery,
   useGetServiceReportQuery,

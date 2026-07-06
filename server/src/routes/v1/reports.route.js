@@ -42,6 +42,8 @@ router.route('/purchase-returns').get(auth('viewReports'), reportsController.get
 
 router.route('/load').get(auth('viewReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
 
+router.route('/wallet-wise').get(auth('viewReports'), reportsController.getWalletWiseReport);
+
 router
   .route('/load/wallet-balance-statement')
   .get(auth('viewReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);

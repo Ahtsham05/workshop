@@ -2088,6 +2088,164 @@ async function getLoadReport(req, res) {
   });
 }
 
+/* ── Wallet-wise (Sim-wise) Report ─────────────────────────────────────────── */
+/**
+ * Combines Cash Management (CashWithdrawal), Load (LoadTransaction/LoadPurchase)
+ * and Sim Sale records into one wallet-by-wallet ("sim-wise") breakdown with
+ * full transaction detail, for every wallet in one pass (no per-wallet loop).
+ */
+async function getWalletWiseReport(req, res) {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const dateMatch = { ...scope, date: { $gte: start, $lte: end } };
+
+  const [wallets, cashRows, loadRows, loadPurchaseRows, simSaleRows] = await Promise.all([
+    Wallet.find(scope).sort({ type: 1 }).lean(),
+    CashWithdrawal.find(dateMatch)
+      .select('walletType transactionType amount cashAmount profit customerName customerNumber customerCNIC customerAccountType date')
+      .sort({ date: -1 })
+      .lean(),
+    LoadTransaction.find(dateMatch)
+      .select('walletType mobileNumber customerName network amount profit paymentMethod date')
+      .sort({ date: -1 })
+      .lean(),
+    LoadPurchase.find(dateMatch)
+      .select('walletType supplierName amount profit date')
+      .sort({ date: -1 })
+      .lean(),
+    SimSale.find(dateMatch)
+      .select('walletType productName customerName customerMobile customerCNIC loadAmount saleAmount commission date')
+      .sort({ date: -1 })
+      .lean(),
+  ]);
+
+  const bucket = () => ({
+    cash: { withdrawals: 0, deposits: 0, withdrawalAmount: 0, depositAmount: 0, profit: 0, transactions: [] },
+    load: { sold: 0, purchased: 0, profit: 0, transactions: [] },
+    simSale: { count: 0, saleAmount: 0, loadAmount: 0, commission: 0, transactions: [] },
+  });
+  const byWalletType = new Map();
+  const getBucket = (walletType) => {
+    const key = walletType || 'unknown';
+    if (!byWalletType.has(key)) byWalletType.set(key, bucket());
+    return byWalletType.get(key);
+  };
+
+  cashRows.forEach((row) => {
+    const b = getBucket(row.walletType).cash;
+    const isWithdrawal = row.transactionType === 'withdrawal';
+    if (isWithdrawal) {
+      b.withdrawals += 1;
+      b.withdrawalAmount += row.amount || 0;
+    } else {
+      b.deposits += 1;
+      b.depositAmount += row.amount || 0;
+    }
+    b.profit += row.profit || 0;
+    b.transactions.push({
+      id: String(row._id),
+      date: row.date,
+      type: row.transactionType,
+      customerName: row.customerName || '',
+      customerNumber: row.customerNumber || '',
+      customerCNIC: row.customerCNIC || '',
+      accountType: row.customerAccountType || '',
+      amount: row.amount || 0,
+      cashAmount: row.cashAmount || 0,
+      profit: row.profit || 0,
+    });
+  });
+
+  loadRows.forEach((row) => {
+    const b = getBucket(row.walletType).load;
+    b.sold += row.amount || 0;
+    b.profit += row.profit || 0;
+    b.transactions.push({
+      id: String(row._id),
+      date: row.date,
+      kind: 'sale',
+      customerName: row.customerName || '',
+      mobileNumber: row.mobileNumber || '',
+      network: row.network || '',
+      amount: row.amount || 0,
+      profit: row.profit || 0,
+      paymentMethod: row.paymentMethod || '',
+    });
+  });
+
+  loadPurchaseRows.forEach((row) => {
+    const b = getBucket(row.walletType).load;
+    b.purchased += row.amount || 0;
+    b.transactions.push({
+      id: String(row._id),
+      date: row.date,
+      kind: 'purchase',
+      customerName: row.supplierName || '',
+      amount: row.amount || 0,
+      profit: row.profit || 0,
+    });
+  });
+
+  simSaleRows.forEach((row) => {
+    const b = getBucket(row.walletType).simSale;
+    b.count += 1;
+    b.saleAmount += row.saleAmount || 0;
+    b.loadAmount += row.loadAmount || 0;
+    b.commission += row.commission || 0;
+    b.transactions.push({
+      id: String(row._id),
+      date: row.date,
+      productName: row.productName || '',
+      customerName: row.customerName || '',
+      customerMobile: row.customerMobile || '',
+      customerCNIC: row.customerCNIC || '',
+      saleAmount: row.saleAmount || 0,
+      loadAmount: row.loadAmount || 0,
+      commission: row.commission || 0,
+    });
+  });
+
+  const walletList = wallets.map((wallet) => {
+    const b = byWalletType.get(wallet.type) || bucket();
+    const totalProfit = b.cash.profit + b.load.profit + b.simSale.commission;
+    const totalTransactions =
+      b.cash.transactions.length + b.load.transactions.length + b.simSale.transactions.length;
+    byWalletType.delete(wallet.type);
+    return {
+      walletId: String(wallet._id),
+      walletType: wallet.type,
+      currentBalance: wallet.balance || 0,
+      isLoadWallet: isLoadWalletName(wallet.type),
+      cash: b.cash,
+      load: b.load,
+      simSale: b.simSale,
+      totals: { transactions: totalTransactions, profit: totalProfit },
+    };
+  });
+
+  // Wallet types referenced by transactions but with no matching Wallet doc (e.g. deleted wallet)
+  byWalletType.forEach((b, walletType) => {
+    const totalProfit = b.cash.profit + b.load.profit + b.simSale.commission;
+    const totalTransactions =
+      b.cash.transactions.length + b.load.transactions.length + b.simSale.transactions.length;
+    walletList.push({
+      walletId: null,
+      walletType,
+      currentBalance: 0,
+      isLoadWallet: isLoadWalletName(walletType),
+      cash: b.cash,
+      load: b.load,
+      simSale: b.simSale,
+      totals: { transactions: totalTransactions, profit: totalProfit },
+    });
+  });
+
+  res.status(httpStatus.OK).send({
+    wallets: walletList,
+    period: { startDate: start, endDate: end },
+  });
+}
+
 /* ── Repair Report ──────────────────────────────────────────────────────────── */
 async function getRepairReport(req, res) {
   const scope = buildScope(req);
@@ -3267,7 +3425,7 @@ module.exports = {
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
   getBatchExpiryReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
-  getLoadReport, getRepairReport, getServiceReport,
+  getLoadReport, getWalletWiseReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,
   getSimSaleReport, getInstallmentReport,
   getActivitySummaryReport,
