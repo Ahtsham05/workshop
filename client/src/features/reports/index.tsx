@@ -235,7 +235,7 @@ export default function ReportsPage() {
             <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
             <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
             {isMobileShop && (
-              <TabsTrigger value='complete' className='text-xs sm:text-sm px-2 sm:px-3'>Complete Report</TabsTrigger>
+              <TabsTrigger value='complete' className='text-xs sm:text-sm px-2 sm:px-3'>Final Report</TabsTrigger>
             )}
             <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>

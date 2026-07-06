@@ -889,22 +889,35 @@ const getSupplierReport = catchAsync(async (req, res) => {
 const getExpenseReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { start, end } = parseRange(req.query);
-  const { category } = req.query;
+  const { category, groupRecurring } = req.query;
 
   const baseMatch = { ...scope, date: { $gte: start, $lte: end } };
   if (category) baseMatch.category = category;
 
-  const [expenseData, categoryBreakdown, summary, categoryExpenses] = await Promise.all([
+  // Auto-generated recurring expenses are tagged with a reference like "AUTO-XXXXXX"
+  // (see recurringExpense.service.js). When requested (Complete Report only), split
+  // them into their own breakdown, separate from manually-entered expenses, without
+  // touching the expense's own stored category.
+  const splitRecurring = groupRecurring === 'true';
+
+  const [expenseData, categoryBreakdown, recurringBreakdown, summary, categoryExpenses] = await Promise.all([
     Expense.aggregate([
       { $match: baseMatch },
       { $group: { _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, category: '$category' }, totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 } } },
       { $sort: { '_id.date': -1 } },
     ]),
     Expense.aggregate([
-      { $match: { ...scope, date: { $gte: start, $lte: end } } },
+      { $match: splitRecurring ? { ...scope, date: { $gte: start, $lte: end }, reference: { $not: /^AUTO-/ } } : { ...scope, date: { $gte: start, $lte: end } } },
       { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' } } },
       { $sort: { totalAmount: -1 } },
     ]),
+    splitRecurring
+      ? Expense.aggregate([
+        { $match: { ...scope, date: { $gte: start, $lte: end }, reference: { $regex: /^AUTO-/ } } },
+        { $group: { _id: '$category', totalAmount: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgAmount: { $avg: '$amount' } } },
+        { $sort: { totalAmount: -1 } },
+      ])
+      : Promise.resolve([]),
     Expense.aggregate([
       { $match: baseMatch },
       { $group: { _id: null, totalExpenses: { $sum: '$amount' }, expenseCount: { $sum: 1 }, avgExpense: { $avg: '$amount' }, maxExpense: { $max: '$amount' }, minExpense: { $min: '$amount' } } },
@@ -918,6 +931,7 @@ const getExpenseReport = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send({
     data: expenseData,
     categoryBreakdown,
+    recurringBreakdown,
     summary: summary[0] || {},
     categoryExpenses,
     period: { startDate: start, endDate: end },
@@ -2114,7 +2128,7 @@ async function getWalletWiseReport(req, res) {
       .sort({ date: -1 })
       .lean(),
     SimSale.find(dateMatch)
-      .select('walletType productName customerName customerMobile customerCNIC loadAmount saleAmount commission date')
+      .select('walletType productName customerName customerMobile customerCNIC loadAmount purchaseAmount saleAmount commission date')
       .sort({ date: -1 })
       .lean(),
   ]);
@@ -2122,7 +2136,7 @@ async function getWalletWiseReport(req, res) {
   const bucket = () => ({
     cash: { withdrawals: 0, deposits: 0, withdrawalAmount: 0, depositAmount: 0, profit: 0, transactions: [] },
     load: { sold: 0, purchased: 0, profit: 0, transactions: [] },
-    simSale: { count: 0, saleAmount: 0, loadAmount: 0, commission: 0, transactions: [] },
+    simSale: { count: 0, saleAmount: 0, loadAmount: 0, purchaseAmount: 0, commission: 0, transactions: [] },
   });
   const byWalletType = new Map();
   const getBucket = (walletType) => {
@@ -2176,6 +2190,7 @@ async function getWalletWiseReport(req, res) {
   loadPurchaseRows.forEach((row) => {
     const b = getBucket(row.walletType).load;
     b.purchased += row.amount || 0;
+    b.profit += row.profit || 0;
     b.transactions.push({
       id: String(row._id),
       date: row.date,
@@ -2191,6 +2206,7 @@ async function getWalletWiseReport(req, res) {
     b.count += 1;
     b.saleAmount += row.saleAmount || 0;
     b.loadAmount += row.loadAmount || 0;
+    b.purchaseAmount += row.purchaseAmount || 0;
     b.commission += row.commission || 0;
     b.transactions.push({
       id: String(row._id),
@@ -2201,6 +2217,7 @@ async function getWalletWiseReport(req, res) {
       customerCNIC: row.customerCNIC || '',
       saleAmount: row.saleAmount || 0,
       loadAmount: row.loadAmount || 0,
+      purchaseAmount: row.purchaseAmount || 0,
       commission: row.commission || 0,
     });
   });

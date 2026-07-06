@@ -812,6 +812,7 @@ export interface WalletWiseEntry {
     count: number
     saleAmount: number
     loadAmount: number
+    purchaseAmount: number
     commission: number
     transactions: WalletWiseTransaction[]
   }
@@ -942,18 +943,20 @@ export const reportsApi = createApi({
     getExpenseReport: builder.query<{
       data: ExpenseReportData[]
       categoryBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number }[]
+      recurringBreakdown: { _id: string; totalAmount: number; expenseCount: number; avgAmount: number }[]
       categoryExpenses: {
         _id: string; expenseNumber: string; category: string; description: string
         amount: number; paymentMethod: string; date: string; vendor?: string; reference?: string; notes?: string
       }[]
       summary: { totalExpenses: number; expenseCount: number; avgExpense: number }
       period: { startDate: string; endDate: string }
-    }, { startDate?: string; endDate?: string; category?: string }>({
+    }, { startDate?: string; endDate?: string; category?: string; groupRecurring?: boolean }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.startDate) searchParams.set('startDate', params.startDate)
         if (params.endDate) searchParams.set('endDate', params.endDate)
         if (params.category) searchParams.set('category', params.category)
+        if (params.groupRecurring) searchParams.set('groupRecurring', 'true')
         return `/expenses?${searchParams.toString()}`
       },
       providesTags: ['ExpenseReport'],

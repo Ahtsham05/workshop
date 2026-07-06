@@ -387,6 +387,21 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
     AgentBill.aggregate([
       { $match: rangeFilter },
       {
+        $addFields: { overdueApplies: overdueAppliesExpr },
+      },
+      {
+        $addFields: {
+          billTotal: {
+            $add: [
+              '$currentBillAmount',
+              '$previousBillAmount',
+              '$previousOverdueAmount',
+              { $cond: ['$overdueApplies', '$overdueAmount', 0] },
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: null,
           totalBills: { $sum: 1 },
@@ -394,7 +409,8 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
           totalPreviousBill: { $sum: '$previousBillAmount' },
           totalOverdue: { $sum: '$overdueAmount' },
           totalPreviousOverdue: { $sum: '$previousOverdueAmount' },
-          totalCollection: { $sum: '$totalAmount' },
+          totalCollection: { $sum: '$billTotal' },
+          totalPayable: { $sum: { $cond: ['$isPaid', 0, '$billTotal'] } },
           totalProfit: { $sum: '$profit' },
         },
       },
@@ -402,10 +418,25 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
     AgentBill.aggregate([
       { $match: rangeFilter },
       {
+        $addFields: { overdueApplies: overdueAppliesExpr },
+      },
+      {
+        $addFields: {
+          billTotal: {
+            $add: [
+              '$currentBillAmount',
+              '$previousBillAmount',
+              '$previousOverdueAmount',
+              { $cond: ['$overdueApplies', '$overdueAmount', 0] },
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$collectionDate' } },
           billCount: { $sum: 1 },
-          totalCollection: { $sum: '$totalAmount' },
+          totalCollection: { $sum: '$billTotal' },
           totalProfit: { $sum: '$profit' },
         },
       },
@@ -414,10 +445,27 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
     AgentBill.aggregate([
       { $match: rangeFilter },
       {
+        $addFields: { overdueApplies: overdueAppliesExpr },
+      },
+      {
+        $addFields: {
+          billTotal: {
+            $add: [
+              '$currentBillAmount',
+              '$previousBillAmount',
+              '$previousOverdueAmount',
+              { $cond: ['$overdueApplies', '$overdueAmount', 0] },
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: '$companyName',
           billCount: { $sum: 1 },
-          totalCollection: { $sum: '$totalAmount' },
+          totalCollection: { $sum: '$billTotal' },
+          totalOverdue: { $sum: '$overdueAmount' },
+          totalPayable: { $sum: { $cond: ['$isPaid', 0, '$billTotal'] } },
           totalProfit: { $sum: '$profit' },
         },
       },
@@ -472,6 +520,7 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
     totalOverdue: 0,
     totalPreviousOverdue: 0,
     totalCollection: 0,
+    totalPayable: 0,
     totalProfit: 0,
   };
 
@@ -485,6 +534,7 @@ const getAgentBillReport = async ({ organizationId, branchId, startDate, endDate
     totalOverdue: summary.totalOverdue,
     totalPreviousOverdue: summary.totalPreviousOverdue,
     totalCollection: summary.totalCollection,
+    totalPayable: summary.totalPayable,
     totalProfit: summary.totalProfit,
     totalPending: pendingCount,
     totalDueToday: dueTodayCount,

@@ -3,26 +3,12 @@ import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import { Link } from '@tanstack/react-router'
 import { useSelector } from 'react-redux'
-import { format } from 'date-fns'
+import { differenceInCalendarDays, format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
-import {
-  ArrowRight,
-  Banknote,
-  ChevronDown,
-  ChevronRight,
-  Landmark,
-  Receipt,
-  ReceiptText,
-  Search,
-  ShieldCheck,
-  Smartphone,
-  TrendingUp,
-  Wrench,
-} from 'lucide-react'
+import { ArrowRight, Search, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
 import {
   Table,
   TableBody,
@@ -44,13 +30,11 @@ import {
   useGetCustomerReportQuery,
   useGetSupplierReportQuery,
   useGetProductReportQuery,
-  type WalletWiseEntry,
   type WalletWiseTransaction,
 } from '@/stores/reports.api'
 import { useGetBillPaymentReportQuery, useGetAgentBillReportQuery } from '@/stores/mobile-shop.api'
 import { AGENT_BILL_EMAIL } from '../../mobile-shop/bill-payments'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
-import { kpiCardClass, toneIconWrapClass, toneColor, type StatCardTone } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 
 interface CompleteReportProps {
@@ -60,33 +44,6 @@ interface CompleteReportProps {
 
 const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v || 0)
 const fmtDate = (v: string | undefined) => (v ? format(new Date(v), 'dd MMM yyyy') : '—')
-
-const SECTIONS = [
-  { key: 'overview', label: 'Overview', icon: TrendingUp, tone: 'emerald' as const },
-  { key: 'sim-wise', label: 'Sim-wise (Sale / Cash / Load)', icon: Smartphone, tone: 'violet' as const },
-  { key: 'services', label: 'Services', icon: Wrench, tone: 'sky' as const },
-  { key: 'bill-payments', label: 'Bill Payments', icon: Receipt, tone: 'amber' as const },
-  { key: 'agent-bills', label: 'Agent Bills', icon: ReceiptText, tone: 'indigo' as const },
-  { key: 'repairing', label: 'Repairing', icon: Wrench, tone: 'orange' as const },
-  { key: 'expenses', label: 'Expenses', icon: Banknote, tone: 'rose' as const },
-  { key: 'accounts', label: 'My Accounts', icon: Landmark, tone: 'cyan' as const },
-]
-
-const CATEGORY_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
-  '#6366f1', '#94a3b8',
-]
-
-const PROFIT_CENTERS: { key: 'loadProfit' | 'repairProfit' | 'serviceProfit' | 'simSaleProfit' | 'billNetProfit' | 'withdrawalProfit' | 'depositProfit'; label: string; tone: StatCardTone }[] = [
-  { key: 'loadProfit', label: 'Load', tone: 'indigo' },
-  { key: 'repairProfit', label: 'Repairing', tone: 'orange' },
-  { key: 'serviceProfit', label: 'Services', tone: 'sky' },
-  { key: 'simSaleProfit', label: 'Sim Sale', tone: 'violet' },
-  { key: 'billNetProfit', label: 'Bill Payments', tone: 'amber' },
-  { key: 'withdrawalProfit', label: 'Cash Withdrawals', tone: 'emerald' },
-  { key: 'depositProfit', label: 'Cash Deposits', tone: 'cyan' },
-]
 
 function LockedNote({ label }: { label: string }) {
   return (
@@ -112,7 +69,7 @@ interface PersonalLedgerEntry {
 const isIncomeLedgerType = (type: string) => type === 'income' || type === 'opening_balance'
 
 function buildLedgerCategoryBreakdown(entries: PersonalLedgerEntry[], flow: 'income' | 'expense') {
-  const map = new Map<string, number>()
+  const map = new Map<string, { totalAmount: number; count: number }>()
   for (const entry of entries) {
     if (flow === 'expense') {
       if (entry.transactionType !== 'expense' || !(entry.debit > 0)) continue
@@ -121,164 +78,14 @@ function buildLedgerCategoryBreakdown(entries: PersonalLedgerEntry[], flow: 'inc
     }
     const amount = flow === 'expense' ? entry.debit : entry.credit
     const cat = entry.category?.trim() || 'Uncategorized'
-    map.set(cat, (map.get(cat) || 0) + amount)
+    const row = map.get(cat) || { totalAmount: 0, count: 0 }
+    row.totalAmount += amount
+    row.count += 1
+    map.set(cat, row)
   }
   return Array.from(map.entries())
-    .map(([name, totalAmount]) => ({ name, totalAmount }))
+    .map(([name, row]) => ({ name, totalAmount: row.totalAmount, count: row.count }))
     .sort((a, b) => b.totalAmount - a.totalAmount)
-}
-
-function WalletCard({ wallet }: { wallet: WalletWiseEntry }) {
-  const [open, setOpen] = useState(false)
-  const hasActivity = wallet.totals.transactions > 0
-
-  return (
-    <div className={cn('rounded-xl border bg-card shadow-sm transition-all', hasActivity && 'hover:border-primary/40 hover:shadow-md')}>
-      <button
-        type='button'
-        onClick={() => setOpen((o) => !o)}
-        className='flex w-full flex-col gap-4 p-4 text-left lg:flex-row lg:items-center lg:justify-between'
-      >
-        <div className='flex items-center gap-3'>
-          <span className={cn('inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', toneIconWrapClass(wallet.isLoadWallet ? 'indigo' : 'violet'))}>
-            <Smartphone className='h-4 w-4' />
-          </span>
-          <div>
-            <div className='flex items-center gap-2'>
-              <span className='font-semibold'>{wallet.walletType}</span>
-              {wallet.isLoadWallet && <Badge variant='secondary' className='text-xs'>Load</Badge>}
-              {open ? <ChevronDown className='h-3.5 w-3.5 text-muted-foreground' /> : <ChevronRight className='h-3.5 w-3.5 text-muted-foreground' />}
-            </div>
-            <p className='text-xs text-muted-foreground'>
-              Balance: {fmt(wallet.currentBalance)} · {wallet.totals.transactions} transactions
-            </p>
-          </div>
-        </div>
-        <div className='grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4'>
-          <div>
-            <p className='text-xs text-muted-foreground'>Cash In / Out</p>
-            <p className='font-medium'>{fmt(wallet.cash.withdrawalAmount)} / {fmt(wallet.cash.depositAmount)}</p>
-          </div>
-          <div>
-            <p className='text-xs text-muted-foreground'>Load Sold / Purchased</p>
-            <p className='font-medium'>{fmt(wallet.load.sold)} / {fmt(wallet.load.purchased)}</p>
-          </div>
-          <div>
-            <p className='text-xs text-muted-foreground'>Sim Sale</p>
-            <p className='font-medium'>{wallet.simSale.count} ({fmt(wallet.simSale.saleAmount)})</p>
-          </div>
-          <div>
-            <p className='text-xs text-muted-foreground'>Profit</p>
-            <p className='font-semibold text-green-600 dark:text-green-400'>{fmt(wallet.totals.profit)}</p>
-          </div>
-        </div>
-      </button>
-      {open && (
-        <div className='space-y-4 border-t p-4'>
-          {!hasActivity && <EmptyNote label='activity for this wallet' />}
-          {wallet.cash.transactions.length > 0 && (
-            <div>
-              <p className='mb-2 text-sm font-medium'>Cash Management</p>
-              <div className='rounded-md border'>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Number</TableHead>
-                      <TableHead>Account Type</TableHead>
-                      <TableHead className='text-right'>Amount</TableHead>
-                      <TableHead className='text-right'>Profit</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {wallet.cash.transactions.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className='whitespace-nowrap text-sm'>{fmtDate(row.date)}</TableCell>
-                        <TableCell className='text-sm capitalize'>{String(row.type)}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerName || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerNumber || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.accountType || '—')}</TableCell>
-                        <TableCell className='text-right text-sm'>{fmt(Number(row.amount))}</TableCell>
-                        <TableCell className='text-right text-sm text-green-600'>{fmt(Number(row.profit))}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-          {wallet.load.transactions.length > 0 && (
-            <div>
-              <p className='mb-2 text-sm font-medium'>Load</p>
-              <div className='rounded-md border'>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Customer/Supplier</TableHead>
-                      <TableHead>Number</TableHead>
-                      <TableHead className='text-right'>Amount</TableHead>
-                      <TableHead className='text-right'>Profit</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {wallet.load.transactions.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className='whitespace-nowrap text-sm'>{fmtDate(row.date)}</TableCell>
-                        <TableCell className='text-sm capitalize'>{String(row.kind)}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerName || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.mobileNumber || '—')}</TableCell>
-                        <TableCell className='text-right text-sm'>{fmt(Number(row.amount))}</TableCell>
-                        <TableCell className='text-right text-sm text-green-600'>{fmt(Number(row.profit))}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-          {wallet.simSale.transactions.length > 0 && (
-            <div>
-              <p className='mb-2 text-sm font-medium'>Sim Sale</p>
-              <div className='rounded-md border'>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Number</TableHead>
-                      <TableHead>CNIC</TableHead>
-                      <TableHead className='text-right'>Sale Amt</TableHead>
-                      <TableHead className='text-right'>Load Amt</TableHead>
-                      <TableHead className='text-right'>Commission</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {wallet.simSale.transactions.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className='whitespace-nowrap text-sm'>{fmtDate(row.date)}</TableCell>
-                        <TableCell className='text-sm'>{String(row.productName || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerName || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerMobile || '—')}</TableCell>
-                        <TableCell className='text-sm'>{String(row.customerCNIC || '—')}</TableCell>
-                        <TableCell className='text-right text-sm'>{fmt(Number(row.saleAmount))}</TableCell>
-                        <TableCell className='text-right text-sm'>{fmt(Number(row.loadAmount))}</TableCell>
-                        <TableCell className='text-right text-sm text-green-600'>{fmt(Number(row.commission))}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
 export const CompleteReport = forwardRef<{ exportToExcel: () => void }, CompleteReportProps>(
@@ -288,9 +95,10 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
     const isAgentBillUser = user?.email === AGENT_BILL_EMAIL
     const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-    const scrollToSection = (key: string) => {
-      sectionRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    const daysInRange = useMemo(
+      () => Math.max(1, differenceInCalendarDays(new Date(endDate), new Date(startDate)) + 1),
+      [startDate, endDate],
+    )
 
     const { data: pnl, isLoading: pnlLoading } = useGetProfitLossFullReportQuery(
       { from: startDate, to: endDate },
@@ -298,7 +106,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
     )
     const { data: walletWise, isLoading: walletWiseLoading } = useGetWalletWiseReportQuery({ startDate, endDate })
     const { data: services, isLoading: servicesLoading } = useGetServiceReportQuery({ startDate, endDate })
-    const { data: billPayments, isLoading: billPaymentsLoading } = useGetBillPaymentReportQuery(
+    const { data: billPayments } = useGetBillPaymentReportQuery(
       { startDate, endDate },
       { skip: !canAccess('bill_payment') },
     )
@@ -310,7 +118,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
       { startDate, endDate },
       { skip: !canAccess('repair') },
     )
-    const { data: expenses, isLoading: expensesLoading } = useGetExpenseReportQuery({ startDate, endDate })
+    const { data: expenses, isLoading: expensesLoading } = useGetExpenseReportQuery({ startDate, endDate, groupRecurring: true })
     const { data: salesPurchase } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
     const { data: customers } = useGetCustomerReportQuery({ startDate, endDate })
     const { data: suppliers } = useGetSupplierReportQuery({ startDate, endDate })
@@ -322,6 +130,121 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
       () => (walletWise?.wallets || []).filter((w) => w.totals.transactions > 0 || w.currentBalance > 0),
       [walletWise],
     )
+
+    const sortByDateDesc = <T extends { date: string }>(rows: T[]) =>
+      rows.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    const loadReport = useMemo(() => {
+      let sold = 0
+      let purchased = 0
+      let profit = 0
+      const transactions: (WalletWiseTransaction & { wallet: string })[] = []
+      walletsWithActivity.forEach((w) => {
+        sold += w.load.sold
+        purchased += w.load.purchased
+        profit += w.load.profit
+        w.load.transactions.forEach((t) => transactions.push({ ...t, wallet: w.walletType }))
+      })
+      return { sold, purchased, profit, transactions: sortByDateDesc(transactions) }
+    }, [walletsWithActivity])
+
+    const loadWalletRows = useMemo(
+      () =>
+        walletsWithActivity
+          .filter((w) => w.load.transactions.length > 0 || w.load.sold > 0 || w.load.purchased > 0)
+          .map((w) => ({
+            walletType: w.walletType,
+            transactions: w.load.transactions.length,
+            purchased: w.load.purchased,
+            sold: w.load.sold,
+            profit: w.load.profit,
+          }))
+          .sort((a, b) => b.profit - a.profit),
+      [walletsWithActivity],
+    )
+
+    const cashReport = useMemo(() => {
+      let withdrawalAmount = 0
+      let depositAmount = 0
+      let profit = 0
+      const transactions: (WalletWiseTransaction & { wallet: string })[] = []
+      walletsWithActivity.forEach((w) => {
+        withdrawalAmount += w.cash.withdrawalAmount
+        depositAmount += w.cash.depositAmount
+        profit += w.cash.profit
+        w.cash.transactions.forEach((t) => transactions.push({ ...t, wallet: w.walletType }))
+      })
+      return { withdrawalAmount, depositAmount, profit, transactions: sortByDateDesc(transactions) }
+    }, [walletsWithActivity])
+
+    const cashWalletRows = useMemo(
+      () =>
+        walletsWithActivity
+          .filter((w) => w.cash.transactions.length > 0 || w.cash.withdrawalAmount > 0 || w.cash.depositAmount > 0)
+          .map((w) => {
+            const sendProfit = w.cash.transactions
+              .filter((t) => t.type === 'withdrawal')
+              .reduce((sum, t) => sum + (Number(t.profit) || 0), 0)
+            const receiveProfit = w.cash.transactions
+              .filter((t) => t.type === 'deposit')
+              .reduce((sum, t) => sum + (Number(t.profit) || 0), 0)
+            return {
+              walletType: w.walletType,
+              transactions: w.cash.transactions.length,
+              sendAmount: w.cash.withdrawalAmount,
+              sendProfit,
+              receiveAmount: w.cash.depositAmount,
+              receiveProfit,
+            }
+          })
+          .sort((a, b) => b.sendProfit + b.receiveProfit - (a.sendProfit + a.receiveProfit)),
+      [walletsWithActivity],
+    )
+
+    const cashWalletTotals = useMemo(
+      () =>
+        cashWalletRows.reduce(
+          (acc, r) => ({
+            sendProfit: acc.sendProfit + r.sendProfit,
+            receiveProfit: acc.receiveProfit + r.receiveProfit,
+          }),
+          { sendProfit: 0, receiveProfit: 0 },
+        ),
+      [cashWalletRows],
+    )
+
+    const simSaleReport = useMemo(() => {
+      let count = 0
+      let saleAmount = 0
+      let loadAmount = 0
+      let purchaseAmount = 0
+      let commission = 0
+      const transactions: (WalletWiseTransaction & { wallet: string })[] = []
+      walletsWithActivity.forEach((w) => {
+        count += w.simSale.count
+        saleAmount += w.simSale.saleAmount
+        loadAmount += w.simSale.loadAmount
+        purchaseAmount += w.simSale.purchaseAmount
+        commission += w.simSale.commission
+        w.simSale.transactions.forEach((t) => transactions.push({ ...t, wallet: w.walletType }))
+      })
+      return { count, saleAmount, loadAmount, purchaseAmount, commission, transactions: sortByDateDesc(transactions) }
+    }, [walletsWithActivity])
+
+    const simSaleProductRows = useMemo(() => {
+      const map = new Map<string, { productName: string; count: number; saleAmount: number; loadAmount: number; purchaseAmount: number; commission: number }>()
+      simSaleReport.transactions.forEach((t) => {
+        const name = String(t.productName || 'Unknown')
+        const row = map.get(name) || { productName: name, count: 0, saleAmount: 0, loadAmount: 0, purchaseAmount: 0, commission: 0 }
+        row.count += 1
+        row.saleAmount += Number(t.saleAmount) || 0
+        row.loadAmount += Number(t.loadAmount) || 0
+        row.purchaseAmount += Number(t.purchaseAmount) || 0
+        row.commission += Number(t.commission) || 0
+        map.set(name, row)
+      })
+      return Array.from(map.values()).sort((a, b) => b.commission - a.commission)
+    }, [simSaleReport.transactions])
 
     const [itemSearch, setItemSearch] = useState('')
     const itemRows = useMemo(() => {
@@ -402,6 +325,29 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
     const ledgerIncomeByCategory = useMemo(() => buildLedgerCategoryBreakdown(ledgerEntries, 'income'), [ledgerEntries])
     const ledgerExpenseByCategory = useMemo(() => buildLedgerCategoryBreakdown(ledgerEntries, 'expense'), [ledgerEntries])
 
+    const moduleSummaryRows = useMemo(
+      () => [
+        { name: 'Load', total: loadReport.sold + loadReport.purchased, profit: loadReport.profit },
+        { name: 'Cash Management', total: cashReport.withdrawalAmount + cashReport.depositAmount, profit: cashReport.profit },
+        { name: 'Sim Sale', total: simSaleReport.saleAmount, profit: simSaleReport.commission },
+        { name: 'Services', total: services?.summary.totalAmount ?? 0, profit: services?.summary.totalProfit ?? 0 },
+        { name: 'Agent Bills', total: agentBills?.totalCollection ?? 0, profit: agentBills?.totalProfit ?? 0 },
+        { name: 'Repairing', total: repair?.summary.totalRevenue ?? 0, profit: repair?.summary.totalProfit ?? 0 },
+        { name: 'Expenses', total: expenses?.summary.totalExpenses ?? 0, profit: -(expenses?.summary.totalExpenses ?? 0) },
+        { name: 'My Accounts', total: ledgerSummary.totalCredit, profit: ledgerSummary.netBalance },
+      ],
+      [loadReport, cashReport, simSaleReport, services, agentBills, repair, expenses, ledgerSummary],
+    )
+
+    const moduleSummaryTotals = useMemo(
+      () =>
+        moduleSummaryRows.reduce(
+          (acc, r) => ({ total: acc.total + r.total, profit: acc.profit + r.profit }),
+          { total: 0, profit: 0 },
+        ),
+      [moduleSummaryRows],
+    )
+
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
         try {
@@ -479,6 +425,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               Customer: r.customerName,
               Number: r.customerMobile,
               CNIC: r.customerCNIC,
+              'Purchase Amount': r.purchaseAmount,
               'Sale Amount': r.saleAmount,
               'Load Amount': r.loadAmount,
               Commission: r.commission,
@@ -610,7 +557,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
             return
           }
 
-          XLSX.writeFile(wb, `complete-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+          XLSX.writeFile(wb, `final-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
           toast.success('Data exported successfully')
         } catch (error) {
           console.error('Export error:', error)
@@ -634,31 +581,6 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
 
     return (
       <div className='space-y-6 min-w-0 max-w-full'>
-        {/* Jump-to section grid */}
-        <Card>
-          <CardHeader>
-            <CardTitle className='text-base'>Complete Report</CardTitle>
-            <CardDescription>Every module in one place — click a card to jump to its section</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-              {SECTIONS.map(({ key, label, icon: Icon, tone }) => (
-                <button
-                  key={key}
-                  type='button'
-                  onClick={() => scrollToSection(key)}
-                  className='flex items-center gap-3 rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-primary/50'
-                >
-                  <div className={toneIconWrapClass(tone)}>
-                    <Icon className='h-4 w-4' />
-                  </div>
-                  <span className='text-sm font-medium'>{label}</span>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Overview */}
         <div ref={(el) => { sectionRefs.current['overview'] = el }} className='scroll-mt-24'>
           <Card>
@@ -671,79 +593,6 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                 <LockedNote label='Overview' />
               ) : (
                 <div className='space-y-6'>
-                  <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-                    <Card className={kpiCardClass('emerald')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Net Revenue</CardTitle>
-                        <div className={toneIconWrapClass('emerald')}><TrendingUp className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{fmt(pnl?.revenue.netRevenue ?? 0)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('rose')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Cost of Goods Sold</CardTitle>
-                        <div className={toneIconWrapClass('rose')}><Receipt className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{fmt(pnl?.revenue.costOfGoodsSold ?? 0)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('sky')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Gross Profit</CardTitle>
-                        <div className={toneIconWrapClass('sky')}><Banknote className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{fmt(pnl?.revenue.grossProfit ?? 0)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('violet')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Net Profit</CardTitle>
-                        <div className={toneIconWrapClass('violet')}><Landmark className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className={cn('text-2xl font-bold', (pnl?.netProfit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600')}>
-                          {fmt(pnl?.netProfit ?? 0)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {pnl && (
-                    <div>
-                      <p className='mb-3 text-sm font-medium text-muted-foreground'>Profit by Center</p>
-                      <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-                        {PROFIT_CENTERS.map(({ key, label, tone }) => {
-                          const value = pnl.additionalProfits[key]
-                          const positiveTotal = PROFIT_CENTERS.reduce(
-                            (sum, c) => sum + Math.max(pnl.additionalProfits[c.key], 0),
-                            0,
-                          )
-                          const share = positiveTotal && value > 0 ? (value / positiveTotal) * 100 : 0
-                          return (
-                            <div key={key} className='rounded-xl border bg-card p-4 shadow-sm'>
-                              <div className='mb-2 flex items-center justify-between'>
-                                <span className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold', toneIconWrapClass(tone))}>
-                                  {label.charAt(0)}
-                                </span>
-                                {share > 0 && <Badge variant='secondary' className='text-xs'>{share.toFixed(1)}%</Badge>}
-                              </div>
-                              <p className='text-sm font-medium text-muted-foreground'>{label}</p>
-                              <p className={cn('text-lg font-bold', value >= 0 ? '' : 'text-red-600')}>{fmt(value)}</p>
-                              <div className='mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted'>
-                                <div className='h-full rounded-full' style={{ width: `${share}%`, backgroundColor: toneColor(tone) }} />
-                              </div>
-                            </div>
-                          )
-                        })}
-                        <div className='rounded-xl border bg-card p-4 shadow-sm'>
-                          <div className='mb-2 flex items-center justify-between'>
-                            <span className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold', toneIconWrapClass('rose'))}>E</span>
-                          </div>
-                          <p className='text-sm font-medium text-muted-foreground'>Expenses</p>
-                          <p className='text-lg font-bold text-red-600'>-{fmt(pnl.expenses)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div>
                     <div className='mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                       <div>
@@ -768,10 +617,9 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                           <TableHeader>
                             <TableRow>
                               <TableHead>Product</TableHead>
-                              <TableHead>Category</TableHead>
                               <TableHead className='text-right'>Qty Sold</TableHead>
-                              <TableHead className='text-right'>Purchase Price</TableHead>
-                              <TableHead className='text-right'>Sale Price</TableHead>
+                              <TableHead className='text-right'>Purchase Amount</TableHead>
+                              <TableHead className='text-right'>Sale Amount</TableHead>
                               <TableHead className='text-right'>Profit</TableHead>
                               <TableHead className='text-right'>Margin</TableHead>
                             </TableRow>
@@ -780,7 +628,6 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                             {itemRows.map((row) => (
                               <TableRow key={row._id}>
                                 <TableCell className='font-medium'>{row.productName}</TableCell>
-                                <TableCell className='text-sm text-muted-foreground'>{row.category || '—'}</TableCell>
                                 <TableCell className='text-right'>{row.totalQuantitySold}</TableCell>
                                 <TableCell className='text-right'>{fmt(row.purchaseAmount)}</TableCell>
                                 <TableCell className='text-right'>{fmt(row.totalRevenue)}</TableCell>
@@ -793,7 +640,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                           </TableBody>
                           <TableFooter>
                             <TableRow>
-                              <TableCell colSpan={2} className='font-semibold'>Total — {itemRows.length} items</TableCell>
+                              <TableCell className='font-semibold'>Total — {itemRows.length} items</TableCell>
                               <TableCell className='text-right font-semibold'>{itemTotals.qty}</TableCell>
                               <TableCell className='text-right font-semibold'>{fmt(itemTotals.purchase)}</TableCell>
                               <TableCell className='text-right font-semibold'>{fmt(itemTotals.sale)}</TableCell>
@@ -811,20 +658,162 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
           </Card>
         </div>
 
-        {/* Sim-wise */}
-        <div ref={(el) => { sectionRefs.current['sim-wise'] = el }} className='scroll-mt-24'>
+        {/* Load */}
+        <div ref={(el) => { sectionRefs.current['load'] = el }} className='scroll-mt-24'>
           <Card>
             <CardHeader>
-              <CardTitle>Sim-wise — Sim Sale, Cash Management &amp; Load</CardTitle>
-              <CardDescription>Every wallet/account with full cash, load and sim sale transaction detail</CardDescription>
+              <CardTitle>Load</CardTitle>
+              <CardDescription>Wallet-wise load sold to customers and purchased from suppliers</CardDescription>
             </CardHeader>
-            <CardContent className='space-y-3'>
-              {!canAccess('wallet') && !canAccess('load') ? (
-                <LockedNote label='Sim-wise report' />
-              ) : walletsWithActivity.length === 0 ? (
-                <EmptyNote label='wallet activity' />
+            <CardContent>
+              {!canAccess('load') ? (
+                <LockedNote label='Load report' />
+              ) : loadWalletRows.length === 0 ? (
+                <EmptyNote label='load transactions' />
               ) : (
-                walletsWithActivity.map((wallet) => <WalletCard key={wallet.walletType} wallet={wallet} />)
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Wallet</TableHead>
+                        <TableHead className='text-right'>Transactions</TableHead>
+                        <TableHead className='text-right'>Purchase Amount</TableHead>
+                        <TableHead className='text-right'>Sale Amount</TableHead>
+                        <TableHead className='text-right'>Profit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadWalletRows.map((row) => (
+                        <TableRow key={row.walletType}>
+                          <TableCell className='font-medium'>{row.walletType}</TableCell>
+                          <TableCell className='text-right'>{row.transactions}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.purchased)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.sold)}</TableCell>
+                          <TableCell className={cn('text-right font-medium', row.profit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                            {fmt(row.profit)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {loadWalletRows.length} wallets</TableCell>
+                        <TableCell className='text-right font-semibold'>{loadReport.transactions.length}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(loadReport.purchased)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(loadReport.sold)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(loadReport.profit)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Cash Management */}
+        <div ref={(el) => { sectionRefs.current['cash-management'] = el }} className='scroll-mt-24'>
+          <Card>
+            <CardHeader>
+              <CardTitle>Cash Management — Send &amp; Receive</CardTitle>
+              <CardDescription>Cash withdrawals (sent to customers) and deposits (received from customers), across every wallet</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!canAccess('wallet') ? (
+                <LockedNote label='Cash management report' />
+              ) : cashWalletRows.length === 0 ? (
+                <EmptyNote label='cash management transactions' />
+              ) : (
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Wallet</TableHead>
+                        <TableHead className='text-right'>Transactions</TableHead>
+                        <TableHead className='text-right'>Send Amount</TableHead>
+                        <TableHead className='text-right'>Send Profit</TableHead>
+                        <TableHead className='text-right'>Receive Amount</TableHead>
+                        <TableHead className='text-right'>Receive Profit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cashWalletRows.map((row) => (
+                        <TableRow key={row.walletType}>
+                          <TableCell className='font-medium'>{row.walletType}</TableCell>
+                          <TableCell className='text-right'>{row.transactions}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.sendAmount)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(row.sendProfit)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.receiveAmount)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(row.receiveProfit)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {cashWalletRows.length} wallets</TableCell>
+                        <TableCell className='text-right font-semibold'>{cashReport.transactions.length}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(cashReport.withdrawalAmount)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(cashWalletTotals.sendProfit)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(cashReport.depositAmount)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(cashWalletTotals.receiveProfit)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sim Sale */}
+        <div ref={(el) => { sectionRefs.current['sim-sale'] = el }} className='scroll-mt-24'>
+          <Card>
+            <CardHeader>
+              <CardTitle>Sim Sale</CardTitle>
+              <CardDescription>Sim-wise sales with load bundled in, across every wallet</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!canAccess('wallet') ? (
+                <LockedNote label='Sim sale report' />
+              ) : simSaleProductRows.length === 0 ? (
+                <EmptyNote label='sim sale transactions' />
+              ) : (
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sim</TableHead>
+                        <TableHead className='text-right'>Transactions</TableHead>
+                        <TableHead className='text-right'>Purchase Amount</TableHead>
+                        <TableHead className='text-right'>Sale Amount</TableHead>
+                        <TableHead className='text-right'>Load Amount</TableHead>
+                        <TableHead className='text-right'>Commission</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {simSaleProductRows.map((row) => (
+                        <TableRow key={row.productName}>
+                          <TableCell className='font-medium'>{row.productName}</TableCell>
+                          <TableCell className='text-right'>{row.count}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.purchaseAmount)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.saleAmount)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.loadAmount)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(row.commission)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {simSaleProductRows.length} sims</TableCell>
+                        <TableCell className='text-right font-semibold'>{simSaleReport.count}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(simSaleReport.purchaseAmount)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(simSaleReport.saleAmount)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(simSaleReport.loadAmount)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(simSaleReport.commission)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -838,140 +827,43 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               <CardDescription>Service-wise revenue breakdown</CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <div className='grid gap-4 sm:grid-cols-3'>
-                <Card className={kpiCardClass('sky')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Total Invoices</CardTitle>
-                    <div className={toneIconWrapClass('sky')}><Wrench className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold'>{services?.summary.totalInvoices ?? 0}</div></CardContent>
-                </Card>
-                <Card className={kpiCardClass('emerald')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Total Amount</CardTitle>
-                    <div className={toneIconWrapClass('emerald')}><Banknote className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(services?.summary.totalAmount ?? 0)}</div></CardContent>
-                </Card>
-                <Card className={kpiCardClass('violet')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Avg Invoice</CardTitle>
-                    <div className={toneIconWrapClass('violet')}><TrendingUp className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold'>{fmt(services?.summary.avgInvoice ?? 0)}</div></CardContent>
-                </Card>
-              </div>
               {!services || services.byService.length === 0 ? (
                 <EmptyNote label='services' />
               ) : (
-                <div>
-                  <p className='mb-3 text-sm font-medium text-muted-foreground'>Service-wise Revenue</p>
-                  <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-                    {services.byService.map((row, idx) => {
-                      const share = services.summary.totalAmount ? (row.totalAmount / services.summary.totalAmount) * 100 : 0
-                      const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length]
-                      return (
-                        <div key={row._id} className='rounded-xl border bg-card p-4 shadow-sm'>
-                          <div className='mb-2 flex items-center justify-between'>
-                            <span
-                              className='inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white'
-                              style={{ backgroundColor: color }}
-                            >
-                              {row._id.charAt(0).toUpperCase()}
-                            </span>
-                            <Badge variant='secondary' className='text-xs'>{share.toFixed(1)}%</Badge>
-                          </div>
-                          <p className='truncate text-sm font-semibold'>{row._id}</p>
-                          <p className='text-lg font-bold' style={{ color }}>{fmt(row.totalAmount)}</p>
-                          <div className='mt-2 flex items-center justify-between text-xs text-muted-foreground'>
-                            <span>Qty {row.totalQuantity}</span>
-                            <span>Avg {fmt(row.avgUnitPrice)}</span>
-                          </div>
-                          <div className='mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted'>
-                            <div className='h-full rounded-full' style={{ width: `${share}%`, backgroundColor: color }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Bill Payments */}
-        <div ref={(el) => { sectionRefs.current['bill-payments'] = el }} className='scroll-mt-24'>
-          <Card>
-            <CardHeader>
-              <CardTitle>Bill Payments</CardTitle>
-              <CardDescription>Utility bills collected on customers&apos; behalf</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!canAccess('bill_payment') ? (
-                <LockedNote label='Bill Payments' />
-              ) : billPaymentsLoading || !billPayments ? (
-                <EmptyNote label='bill payments' />
-              ) : (
-                <div className='space-y-4'>
-                  <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-                    <Card className={kpiCardClass('amber')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Total Bills</CardTitle>
-                        <div className={toneIconWrapClass('amber')}><Receipt className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{billPayments.totalBills}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('emerald')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Collection</CardTitle>
-                        <div className={toneIconWrapClass('emerald')}><Banknote className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(billPayments.totalCollection)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('sky')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Your Profit</CardTitle>
-                        <div className={toneIconWrapClass('sky')}><TrendingUp className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(billPayments.totalNetBillProfit)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('rose')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Pending / Overdue</CardTitle>
-                        <div className={toneIconWrapClass('rose')}><ShieldCheck className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{billPayments.totalPending} / {billPayments.totalOverdue}</div></CardContent>
-                    </Card>
-                  </div>
-                  {billPayments.byCompany.length > 0 && (
-                    <div>
-                      <p className='mb-3 text-sm font-medium text-muted-foreground'>By Company</p>
-                      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-                        {billPayments.byCompany.map((row, idx) => {
-                          const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length]
-                          return (
-                            <div key={row._id} className='rounded-xl border bg-card p-4 shadow-sm'>
-                              <div className='mb-2 flex items-center gap-2'>
-                                <span
-                                  className='inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white'
-                                  style={{ backgroundColor: color }}
-                                >
-                                  {row._id.charAt(0).toUpperCase()}
-                                </span>
-                                <p className='truncate text-sm font-semibold'>{row._id}</p>
-                              </div>
-                              <p className='text-lg font-bold' style={{ color }}>{fmt(row.totalCollection)}</p>
-                              <div className='mt-2 flex items-center justify-between text-xs text-muted-foreground'>
-                                <span>{row.billCount} bills</span>
-                                <span>Amount {fmt(row.totalBillAmount)}</span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Service</TableHead>
+                        <TableHead className='text-right'>Qty</TableHead>
+                        <TableHead className='text-right'>Amount</TableHead>
+                        <TableHead className='text-right'>Per Day Avg</TableHead>
+                        <TableHead className='text-right'>Profit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {services.byService.map((row) => (
+                        <TableRow key={row._id}>
+                          <TableCell className='font-medium'>{row._id}</TableCell>
+                          <TableCell className='text-right'>{row.totalQuantity}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.totalAmount)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.totalAmount / daysInRange)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(row.totalAmount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {services.byService.length} services</TableCell>
+                        <TableCell className='text-right font-semibold'>
+                          {services.byService.reduce((sum, r) => sum + r.totalQuantity, 0)}
+                        </TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(services.summary.totalAmount)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(services.summary.totalAmount / daysInRange)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(services.summary.totalProfit)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -983,79 +875,49 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
           <Card>
             <CardHeader>
               <CardTitle>Agent Bills</CardTitle>
-              <CardDescription>Bills collected as an agent</CardDescription>
+              <CardDescription>Company-wise bills collected as an agent</CardDescription>
             </CardHeader>
             <CardContent>
               {!isAgentBillUser ? (
                 <LockedNote label='Agent Bills' />
-              ) : agentBillsLoading || !agentBills || agentBills.bills.length === 0 ? (
+              ) : agentBillsLoading || !agentBills || agentBills.byCompany.length === 0 ? (
                 <EmptyNote label='agent bills' />
               ) : (
-                <div className='space-y-4'>
-                  <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-                    <Card className={kpiCardClass('indigo')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Total Bills</CardTitle>
-                        <div className={toneIconWrapClass('indigo')}><ReceiptText className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{agentBills.totalBills}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('emerald')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Collection</CardTitle>
-                        <div className={toneIconWrapClass('emerald')}><Banknote className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(agentBills.totalCollection)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('sky')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Profit</CardTitle>
-                        <div className={toneIconWrapClass('sky')}><TrendingUp className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(agentBills.totalProfit)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('rose')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Pending / Overdue</CardTitle>
-                        <div className={toneIconWrapClass('rose')}><ShieldCheck className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{agentBills.totalPending} / {agentBills.totalOverdueBills}</div></CardContent>
-                    </Card>
-                  </div>
-                  <div className='rounded-md border'>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>Reference</TableHead>
-                          <TableHead>Company</TableHead>
-                          <TableHead className='text-right'>Current Bill</TableHead>
-                          <TableHead className='text-right'>Previous Bill</TableHead>
-                          <TableHead className='text-right'>Total</TableHead>
-                          <TableHead className='text-right'>Profit</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Date</TableHead>
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Company</TableHead>
+                        <TableHead className='text-right'>Bills</TableHead>
+                        <TableHead className='text-right'>Collection</TableHead>
+                        <TableHead className='text-right'>Overdue</TableHead>
+                        <TableHead className='text-right'>Payable</TableHead>
+                        <TableHead className='text-right'>Profit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {agentBills.byCompany.map((row) => (
+                        <TableRow key={row._id}>
+                          <TableCell className='font-medium'>{row._id}</TableCell>
+                          <TableCell className='text-right'>{row.billCount}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.totalCollection)}</TableCell>
+                          <TableCell className='text-right text-amber-600'>{fmt(row.totalOverdue)}</TableCell>
+                          <TableCell className='text-right text-red-600'>{fmt(row.totalPayable)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(row.totalProfit)}</TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {agentBills.bills.map((b) => (
-                          <TableRow key={b.id}>
-                            <TableCell className='font-medium'>{b.customerName}</TableCell>
-                            <TableCell className='font-mono text-sm'>{b.referenceNumber}</TableCell>
-                            <TableCell>{b.companyName || '—'}</TableCell>
-                            <TableCell className='text-right'>{fmt(b.currentBillAmount)}</TableCell>
-                            <TableCell className='text-right'>{fmt(b.previousBillAmount)}</TableCell>
-                            <TableCell className='text-right font-semibold'>{fmt(b.totalAmount)}</TableCell>
-                            <TableCell className='text-right text-green-600'>{fmt(b.profit)}</TableCell>
-                            <TableCell>
-                              <Badge variant={b.isPaid ? 'secondary' : 'outline'}>{b.isPaid ? 'Paid' : 'Pending'}</Badge>
-                            </TableCell>
-                            <TableCell className='whitespace-nowrap text-sm'>{fmtDate(b.collectionDate)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {agentBills.byCompany.length} companies</TableCell>
+                        <TableCell className='text-right font-semibold'>{agentBills.totalBills}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(agentBills.totalCollection)}</TableCell>
+                        <TableCell className='text-right font-semibold text-amber-600'>{fmt(agentBills.totalOverdue)}</TableCell>
+                        <TableCell className='text-right font-semibold text-red-600'>{fmt(agentBills.totalPayable)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(agentBills.totalProfit)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -1072,74 +934,47 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
             <CardContent>
               {!canAccess('repair') ? (
                 <LockedNote label='Repairing' />
-              ) : !repair ? (
+              ) : !repair || repair.recentJobs.length === 0 ? (
                 <EmptyNote label='repair jobs' />
               ) : (
-                <div className='space-y-4'>
-                  <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-                    <Card className={kpiCardClass('orange')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Total Jobs</CardTitle>
-                        <div className={toneIconWrapClass('orange')}><Wrench className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold'>{repair.summary.totalJobs}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('emerald')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Revenue</CardTitle>
-                        <div className={toneIconWrapClass('emerald')}><Banknote className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(repair.summary.totalRevenue)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('rose')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Cost</CardTitle>
-                        <div className={toneIconWrapClass('rose')}><Receipt className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-red-600'>{fmt(repair.summary.totalCost)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('sky')}>
-                      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                        <CardTitle className='text-sm font-medium'>Profit</CardTitle>
-                        <div className={toneIconWrapClass('sky')}><TrendingUp className='h-4 w-4' /></div>
-                      </CardHeader>
-                      <CardContent><div className='text-2xl font-bold text-green-600'>{fmt(repair.summary.totalProfit)}</div></CardContent>
-                    </Card>
-                  </div>
-                  {repair.recentJobs.length === 0 ? (
-                    <EmptyNote label='repair jobs' />
-                  ) : (
-                    <div className='rounded-md border'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>Device</TableHead>
-                            <TableHead>Issue</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className='text-right'>Charges</TableHead>
-                            <TableHead className='text-right'>Cost</TableHead>
-                            <TableHead className='text-right'>Profit</TableHead>
-                            <TableHead>Date</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {repair.recentJobs.map((job) => (
-                            <TableRow key={job._id}>
-                              <TableCell className='font-medium'>{job.customerName}</TableCell>
-                              <TableCell>{job.deviceModel}</TableCell>
-                              <TableCell className='max-w-[200px] truncate'>{job.issue}</TableCell>
-                              <TableCell className='capitalize'>{job.status}</TableCell>
-                              <TableCell className='text-right'>{fmt(job.charges)}</TableCell>
-                              <TableCell className='text-right'>{fmt(job.cost)}</TableCell>
-                              <TableCell className='text-right text-green-600'>{fmt(job.charges - job.cost)}</TableCell>
-                              <TableCell className='whitespace-nowrap text-sm'>{fmtDate(job.date)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Device</TableHead>
+                        <TableHead>Issue</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className='text-right'>Charges</TableHead>
+                        <TableHead className='text-right'>Cost</TableHead>
+                        <TableHead className='text-right'>Profit</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {repair.recentJobs.map((job) => (
+                        <TableRow key={job._id}>
+                          <TableCell className='font-medium'>{job.customerName}</TableCell>
+                          <TableCell>{job.deviceModel}</TableCell>
+                          <TableCell className='max-w-[200px] truncate'>{job.issue}</TableCell>
+                          <TableCell className='capitalize'>{job.status}</TableCell>
+                          <TableCell className='text-right'>{fmt(job.charges)}</TableCell>
+                          <TableCell className='text-right'>{fmt(job.cost)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(job.charges - job.cost)}</TableCell>
+                          <TableCell className='whitespace-nowrap text-sm'>{fmtDate(job.date)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell colSpan={4} className='font-semibold'>Total — {repair.summary.totalJobs} jobs</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(repair.summary.totalRevenue)}</TableCell>
+                        <TableCell className='text-right font-semibold'>{fmt(repair.summary.totalCost)}</TableCell>
+                        <TableCell className='text-right font-bold text-green-600'>{fmt(repair.summary.totalProfit)}</TableCell>
+                        <TableCell />
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -1153,69 +988,106 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               <CardTitle>Expenses</CardTitle>
               <CardDescription>Category-wise breakdown</CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid gap-4 sm:grid-cols-3'>
-                <Card className={kpiCardClass('rose')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Total Expenses</CardTitle>
-                    <div className={toneIconWrapClass('rose')}><Banknote className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold text-red-600'>{fmt(expenses?.summary.totalExpenses ?? 0)}</div></CardContent>
-                </Card>
-                <Card className={kpiCardClass('slate')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Entries</CardTitle>
-                    <div className={toneIconWrapClass('slate')}><Receipt className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold'>{expenses?.summary.expenseCount ?? 0}</div></CardContent>
-                </Card>
-                <Card className={kpiCardClass('amber')}>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                    <CardTitle className='text-sm font-medium'>Average</CardTitle>
-                    <div className={toneIconWrapClass('amber')}><TrendingUp className='h-4 w-4' /></div>
-                  </CardHeader>
-                  <CardContent><div className='text-2xl font-bold'>{fmt(expenses?.summary.avgExpense ?? 0)}</div></CardContent>
-                </Card>
-              </div>
+            <CardContent>
               {!expenses || expenses.categoryBreakdown.length === 0 ? (
                 <EmptyNote label='expenses' />
               ) : (
-                <div>
-                  <p className='mb-3 text-sm font-medium text-muted-foreground'>Category-wise Breakdown</p>
-                  <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-                    {expenses.categoryBreakdown.map((row, idx) => {
-                      const total = expenses.summary.totalExpenses || 0
-                      const share = total ? (row.totalAmount / total) * 100 : 0
-                      const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length]
-                      return (
-                        <div key={row._id} className='rounded-xl border bg-card p-4 shadow-sm'>
-                          <div className='mb-2 flex items-center justify-between'>
-                            <span
-                              className='inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white'
-                              style={{ backgroundColor: color }}
-                            >
-                              {row._id.charAt(0).toUpperCase()}
-                            </span>
-                            <Badge variant='secondary' className='text-xs'>{share.toFixed(1)}%</Badge>
-                          </div>
-                          <p className='truncate text-sm font-semibold'>{row._id}</p>
-                          <p className='text-lg font-bold text-red-600'>{fmt(row.totalAmount)}</p>
-                          <div className='mt-2 flex items-center justify-between text-xs text-muted-foreground'>
-                            <span>{row.expenseCount} entries</span>
-                            <span>Avg {fmt(row.avgAmount)}</span>
-                          </div>
-                          <div className='mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted'>
-                            <div className='h-full rounded-full' style={{ width: `${share}%`, backgroundColor: color }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead className='text-right'>Entries</TableHead>
+                        <TableHead className='text-right'>Total Amount</TableHead>
+                        <TableHead className='text-right'>Average</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {expenses.categoryBreakdown.map((row) => (
+                        <TableRow key={row._id}>
+                          <TableCell className='font-medium'>{row._id}</TableCell>
+                          <TableCell className='text-right'>{row.expenseCount}</TableCell>
+                          <TableCell className='text-right text-red-600'>{fmt(row.totalAmount)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.avgAmount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {expenses.categoryBreakdown.length} categories</TableCell>
+                        <TableCell className='text-right font-semibold'>
+                          {expenses.categoryBreakdown.reduce((sum, r) => sum + r.expenseCount, 0)}
+                        </TableCell>
+                        <TableCell className='text-right font-bold text-red-600'>
+                          {fmt(expenses.categoryBreakdown.reduce((sum, r) => sum + r.totalAmount, 0))}
+                        </TableCell>
+                        <TableCell className='text-right font-semibold'>
+                          {fmt(
+                            expenses.categoryBreakdown.reduce((sum, r) => sum + r.totalAmount, 0) /
+                              (expenses.categoryBreakdown.reduce((sum, r) => sum + r.expenseCount, 0) || 1),
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
+
+        {/* Recurring Expenses */}
+        {expenses && expenses.recurringBreakdown.length > 0 && (
+          <div className='scroll-mt-24'>
+            <Card>
+              <CardHeader>
+                <CardTitle>Recurring Expenses</CardTitle>
+                <CardDescription>Auto-generated by recurring rules — kept separate from manual entries</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead className='text-right'>Entries</TableHead>
+                        <TableHead className='text-right'>Total Amount</TableHead>
+                        <TableHead className='text-right'>Average</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {expenses.recurringBreakdown.map((row) => (
+                        <TableRow key={row._id}>
+                          <TableCell className='font-medium'>{row._id}</TableCell>
+                          <TableCell className='text-right'>{row.expenseCount}</TableCell>
+                          <TableCell className='text-right text-red-600'>{fmt(row.totalAmount)}</TableCell>
+                          <TableCell className='text-right'>{fmt(row.avgAmount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold'>Total — {expenses.recurringBreakdown.length} categories</TableCell>
+                        <TableCell className='text-right font-semibold'>
+                          {expenses.recurringBreakdown.reduce((sum, r) => sum + r.expenseCount, 0)}
+                        </TableCell>
+                        <TableCell className='text-right font-bold text-red-600'>
+                          {fmt(expenses.recurringBreakdown.reduce((sum, r) => sum + r.totalAmount, 0))}
+                        </TableCell>
+                        <TableCell className='text-right font-semibold'>
+                          {fmt(
+                            expenses.recurringBreakdown.reduce((sum, r) => sum + r.totalAmount, 0) /
+                              (expenses.recurringBreakdown.reduce((sum, r) => sum + r.expenseCount, 0) || 1),
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* My Accounts */}
         <div ref={(el) => { sectionRefs.current['accounts'] = el }} className='scroll-mt-24'>
@@ -1228,105 +1100,120 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               {ledgerLoading ? (
                 <Skeleton className='h-[200px] w-full' />
               ) : (
-                <>
-                  <div className='grid gap-4 sm:grid-cols-3 lg:grid-cols-6'>
-                    <Card className={kpiCardClass('slate')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Opening Balance</CardTitle></CardHeader>
-                      <CardContent><div className='text-xl font-bold'>{fmt(ledgerSummary.openingBalance)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('emerald')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Total Money In</CardTitle></CardHeader>
-                      <CardContent><div className='text-xl font-bold text-green-600'>{fmt(ledgerSummary.totalCredit)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('rose')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Total Money Out / Expense</CardTitle></CardHeader>
-                      <CardContent><div className='text-xl font-bold text-red-600'>{fmt(ledgerSummary.totalDebit)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('sky')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Net Balance</CardTitle></CardHeader>
-                      <CardContent>
-                        <div className={cn('text-xl font-bold', ledgerSummary.netBalance >= 0 ? 'text-green-600' : 'text-red-600')}>
-                          {fmt(ledgerSummary.netBalance)}
-                        </div>
-                        <p className='text-xs text-muted-foreground'>{ledgerSummary.netBalance >= 0 ? 'Positive' : 'Negative'}</p>
-                      </CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('violet')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Closing Balance</CardTitle></CardHeader>
-                      <CardContent><div className='text-xl font-bold'>{fmt(ledgerSummary.closingBalance)}</div></CardContent>
-                    </Card>
-                    <Card className={kpiCardClass('amber')}>
-                      <CardHeader className='pb-2'><CardTitle className='text-sm font-medium'>Avg Transaction</CardTitle></CardHeader>
-                      <CardContent><div className='text-xl font-bold'>{fmt(ledgerSummary.avgTransaction)}</div></CardContent>
-                    </Card>
+                (ledgerIncomeByCategory.length > 0 || ledgerExpenseByCategory.length > 0) && (
+                  <div className='grid gap-4 md:grid-cols-2'>
+                    {ledgerIncomeByCategory.length > 0 && (
+                      <div className='rounded-md border'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Income Category</TableHead>
+                              <TableHead className='text-right'>Entries</TableHead>
+                              <TableHead className='text-right'>Amount</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ledgerIncomeByCategory.map((cat) => (
+                              <TableRow key={cat.name}>
+                                <TableCell className='font-medium'>{cat.name}</TableCell>
+                                <TableCell className='text-right'>{cat.count}</TableCell>
+                                <TableCell className='text-right text-green-600'>{fmt(cat.totalAmount)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                          <TableFooter>
+                            <TableRow>
+                              <TableCell className='font-semibold'>Total</TableCell>
+                              <TableCell className='text-right font-semibold'>
+                                {ledgerIncomeByCategory.reduce((sum, c) => sum + c.count, 0)}
+                              </TableCell>
+                              <TableCell className='text-right font-bold text-green-600'>{fmt(ledgerSummary.totalCredit)}</TableCell>
+                            </TableRow>
+                          </TableFooter>
+                        </Table>
+                      </div>
+                    )}
+                    {ledgerExpenseByCategory.length > 0 && (
+                      <div className='rounded-md border'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Expense Category</TableHead>
+                              <TableHead className='text-right'>Entries</TableHead>
+                              <TableHead className='text-right'>Amount</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ledgerExpenseByCategory.map((cat) => (
+                              <TableRow key={cat.name}>
+                                <TableCell className='font-medium'>{cat.name}</TableCell>
+                                <TableCell className='text-right'>{cat.count}</TableCell>
+                                <TableCell className='text-right text-red-600'>{fmt(cat.totalAmount)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                          <TableFooter>
+                            <TableRow>
+                              <TableCell className='font-semibold'>Total</TableCell>
+                              <TableCell className='text-right font-semibold'>
+                                {ledgerExpenseByCategory.reduce((sum, c) => sum + c.count, 0)}
+                              </TableCell>
+                              <TableCell className='text-right font-bold text-red-600'>{fmt(ledgerSummary.totalDebit)}</TableCell>
+                            </TableRow>
+                          </TableFooter>
+                        </Table>
+                      </div>
+                    )}
                   </div>
-
-                  {(ledgerIncomeByCategory.length > 0 || ledgerExpenseByCategory.length > 0) && (
-                    <div className='grid gap-4 md:grid-cols-2'>
-                      {ledgerIncomeByCategory.length > 0 && (
-                        <div>
-                          <p className='mb-2 text-sm font-medium'>Income by Category</p>
-                          <div className='space-y-2'>
-                            {ledgerIncomeByCategory.map((cat, idx) => {
-                              const share = ledgerSummary.totalCredit ? (cat.totalAmount / ledgerSummary.totalCredit) * 100 : 0
-                              return (
-                                <div key={cat.name} className='flex items-center gap-3 rounded-lg border p-2.5'>
-                                  <span
-                                    className='inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white'
-                                    style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
-                                  >
-                                    {cat.name.charAt(0).toUpperCase()}
-                                  </span>
-                                  <div className='min-w-0 flex-1'>
-                                    <p className='truncate text-sm font-medium'>{cat.name}</p>
-                                    <div className='mt-1 h-1 w-full overflow-hidden rounded-full bg-muted'>
-                                      <div className='h-full rounded-full bg-emerald-500' style={{ width: `${share}%` }} />
-                                    </div>
-                                  </div>
-                                  <div className='text-right text-sm font-semibold text-green-600'>{fmt(cat.totalAmount)}</div>
-                                  <Badge variant='secondary' className='text-xs'>{share.toFixed(0)}%</Badge>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      {ledgerExpenseByCategory.length > 0 && (
-                        <div>
-                          <p className='mb-2 text-sm font-medium'>Expense by Category</p>
-                          <div className='space-y-2'>
-                            {ledgerExpenseByCategory.map((cat, idx) => {
-                              const share = ledgerSummary.totalDebit ? (cat.totalAmount / ledgerSummary.totalDebit) * 100 : 0
-                              return (
-                                <div key={cat.name} className='flex items-center gap-3 rounded-lg border p-2.5'>
-                                  <span
-                                    className='inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white'
-                                    style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
-                                  >
-                                    {cat.name.charAt(0).toUpperCase()}
-                                  </span>
-                                  <div className='min-w-0 flex-1'>
-                                    <p className='truncate text-sm font-medium'>{cat.name}</p>
-                                    <div className='mt-1 h-1 w-full overflow-hidden rounded-full bg-muted'>
-                                      <div className='h-full rounded-full bg-rose-500' style={{ width: `${share}%` }} />
-                                    </div>
-                                  </div>
-                                  <div className='text-right text-sm font-semibold text-red-600'>{fmt(cat.totalAmount)}</div>
-                                  <Badge variant='secondary' className='text-xs'>{share.toFixed(0)}%</Badge>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
+                )
               )}
 
               <Link to='/accounting' search={{ tab: 'wallet' }} className='inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline'>
                 View full accounts <ArrowRight className='h-3.5 w-3.5' />
               </Link>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* All Modules Summary */}
+        <div className='scroll-mt-24'>
+          <Card>
+            <CardHeader>
+              <CardTitle>All Modules Summary</CardTitle>
+              <CardDescription>Total activity and profit across every module</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
+                {moduleSummaryRows.map((row) => (
+                  <div key={row.name} className='rounded-xl border bg-card p-4 shadow-sm'>
+                    <p className='text-sm font-medium text-muted-foreground'>{row.name}</p>
+                    <p className='text-lg font-bold'>{fmt(row.total)}</p>
+                    <div className='mt-2 flex items-center justify-between text-xs'>
+                      <span className='text-muted-foreground'>Profit</span>
+                      <span className={cn('font-semibold', row.profit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                        {fmt(row.profit)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                <div className='rounded-xl border-2 border-primary/30 bg-card p-4 shadow-sm'>
+                  <p className='text-sm font-medium text-muted-foreground'>Grand Total</p>
+                  <p className='text-lg font-bold'>{fmt(moduleSummaryTotals.total)}</p>
+                  <div className='mt-2 flex items-center justify-between text-xs'>
+                    <span className='text-muted-foreground'>Net Profit</span>
+                    <span className={cn('font-semibold', moduleSummaryTotals.profit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {fmt(moduleSummaryTotals.profit)}
+                    </span>
+                  </div>
+                </div>
+                <div className={cn('rounded-xl border-2 p-4 shadow-sm', moduleSummaryTotals.profit >= 0 ? 'border-green-500/30 bg-green-50 dark:bg-green-950/20' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
+                  <p className='text-sm font-medium text-muted-foreground'>Total Profit</p>
+                  <p className={cn('text-2xl font-bold', moduleSummaryTotals.profit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                    {fmt(moduleSummaryTotals.profit)}
+                  </p>
+                  <p className='mt-2 text-xs text-muted-foreground'>Across all modules combined</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

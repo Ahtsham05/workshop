@@ -547,6 +547,8 @@ export interface AgentBillCompanyBreakdownItem {
   _id: string
   billCount: number
   totalCollection: number
+  totalOverdue: number
+  totalPayable: number
   totalProfit: number
 }
 
@@ -557,6 +559,7 @@ export interface AgentBillReport {
   totalOverdue: number
   totalPreviousOverdue: number
   totalCollection: number
+  totalPayable: number
   totalProfit: number
   totalPending: number
   totalDueToday: number
