@@ -3411,10 +3411,23 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     }));
 
   const organizationId = req.organizationId || req.user?.organizationId;
-  const cashBookSummary = await cashBookService.getCashInHandSummary({
-    organizationId,
-    branchId: req.branchId,
-  });
+  // Scoped to the selected date range, not the all-time balance — so "Cash In Hand" here
+  // reconciles with the rest of this report (which is all period-filtered), and the
+  // opening balance doubles as "cash in hand as of the start of this period".
+  const [cashBookSummary, cashByModule] = await Promise.all([
+    cashBookService.getCashInHandSummary({
+      organizationId,
+      branchId: req.branchId,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    }),
+    cashBookService.getCashInHandByModule({
+      organizationId,
+      branchId: req.branchId,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    }),
+  ]);
 
   res.status(httpStatus.OK).send({
     summary: {
@@ -3424,10 +3437,19 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
       expenseCount: expenses.count,
       myWalletExpense: roundReportAmount(walletExpenses.amount),
       myWalletExpenseCount: walletExpenses.count,
+      previousCashInHand: roundReportAmount(cashBookSummary.openingBalance),
       cashInHand: roundReportAmount(cashBookSummary.closingBalance),
+      periodCashIn: roundReportAmount(cashBookSummary.totalIncome),
+      periodCashOut: roundReportAmount(cashBookSummary.totalExpense),
       salesTransactions,
       purchaseTransactions,
     },
+    cashByModule: cashByModule.map((row) => ({
+      module: row.module,
+      income: roundReportAmount(row.income),
+      expense: roundReportAmount(row.expense),
+      net: roundReportAmount(row.net),
+    })),
     modules,
     monthly,
     period: { startDate: start, endDate: end },

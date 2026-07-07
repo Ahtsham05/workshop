@@ -766,6 +766,13 @@ export interface SalesPurchaseModuleRow {
   mobileOnly: boolean
 }
 
+export interface CashByModuleRow {
+  module: string
+  income: number
+  expense: number
+  net: number
+}
+
 export interface SalesPurchaseSummaryReport {
   summary: {
     totalSales: number
@@ -774,10 +781,14 @@ export interface SalesPurchaseSummaryReport {
     expenseCount: number
     myWalletExpense: number
     myWalletExpenseCount: number
+    previousCashInHand: number
     cashInHand: number
+    periodCashIn: number
+    periodCashOut: number
     salesTransactions: number
     purchaseTransactions: number
   }
+  cashByModule: CashByModuleRow[]
   modules: SalesPurchaseModuleRow[]
   monthly: { month: string; sales: number; purchases: number }[]
   period: { startDate: string; endDate: string }

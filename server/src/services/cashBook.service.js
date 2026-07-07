@@ -262,6 +262,82 @@ const getCashInHandSummary = async (filter = {}) => {
   };
 };
 
+const CASH_MODULE_LABELS = {
+  Invoice: 'Sales',
+  SalesReturn: 'Sales Returns',
+  SimSale: 'Sim Sale',
+  LoadTransaction: 'Load',
+  LoadPurchase: 'Load',
+  CashWithdrawal: 'Cash Management',
+  AgentBill: 'Agent Bills',
+  RepairJob: 'Repairing',
+  ServiceInvoice: 'Services',
+  Purchase: 'Purchases',
+  PurchaseReturn: 'Purchase Returns',
+  Expense: 'Expenses',
+  PersonalLedger: 'My Accounts',
+  BillPayment: 'Bill Payments',
+  InstallmentPlan: 'Installments',
+  InstallmentPayment: 'Installments',
+  CustomerLedger: 'Customer Payments',
+  SupplierLedger: 'Supplier Payments',
+  EmployeeLedger: 'Employee Payments',
+  Payroll: 'Employee Payments',
+};
+
+// Cash-only movement grouped by module (referenceModel), using the same
+// paymentMethod/date-boundary filtering as getCashInHandSummary — so summing every
+// row's net here always equals closingBalance - openingBalance exactly, because it
+// reads the identical ledger rather than re-deriving amounts from each module's own
+// report (which mixes cash, credit, and profit-only figures and can't be relied on
+// to reconcile against actual cash in hand).
+const getCashInHandByModule = async (filter = {}) => {
+  const baseMatch = {};
+  if (filter.organizationId) {
+    baseMatch.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
+      ? new mongoose.Types.ObjectId(String(filter.organizationId))
+      : filter.organizationId;
+  }
+  if (filter.branchId) {
+    baseMatch.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
+      ? new mongoose.Types.ObjectId(String(filter.branchId))
+      : filter.branchId;
+  }
+  baseMatch.paymentMethod = 'cash';
+  baseMatch.source = { $ne: 'opening_balance' };
+
+  const periodStartBoundary = filter.startDate ? parseBusinessDateBoundary(filter.startDate, false) : null;
+  const periodEndBoundary = filter.endDate ? parseBusinessDateBoundary(filter.endDate, true) : null;
+  if (periodStartBoundary || periodEndBoundary) {
+    baseMatch.date = {};
+    if (periodStartBoundary) baseMatch.date.$gte = periodStartBoundary;
+    if (periodEndBoundary) baseMatch.date.$lte = periodEndBoundary;
+  }
+
+  const rows = await CashBookEntry.aggregate([
+    { $match: baseMatch },
+    {
+      $group: {
+        _id: { referenceModel: '$referenceModel', type: '$type' },
+        total: { $sum: '$amount' },
+      },
+    },
+  ]);
+
+  const byModule = new Map();
+  rows.forEach((row) => {
+    const label = CASH_MODULE_LABELS[row._id.referenceModel] || row._id.referenceModel || 'Other';
+    const entry = byModule.get(label) || { module: label, income: 0, expense: 0 };
+    if (row._id.type === 'income') entry.income += row.total;
+    else entry.expense += row.total;
+    byModule.set(label, entry);
+  });
+
+  return Array.from(byModule.values())
+    .map((row) => ({ ...row, net: row.income - row.expense }))
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+};
+
 const getOpeningBalance = async (filter = {}) => {
   const query = { source: 'opening_balance' };
   if (filter.organizationId) query.organizationId = filter.organizationId;
@@ -306,6 +382,7 @@ module.exports = {
   queryEntries,
   getSummary,
   getCashInHandSummary,
+  getCashInHandByModule,
   setOpeningBalance,
   getOpeningBalance,
 };
