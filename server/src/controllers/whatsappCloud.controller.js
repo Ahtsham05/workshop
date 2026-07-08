@@ -1,23 +1,10 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const ApiError = require('../utils/ApiError');
-const config = require('../config/config');
 const connectionService = require('../services/whatsapp/connection.service');
 
 const getConnection = catchAsync(async (req, res) => {
   const connection = await connectionService.getConnection(req.organizationId, req.branchId);
   res.send(connectionService.toPublicConnection(connection));
-});
-
-/* SWAP TO EMBEDDED SIGNUP HERE — pre-App-Review fallback: serves the static
- * Meta-hosted Embedded Signup link. Once the app is approved, the frontend's
- * FB.login flow (useEmbeddedWhatsAppSignup) is the primary path and this can
- * be removed. */
-const getMetaHostedLink = catchAsync(async (req, res) => {
-  if (!config.whatsapp.meta.hostedLink) {
-    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'META_HOSTED_LINK is not configured');
-  }
-  res.send({ link: config.whatsapp.meta.hostedLink });
 });
 
 const startEmbeddedSignup = catchAsync(async (req, res) => {
@@ -66,7 +53,6 @@ const manualConnect = catchAsync(async (req, res) => {
 
 module.exports = {
   getConnection,
-  getMetaHostedLink,
   startEmbeddedSignup,
   oauthCallback,
   reconnect,

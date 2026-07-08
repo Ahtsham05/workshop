@@ -19,7 +19,7 @@ import {
   useGetSchoolClassesQuery,
   useGetStudentsQuery,
 } from '@/stores/school.api';
-import { useGetMetaHostedLinkQuery } from '@/stores/whatsappCloud.api';
+import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup';
 import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import {
@@ -62,8 +62,7 @@ export default function WhatsAppMessaging() {
   const isReady = Boolean(status?.connected ?? status?.state === 'READY');
 
   const [disconnect, { isLoading: disconnecting }] = useDisconnectWhatsAppMutation();
-  const { data: metaLinkData, isLoading: connecting } = useGetMetaHostedLinkQuery();
-  const startEmbeddedSignup = () => { if (metaLinkData?.link) window.location.href = metaLinkData.link };
+  const { connect: startEmbeddedSignup, isLoading: connecting } = useEmbeddedWhatsAppSignup();
 
   // ── Single message ─────────────────────────────────────────────────────────
   const [singlePhone, setSinglePhone] = useState('');

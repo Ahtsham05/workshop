@@ -61,12 +61,6 @@ export const whatsappCloudApi = createApi({
       query: () => '/connection',
       providesTags: ['WhatsAppConnection'],
     }),
-    // Pre-App-Review fallback: static Meta-hosted Embedded Signup link.
-    /* SWAP TO EMBEDDED SIGNUP HERE once App Review is approved — switch the
-     * settings page to useEmbeddedWhatsAppSignup() and remove this query. */
-    getMetaHostedLink: builder.query<{ link: string }, void>({
-      query: () => '/meta-link',
-    }),
     startEmbeddedSignup: builder.mutation<
       { appId: string; configId: string; redirectUri: string; frontendRedirectUrl: string; state: string },
       void
@@ -136,7 +130,6 @@ export const whatsappCloudApi = createApi({
 
 export const {
   useGetCloudConnectionQuery,
-  useGetMetaHostedLinkQuery,
   useStartEmbeddedSignupMutation,
   useReconnectCloudMutation,
   useDisconnectCloudMutation,

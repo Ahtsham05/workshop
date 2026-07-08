@@ -14,7 +14,6 @@ router.use(auth(), branchScope());
 const manageConnection = auth('editSettings', 'manageSchool', 'manageInvoices');
 
 router.get('/connection', manageConnection, whatsappCloudController.getConnection);
-router.get('/meta-link', manageConnection, whatsappCloudController.getMetaHostedLink);
 router.post('/connection/embedded-signup/start', manageConnection, whatsappCloudController.startEmbeddedSignup);
 router.post('/connection/reconnect', manageConnection, whatsappCloudController.reconnect);
 router.post('/connection/disconnect', manageConnection, whatsappCloudController.disconnect);

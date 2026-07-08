@@ -5,17 +5,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
 import {
   useDisconnectCloudMutation,
   useGetCloudConnectionQuery,
-  useGetMetaHostedLinkQuery,
   useReconnectCloudMutation,
 } from '@/stores/whatsappCloud.api'
 
 export default function BusinessWhatsAppSettings() {
   const { data: connection, isLoading, refetch } = useGetCloudConnectionQuery()
-  const { data: metaLinkData, isLoading: starting } = useGetMetaHostedLinkQuery()
-  const handleMetaHostedLink = () => { if (metaLinkData?.link) window.location.href = metaLinkData.link }
+  const { connect, isLoading: starting } = useEmbeddedWhatsAppSignup()
   const [reconnect, { isLoading: reconnecting }] = useReconnectCloudMutation()
   const [disconnect, { isLoading: disconnecting }] = useDisconnectCloudMutation()
 
@@ -101,7 +100,7 @@ export default function BusinessWhatsAppSettings() {
                 <Button
                   type='button'
                   className='bg-[#25D366] hover:bg-[#20bd5a] text-white gap-2'
-                  onClick={handleMetaHostedLink}
+                  onClick={connect}
                   disabled={starting}
                 >
                   {starting ? <Loader2 className='h-4 w-4 animate-spin' /> : <MessageCircle className='h-4 w-4' />}
