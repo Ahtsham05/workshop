@@ -65,6 +65,29 @@ const CASH_MODULE_ORDER = [
   'Customer Payments', 'Supplier Payments', 'Employee Payments', 'Sales Returns', 'Purchase Returns',
 ]
 
+// Each module moves cash for a different reason, so the in/out/net wording is
+// tailored per module instead of one generic "Sale/Purchase/Profit" label everywhere.
+const MODULE_FLOW_LABELS: Record<string, { in: string; out: string; net: string }> = {
+  'Sales': { in: 'Sale', out: 'Total Cost', net: 'Profit' },
+  'Purchases': { in: 'Refunds', out: 'Paid', net: 'Net Spent' },
+  'Load': { in: 'Sold', out: 'Purchased', net: 'Profit' },
+  'Cash Management': { in: 'Received', out: 'Sent', net: 'Net' },
+  'Sim Sale': { in: 'Sold', out: 'Purchased', net: 'Profit' },
+  'Services': { in: 'Collected', out: 'Refunds', net: 'Net' },
+  'Agent Bills': { in: 'Collected', out: 'Paid', net: 'Net' },
+  'Repairing': { in: 'Collected', out: 'Paid', net: 'Net' },
+  'Expenses': { in: 'Received', out: 'Paid', net: 'Net' },
+  'My Accounts': { in: 'Received', out: 'Drawings', net: 'Net' },
+  'Bill Payments': { in: 'Collected', out: 'Paid', net: 'Net' },
+  'Installments': { in: 'Collected', out: 'Paid', net: 'Net' },
+  'Customer Payments': { in: 'Collected', out: 'Refunds', net: 'Net' },
+  'Supplier Payments': { in: 'Refunds', out: 'Paid', net: 'Net' },
+  'Employee Payments': { in: 'Received', out: 'Paid', net: 'Net' },
+  'Sales Returns': { in: 'Received', out: 'Refunded', net: 'Net' },
+  'Purchase Returns': { in: 'Received', out: 'Refunded', net: 'Net' },
+}
+const DEFAULT_FLOW_LABELS = { in: 'Received', out: 'Paid', net: 'Net' }
+
 interface PersonalLedgerEntry {
   transactionType: string
   category?: string
@@ -128,8 +151,8 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
     const { data: expenses, isLoading: expensesLoading } = useGetExpenseReportQuery({ startDate, endDate, groupRecurring: true })
     const { data: salesPurchase } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
     const { data: activitySummary } = useGetActivitySummaryReportQuery({ startDate, endDate })
-    const { data: customers } = useGetCustomerReportQuery({ startDate, endDate })
-    const { data: suppliers } = useGetSupplierReportQuery({ startDate, endDate })
+    const { data: customers, isLoading: customersLoading } = useGetCustomerReportQuery({ startDate, endDate, top: 100 })
+    const { data: suppliers, isLoading: suppliersLoading } = useGetSupplierReportQuery({ startDate, endDate })
     const { data: productReport, isLoading: productLoading } = useGetProductReportQuery({ startDate, endDate })
 
     const isLoading = pnlLoading || walletWiseLoading || servicesLoading || repairLoading || expensesLoading || productLoading
@@ -333,6 +356,24 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
     const ledgerIncomeByCategory = useMemo(() => buildLedgerCategoryBreakdown(ledgerEntries, 'income'), [ledgerEntries])
     const ledgerExpenseByCategory = useMemo(() => buildLedgerCategoryBreakdown(ledgerEntries, 'expense'), [ledgerEntries])
 
+    const creditCustomers = useMemo(
+      () => (customers?.data ?? []).filter((c) => c.totalBalance > 0).sort((a, b) => b.totalBalance - a.totalBalance),
+      [customers],
+    )
+    const creditCustomersTotal = useMemo(
+      () => creditCustomers.reduce((sum, c) => sum + c.totalBalance, 0),
+      [creditCustomers],
+    )
+
+    const creditSuppliers = useMemo(
+      () => (suppliers?.data ?? []).filter((s) => s.totalBalance > 0).sort((a, b) => b.totalBalance - a.totalBalance),
+      [suppliers],
+    )
+    const creditSuppliersTotal = useMemo(
+      () => creditSuppliers.reduce((sum, s) => sum + s.totalBalance, 0),
+      [creditSuppliers],
+    )
+
     const cashCreditSummary = useMemo(() => {
       const s = activitySummary?.summary
       const cashSales = s?.cashSales ?? 0
@@ -382,6 +423,10 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
 
     const previousCashInHand = salesPurchase?.summary.previousCashInHand ?? 0
     const cashInHand = salesPurchase?.summary.cashInHand ?? 0
+    // Credit purchases haven't left cash yet but are owed to suppliers — reserving this
+    // amount out of Net Cash Available shows what's genuinely free to spend right now.
+    const purchasesReserve = cashCreditSummary.creditPurchaseBalance
+    const availableAfterReserve = cashInHand - purchasesReserve
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -397,8 +442,10 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               { Metric: 'Cash Purchases', Value: cashCreditSummary.cashPurchases },
               { Metric: 'Credit Purchases', Value: cashCreditSummary.creditPurchases },
               { Metric: 'Total Purchases', Value: cashCreditSummary.totalPurchases },
-              { Metric: 'Previous Cash In Hand', Value: previousCashInHand },
-              { Metric: 'Cash In Hand (as of selected period)', Value: cashInHand },
+              { Metric: 'Previous Balance', Value: previousCashInHand },
+              { Metric: 'Net Cash Available (as of selected period)', Value: cashInHand },
+              { Metric: 'Reserved for Purchases (credit payable)', Value: purchasesReserve },
+              { Metric: 'Available After Purchases Reserve', Value: availableAfterReserve },
             ]),
             'Business Summary',
           )
@@ -608,6 +655,40 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               wb,
               XLSX.utils.json_to_sheet(ledgerExpenseByCategory.map((c) => ({ Category: c.name, 'Total Amount': c.totalAmount }))),
               'My Account Expenses',
+            )
+          }
+
+          if (creditCustomers.length > 0) {
+            XLSX.utils.book_append_sheet(
+              wb,
+              XLSX.utils.json_to_sheet(
+                creditCustomers.map((c) => ({
+                  Customer: c.customerName,
+                  Phone: c.phone || '',
+                  Purchases: c.totalPurchases,
+                  'Total Spent': c.totalSpent,
+                  Paid: c.totalPaid,
+                  'Balance Owed': c.totalBalance,
+                })),
+              ),
+              'Credit Customers',
+            )
+          }
+
+          if (creditSuppliers.length > 0) {
+            XLSX.utils.book_append_sheet(
+              wb,
+              XLSX.utils.json_to_sheet(
+                creditSuppliers.map((s) => ({
+                  Supplier: s.supplierName,
+                  Phone: s.phone || '',
+                  Purchases: s.totalPurchases,
+                  'Total Amount': s.totalAmount,
+                  Paid: s.totalPaid,
+                  'Balance Owed': s.totalBalance,
+                })),
+              ),
+              'Credit Suppliers',
             )
           }
 
@@ -1234,6 +1315,106 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
           </Card>
         </div>
 
+        {/* Credit Customers */}
+        <div ref={(el) => { sectionRefs.current['credit-customers'] = el }} className='scroll-mt-24'>
+          <Card>
+            <CardHeader>
+              <CardTitle>Credit Customers</CardTitle>
+              <CardDescription>Customers who bought on credit in this period, with what they still owe</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {customersLoading ? (
+                <Skeleton className='h-[200px] w-full' />
+              ) : creditCustomers.length === 0 ? (
+                <EmptyNote label='credit customers' />
+              ) : (
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead className='text-right'>Purchases</TableHead>
+                        <TableHead className='text-right'>Total Spent</TableHead>
+                        <TableHead className='text-right'>Paid</TableHead>
+                        <TableHead className='text-right'>Balance Owed</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {creditCustomers.map((c) => (
+                        <TableRow key={c._id}>
+                          <TableCell className='font-medium'>{c.customerName}</TableCell>
+                          <TableCell className='text-muted-foreground'>{c.phone || '—'}</TableCell>
+                          <TableCell className='text-right'>{c.totalPurchases}</TableCell>
+                          <TableCell className='text-right'>{fmt(c.totalSpent)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(c.totalPaid)}</TableCell>
+                          <TableCell className='text-right font-semibold text-red-600'>{fmt(c.totalBalance)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold' colSpan={5}>Total — {creditCustomers.length} customers</TableCell>
+                        <TableCell className='text-right font-bold text-red-600'>{fmt(creditCustomersTotal)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Credit Suppliers */}
+        <div ref={(el) => { sectionRefs.current['credit-suppliers'] = el }} className='scroll-mt-24'>
+          <Card>
+            <CardHeader>
+              <CardTitle>Credit Suppliers</CardTitle>
+              <CardDescription>Suppliers you bought from on credit in this period, with what you still owe them</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {suppliersLoading ? (
+                <Skeleton className='h-[200px] w-full' />
+              ) : creditSuppliers.length === 0 ? (
+                <EmptyNote label='credit suppliers' />
+              ) : (
+                <div className='rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Supplier</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead className='text-right'>Purchases</TableHead>
+                        <TableHead className='text-right'>Total Amount</TableHead>
+                        <TableHead className='text-right'>Paid</TableHead>
+                        <TableHead className='text-right'>Balance Owed</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {creditSuppliers.map((s) => (
+                        <TableRow key={s._id}>
+                          <TableCell className='font-medium'>{s.supplierName}</TableCell>
+                          <TableCell className='text-muted-foreground'>{s.phone || '—'}</TableCell>
+                          <TableCell className='text-right'>{s.totalPurchases}</TableCell>
+                          <TableCell className='text-right'>{fmt(s.totalAmount)}</TableCell>
+                          <TableCell className='text-right text-green-600'>{fmt(s.totalPaid)}</TableCell>
+                          <TableCell className='text-right font-semibold text-red-600'>{fmt(s.totalBalance)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell className='font-semibold' colSpan={5}>Total — {creditSuppliers.length} suppliers</TableCell>
+                        <TableCell className='text-right font-bold text-red-600'>{fmt(creditSuppliersTotal)}</TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Business Summary — Sales, Purchases, Modules & Cash Position */}
         <div className='scroll-mt-24'>
           <Card>
@@ -1245,6 +1426,11 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               {/* Sales & Purchases — Cash vs Credit */}
               <div>
                 <p className='mb-3 text-sm font-medium'>Sales &amp; Purchases — Cash vs Credit</p>
+                <p className='mb-3 text-xs text-muted-foreground'>
+                  Credit shows the full value of credit sales/purchases made in this period. Still Owed is only the unpaid part —
+                  it&apos;s lower than Credit whenever a down payment was made at the time of sale/purchase, and it matches the
+                  totals in Credit Customers / Credit Suppliers below.
+                </p>
                 <div className='rounded-md border'>
                   <Table>
                     <TableHeader>
@@ -1252,6 +1438,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                         <TableHead>Type</TableHead>
                         <TableHead className='text-right'>Cash</TableHead>
                         <TableHead className='text-right'>Credit</TableHead>
+                        <TableHead className='text-right'>Still Owed</TableHead>
                         <TableHead className='text-right'>Total</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1260,12 +1447,14 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                         <TableCell className='font-medium'>Sales</TableCell>
                         <TableCell className='text-right text-green-600'>{fmt(cashCreditSummary.cashSales)}</TableCell>
                         <TableCell className='text-right text-amber-600'>{fmt(cashCreditSummary.creditSales)}</TableCell>
+                        <TableCell className='text-right text-red-600'>{fmt(cashCreditSummary.creditSalesBalance)}</TableCell>
                         <TableCell className='text-right font-semibold'>{fmt(cashCreditSummary.totalSales)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell className='font-medium'>Purchases</TableCell>
                         <TableCell className='text-right text-green-600'>{fmt(cashCreditSummary.cashPurchases)}</TableCell>
                         <TableCell className='text-right text-amber-600'>{fmt(cashCreditSummary.creditPurchases)}</TableCell>
+                        <TableCell className='text-right text-red-600'>{fmt(cashCreditSummary.creditPurchaseBalance)}</TableCell>
                         <TableCell className='text-right font-semibold'>{fmt(cashCreditSummary.totalPurchases)}</TableCell>
                       </TableRow>
                     </TableBody>
@@ -1276,71 +1465,119 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               {/* All Modules Summary */}
               <div>
                 <p className='mb-3 text-sm font-medium'>All Modules Summary — Actual Cash Movement</p>
-                <p className='mb-3 text-xs text-muted-foreground'>
-                  Every module&apos;s real cash received and cash paid, side by side — e.g. Load shows what you sold vs what you
+                <p className='mb-4 text-xs text-muted-foreground'>
+                  Every module&apos;s sale and purchase amount, side by side — e.g. Load shows what you sold vs what you
                   purchased, Cash Management shows received vs sent, My Accounts shows what came in vs personal drawings, Supplier
                   Payments shows what you paid suppliers vs any refunds, Customer Payments shows what you collected vs any refunds.
-                  Net = Cash In − Cash Out, and the Grand Total below always equals Cash In Hand minus Previous Cash In Hand.
+                  Sales shows real cost of goods sold and gross profit. Each card's Net always equals its own In minus Out, and the
+                  Grand Total card equals Net Cash Available minus Previous Balance.
                 </p>
                 {moduleSummaryRows.length === 0 ? (
                   <EmptyNote label='cash activity' />
                 ) : (
-                  <div className='rounded-md border'>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Module</TableHead>
-                          <TableHead className='text-right'>Cash In</TableHead>
-                          <TableHead className='text-right'>Cash Out</TableHead>
-                          <TableHead className='text-right'>Net</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {moduleSummaryRows.map((row) => (
-                          <TableRow key={row.module}>
-                            <TableCell className='font-medium'>{row.module}</TableCell>
-                            <TableCell className='text-right text-green-600'>{row.income > 0 ? fmt(row.income) : '—'}</TableCell>
-                            <TableCell className='text-right text-red-600'>{row.expense > 0 ? fmt(row.expense) : '—'}</TableCell>
-                            <TableCell className={cn('text-right font-medium', row.net < 0 ? 'text-red-600' : 'text-green-600')}>
-                              {row.net < 0 ? '-' : '+'}{fmt(Math.abs(row.net))}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow>
-                          <TableCell className='font-semibold'>Grand Total</TableCell>
-                          <TableCell className='text-right font-semibold text-green-600'>{fmt(moduleSummaryTotalIn)}</TableCell>
-                          <TableCell className='text-right font-semibold text-red-600'>{fmt(moduleSummaryTotalOut)}</TableCell>
-                          <TableCell className={cn('text-right font-bold', moduleSummaryTotal >= 0 ? 'text-green-600' : 'text-red-600')}>
-                            {fmt(moduleSummaryTotal)}
-                          </TableCell>
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
+                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+                    {moduleSummaryRows.map((row) => {
+                      const isSales = row.module === 'Sales'
+                      const totalCost = pnl?.revenue.costOfGoodsSold ?? 0
+                      const grossProfit = pnl?.revenue.grossProfit ?? 0
+                      const net = isSales ? grossProfit : row.net
+                      const labels = MODULE_FLOW_LABELS[row.module] ?? DEFAULT_FLOW_LABELS
+                      return (
+                        <div
+                          key={row.module}
+                          className={cn(
+                            'rounded-xl border-2 p-4 shadow-sm',
+                            net >= 0
+                              ? 'border-green-500/20 bg-green-50/50 dark:bg-green-950/10'
+                              : 'border-red-500/20 bg-red-50/50 dark:bg-red-950/10',
+                          )}
+                        >
+                          <p className='text-sm font-semibold'>{row.module}</p>
+                          <div className='mt-3 space-y-1.5 text-xs'>
+                            <div className='flex items-center justify-between'>
+                              <span className='text-muted-foreground'>{isSales ? 'Sale' : labels.in}</span>
+                              <span className='font-medium text-green-600'>{row.income > 0 ? fmt(row.income) : '—'}</span>
+                            </div>
+                            <div className='flex items-center justify-between'>
+                              <span className='text-muted-foreground'>{isSales ? 'Total Cost' : labels.out}</span>
+                              <span className='font-medium text-red-600'>
+                                {isSales ? (totalCost > 0 ? fmt(totalCost) : '—') : row.expense > 0 ? fmt(row.expense) : '—'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className='mt-3 flex items-center justify-between border-t pt-2'>
+                            <span className='text-xs font-medium text-muted-foreground'>{isSales ? 'Profit' : labels.net}</span>
+                            <span className={cn('text-base font-bold', net < 0 ? 'text-red-600' : 'text-green-600')}>
+                              {net < 0 ? '-' : '+'}{fmt(Math.abs(net))}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <div
+                      className={cn(
+                        'rounded-xl border-2 p-4 shadow-sm',
+                        moduleSummaryTotal >= 0 ? 'border-primary/40 bg-primary/5' : 'border-red-500/40 bg-red-50 dark:bg-red-950/20',
+                      )}
+                    >
+                      <p className='text-sm font-semibold'>Grand Total</p>
+                      <div className='mt-3 space-y-1.5 text-xs'>
+                        <div className='flex items-center justify-between'>
+                          <span className='text-muted-foreground'>Total In</span>
+                          <span className='font-medium text-green-600'>{fmt(moduleSummaryTotalIn)}</span>
+                        </div>
+                        <div className='flex items-center justify-between'>
+                          <span className='text-muted-foreground'>Total Out</span>
+                          <span className='font-medium text-red-600'>{fmt(moduleSummaryTotalOut)}</span>
+                        </div>
+                      </div>
+                      <div className='mt-3 flex items-center justify-between border-t pt-2'>
+                        <span className='text-xs font-medium text-muted-foreground'>Net</span>
+                        <span className={cn('text-base font-bold', moduleSummaryTotal < 0 ? 'text-red-600' : 'text-green-600')}>
+                          {moduleSummaryTotal < 0 ? '-' : '+'}{fmt(Math.abs(moduleSummaryTotal))}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Final Position */}
-              <div className='grid gap-4 sm:grid-cols-3'>
-                <div className='rounded-xl border-2 border-muted p-4 shadow-sm'>
-                  <p className='text-sm font-medium text-muted-foreground'>Previous Cash In Hand</p>
-                  <p className='text-2xl font-bold'>{fmt(previousCashInHand)}</p>
-                  <p className='mt-2 text-xs text-muted-foreground'>Cash you had right before this period started</p>
+              <div>
+                <p className='mb-3 text-sm font-medium'>Final Position</p>
+                <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                  <div className='rounded-xl border-2 border-muted p-4 shadow-sm'>
+                    <p className='text-sm font-medium text-muted-foreground'>Previous Balance</p>
+                    <p className='text-2xl font-bold'>{fmt(previousCashInHand)}</p>
+                    <p className='mt-2 text-xs text-muted-foreground'>Cash you had right before this period started</p>
+                  </div>
+                  <div className={cn('rounded-xl border-2 p-4 shadow-sm', moduleSummaryTotal >= 0 ? 'border-green-500/30 bg-green-50 dark:bg-green-950/20' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
+                    <p className='text-sm font-medium text-muted-foreground'>Net Cash Movement</p>
+                    <p className={cn('text-2xl font-bold', moduleSummaryTotal >= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {moduleSummaryTotal >= 0 ? '+' : ''}{fmt(moduleSummaryTotal)}
+                    </p>
+                    <p className='mt-2 text-xs text-muted-foreground'>Grand Total from the modules above, for the selected period</p>
+                  </div>
+                  <div className='rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 shadow-sm dark:bg-amber-950/20'>
+                    <p className='text-sm font-medium text-muted-foreground'>Reserved for Purchases</p>
+                    <p className='text-2xl font-bold text-amber-600'>{fmt(purchasesReserve)}</p>
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      Credit purchases still payable to suppliers — set this aside before spending Net Cash Available elsewhere
+                    </p>
+                  </div>
+                  <div className={cn('rounded-xl border-2 p-4 shadow-sm', cashInHand >= 0 ? 'border-primary/30 bg-primary/5' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
+                    <p className='text-sm font-medium text-muted-foreground'>Net Cash Available</p>
+                    <p className={cn('text-2xl font-bold', cashInHand >= 0 ? 'text-primary' : 'text-red-600')}>{fmt(cashInHand)}</p>
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      Previous Balance + Net Cash Movement — the actual closing cash balance for the selected period
+                    </p>
+                  </div>
                 </div>
-                <div className={cn('rounded-xl border-2 p-4 shadow-sm', moduleSummaryTotal >= 0 ? 'border-green-500/30 bg-green-50 dark:bg-green-950/20' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
-                  <p className='text-sm font-medium text-muted-foreground'>Net Cash Movement</p>
-                  <p className={cn('text-2xl font-bold', moduleSummaryTotal >= 0 ? 'text-green-600' : 'text-red-600')}>
-                    {moduleSummaryTotal >= 0 ? '+' : ''}{fmt(moduleSummaryTotal)}
-                  </p>
-                  <p className='mt-2 text-xs text-muted-foreground'>Grand Total from the modules list above, for the selected period</p>
-                </div>
-                <div className={cn('rounded-xl border-2 p-4 shadow-sm', cashInHand >= 0 ? 'border-primary/30 bg-primary/5' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
-                  <p className='text-sm font-medium text-muted-foreground'>Cash In Hand</p>
-                  <p className={cn('text-2xl font-bold', cashInHand >= 0 ? 'text-primary' : 'text-red-600')}>{fmt(cashInHand)}</p>
+                <div className={cn('mt-4 rounded-xl border-2 p-4 shadow-sm', availableAfterReserve >= 0 ? 'border-teal-500/30 bg-teal-50 dark:bg-teal-950/20' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20')}>
+                  <p className='text-sm font-medium text-muted-foreground'>Available After Purchases Reserve</p>
+                  <p className={cn('text-2xl font-bold', availableAfterReserve >= 0 ? 'text-teal-600' : 'text-red-600')}>{fmt(availableAfterReserve)}</p>
                   <p className='mt-2 text-xs text-muted-foreground'>
-                    Previous Cash In Hand + Net Cash Movement — the actual closing cash balance for the selected period
+                    Net Cash Available minus Reserved for Purchases — what&apos;s truly free to use right now
                   </p>
                 </div>
               </div>

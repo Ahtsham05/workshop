@@ -811,6 +811,8 @@ const getCustomerReport = catchAsync(async (req, res) => {
         totalPurchases: { $sum: 1 },
         totalSpent: { $sum: '$total' },
         totalProfit: { $sum: { $ifNull: ['$totalProfit', 0] } },
+        totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } },
+        totalBalance: { $sum: { $ifNull: ['$balance', 0] } },
         avgPurchaseValue: { $avg: '$total' },
         lastPurchase: { $max: '$invoiceDate' },
         firstPurchase: { $min: '$invoiceDate' },
@@ -820,8 +822,14 @@ const getCustomerReport = catchAsync(async (req, res) => {
     ]),
     Invoice.aggregate([
       { $match: { ...baseMatch, ...dateMatch } },
-      { $group: { _id: null, uniqueCustomers: { $addToSet: customerGroupExpr }, totalTransactions: { $sum: 1 }, totalRevenue: { $sum: '$total' } } },
-      { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
+      { $group: {
+        _id: null,
+        uniqueCustomers: { $addToSet: customerGroupExpr },
+        totalTransactions: { $sum: 1 },
+        totalRevenue: { $sum: '$total' },
+        totalBalance: { $sum: { $ifNull: ['$balance', 0] } },
+      } },
+      { $project: { uniqueCustomers: { $size: '$uniqueCustomers' }, totalTransactions: 1, totalRevenue: 1, totalBalance: 1, avgTransactionValue: { $cond: [{ $gt: ['$totalTransactions', 0] }, { $divide: ['$totalRevenue', '$totalTransactions'] }, 0] } } },
     ]),
   ]);
 

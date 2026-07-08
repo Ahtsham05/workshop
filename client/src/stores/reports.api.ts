@@ -160,6 +160,8 @@ export interface CustomerReportData {
   totalPurchases: number
   totalSpent: number
   totalProfit: number
+  totalPaid: number
+  totalBalance: number
   avgPurchaseValue: number
   lastPurchase: string
   firstPurchase: string
