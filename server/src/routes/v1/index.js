@@ -145,12 +145,6 @@ const defaultRoutes = [
     route: productAttributeRoute,
   },
   {
-    // productVariantRoute defines its own full paths (/products/:productId/variants,
-    // /product-variants/:variantId), so it must mount at root.
-    path: '/',
-    route: productVariantRoute,
-  },
-  {
     path: '/inventory',
     route: inventoryRoute,
   },
@@ -269,10 +263,6 @@ const defaultRoutes = [
   {
     path: '/insights',
     route: insightRoute,
-  },
-  {
-    path: '/',
-    route: purchaseSuggestionsRoute,
   },
   {
     path: '/cash-withdrawals',
@@ -527,6 +517,20 @@ const defaultRoutes = [
   {
     path: '/sms-gateway',
     route: smsGatewayRoute,
+  },
+  // These two mount at '/' because they define their own full paths. They must be
+  // registered last so path-specific routers (including public routes like the
+  // WhatsApp OAuth callback) get a chance to match before this router's blanket
+  // auth() middleware runs for every request that falls through to it.
+  {
+    // productVariantRoute defines its own full paths (/products/:productId/variants,
+    // /product-variants/:variantId), so it must mount at root.
+    path: '/',
+    route: productVariantRoute,
+  },
+  {
+    path: '/',
+    route: purchaseSuggestionsRoute,
   },
 ];
 
