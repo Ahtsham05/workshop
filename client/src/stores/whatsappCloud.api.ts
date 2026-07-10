@@ -43,19 +43,47 @@ export type WhatsAppConversation = {
   status: 'open' | 'closed' | 'spam'
 }
 
+export type WhatsAppMessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
+
 export type WhatsAppMessage = {
   id: string
   direction: 'inbound' | 'outbound'
   type: string
   content: { text?: string; caption?: string; mediaUrl?: string; filename?: string }
-  status: string
+  status: WhatsAppMessageStatus
+  errorMessage?: string
+  errorCode?: string
   createdAt: string
+}
+
+export type WhatsAppTemplate = {
+  id: string
+  name: string
+  language: string
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED'
+  internalCategory: string
+  variableCount: number
+  rejectionReason?: string
+  components?: Array<{ type: string; text?: string }>
+  updatedAt: string
+}
+
+export type WhatsAppTemplateSuggestion = {
+  name: string
+  language: string
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+  internalCategory: string
+  bodyText: string
+  variableCount: number
+  alreadyCreated: boolean
+  status: WhatsAppTemplate['status'] | null
 }
 
 export const whatsappCloudApi = createApi({
   reducerPath: 'whatsappCloudApi',
   baseQuery: cloudBaseQuery,
-  tagTypes: ['WhatsAppConnection', 'WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppAnalytics'],
+  tagTypes: ['WhatsAppConnection', 'WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppAnalytics', 'WhatsAppTemplates'],
   endpoints: (builder) => ({
     getCloudConnection: builder.query<WhatsAppCloudConnection, void>({
       query: () => '/connection',
@@ -97,7 +125,10 @@ export const whatsappCloudApi = createApi({
       query: (id) => ({ url: `/conversations/${id}/read`, method: 'POST' }),
       invalidatesTags: ['WhatsAppConversations'],
     }),
-    sendInboxMessage: builder.mutation<{ success: boolean }, { phone: string; text: string; conversationId?: string }>({
+    sendInboxMessage: builder.mutation<
+      { success: boolean; wamid?: string; message?: WhatsAppMessage },
+      { phone: string; text: string; conversationId?: string }
+    >({
       query: (body) => ({ url: '/messages/send', method: 'POST', body }),
       invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages'],
     }),
@@ -118,6 +149,26 @@ export const whatsappCloudApi = createApi({
     }),
     syncTemplates: builder.mutation<{ synced: number }, void>({
       query: () => ({ url: '/templates/sync', method: 'POST' }),
+      invalidatesTags: ['WhatsAppTemplates'],
+    }),
+    getTemplates: builder.query<{ results: WhatsAppTemplate[]; totalResults: number }, { status?: string } | void>({
+      query: (params) => ({ url: '/templates', params: params || undefined }),
+      providesTags: ['WhatsAppTemplates'],
+    }),
+    getSuggestedTemplates: builder.query<{ suggestions: WhatsAppTemplateSuggestion[] }, void>({
+      query: () => '/templates/suggestions',
+      providesTags: ['WhatsAppTemplates'],
+    }),
+    createTemplate: builder.mutation<
+      WhatsAppTemplate,
+      { name: string; language?: string; category: string; bodyText: string; internalCategory?: string }
+    >({
+      query: (body) => ({ url: '/templates', method: 'POST', body }),
+      invalidatesTags: ['WhatsAppTemplates'],
+    }),
+    checkTemplateStatus: builder.mutation<WhatsAppTemplate, string>({
+      query: (id) => ({ url: `/templates/${id}/check-status`, method: 'POST' }),
+      invalidatesTags: ['WhatsAppTemplates'],
     }),
     sendCloudInvoicePdf: builder.mutation<
       { success: boolean; wamid?: string },
@@ -141,4 +192,8 @@ export const {
   useGetAnalyticsOverviewQuery,
   useSyncTemplatesMutation,
   useSendCloudInvoicePdfMutation,
+  useGetTemplatesQuery,
+  useGetSuggestedTemplatesQuery,
+  useCreateTemplateMutation,
+  useCheckTemplateStatusMutation,
 } = whatsappCloudApi

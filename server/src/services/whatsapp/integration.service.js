@@ -31,7 +31,16 @@ async function sendPaymentReminder({ organizationId, branchId, customerId, sentB
   });
   const totalDue = invoices.reduce((s, i) => s + (i.balance || 0), 0);
   const text = `Payment Reminder: Dear ${customer.name}, your outstanding balance is Rs. ${totalDue}. Please clear at earliest convenience.`;
-  return messagingService.sendText({ organizationId, branchId, phone, text, source: 'api', sentBy });
+  return messagingService.sendMessage({
+    organizationId,
+    branchId,
+    phone,
+    text,
+    source: 'api',
+    sentBy,
+    templateCategory: 'payment_reminder',
+    templateParams: [customer.name, totalDue, 'your account'],
+  });
 }
 
 async function sendAttendanceAlert({ organizationId, branchId, studentId, date, sentBy }) {
@@ -39,7 +48,16 @@ async function sendAttendanceAlert({ organizationId, branchId, studentId, date, 
   if (!student?.parent?.phone) throw new Error('Parent phone not found');
   const phone = normalizePhone(student.parent.phone);
   const text = `Attendance Alert: ${student.firstName} ${student.lastName} was marked ABSENT on ${new Date(date).toDateString()}.`;
-  return messagingService.sendText({ organizationId, branchId, phone, text, source: 'attendance', sentBy });
+  return messagingService.sendMessage({
+    organizationId,
+    branchId,
+    phone,
+    text,
+    source: 'attendance',
+    sentBy,
+    templateCategory: 'attendance',
+    templateParams: [`${student.firstName} ${student.lastName}`, new Date(date).toDateString()],
+  });
 }
 
 async function sendFeeReminder({ organizationId, branchId, voucherId, sentBy }) {
@@ -47,8 +65,18 @@ async function sendFeeReminder({ organizationId, branchId, voucherId, sentBy }) 
   if (!voucher?.studentId?.parent?.phone) throw new Error('Parent phone not found');
   const phone = normalizePhone(voucher.studentId.parent.phone);
   const amount = Math.max(0, (voucher.netAmount || voucher.totalAmount || 0) - (voucher.paidAmount || 0));
+  const dueDate = voucher.dueDate ? new Date(voucher.dueDate).toDateString() : 'soon';
   const text = `Fee Reminder: ${voucher.studentId.firstName}'s fee of Rs. ${amount} is due. Voucher #${voucher.voucherNumber || voucher._id}.`;
-  return messagingService.sendText({ organizationId, branchId, phone, text, source: 'fee', sentBy });
+  return messagingService.sendMessage({
+    organizationId,
+    branchId,
+    phone,
+    text,
+    source: 'fee',
+    sentBy,
+    templateCategory: 'fee',
+    templateParams: [voucher.studentId.firstName, `Rs. ${amount}`, dueDate],
+  });
 }
 
 async function sendResultNotification({ organizationId, branchId, studentId, examName, sentBy }) {
@@ -56,7 +84,16 @@ async function sendResultNotification({ organizationId, branchId, studentId, exa
   if (!student?.parent?.phone) throw new Error('Parent phone not found');
   const phone = normalizePhone(student.parent.phone);
   const text = `Result Published: ${student.firstName}'s ${examName || 'exam'} results are now available. Contact school for details.`;
-  return messagingService.sendText({ organizationId, branchId, phone, text, source: 'result', sentBy });
+  return messagingService.sendMessage({
+    organizationId,
+    branchId,
+    phone,
+    text,
+    source: 'result',
+    sentBy,
+    templateCategory: 'result',
+    templateParams: [student.firstName, examName || 'exam'],
+  });
 }
 
 async function sendHolidayNotice({ organizationId, branchId, audience, message, sentBy }) {
@@ -65,7 +102,16 @@ async function sendHolidayNotice({ organizationId, branchId, audience, message, 
   const results = [];
   for (const phone of phones) {
     try {
-      await messagingService.sendText({ organizationId, branchId, phone, text: message, source: 'holiday', sentBy });
+      await messagingService.sendMessage({
+        organizationId,
+        branchId,
+        phone,
+        text: message,
+        source: 'holiday',
+        sentBy,
+        templateCategory: 'holiday',
+        templateParams: [message],
+      });
       results.push({ phone, success: true });
     } catch (err) {
       results.push({ phone, success: false, error: err.message });

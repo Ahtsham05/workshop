@@ -77,7 +77,7 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
       }
       try {
         await sendWhatsAppMessage({ phone, message }).unwrap()
-        toast.success('Message sent on WhatsApp')
+        toast.success('Message queued — check Inbox for delivery status')
         return true
       } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
@@ -103,7 +103,7 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
       }
       try {
         await sendInvoicePdfMutation(payload).unwrap()
-        toast.success('Invoice sent on WhatsApp')
+        toast.success('Invoice queued — check Inbox for delivery status')
         return true
       } catch (err: unknown) {
         const e = err as { data?: { message?: string } }

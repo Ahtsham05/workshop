@@ -42,6 +42,11 @@ const whatsappCampaignSchema = mongoose.Schema(
     },
     stats: {
       total: { type: Number, default: 0 },
+      // queued/rejected reflect our own send API call (accepted vs. rejected outright);
+      // sent/delivered/read/failed are updated exclusively from Meta's status webhooks
+      // to avoid double-counting the same message.
+      queued: { type: Number, default: 0 },
+      rejected: { type: Number, default: 0 },
       sent: { type: Number, default: 0 },
       delivered: { type: Number, default: 0 },
       read: { type: Number, default: 0 },

@@ -49,6 +49,30 @@ const createCampaign = {
   }),
 };
 
+const createTemplate = {
+  body: Joi.object().keys({
+    name: Joi.string()
+      .required()
+      .pattern(/^[a-z0-9_]+$/)
+      .message('Template name must be lowercase letters, numbers and underscores only'),
+    language: Joi.string().default('en'),
+    category: Joi.string().valid('MARKETING', 'UTILITY', 'AUTHENTICATION').required(),
+    bodyText: Joi.string().required().max(1024),
+    internalCategory: Joi.string().valid(
+      'invoice',
+      'fee',
+      'attendance',
+      'result',
+      'holiday',
+      'promo',
+      'homework',
+      'payment_reminder',
+      'order_update',
+      'general',
+    ),
+  }),
+};
+
 const updateConversation = {
   body: Joi.object().keys({
     status: Joi.string().valid('open', 'closed', 'spam'),
@@ -62,5 +86,6 @@ module.exports = {
   sendMessage,
   sendInvoicePdf,
   createCampaign,
+  createTemplate,
   updateConversation,
 };

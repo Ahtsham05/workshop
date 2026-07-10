@@ -23,6 +23,16 @@ function emitNewMessage(organizationId, branchId, conversationId, messageId) {
   });
 }
 
+function emitMessageStatusUpdate(organizationId, branchId, { conversationId, messageId, status, errorMessage }) {
+  emitter.emit(channelKey(organizationId, branchId), {
+    type: 'message_status_update',
+    conversationId: conversationId ? String(conversationId) : undefined,
+    messageId: String(messageId),
+    status,
+    errorMessage,
+  });
+}
+
 function subscribe(organizationId, branchId, listener) {
   const key = channelKey(organizationId, branchId);
   emitter.on(key, listener);
@@ -32,5 +42,6 @@ function subscribe(organizationId, branchId, listener) {
 module.exports = {
   emitConversationUpdate,
   emitNewMessage,
+  emitMessageStatusUpdate,
   subscribe,
 };

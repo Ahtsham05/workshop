@@ -106,6 +106,7 @@ async function storeInboundMessage(connection, conversation, msg) {
   });
 
   conversation.lastMessageAt = new Date();
+  conversation.lastInboundAt = conversation.lastMessageAt;
   conversation.lastMessagePreview = String(preview).slice(0, 200);
   conversation.lastMessageDirection = 'inbound';
   conversation.unreadCount = (conversation.unreadCount || 0) + 1;

@@ -2,8 +2,10 @@ const logger = require('../../config/logger');
 const ApiError = require('../../utils/ApiError');
 const httpStatus = require('http-status');
 const connectionService = require('./connection.service');
-const { WhatsAppMessage } = require('../../models');
+const { WhatsAppMessage, WhatsAppConversation, WhatsAppTemplate } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
+
+const CUSTOMER_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function graphUrl(apiVersion, path) {
   return `${connectionService.graphBaseUrl(apiVersion)}/${path}`;
@@ -19,6 +21,23 @@ async function resolveConnection(organizationId, branchId) {
   }
   const accessToken = connectionService.getDecryptedToken(conn);
   return { conn, accessToken };
+}
+
+// Every outbound send needs a conversation row so the webhook (matched by wamid) has
+// something to update with delivery status — not just sends initiated from the inbox UI.
+async function resolveConversation(organizationId, branchId, phone) {
+  return WhatsAppConversation.findOneAndUpdate(
+    { organizationId, branchId, contactPhone: phone },
+    { $setOnInsert: { organizationId, branchId, contactPhone: phone, contactWaId: phone, status: 'open' } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+}
+
+async function touchConversationOnOutbound(conversation, preview) {
+  conversation.lastMessageAt = new Date();
+  conversation.lastMessagePreview = String(preview || '').slice(0, 200);
+  conversation.lastMessageDirection = 'outbound';
+  await conversation.save();
 }
 
 function decodePdfBuffer(data) {
@@ -90,22 +109,26 @@ async function sendText({
   });
 
   const wamid = body.messages?.[0]?.id;
-  if (!conversationId) return { wamid, success: true };
+  const conversation = conversationId
+    ? await WhatsAppConversation.findById(conversationId)
+    : await resolveConversation(organizationId, branchId, to);
 
   const message = await WhatsAppMessage.create({
     organizationId,
     branchId,
-    conversationId,
+    conversationId: conversation._id,
     direction: 'outbound',
     type: 'text',
     content: { text },
     wamid,
     metaMessageId: wamid,
-    status: 'sent',
-    statusHistory: [{ status: 'sent', at: new Date() }],
+    status: 'queued',
+    statusHistory: [{ status: 'queued', at: new Date() }],
     source,
     sentBy,
   });
+  await touchConversationOnOutbound(conversation, text);
+
   return { wamid, message, success: true };
 }
 
@@ -137,23 +160,26 @@ async function sendTemplate({
   });
 
   const wamid = body.messages?.[0]?.id;
-  const message = conversationId
-    ? await WhatsAppMessage.create({
-        organizationId,
-        branchId,
-        conversationId,
-        direction: 'outbound',
-        type: 'template',
-        content: { templateName, templateParams: components },
-        wamid,
-        metaMessageId: wamid,
-        status: 'sent',
-        statusHistory: [{ status: 'sent', at: new Date() }],
-        source,
-        sentBy,
-        campaignId,
-      })
-    : null;
+  const conversation = conversationId
+    ? await WhatsAppConversation.findById(conversationId)
+    : await resolveConversation(organizationId, branchId, to);
+
+  const message = await WhatsAppMessage.create({
+    organizationId,
+    branchId,
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type: 'template',
+    content: { templateName, templateParams: components },
+    wamid,
+    metaMessageId: wamid,
+    status: 'queued',
+    statusHistory: [{ status: 'queued', at: new Date() }],
+    source,
+    sentBy,
+    campaignId,
+  });
+  await touchConversationOnOutbound(conversation, `[Template: ${templateName}]`);
 
   return { wamid, message, success: true };
 }
@@ -197,24 +223,112 @@ async function sendDocument({
   });
 
   const wamid = body.messages?.[0]?.id;
-  const message = conversationId
-    ? await WhatsAppMessage.create({
-        organizationId,
-        branchId,
-        conversationId,
-        direction: 'outbound',
-        type: 'document',
-        content: { caption, filename: safeFilename, mediaId },
-        wamid,
-        metaMessageId: wamid,
-        status: 'sent',
-        statusHistory: [{ status: 'sent', at: new Date() }],
-        source,
-        sentBy,
-      })
-    : null;
+  const conversation = conversationId
+    ? await WhatsAppConversation.findById(conversationId)
+    : await resolveConversation(organizationId, branchId, to);
+
+  const message = await WhatsAppMessage.create({
+    organizationId,
+    branchId,
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type: 'document',
+    content: { caption, filename: safeFilename, mediaId },
+    wamid,
+    metaMessageId: wamid,
+    status: 'queued',
+    statusHistory: [{ status: 'queued', at: new Date() }],
+    source,
+    sentBy,
+  });
+  await touchConversationOnOutbound(conversation, caption || `📄 ${safeFilename}`);
 
   return { wamid, message, success: true };
+}
+
+/**
+ * Single entry point that picks free-form text vs. an approved template automatically,
+ * based on Meta's 24h customer-service window (measured from the customer's last inbound
+ * message). Outside the window, Meta rejects free-form text outright, so callers must
+ * supply a templateCategory (WhatsAppTemplate.internalCategory) to fall back to, plus the
+ * ordered params for that template's body variables.
+ */
+async function sendMessage({
+  organizationId,
+  branchId,
+  phone,
+  text,
+  templateCategory,
+  templateParams = [],
+  source = 'api',
+  sentBy,
+  conversationId,
+  campaignId,
+}) {
+  const to = normalizePhone(phone);
+  if (!to) throw new ApiError(httpStatus.BAD_REQUEST, `Invalid phone number: ${phone}`);
+
+  const conversation = conversationId
+    ? await WhatsAppConversation.findOne({ _id: conversationId, organizationId, branchId })
+    : await WhatsAppConversation.findOne({ organizationId, branchId, contactPhone: to });
+
+  const withinWindow =
+    conversation?.lastInboundAt &&
+    Date.now() - new Date(conversation.lastInboundAt).getTime() < CUSTOMER_SERVICE_WINDOW_MS;
+
+  if (withinWindow) {
+    if (!text) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Text is required to send a free-form message');
+    }
+    return sendText({
+      organizationId,
+      branchId,
+      phone: to,
+      text,
+      source,
+      sentBy,
+      conversationId: conversation?._id,
+    });
+  }
+
+  if (!templateCategory) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'This customer has not messaged you in the last 24 hours — an approved message template is required to reach them.',
+    );
+  }
+
+  const template = await WhatsAppTemplate.findOne({
+    organizationId,
+    branchId,
+    internalCategory: templateCategory,
+    status: 'APPROVED',
+  }).sort({ updatedAt: -1 });
+
+  if (!template) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `No approved "${templateCategory}" message template found for this business. Create and get one approved in WhatsApp Templates first.`,
+    );
+  }
+
+  const params = Array.isArray(templateParams) ? templateParams : Object.values(templateParams || {});
+  const components = params.length
+    ? [{ type: 'body', parameters: params.map((v) => ({ type: 'text', text: String(v) })) }]
+    : [];
+
+  return sendTemplate({
+    organizationId,
+    branchId,
+    phone: to,
+    templateName: template.name,
+    language: template.language,
+    components,
+    source,
+    sentBy,
+    conversationId: conversation?._id,
+    campaignId,
+  });
 }
 
 async function isConnected(organizationId, branchId) {
@@ -227,6 +341,7 @@ module.exports = {
   sendText,
   sendTemplate,
   sendDocument,
+  sendMessage,
   isConnected,
   uploadMedia,
 };

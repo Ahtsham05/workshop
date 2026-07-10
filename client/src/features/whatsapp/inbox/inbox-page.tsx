@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Send, MessageCircle } from 'lucide-react'
+import { Search, Send, MessageCircle, Clock, Check, CheckCheck, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
   useGetCloudConnectionQuery,
@@ -11,7 +12,35 @@ import {
   useGetConversationsQuery,
   useMarkConversationReadMutation,
   useSendInboxMessageMutation,
+  type WhatsAppMessage,
 } from '@/stores/whatsappCloud.api'
+
+function MessageStatusIndicator({ status, errorMessage }: Pick<WhatsAppMessage, 'status' | 'errorMessage'>) {
+  const icon = {
+    queued: <Clock className='h-3 w-3 text-muted-foreground' />,
+    sent: <Check className='h-3 w-3 text-muted-foreground' />,
+    delivered: <CheckCheck className='h-3 w-3 text-muted-foreground' />,
+    read: <CheckCheck className='h-3 w-3 text-blue-500' />,
+    failed: <AlertCircle className='h-3 w-3 text-destructive' />,
+  }[status]
+
+  const label = {
+    queued: 'Queued — waiting for WhatsApp to accept',
+    sent: 'Sent to WhatsApp',
+    delivered: 'Delivered',
+    read: 'Read',
+    failed: errorMessage || 'Failed to deliver',
+  }[status]
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className='inline-flex'>{icon}</span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 export default function WhatsAppInboxPage() {
   const [search, setSearch] = useState('')
@@ -153,8 +182,11 @@ export default function WhatsAppInboxPage() {
                     )}
                   >
                     <p>{msg.content.text || msg.content.caption || `[${msg.type}]`}</p>
-                    <p className='text-[10px] text-muted-foreground mt-1 text-right'>
-                      {msg.status} · {new Date(msg.createdAt).toLocaleTimeString()}
+                    <p className='flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1'>
+                      {new Date(msg.createdAt).toLocaleTimeString()}
+                      {msg.direction === 'outbound' && (
+                        <MessageStatusIndicator status={msg.status} errorMessage={msg.errorMessage} />
+                      )}
                     </p>
                   </div>
                 ))}

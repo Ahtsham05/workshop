@@ -68,7 +68,7 @@ async function createCampaign(data) {
   const phones = await resolveAudience(data.organizationId, data.branchId, data.audience);
   const campaign = await WhatsAppCampaign.create({
     ...data,
-    stats: { total: phones.length, sent: 0, delivered: 0, read: 0, failed: 0 },
+    stats: { total: phones.length, queued: 0, rejected: 0, sent: 0, delivered: 0, read: 0, failed: 0 },
     status: data.scheduledAt ? 'scheduled' : 'draft',
   });
   return { campaign, phones };
@@ -95,9 +95,11 @@ async function runCampaign(campaign, phones, sentBy) {
         sentBy,
         campaignId: campaign._id,
       });
-      campaign.stats.sent += 1;
+      campaign.stats.queued += 1;
     } catch {
-      campaign.stats.failed += 1;
+      // The send API call itself was rejected (bad number, connection down, etc.) — this
+      // never reaches Meta, so it must not be confused with a webhook-reported delivery failure.
+      campaign.stats.rejected += 1;
     }
     await new Promise((r) => setTimeout(r, 80));
   }

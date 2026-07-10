@@ -234,7 +234,7 @@ export default function WhatsAppMessaging() {
         successfulRecipients: [{ phone: singlePhone.trim() }],
         source: 'Single Message',
       });
-      toast.success('Message sent!');
+      toast.success('Message queued — check Inbox for delivery status');
       setSinglePhone('');
       setSingleMsg('');
     } catch (e: any) {
@@ -261,7 +261,7 @@ export default function WhatsAppMessaging() {
           failed: failedWithDetails,
           source: broadcastClass === 'all' ? 'Broadcast (All Classes)' : 'Broadcast (Class)',
         });
-        toast.success(`Sent to ${result.sent} of ${result.total} students`);
+        toast.success(`Queued ${result.sent} of ${result.total} students — delivery status updates in Inbox`);
       }
     } catch (e: any) {
       toast.error(e?.data?.message || 'Broadcast failed');
@@ -284,7 +284,7 @@ export default function WhatsAppMessaging() {
           failed: failedWithDetails,
           source: 'Fee Alerts',
         });
-        toast.success(`Sent fee alerts to ${result.sent} of ${result.total} parents`);
+        toast.success(`Queued fee alerts to ${result.sent} of ${result.total} parents`);
       }
     } catch (e: any) {
       toast.error(e?.data?.message || 'Fee alerts failed');
@@ -327,7 +327,7 @@ export default function WhatsAppMessaging() {
           successfulRecipients,
           source: 'Bulk Custom',
         });
-        toast.success(`Sent to ${result.sent} of ${result.total} recipients`);
+        toast.success(`Queued ${result.sent} of ${result.total} recipients`);
       }
     } catch (e: any) {
       toast.error(e?.data?.message || 'Bulk send failed');

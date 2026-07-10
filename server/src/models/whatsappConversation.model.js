@@ -24,6 +24,9 @@ const whatsappConversationSchema = mongoose.Schema(
     lastMessageAt: { type: Date, index: true },
     lastMessagePreview: { type: String, trim: true },
     lastMessageDirection: { type: String, enum: ['inbound', 'outbound'] },
+    // Meta's 24h customer-service window is measured from the customer's last inbound
+    // message, not from any message in either direction — kept separate from lastMessageAt.
+    lastInboundAt: { type: Date, index: true },
     unreadCount: { type: Number, default: 0 },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     tags: [{ type: String, trim: true }],

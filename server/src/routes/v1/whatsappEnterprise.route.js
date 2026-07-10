@@ -34,8 +34,20 @@ router.post(
 );
 
 router.get('/templates', whatsappEnterpriseController.listTemplates);
+router.get('/templates/suggestions', whatsappEnterpriseController.getSuggestedTemplates);
 router.post('/templates/sync', auth('editSettings', 'manageSchool'), whatsappEnterpriseController.syncTemplates);
+router.post(
+  '/templates',
+  auth('editSettings', 'manageSchool'),
+  validate(whatsappCloudValidation.createTemplate),
+  whatsappEnterpriseController.createTemplate,
+);
 router.get('/templates/:id', whatsappEnterpriseController.getTemplate);
+router.post(
+  '/templates/:id/check-status',
+  auth('editSettings', 'manageSchool'),
+  whatsappEnterpriseController.checkTemplateStatus,
+);
 
 router.get('/campaigns', whatsappEnterpriseController.listCampaigns);
 router.post(

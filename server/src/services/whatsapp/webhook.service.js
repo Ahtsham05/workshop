@@ -9,6 +9,7 @@ const {
 } = require('../../models');
 const connectionService = require('./connection.service');
 const inboxService = require('./inbox.service');
+const eventsService = require('./events.service');
 const parentAssistant = require('./ai/parentAssistant.service');
 const businessAssistant = require('./ai/businessAssistant.service');
 
@@ -83,7 +84,22 @@ async function handleInboundMessage(connection, msg, contact) {
   }
 }
 
+// Meta can deliver status webhooks out of order or duplicated; never let a late/duplicate
+// event regress an already-further-along status (e.g. 'sent' arriving after 'read').
+const STATUS_RANK = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
+
 async function handleStatusUpdate(connection, status) {
+  const existing = await WhatsAppMessage.findOne({
+    organizationId: connection.organizationId,
+    branchId: connection.branchId,
+    wamid: status.id,
+  });
+  if (!existing) return;
+
+  const currentRank = STATUS_RANK[existing.status] ?? 0;
+  const nextRank = STATUS_RANK[status.status] ?? 0;
+  if (nextRank < currentRank && status.status !== 'failed') return;
+
   const update = {
     status: status.status,
     $push: {
@@ -99,15 +115,7 @@ async function handleStatusUpdate(connection, status) {
     update.errorMessage = status.errors?.[0]?.message;
   }
 
-  const message = await WhatsAppMessage.findOneAndUpdate(
-    {
-      organizationId: connection.organizationId,
-      branchId: connection.branchId,
-      wamid: status.id,
-    },
-    update,
-    { new: true },
-  );
+  const message = await WhatsAppMessage.findByIdAndUpdate(existing._id, update, { new: true });
 
   if (message?.campaignId) {
     const statField = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' }[status.status];
@@ -115,6 +123,13 @@ async function handleStatusUpdate(connection, status) {
       await WhatsAppCampaign.updateOne({ _id: message.campaignId }, { $inc: { [`stats.${statField}`]: 1 } });
     }
   }
+
+  eventsService.emitMessageStatusUpdate(connection.organizationId, connection.branchId, {
+    conversationId: message?.conversationId,
+    messageId: message?._id,
+    status: status.status,
+    errorMessage: message?.errorMessage,
+  });
 }
 
 async function handleTemplateStatusUpdate(connection, value) {

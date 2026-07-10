@@ -23,6 +23,21 @@ const getTemplate = catchAsync(async (req, res) => {
   res.send(template);
 });
 
+const getSuggestedTemplates = catchAsync(async (req, res) => {
+  const suggestions = await templateService.listSuggestedTemplates(req.organizationId, req.branchId);
+  res.send({ suggestions });
+});
+
+const createTemplate = catchAsync(async (req, res) => {
+  const template = await templateService.createTemplate(req.organizationId, req.branchId, req.body);
+  res.status(httpStatus.CREATED).send(template);
+});
+
+const checkTemplateStatus = catchAsync(async (req, res) => {
+  const template = await templateService.checkApprovalStatus(req.organizationId, req.branchId, req.params.id);
+  res.send(template);
+});
+
 const listCampaigns = catchAsync(async (req, res) => {
   const filter = applyBranchFilter(pick(req.query, ['status']), req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
@@ -137,6 +152,9 @@ module.exports = {
   syncTemplates,
   listTemplates,
   getTemplate,
+  getSuggestedTemplates,
+  createTemplate,
+  checkTemplateStatus,
   listCampaigns,
   createCampaign,
   runCampaign,

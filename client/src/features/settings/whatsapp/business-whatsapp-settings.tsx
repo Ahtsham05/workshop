@@ -4,6 +4,7 @@ import ContentSection from '../components/content-section'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
 import {
@@ -11,6 +12,7 @@ import {
   useGetCloudConnectionQuery,
   useReconnectCloudMutation,
 } from '@/stores/whatsappCloud.api'
+import WhatsAppTemplatesPage from './whatsapp-templates'
 
 export default function BusinessWhatsAppSettings() {
   const { data: connection, isLoading, refetch } = useGetCloudConnectionQuery()
@@ -38,17 +40,23 @@ export default function BusinessWhatsAppSettings() {
       title='WhatsApp Business (Cloud API)'
       desc='Connect your own WhatsApp Business Account via Meta Embedded Signup. Official Cloud API — no QR scan required.'
     >
+      <Tabs defaultValue='connection' className='space-y-4'>
+        <TabsList>
+          <TabsTrigger value='connection'>Connection</TabsTrigger>
+          <TabsTrigger value='templates'>Templates</TabsTrigger>
+        </TabsList>
+        <TabsContent value='connection'>
       <Card>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <MessageCircle className='h-5 w-5 text-[#25D366]' />
-            Connection Status
-          </CardTitle>
-          <CardDescription>
-            Each branch connects its own WABA and phone number. Messages are sent via Meta WhatsApp Cloud API.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='space-y-4'>
+      <CardHeader>
+        <CardTitle className='flex items-center gap-2'>
+          <MessageCircle className='h-5 w-5 text-[#25D366]' />
+          Connection Status
+        </CardTitle>
+        <CardDescription>
+          Each branch connects its own WABA and phone number. Messages are sent via Meta WhatsApp Cloud API.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-4'>
           {isLoading ? (
             <div className='flex items-center gap-2 text-muted-foreground'>
               <Loader2 className='h-4 w-4 animate-spin' /> Loading…
@@ -135,6 +143,11 @@ export default function BusinessWhatsAppSettings() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+        <TabsContent value='templates'>
+          <WhatsAppTemplatesPage />
+        </TabsContent>
+      </Tabs>
     </ContentSection>
   )
 }
