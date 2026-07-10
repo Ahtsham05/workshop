@@ -98,10 +98,14 @@ async function fetchWabaAndPhone(accessToken) {
 }
 
 /**
- * A phone number connected via Embedded Signup is only added to the WABA — it
- * still won't send/receive on the Cloud API until explicitly registered (Meta's
- * dashboard shows this as "Phone Number: Not registered"). Without this call,
- * message sends return success but never actually reach the recipient.
+ * A phone number connected via Embedded Signup is only added to the WABA — for
+ * a brand-new number it also needs to be explicitly registered before it can
+ * send/receive on the Cloud API (Meta's dashboard shows this as "Phone Number:
+ * Not registered"), otherwise sends report success but never reach the
+ * recipient. Numbers migrated from the WhatsApp Business mobile app, or
+ * accounts still on Meta's "SMB" (non Tech Provider) tier, are registered by
+ * Meta automatically and reject this call — that rejection is expected and
+ * handled below, not a failure.
  */
 async function registerPhoneNumber(phoneNumberId, accessToken, apiVersion = 'v21.0') {
   const pin = String(crypto.randomInt(100000, 1000000));
@@ -117,11 +121,17 @@ async function registerPhoneNumber(phoneNumberId, accessToken, apiVersion = 'v21
   if (body.success) {
     return { success: true, pin };
   }
-  if (/already\s+(registered|verified)/i.test(body?.error?.message || '')) {
+  const errorMessage = body?.error?.message || '';
+  // Both cases mean the number is already usable and doesn't need /register:
+  // - numbers Meta already registered for us
+  // - numbers migrated from the WhatsApp Business mobile app into Cloud API
+  //   ("SMB" tier), where Meta intentionally blocks /register to avoid
+  //   clobbering the number's existing verification.
+  if (/already\s+(registered|verified)/i.test(errorMessage) || /not available for smb/i.test(errorMessage)) {
     return { success: true, pin: null, alreadyRegistered: true };
   }
   logger.warn('WhatsApp phone number registration failed:', body);
-  return { success: false, pin: null, error: body?.error?.message || 'Phone number registration failed' };
+  return { success: false, pin: null, error: errorMessage || 'Phone number registration failed' };
 }
 
 async function subscribeAppToWaba(wabaId, accessToken, apiVersion = 'v21.0') {
