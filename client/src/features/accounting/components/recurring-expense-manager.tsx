@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { format } from 'date-fns'
 import {
   Plus, Trash2, Pencil, RefreshCw, Loader2, CalendarClock,
   ChevronDown, ChevronUp, Check, ChevronsUpDown,
@@ -16,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
   useGetRecurringExpensesQuery,
@@ -27,7 +27,7 @@ import {
   type RecurringFrequency,
 } from '@/stores/recurringExpense.api'
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api'
-import { getBusinessToday } from '@/lib/business-timezone'
+import { getBusinessToday, formatBusinessDate } from '@/lib/business-timezone'
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sunday' },
@@ -56,7 +56,10 @@ const monthlyEst = (r: RecurringExpenseRecord) => {
 }
 
 const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString('en-PK')}`
-const fmtDate = (d?: string | null) => (d ? format(new Date(d), 'dd MMM yyyy') : '—')
+// The backend computes recurring-expense day boundaries in the business timezone
+// (Asia/Karachi) — format with the same helper so the displayed day always
+// matches what the server considers "today", regardless of viewer's browser TZ.
+const fmtDate = (d?: string | null) => (d ? formatBusinessDate(d) : '—')
 
 /** Show daily / monthly equivalent as a hint below the amount field */
 function AmountHint({ amount, frequency }: { amount: string; frequency: RecurringFrequency }) {
@@ -181,11 +184,19 @@ export function RecurringExpenseManager() {
     }
     try {
       if (editingId) {
-        await updateRule({ id: editingId, ...payload }).unwrap()
-        toast.success('Rule updated')
+        const result = await updateRule({ id: editingId, ...payload }).unwrap()
+        toast.success(
+          result.pendingCount
+            ? `Rule updated — ${result.pendingCount} day(s) pending catch-up, click "Run Now" to generate them`
+            : 'Rule updated'
+        )
       } else {
-        await createRule(payload).unwrap()
-        toast.success('Recurring expense created')
+        const result = await createRule(payload).unwrap()
+        toast.success(
+          result.pendingCount
+            ? `Rule created — ${result.pendingCount} day(s) pending catch-up, click "Run Now" to generate them`
+            : 'Recurring expense created'
+        )
       }
       setFormOpen(false)
     } catch {
@@ -255,6 +266,7 @@ export function RecurringExpenseManager() {
           <CardContent className='px-4 py-0'>
             <p className='text-xs text-muted-foreground'>Monthly Est.</p>
             <p className='text-xl font-bold text-blue-600'>{fmt(totalMonthlyEst)}</p>
+            <p className='text-xs text-muted-foreground'>≈ {fmt(totalMonthlyEst / 30)}/day</p>
           </CardContent>
         </Card>
       </div>
@@ -311,7 +323,23 @@ export function RecurringExpenseManager() {
                         )}
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{frequencyLabel(rule)}</TableCell>
-                      <TableCell className='text-sm text-blue-600 font-medium'>{fmtDate(rule.nextRunDate)}</TableCell>
+                      <TableCell className='text-sm text-blue-600 font-medium'>
+                        {fmtDate(rule.nextRunDate)}
+                        {!!rule.pendingCount && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className='block'>
+                                <Badge variant='outline' className='mt-1 text-xs border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30'>
+                                  {rule.pendingCount}{rule.pendingCount >= 400 ? '+' : ''} pending
+                                </Badge>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {rule.pendingCount} cycle(s) are due but not yet generated. Click "Run Now" to catch up.
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{fmtDate(rule.lastGeneratedDate)}</TableCell>
                       <TableCell className='text-center text-sm'>{rule.totalGenerated}</TableCell>
                       <TableCell>
@@ -478,6 +506,11 @@ export function RecurringExpenseManager() {
                 <div>
                   <Label>Start Date *</Label>
                   <Input type='date' value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
+                  {form.startDate && form.startDate < getBusinessToday() && (
+                    <p className='text-xs text-amber-600 mt-1'>
+                      Backdated — missed days since this date will be marked pending and auto-generated on the next run.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>End Date (optional)</Label>

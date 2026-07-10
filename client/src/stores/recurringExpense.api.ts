@@ -22,6 +22,8 @@ export interface RecurringExpenseRecord {
   nextRunDate: string
   totalGenerated: number
   createdAt: string
+  /** Cycles due (nextRunDate..today) but not yet generated — backlog waiting on the next run. */
+  pendingCount?: number
 }
 
 export interface CreateRecurringExpenseInput {
