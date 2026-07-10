@@ -33,6 +33,8 @@ const whatsappConnectionSchema = mongoose.Schema(
     },
     webhookSubscribed: { type: Boolean, default: false },
     webhookVerifiedAt: { type: Date },
+    phoneRegistered: { type: Boolean, default: false },
+    registrationPinEnc: { type: String, private: true },
     lastError: { type: String, trim: true },
     messagingLimit: { type: String, trim: true },
     qualityRating: {

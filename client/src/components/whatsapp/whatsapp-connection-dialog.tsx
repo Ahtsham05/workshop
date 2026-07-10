@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Loader2, MessageCircle, Settings, Unplug } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, MessageCircle, Settings, Unplug } from 'lucide-react'
 import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup'
 
 type CloudConnection = {
@@ -15,6 +15,7 @@ type CloudConnection = {
   displayPhoneNumber?: string
   verifiedName?: string
   webhookSubscribed?: boolean
+  phoneRegistered?: boolean
   status?: string
 }
 
@@ -59,7 +60,24 @@ export function WhatsAppConnectionDialog({
               )}
               {connection?.verifiedName && <p>Business: {connection.verifiedName}</p>}
             </div>
-          ) : (
+          ) : null}
+
+          {isReady && connection?.phoneRegistered === false && (
+            <div className='rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800 space-y-1'>
+              <div className='flex items-center gap-2 font-medium'>
+                <AlertTriangle className='h-4 w-4' />
+                Number not registered for sending
+              </div>
+              <p>
+                This number is connected but Meta hasn't finished registering it for the Cloud
+                API — messages will appear to send but won't reach customers. Click{' '}
+                <span className='font-medium'>Reconnect via Meta</span> below to complete
+                registration.
+              </p>
+            </div>
+          )}
+
+          {!isReady && (
             <div className='space-y-3 text-sm text-muted-foreground'>
               <p>
                 Connect your own WhatsApp Business Account using Meta Embedded Signup — the same

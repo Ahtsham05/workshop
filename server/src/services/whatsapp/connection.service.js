@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const httpStatus = require('http-status');
 const config = require('../../config/config');
@@ -96,6 +97,33 @@ async function fetchWabaAndPhone(accessToken) {
   return { wabaId, phone };
 }
 
+/**
+ * A phone number connected via Embedded Signup is only added to the WABA — it
+ * still won't send/receive on the Cloud API until explicitly registered (Meta's
+ * dashboard shows this as "Phone Number: Not registered"). Without this call,
+ * message sends return success but never actually reach the recipient.
+ */
+async function registerPhoneNumber(phoneNumberId, accessToken, apiVersion = 'v21.0') {
+  const pin = String(crypto.randomInt(100000, 1000000));
+  const res = await fetch(`${graphBaseUrl(apiVersion)}/${phoneNumberId}/register`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (body.success) {
+    return { success: true, pin };
+  }
+  if (/already\s+(registered|verified)/i.test(body?.error?.message || '')) {
+    return { success: true, pin: null, alreadyRegistered: true };
+  }
+  logger.warn('WhatsApp phone number registration failed:', body);
+  return { success: false, pin: null, error: body?.error?.message || 'Phone number registration failed' };
+}
+
 async function subscribeAppToWaba(wabaId, accessToken, apiVersion = 'v21.0') {
   const res = await fetch(`${graphBaseUrl(apiVersion)}/${wabaId}/subscribed_apps`, {
     method: 'POST',
@@ -112,6 +140,7 @@ async function handleOAuthCallback({ code, state }) {
   const { organizationId, branchId, userId } = verifyState(state);
   const tokenData = await exchangeCodeForToken(code);
   const { wabaId, phone } = await fetchWabaAndPhone(tokenData.access_token);
+  const registration = await registerPhoneNumber(phone.id, tokenData.access_token);
 
   const connection = await WhatsAppConnection.findOneAndUpdate(
     { organizationId, branchId },
@@ -126,7 +155,9 @@ async function handleOAuthCallback({ code, state }) {
       connectedBy: userId,
       connectedAt: new Date(),
       status: 'webhook_pending',
-      lastError: null,
+      phoneRegistered: registration.success,
+      registrationPinEnc: registration.pin ? encrypt(registration.pin) : undefined,
+      lastError: registration.success ? null : registration.error,
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
@@ -141,6 +172,7 @@ async function handleOAuthCallback({ code, state }) {
 }
 
 async function completeManualConnect({ organizationId, branchId, userId, wabaId, phoneNumberId, accessToken, displayPhoneNumber, verifiedName, businessAccountId }) {
+  const registration = await registerPhoneNumber(phoneNumberId, accessToken);
   const subscribed = await subscribeAppToWaba(wabaId, accessToken, 'v21.0');
   const connection = await WhatsAppConnection.findOneAndUpdate(
     { organizationId, branchId },
@@ -158,7 +190,9 @@ async function completeManualConnect({ organizationId, branchId, userId, wabaId,
       webhookSubscribed: subscribed,
       webhookVerifiedAt: subscribed ? new Date() : undefined,
       status: subscribed ? 'connected' : 'webhook_pending',
-      lastError: null,
+      phoneRegistered: registration.success,
+      registrationPinEnc: registration.pin ? encrypt(registration.pin) : undefined,
+      lastError: registration.success ? null : registration.error,
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
@@ -203,14 +237,20 @@ async function reconnect(organizationId, branchId, userId) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No stored token. Use Embedded Signup to connect again.');
   }
   const accessToken = getDecryptedToken(connection);
+  if (connection.phoneNumberId && !connection.phoneRegistered) {
+    const registration = await registerPhoneNumber(connection.phoneNumberId, accessToken, connection.apiVersion);
+    connection.phoneRegistered = registration.success;
+    if (registration.pin) connection.registrationPinEnc = encrypt(registration.pin);
+    if (!registration.success) connection.lastError = registration.error;
+  }
   if (connection.wabaId) {
     const subscribed = await subscribeAppToWaba(connection.wabaId, accessToken, connection.apiVersion);
     connection.webhookSubscribed = subscribed;
     connection.status = subscribed ? 'connected' : 'webhook_pending';
     connection.connectedBy = userId;
     connection.connectedAt = new Date();
-    await connection.save();
   }
+  await connection.save();
   return connection;
 }
 
@@ -232,6 +272,7 @@ function toPublicConnection(connection) {
     displayPhoneNumber: doc.displayPhoneNumber,
     verifiedName: doc.verifiedName,
     webhookSubscribed: doc.webhookSubscribed,
+    phoneRegistered: doc.phoneRegistered,
     qualityRating: doc.qualityRating,
     messagingLimit: doc.messagingLimit,
     connectedAt: doc.connectedAt,
@@ -251,6 +292,7 @@ module.exports = {
   reconnect,
   toPublicConnection,
   getFrontendRedirectUrl,
+  registerPhoneNumber,
   subscribeAppToWaba,
   graphBaseUrl,
 };

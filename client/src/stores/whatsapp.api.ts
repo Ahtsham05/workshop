@@ -31,6 +31,7 @@ export type WhatsAppCloudConnection = {
   displayPhoneNumber?: string
   verifiedName?: string
   webhookSubscribed?: boolean
+  phoneRegistered?: boolean
 }
 
 export type WhatsAppStatus = {
