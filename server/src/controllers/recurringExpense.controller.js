@@ -41,4 +41,24 @@ const runNow = catchAsync(async (req, res) => {
   res.json(result);
 });
 
-module.exports = { createRecurringExpense, getRecurringExpenses, updateRecurringExpense, deleteRecurringExpense, runNow };
+const payRuleExpenses = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const result = await recurringExpenseService.payRuleExpenses(req.params.id, { organizationId, branchId }, req.user.id);
+  res.json(result);
+});
+
+const payAllRuleExpenses = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const result = await recurringExpenseService.payAllRuleExpenses({ organizationId, branchId }, req.user.id);
+  res.json(result);
+});
+
+module.exports = {
+  createRecurringExpense,
+  getRecurringExpenses,
+  updateRecurringExpense,
+  deleteRecurringExpense,
+  runNow,
+  payRuleExpenses,
+  payAllRuleExpenses,
+};

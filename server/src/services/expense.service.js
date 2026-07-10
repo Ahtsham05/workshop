@@ -160,10 +160,12 @@ const createExpense = async (expenseBody, options = {}) => {
   if (!expense) {
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to create expense after retries');
   }
-  if (!options.skipCashBookSync) {
+  // Unpaid expenses (isPaid: false) are visible in the expense list but must
+  // not touch the cash book / wallet / accounts ledger until they're paid.
+  if (expense.isPaid && !options.skipCashBookSync) {
     await syncExpenseCashAndWalletEntries(expense, null, null, 0);
+    postExpenseToAccounts(expense);
   }
-  postExpenseToAccounts(expense);
 
   return expense;
 };
@@ -237,7 +239,41 @@ const updateExpenseById = async (expenseId, updateBody) => {
   Object.assign(expense, updateBody);
   await expense.save();
 
-  await syncExpenseCashAndWalletEntries(expense, originalPaymentMethod, originalWalletType, originalAmount);
+  // Editing an unpaid expense (e.g. correcting the amount before confirming
+  // payment) shouldn't create cash book / accounts entries — those only get
+  // created once markExpenseAsPaid runs.
+  if (expense.isPaid) {
+    await syncExpenseCashAndWalletEntries(expense, originalPaymentMethod, originalWalletType, originalAmount);
+    postExpenseToAccounts(expense);
+  }
+
+  return expense;
+};
+
+/**
+ * Confirm payment of a previously-recorded (unpaid) expense — typically an
+ * auto-generated recurring cycle. This is the only place an unpaid expense's
+ * cash book / wallet / accounts entries get created, keeping "recorded" and
+ * "actually paid out" as distinct steps.
+ * @param {ObjectId} expenseId
+ * @param {ObjectId} [userId]
+ * @returns {Promise<Expense>}
+ */
+const markExpenseAsPaid = async (expenseId, userId) => {
+  const expense = await getExpenseById(expenseId);
+  if (!expense) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Expense not found');
+  }
+  if (expense.isPaid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Expense is already marked as paid');
+  }
+
+  expense.isPaid = true;
+  expense.paidAt = new Date();
+  expense.paidBy = userId || expense.createdBy;
+  await expense.save();
+
+  await syncExpenseCashAndWalletEntries(expense, null, null, 0);
   postExpenseToAccounts(expense);
 
   return expense;
@@ -434,12 +470,44 @@ const getExpenseTrends = async (filter = {}) => {
   return trends;
 };
 
+/**
+ * Pay every unpaid expense matching a filter in one shot — backs the
+ * "Pay All" / per-rule / per-category bulk-pay actions. Each expense is
+ * paid individually through markExpenseAsPaid so cash book / wallet /
+ * accounts stay in sync exactly as if paid one at a time; a failure on one
+ * expense doesn't stop the rest.
+ * @param {Object} filter - must include organizationId/branchId scope
+ * @param {ObjectId} [userId]
+ */
+const payExpensesBulk = async (filter, userId) => {
+  const pending = await Expense.find({ ...filter, isPaid: false });
+
+  let paidCount = 0;
+  let totalAmount = 0;
+  const errors = [];
+
+  for (const expense of pending) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await markExpenseAsPaid(expense._id, userId);
+      paidCount += 1;
+      totalAmount += Number(expense.amount || 0);
+    } catch (err) {
+      errors.push({ id: String(expense._id), message: err.message });
+    }
+  }
+
+  return { matched: pending.length, paidCount, totalAmount, errors };
+};
+
 module.exports = {
   createExpense,
   queryExpenses,
   getExpenseById,
   updateExpenseById,
   deleteExpenseById,
+  markExpenseAsPaid,
+  payExpensesBulk,
   findExpenseByLedgerReference,
   deleteExpenseByLedgerReference,
   upsertExpenseFromEmployeeLedger,

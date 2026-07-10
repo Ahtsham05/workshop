@@ -20,13 +20,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Search, 
-  Filter, 
-  Edit, 
-  Trash2, 
+import {
+  Search,
+  Filter,
+  Edit,
+  Trash2,
   Calendar,
-  Download
+  Download,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/context/language-context';
@@ -279,13 +281,14 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                   <TableHead>{t('Vendor')}</TableHead>
                   <TableHead>{t('Amount')}</TableHead>
                   <TableHead>{t('Payment Method')}</TableHead>
+                  <TableHead>{t('Status')}</TableHead>
                   <TableHead className="text-right">{t('Actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {expenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       {t('No expenses found')}
                     </TableCell>
                   </TableRow>
@@ -312,6 +315,19 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                         Rs {expense.amount.toFixed(2)}
                       </TableCell>
                       <TableCell>{t(expense.paymentMethod)}</TableCell>
+                      <TableCell>
+                        {expense.isPaid === false ? (
+                          <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
+                            <Clock className="h-3 w-3" />
+                            {t('Pending')}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-green-100 text-green-800 flex items-center gap-1 w-fit">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {t('Paid')}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button

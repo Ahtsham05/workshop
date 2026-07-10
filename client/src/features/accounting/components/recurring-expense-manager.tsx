@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
+import { useDispatch } from 'react-redux'
 import {
   Plus, Trash2, Pencil, RefreshCw, Loader2, CalendarClock,
-  ChevronDown, ChevronUp, Check, ChevronsUpDown,
+  ChevronDown, ChevronUp, Check, ChevronsUpDown, Wallet, CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,16 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -18,15 +29,19 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
+  recurringExpenseApi,
   useGetRecurringExpensesQuery,
   useCreateRecurringExpenseMutation,
   useUpdateRecurringExpenseMutation,
   useDeleteRecurringExpenseMutation,
   useRunRecurringExpensesNowMutation,
+  usePayRecurringExpenseRuleMutation,
+  usePayAllRecurringExpensesMutation,
   type RecurringExpenseRecord,
   type RecurringFrequency,
 } from '@/stores/recurringExpense.api'
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api'
+import { useGetPendingExpensesQuery, usePayExpenseMutation } from '@/stores/expense.api'
 import { getBusinessToday, formatBusinessDate } from '@/lib/business-timezone'
 
 const DAYS_OF_WEEK = [
@@ -124,12 +139,18 @@ export function RecurringExpenseManager() {
   const [showAll, setShowAll] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
 
+  const [payAllDialogOpen, setPayAllDialogOpen] = useState(false)
+  const [payRuleDialogOpen, setPayRuleDialogOpen] = useState(false)
+  const [ruleToPay, setRuleToPay] = useState<RecurringExpenseRecord | null>(null)
+
   const { data, isLoading } = useGetRecurringExpensesQuery()
   const { data: categoriesData } = useGetExpenseCategoriesQuery({ transactionType: 'business_expense' })
   const [createRule, { isLoading: isCreating }] = useCreateRecurringExpenseMutation()
   const [updateRule, { isLoading: isUpdating }] = useUpdateRecurringExpenseMutation()
   const [deleteRule] = useDeleteRecurringExpenseMutation()
   const [runNow, { isLoading: isRunning }] = useRunRecurringExpensesNowMutation()
+  const [payRule, { isLoading: isPayingRule }] = usePayRecurringExpenseRuleMutation()
+  const [payAll, { isLoading: isPayingAll }] = usePayAllRecurringExpensesMutation()
 
   const categories: string[] = useMemo(() => {
     const raw = Array.isArray(categoriesData) ? categoriesData : (categoriesData as any)?.results ?? []
@@ -225,6 +246,37 @@ export function RecurringExpenseManager() {
   }
 
   const totalMonthlyEst = activeRules.reduce((s, r) => s + monthlyEst(r), 0)
+  const totalUnpaidCount = rules.reduce((s, r) => s + (r.unpaidCount || 0), 0)
+  const totalUnpaidAmount = rules.reduce((s, r) => s + (r.unpaidAmount || 0), 0)
+  const totalGeneratedCount = rules.reduce((s, r) => s + (r.totalGenerated || 0), 0)
+  const totalGeneratedAmount = rules.reduce((s, r) => s + (r.generatedAmount || 0), 0)
+
+  const handleConfirmPayAll = async () => {
+    try {
+      const result = await payAll().unwrap()
+      toast.success(`Paid ${result.paidCount} expense(s) — ${fmt(result.totalAmount)} deducted from cash book`)
+      setPayAllDialogOpen(false)
+    } catch {
+      toast.error('Failed to pay pending expenses')
+    }
+  }
+
+  const openPayRuleDialog = (rule: RecurringExpenseRecord) => {
+    setRuleToPay(rule)
+    setPayRuleDialogOpen(true)
+  }
+
+  const handleConfirmPayRule = async () => {
+    if (!ruleToPay) return
+    try {
+      const result = await payRule(ruleToPay.id).unwrap()
+      toast.success(`Paid ${result.paidCount} expense(s) — ${fmt(result.totalAmount)} deducted from cash book`)
+      setPayRuleDialogOpen(false)
+      setRuleToPay(null)
+    } catch {
+      toast.error('Failed to pay pending expenses')
+    }
+  }
 
   return (
     <div className='space-y-4'>
@@ -241,6 +293,17 @@ export function RecurringExpenseManager() {
             {isRunning ? <Loader2 className='h-4 w-4 animate-spin' /> : <RefreshCw className='h-4 w-4' />}
             <span className='ml-1.5'>Run Now</span>
           </Button>
+          {totalUnpaidCount > 0 && (
+            <Button
+              variant='outline'
+              size='sm'
+              className='border-green-600 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'
+              onClick={() => setPayAllDialogOpen(true)}
+            >
+              <Wallet className='h-4 w-4' />
+              <span className='ml-1.5'>Pay All Pending ({totalUnpaidCount})</span>
+            </Button>
+          )}
           <Button size='sm' onClick={openCreate}>
             <Plus className='h-4 w-4 mr-1.5' />
             Add Rule
@@ -249,7 +312,7 @@ export function RecurringExpenseManager() {
       </div>
 
       {/* Stats */}
-      <div className='grid grid-cols-3 gap-3'>
+      <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
         <Card className='py-3'>
           <CardContent className='px-4 py-0'>
             <p className='text-xs text-muted-foreground'>Active Rules</p>
@@ -264,9 +327,23 @@ export function RecurringExpenseManager() {
         </Card>
         <Card className='py-3'>
           <CardContent className='px-4 py-0'>
+            <p className='text-xs text-muted-foreground'>Total Generated</p>
+            <p className='text-xl font-bold'>{fmt(totalGeneratedAmount)}</p>
+            <p className='text-xs text-muted-foreground'>{totalGeneratedCount} expense{totalGeneratedCount !== 1 ? 's' : ''} total</p>
+          </CardContent>
+        </Card>
+        <Card className='py-3'>
+          <CardContent className='px-4 py-0'>
             <p className='text-xs text-muted-foreground'>Monthly Est.</p>
             <p className='text-xl font-bold text-blue-600'>{fmt(totalMonthlyEst)}</p>
             <p className='text-xs text-muted-foreground'>≈ {fmt(totalMonthlyEst / 30)}/day</p>
+          </CardContent>
+        </Card>
+        <Card className='py-3'>
+          <CardContent className='px-4 py-0'>
+            <p className='text-xs text-muted-foreground'>Unpaid (Pending Cash Out)</p>
+            <p className='text-xl font-bold text-amber-600'>{fmt(totalUnpaidAmount)}</p>
+            <p className='text-xs text-muted-foreground'>{totalUnpaidCount} expense{totalUnpaidCount !== 1 ? 's' : ''}</p>
           </CardContent>
         </Card>
       </div>
@@ -302,6 +379,7 @@ export function RecurringExpenseManager() {
                     <TableHead>Next Run</TableHead>
                     <TableHead>Last Run</TableHead>
                     <TableHead className='text-center'>Generated</TableHead>
+                    <TableHead>Unpaid</TableHead>
                     <TableHead>Active</TableHead>
                     <TableHead className='text-right'>Actions</TableHead>
                   </TableRow>
@@ -341,7 +419,27 @@ export function RecurringExpenseManager() {
                         )}
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{fmtDate(rule.lastGeneratedDate)}</TableCell>
-                      <TableCell className='text-center text-sm'>{rule.totalGenerated}</TableCell>
+                      <TableCell className='text-center text-sm'>
+                        {rule.totalGenerated}
+                        {!!rule.generatedAmount && (
+                          <span className='block text-xs text-muted-foreground'>{fmt(rule.generatedAmount)}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {rule.unpaidCount ? (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            className='border-green-600 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30 h-7 px-2'
+                            onClick={() => openPayRuleDialog(rule)}
+                          >
+                            <Wallet className='h-3.5 w-3.5 mr-1' />
+                            <span className='text-xs'>{rule.unpaidCount} · {fmt(rule.unpaidAmount || 0)}</span>
+                          </Button>
+                        ) : (
+                          <span className='text-xs text-muted-foreground'>—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Switch checked={rule.isActive} onCheckedChange={() => toggleActive(rule)} />
                       </TableCell>
@@ -530,6 +628,142 @@ export function RecurringExpenseManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Pay All Pending Confirmation */}
+      <AlertDialog open={payAllDialogOpen} onOpenChange={setPayAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pay All Pending Expenses</AlertDialogTitle>
+            <AlertDialogDescription>
+              This pays every unpaid auto-generated expense across all recurring rules and deducts the total from
+              your cash book. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className='rounded-md border bg-muted/30 p-4 flex items-center justify-between'>
+            <span className='text-sm text-muted-foreground'>{totalUnpaidCount} expense{totalUnpaidCount !== 1 ? 's' : ''}</span>
+            <span className='font-bold text-lg'>{fmt(totalUnpaidAmount)}</span>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPayingAll}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleConfirmPayAll() }}
+              disabled={isPayingAll}
+              className='bg-green-600 hover:bg-green-700'
+            >
+              {isPayingAll && <Loader2 className='h-4 w-4 animate-spin mr-2' />}
+              Confirm & Pay All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Pay-for-one-rule Dialog — lists individual pending cycles, each payable on its own, plus a bulk "Pay All" for this rule */}
+      <Dialog open={payRuleDialogOpen} onOpenChange={setPayRuleDialogOpen}>
+        <DialogContent className='sm:max-w-lg max-h-[85vh] overflow-y-auto'>
+          <DialogHeader>
+            <DialogTitle>Pending payments — {ruleToPay?.name}</DialogTitle>
+          </DialogHeader>
+          {ruleToPay && (
+            <PayRuleDialogBody
+              rule={ruleToPay}
+              isPayingAll={isPayingRule}
+              onPayAll={handleConfirmPayRule}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/** Body of the per-rule pay dialog: individual pending expenses (each payable alone) + a bulk "Pay All" for the rule. */
+function PayRuleDialogBody({
+  rule,
+  isPayingAll,
+  onPayAll,
+}: {
+  rule: RecurringExpenseRecord
+  isPayingAll: boolean
+  onPayAll: () => void
+}) {
+  const { data, isLoading } = useGetPendingExpensesQuery({ referenceId: rule.id })
+  const [payExpense, { isLoading: isPayingSingle }] = usePayExpenseMutation()
+  const [payingId, setPayingId] = useState<string | null>(null)
+  const dispatch = useDispatch()
+
+  const items = data?.results ?? []
+  const totalAmount = items.reduce((s, e) => s + e.amount, 0)
+
+  const handlePaySingle = async (expenseId: string) => {
+    setPayingId(expenseId)
+    try {
+      await payExpense(expenseId).unwrap()
+      toast.success('Expense paid and deducted from cash book')
+      // expenseApi and recurringExpenseApi are separate RTK slices — nudge the
+      // rule list to refetch so its unpaidCount/unpaidAmount badge stays accurate.
+      dispatch(recurringExpenseApi.util.invalidateTags(['RecurringExpenses']))
+    } catch {
+      toast.error('Failed to pay expense')
+    } finally {
+      setPayingId(null)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className='flex justify-center py-8'>
+        <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+      </div>
+    )
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className='py-8 text-center text-sm text-muted-foreground'>
+        Nothing pending — this rule is fully paid up.
+      </div>
+    )
+  }
+
+  return (
+    <div className='space-y-3'>
+      <div className='flex items-center justify-between rounded-md border bg-muted/30 p-3'>
+        <span className='text-sm text-muted-foreground'>{items.length} expense{items.length !== 1 ? 's' : ''} pending</span>
+        <div className='flex items-center gap-3'>
+          <span className='font-bold'>{fmt(totalAmount)}</span>
+          <Button size='sm' onClick={onPayAll} disabled={isPayingAll} className='bg-green-600 hover:bg-green-700'>
+            {isPayingAll ? <Loader2 className='h-4 w-4 animate-spin mr-1.5' /> : <CheckCircle2 className='h-4 w-4 mr-1.5' />}
+            Pay All ({items.length})
+          </Button>
+        </div>
+      </div>
+
+      <div className='space-y-2 max-h-80 overflow-y-auto'>
+        {items.map((expense) => (
+          <div key={expense.id} className='flex items-center justify-between rounded-md border p-2.5 text-sm'>
+            <div>
+              <p className='font-medium'>{fmtDate(expense.date)}</p>
+              <p className='text-xs text-muted-foreground'>{expense.description}</p>
+            </div>
+            <div className='flex items-center gap-2'>
+              <span className='font-semibold'>{fmt(expense.amount)}</span>
+              <Button
+                size='sm'
+                variant='outline'
+                className='border-green-600 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30'
+                onClick={() => handlePaySingle(expense.id)}
+                disabled={isPayingSingle && payingId === expense.id}
+              >
+                {isPayingSingle && payingId === expense.id ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  'Pay'
+                )}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

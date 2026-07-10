@@ -22,9 +22,17 @@ router
   .get(auth('viewPayments'), expenseController.getExpenseTrends);
 
 router
+  .route('/pay-bulk')
+  .post(auth('editPayments'), validate(expenseValidation.payExpensesBulk), expenseController.payExpensesBulk);
+
+router
   .route('/:expenseId')
   .get(auth('viewPayments'), validate(expenseValidation.getExpense), expenseController.getExpense)
   .patch(auth('editPayments'), validate(expenseValidation.updateExpense), expenseController.updateExpense)
   .delete(auth('deletePayments'), validate(expenseValidation.deleteExpense), expenseController.deleteExpense);
+
+router
+  .route('/:expenseId/pay')
+  .patch(auth('editPayments'), validate(expenseValidation.payExpense), expenseController.payExpense);
 
 module.exports = router;

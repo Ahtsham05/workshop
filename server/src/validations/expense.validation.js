@@ -19,6 +19,9 @@ const getExpenses = {
   query: Joi.object().keys({
     category: Joi.string(),
     paymentMethod: Joi.string(),
+    referenceId: Joi.string().custom(objectId),
+    referenceModel: Joi.string(),
+    isPaid: Joi.boolean(),
     search: Joi.string(),
     startDate: Joi.date(),
     endDate: Joi.date(),
@@ -59,6 +62,23 @@ const deleteExpense = {
   }),
 };
 
+const payExpense = {
+  params: Joi.object().keys({
+    expenseId: Joi.required().custom(objectId),
+  }),
+};
+
+const payExpensesBulk = {
+  body: Joi.object()
+    .keys({
+      category: Joi.string(),
+      referenceId: Joi.string().custom(objectId),
+      referenceModel: Joi.string(),
+      all: Joi.boolean(),
+    })
+    .or('category', 'referenceId', 'all'),
+};
+
 const getExpenseSummary = {
   query: Joi.object().keys({
     startDate: Joi.date(),
@@ -72,5 +92,7 @@ module.exports = {
   getExpense,
   updateExpense,
   deleteExpense,
+  payExpense,
+  payExpensesBulk,
   getExpenseSummary,
 };

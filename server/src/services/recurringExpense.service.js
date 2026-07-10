@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { RecurringExpense, Expense } = require('../models');
 const expenseService = require('./expense.service');
 const ApiError = require('../utils/ApiError');
@@ -116,6 +117,42 @@ const withPendingCount = (rule) => {
   return json;
 };
 
+/**
+ * Attach unpaidCount/unpaidAmount (already-generated cycles sitting in the
+ * Expense tab waiting for someone to hit "Pay" — distinct from pendingCount,
+ * which is cycles not yet generated at all) and generatedAmount (the actual
+ * cumulative Rs. total of every cycle this rule has generated to date, paid
+ * or not — sums real historical Expense amounts rather than assuming
+ * rule.amount stayed constant, since edits can change it mid-life).
+ */
+const withUnpaidInfo = async (rules) => {
+  const ruleIds = rules.map((r) => new mongoose.Types.ObjectId(String(r._id ?? r.id)));
+  if (ruleIds.length === 0) return rules;
+
+  const agg = await Expense.aggregate([
+    { $match: { referenceModel: 'RecurringExpense', referenceId: { $in: ruleIds } } },
+    {
+      $group: {
+        _id: '$referenceId',
+        generatedAmount: { $sum: '$amount' },
+        unpaidCount: { $sum: { $cond: [{ $eq: ['$isPaid', false] }, 1, 0] } },
+        unpaidAmount: { $sum: { $cond: [{ $eq: ['$isPaid', false] }, '$amount', 0] } },
+      },
+    },
+  ]);
+  const byRuleId = new Map(agg.map((a) => [String(a._id), a]));
+
+  return rules.map((rule) => {
+    const info = byRuleId.get(String(rule._id ?? rule.id));
+    return {
+      ...rule,
+      unpaidCount: info?.unpaidCount || 0,
+      unpaidAmount: info?.unpaidAmount || 0,
+      generatedAmount: info?.generatedAmount || 0,
+    };
+  });
+};
+
 const createRecurringExpense = async (body) => {
   const nextRunDate = calcFirstRunDate(body);
   const rule = await RecurringExpense.create({ ...body, nextRunDate });
@@ -124,7 +161,9 @@ const createRecurringExpense = async (body) => {
 
 const getRecurringExpenses = async (filter, options) => {
   const result = await RecurringExpense.paginate(filter, { ...options, sortBy: options.sortBy || 'createdAt:desc' });
-  return { ...result, results: result.results.map(withPendingCount) };
+  const withPending = result.results.map(withPendingCount);
+  const results = await withUnpaidInfo(withPending);
+  return { ...result, results };
 };
 
 const getRecurringExpenseById = async (id) => RecurringExpense.findById(id);
@@ -221,7 +260,10 @@ const processDueRecurringExpensesInternal = async () => {
         });
 
         if (!alreadyExists) {
-          // Use expenseService.createExpense so cash book entry is auto-created
+          // Auto-generated cycles are recorded as unpaid so they show up in the
+          // Expense tab immediately without touching the cash book / wallet /
+          // accounts ledger. Cash only moves once someone confirms payment via
+          // the "Paid" action (expenseService.markExpenseAsPaid).
           // eslint-disable-next-line no-await-in-loop
           await expenseService.createExpense({
             organizationId: rule.organizationId,
@@ -236,6 +278,9 @@ const processDueRecurringExpensesInternal = async () => {
             reference,
             notes: `Auto-generated: ${rule.name}`,
             createdBy: rule.createdBy,
+            isPaid: false,
+            referenceId: rule._id,
+            referenceModel: 'RecurringExpense',
           });
           rule.totalGenerated += 1;
           created++;
@@ -255,6 +300,44 @@ const processDueRecurringExpensesInternal = async () => {
   return { created, errors, total: dueRules.length };
 };
 
+/**
+ * Pay every unpaid (already-generated) cycle belonging to a single rule —
+ * the per-row "Pay" action on the Recurring Expenses table.
+ */
+const payRuleExpenses = async (id, scope, userId) => {
+  const rule = await RecurringExpense.findOne({
+    _id: id,
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+  });
+  if (!rule) throw new ApiError(httpStatus.NOT_FOUND, 'Recurring expense not found');
+
+  return expenseService.payExpensesBulk(
+    {
+      organizationId: scope.organizationId,
+      branchId: scope.branchId,
+      referenceId: rule._id,
+      referenceModel: 'RecurringExpense',
+    },
+    userId
+  );
+};
+
+/**
+ * Pay every unpaid cycle across every rule for this org/branch — the header
+ * "Pay All Pending" one-click action.
+ */
+const payAllRuleExpenses = async (scope, userId) => {
+  return expenseService.payExpensesBulk(
+    {
+      organizationId: scope.organizationId,
+      branchId: scope.branchId,
+      referenceModel: 'RecurringExpense',
+    },
+    userId
+  );
+};
+
 module.exports = {
   createRecurringExpense,
   getRecurringExpenses,
@@ -262,6 +345,8 @@ module.exports = {
   updateRecurringExpense,
   deleteRecurringExpense,
   processDueRecurringExpenses,
+  payRuleExpenses,
+  payAllRuleExpenses,
   calcFirstRunDate,
   calcNextRunDate,
 };

@@ -73,6 +73,22 @@ const expenseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Unpaid expenses (e.g. auto-generated recurring cycles) are recorded here
+  // for visibility but deliberately don't touch the cash book / wallet /
+  // accounts ledger until someone confirms payment via markExpenseAsPaid.
+  isPaid: {
+    type: Boolean,
+    default: true,
+  },
+  paidAt: {
+    type: Date,
+    default: null,
+  },
+  paidBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
 }, {
   timestamps: true,
 });

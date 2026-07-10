@@ -9,6 +9,8 @@ router.use(auth(), branchScope());
 
 router.route('/').get(c.getRecurringExpenses).post(c.createRecurringExpense);
 router.route('/run-now').post(c.runNow);
+router.route('/pay-all').post(c.payAllRuleExpenses);
 router.route('/:id').patch(c.updateRecurringExpense).delete(c.deleteRecurringExpense);
+router.route('/:id/pay').post(c.payRuleExpenses);
 
 module.exports = router;

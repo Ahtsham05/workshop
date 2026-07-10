@@ -183,6 +183,10 @@ const summery = {
     url: '/expenses',
     method: 'delete',
   },
+  payExpense: {
+    url: '/expenses',
+    method: 'patch',
+  },
   fetchExpenses: {
     url: '/expenses',
     method: 'get',

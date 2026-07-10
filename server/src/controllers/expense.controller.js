@@ -22,7 +22,8 @@ const createExpense = catchAsync(async (req, res) => {
 });
 
 const getExpenses = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['category', 'paymentMethod']);
+  const filter = pick(req.query, ['category', 'paymentMethod', 'referenceId', 'referenceModel']);
+  if (req.query.isPaid !== undefined) filter.isPaid = req.query.isPaid === 'true';
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'startDate', 'endDate', 'category']);
   const result = await expenseService.queryExpenses(filter, options);
@@ -52,6 +53,38 @@ const updateExpense = catchAsync(async (req, res) => {
     fields: TRACKED_EXPENSE_FIELDS,
   });
   res.send(expense);
+});
+
+const payExpense = catchAsync(async (req, res) => {
+  const before = await expenseService.getExpenseById(req.params.expenseId);
+  const beforeSnapshot = before && before.toObject ? before.toObject() : before;
+  const expense = await expenseService.markExpenseAsPaid(req.params.expenseId, req.user?.id);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'Expense',
+    entityId: expense._id,
+    entityName: expense.description || expense.category,
+    before: beforeSnapshot,
+    after: expense.toObject ? expense.toObject() : expense,
+    fields: ['isPaid', ...TRACKED_EXPENSE_FIELDS],
+  });
+  res.send(expense);
+});
+
+const payExpensesBulk = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const filter = { organizationId, branchId };
+  if (req.body.referenceId) {
+    filter.referenceId = req.body.referenceId;
+    filter.referenceModel = req.body.referenceModel || 'RecurringExpense';
+  } else if (req.body.category) {
+    filter.category = req.body.category;
+  }
+  // Otherwise (only `all: true` given) — pay everything pending for this org/branch.
+
+  const result = await expenseService.payExpensesBulk(filter, req.user.id);
+  res.send(result);
 });
 
 const deleteExpense = catchAsync(async (req, res) => {
@@ -88,6 +121,8 @@ module.exports = {
   getExpense,
   updateExpense,
   deleteExpense,
+  payExpense,
+  payExpensesBulk,
   getExpenseSummary,
   getExpenseTrends,
 };
