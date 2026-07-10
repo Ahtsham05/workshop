@@ -55,10 +55,13 @@ async function startEmbeddedSignup({ organizationId, branchId, userId }) {
 
 async function exchangeCodeForToken(code) {
   const { appId, appSecret } = config.whatsapp.meta;
+  // No redirect_uri here: this code comes from the JS SDK's FB.login (config_id)
+  // popup flow, which manages its own internal redirect_uri. Passing our backend
+  // callback URL here doesn't match what was actually used and Meta rejects the
+  // exchange with "Error validating verification code... redirect_uri is identical".
   const params = new URLSearchParams({
     client_id: appId,
     client_secret: appSecret,
-    redirect_uri: getRedirectUri(),
     code,
   });
   const res = await fetch(`${graphBaseUrl('v21.0')}/oauth/access_token?${params}`);
