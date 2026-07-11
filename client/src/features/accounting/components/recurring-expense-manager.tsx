@@ -158,6 +158,7 @@ export function RecurringExpenseManager() {
   }, [categoriesData])
 
   const rules = data?.results ?? []
+  const monthSummary = data?.monthSummary
   const activeRules = rules.filter((r) => r.isActive)
   const displayRules = showAll ? rules : rules.slice(0, 8)
 
@@ -312,7 +313,7 @@ export function RecurringExpenseManager() {
       </div>
 
       {/* Stats */}
-      <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
+      <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3'>
         <Card className='py-3'>
           <CardContent className='px-4 py-0'>
             <p className='text-xs text-muted-foreground'>Active Rules</p>
@@ -330,6 +331,15 @@ export function RecurringExpenseManager() {
             <p className='text-xs text-muted-foreground'>Total Generated</p>
             <p className='text-xl font-bold'>{fmt(totalGeneratedAmount)}</p>
             <p className='text-xs text-muted-foreground'>{totalGeneratedCount} expense{totalGeneratedCount !== 1 ? 's' : ''} total</p>
+          </CardContent>
+        </Card>
+        <Card className='py-3'>
+          <CardContent className='px-4 py-0'>
+            <p className='text-xs text-muted-foreground'>This Month</p>
+            <p className='text-xl font-bold text-purple-600'>{fmt(monthSummary?.amount ?? 0)}</p>
+            <p className='text-xs text-muted-foreground'>
+              {monthSummary?.days ?? 0} day{(monthSummary?.days ?? 0) !== 1 ? 's' : ''} generated
+            </p>
           </CardContent>
         </Card>
         <Card className='py-3'>

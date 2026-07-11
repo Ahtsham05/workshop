@@ -1580,29 +1580,49 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                     Net Cash Available minus Reserved for Purchases — what&apos;s truly free to use right now
                   </p>
                 </div>
+              </div>
+
+              {/* Profit / Loss — kept separate from Final Position: this is actual business
+                  earnings, not cash movement, so it shouldn't read as another cash metric. */}
+              <div>
+                <p className='mb-3 text-sm font-medium'>Profit / Loss</p>
                 {canAccess('profit_loss') ? (
                   pnl && (
-                    <div
-                      className={cn(
-                        'mt-4 rounded-xl border-2 p-4 shadow-sm',
-                        pnl.netProfit >= 0 ? 'border-green-500/30 bg-green-50 dark:bg-green-950/20' : 'border-red-500/30 bg-red-50 dark:bg-red-950/20',
-                      )}
-                    >
-                      <p className='text-sm font-medium text-muted-foreground'>Total Profit / Loss</p>
-                      <p className={cn('text-2xl font-bold', pnl.netProfit >= 0 ? 'text-green-600' : 'text-red-600')}>
-                        {pnl.netProfit >= 0 ? '+' : ''}{fmt(pnl.netProfit)}
-                      </p>
-                      <p className='mt-2 text-xs text-muted-foreground'>
-                        Actual business profit for the selected period — sales gross profit plus load, service, sim sale, repair
-                        and bill profit, plus deposit/withdrawal profit, minus expenses. This is not the same as Net Cash Movement,
-                        which tracks cash in/out rather than earnings.
-                      </p>
+                    <div className='grid gap-4 sm:grid-cols-2'>
+                      <div
+                        className={cn(
+                          'rounded-xl border-2 p-4 shadow-sm',
+                          pnl.netProfit >= 0 ? 'border-green-500/30 bg-green-50 dark:bg-green-950/20' : 'border-muted opacity-60',
+                        )}
+                      >
+                        <p className='text-sm font-medium text-muted-foreground'>Total Profit</p>
+                        <p className={cn('text-2xl font-bold', pnl.netProfit >= 0 ? 'text-green-600' : 'text-muted-foreground')}>
+                          {pnl.netProfit >= 0 ? `+${fmt(pnl.netProfit)}` : '—'}
+                        </p>
+                        <p className='mt-2 text-xs text-muted-foreground'>
+                          Sales gross profit plus load, service, sim sale, repair and bill profit, plus deposit/withdrawal
+                          profit, minus expenses — shown here only when this period was profitable overall.
+                        </p>
+                      </div>
+                      <div
+                        className={cn(
+                          'rounded-xl border-2 p-4 shadow-sm',
+                          pnl.netProfit < 0 ? 'border-red-500/30 bg-red-50 dark:bg-red-950/20' : 'border-muted opacity-60',
+                        )}
+                      >
+                        <p className='text-sm font-medium text-muted-foreground'>Total Loss</p>
+                        <p className={cn('text-2xl font-bold', pnl.netProfit < 0 ? 'text-red-600' : 'text-muted-foreground')}>
+                          {pnl.netProfit < 0 ? `-${fmt(Math.abs(pnl.netProfit))}` : '—'}
+                        </p>
+                        <p className='mt-2 text-xs text-muted-foreground'>
+                          Expenses that exceeded sales gross profit plus load, service, sim sale, repair, bill and
+                          deposit/withdrawal profit combined — shown here only when this period ran at a loss overall.
+                        </p>
+                      </div>
                     </div>
                   )
                 ) : (
-                  <div className='mt-4'>
-                    <LockedNote label='Total Profit / Loss' />
-                  </div>
+                  <LockedNote label='Total Profit / Loss' />
                 )}
               </div>
             </CardContent>

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { RecurringExpense, Expense } = require('../models');
 const expenseService = require('./expense.service');
 const ApiError = require('../utils/ApiError');
-const { startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { BUSINESS_TZ, startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
 
 // Schedule math is done in two layers:
 //  1. A "calendar cursor" — a UTC-midnight Date used purely for Y/M/D arithmetic
@@ -153,6 +153,42 @@ const withUnpaidInfo = async (rules) => {
   });
 };
 
+/**
+ * Days-generated-this-month and total Rs. generated this month, across every
+ * rule for this org/branch — a header stat so "how much have recurring
+ * expenses cost me this month" doesn't require summing the whole table.
+ */
+const getMonthSummary = async (filter) => {
+  const matchStage = { referenceModel: 'RecurringExpense' };
+  if (filter.organizationId) {
+    matchStage.organizationId = mongoose.Types.ObjectId.isValid(filter.organizationId)
+      ? new mongoose.Types.ObjectId(String(filter.organizationId))
+      : filter.organizationId;
+  }
+  if (filter.branchId) {
+    matchStage.branchId = mongoose.Types.ObjectId.isValid(filter.branchId)
+      ? new mongoose.Types.ObjectId(String(filter.branchId))
+      : filter.branchId;
+  }
+
+  const nowCal = toBusinessCalendarDate(new Date());
+  const monthStartCal = `${nowCal.slice(0, 7)}-01`;
+  matchStage.date = { $gte: startOfBusinessDay(monthStartCal), $lte: endOfBusinessDay(nowCal) };
+
+  const agg = await Expense.aggregate([
+    { $match: matchStage },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: BUSINESS_TZ } },
+        dayTotal: { $sum: '$amount' },
+      },
+    },
+    { $group: { _id: null, totalAmount: { $sum: '$dayTotal' }, totalDays: { $sum: 1 } } },
+  ]);
+
+  return { days: agg[0]?.totalDays || 0, amount: agg[0]?.totalAmount || 0 };
+};
+
 const createRecurringExpense = async (body) => {
   const nextRunDate = calcFirstRunDate(body);
   const rule = await RecurringExpense.create({ ...body, nextRunDate });
@@ -163,7 +199,8 @@ const getRecurringExpenses = async (filter, options) => {
   const result = await RecurringExpense.paginate(filter, { ...options, sortBy: options.sortBy || 'createdAt:desc' });
   const withPending = result.results.map(withPendingCount);
   const results = await withUnpaidInfo(withPending);
-  return { ...result, results };
+  const monthSummary = await getMonthSummary(filter);
+  return { ...result, results, monthSummary };
 };
 
 const getRecurringExpenseById = async (id) => RecurringExpense.findById(id);

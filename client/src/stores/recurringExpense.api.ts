@@ -65,12 +65,21 @@ interface PaginatedResult<T> {
   totalResults: number
 }
 
+/** Days-generated-this-month and total Rs. generated this month, across every rule. */
+export interface RecurringMonthSummary {
+  days: number
+  amount: number
+}
+
 export const recurringExpenseApi = createApi({
   reducerPath: 'recurringExpenseApi',
   baseQuery,
   tagTypes: ['RecurringExpenses'],
   endpoints: (builder) => ({
-    getRecurringExpenses: builder.query<PaginatedResult<RecurringExpenseRecord>, { isActive?: boolean } | void>({
+    getRecurringExpenses: builder.query<
+      PaginatedResult<RecurringExpenseRecord> & { monthSummary?: RecurringMonthSummary },
+      { isActive?: boolean } | void
+    >({
       query: (params) => ({
         url: '/recurring-expenses',
         params: params || {},
