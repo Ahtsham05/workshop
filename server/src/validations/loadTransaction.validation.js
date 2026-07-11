@@ -1,6 +1,6 @@
 const Joi = require('joi');
 
-const { objectId } = require('./custom.validation');
+const { objectId, notFutureDate } = require('./custom.validation');
 
 const createLoadTransaction = {
   body: Joi.object().keys({
@@ -16,7 +16,7 @@ const createLoadTransaction = {
     paymentMethod: Joi.string().valid('cash', 'bank', 'wallet').default('cash'),
     paymentWalletType: Joi.string().trim().allow(''),
     notes: Joi.string().allow(''),
-    date: Joi.date().default(() => new Date()),
+    date: Joi.date().default(() => new Date()).custom(notFutureDate),
     type: Joi.string().valid('normal', 'package').default('normal'),
     network: Joi.string().default('none'),
   }),
@@ -55,7 +55,7 @@ const updateLoadTransaction = {
       paymentMethod: Joi.string().valid('cash', 'bank', 'wallet'),
       paymentWalletType: Joi.string().trim().allow(''),
       notes: Joi.string().allow(''),
-      date: Joi.date(),
+      date: Joi.date().custom(notFutureDate),
       type: Joi.string().valid('normal', 'package'),
       network: Joi.string(),
     })

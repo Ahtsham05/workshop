@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { objectId } = require('./custom.validation');
+const { objectId, notFutureDate } = require('./custom.validation');
 
 const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
 
@@ -71,7 +71,7 @@ const recordPayment = {
     amount:        Joi.number().min(0.01).required(),
     paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
     walletType:    Joi.string().allow(''),
-    date:          Joi.date(),
+    date:          Joi.date().custom(notFutureDate),
     notes:         Joi.string().allow(''),
   }),
 };

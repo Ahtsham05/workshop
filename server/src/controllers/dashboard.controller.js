@@ -7,6 +7,7 @@ const { mobileDashboardService, cashBookService, productService } = require('../
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
+const { toBusinessCalendarDate } = require('../utils/businessTimezone');
 
 /**
  * Build an aggregate $match scope with properly cast ObjectIds.
@@ -184,6 +185,12 @@ const getDashboardStats = catchAsync(async (req, res) => {
     }
   }
 
+  // "Cash in Hand" means cash physically available right now — bound it to the end of
+  // today (business timezone) so a transaction mis-dated in the future (e.g. a sale
+  // saved with a forward date) can't inflate this figure ahead of the Cash Book page,
+  // which always scopes its own "Cash in Hand" to a selected date range ending today.
+  const cashInHandAsOf = toBusinessCalendarDate(new Date());
+
   if (businessType === 'mobile_shop') {
     const { branchId } = req;
 
@@ -194,7 +201,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
         startDate,
         endDate,
       }),
-      cashBookService.getCashInHandSummary({ organizationId, branchId }),
+      cashBookService.getCashInHandSummary({ organizationId, branchId, endDate: cashInHandAsOf }),
     ]);
 
     mobileSummary = {
@@ -205,6 +212,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
     const cashBookSummary = await cashBookService.getCashInHandSummary({
       organizationId,
       branchId: req.branchId,
+      endDate: cashInHandAsOf,
     });
     mobileSummary.cashInHand = cashBookSummary.closingBalance;
   }

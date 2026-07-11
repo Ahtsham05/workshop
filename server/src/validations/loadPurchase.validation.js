@@ -1,6 +1,6 @@
 const Joi = require('joi');
 
-const { objectId } = require('./custom.validation');
+const { objectId, notFutureDate } = require('./custom.validation');
 
 const createLoadPurchase = {
   body: Joi.object().keys({
@@ -14,7 +14,7 @@ const createLoadPurchase = {
     commissionRate: Joi.number().min(0).max(100).default(0),
     extraCharge: Joi.number().min(0).default(0),
     notes: Joi.string().allow(''),
-    date: Joi.date().default(() => new Date()),
+    date: Joi.date().default(() => new Date()).custom(notFutureDate),
   }),
 };
 
@@ -48,7 +48,7 @@ const updateLoadPurchase = {
       commissionRate: Joi.number().min(0).max(100),
       extraCharge: Joi.number().min(0),
       notes: Joi.string().allow(''),
-      date: Joi.date(),
+      date: Joi.date().custom(notFutureDate),
     })
     .min(1),
 };

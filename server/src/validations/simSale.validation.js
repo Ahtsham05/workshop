@@ -1,9 +1,9 @@
 const Joi = require('joi');
-const { objectId } = require('./custom.validation');
+const { objectId, notFutureDate } = require('./custom.validation');
 
 const createSimSale = {
   body: Joi.object().keys({
-    date: Joi.date().default(() => new Date()),
+    date: Joi.date().default(() => new Date()).custom(notFutureDate),
     productId: Joi.string().custom(objectId),
     productName: Joi.string().trim().allow(''),
     simAmount: Joi.number().min(0).required(),
@@ -47,7 +47,7 @@ const updateSimSale = {
   }),
   body: Joi.object()
     .keys({
-      date: Joi.date(),
+      date: Joi.date().custom(notFutureDate),
       productId: Joi.alternatives().try(Joi.string().custom(objectId), Joi.valid(null), Joi.valid('')),
       productName: Joi.string().trim().allow(''),
       simAmount: Joi.number().min(0),

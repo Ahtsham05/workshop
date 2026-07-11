@@ -1,6 +1,7 @@
 const CashRegisterState = require('../models/cashRegisterState.model');
 const CashRegisterSnapshot = require('../models/cashRegisterSnapshot.model');
 const cashBookService = require('./cashBook.service');
+const { toBusinessCalendarDate } = require('../utils/businessTimezone');
 const {
   PKR_DENOMINATIONS,
   computeTotalFromCounts,
@@ -14,9 +15,13 @@ const buildScopeFilter = (organizationId, branchId) => {
 };
 
 const getExpectedCashAmount = async (organizationId, branchId) => {
+  // Bound to end of today (business timezone) — a cash-affecting record mis-dated in
+  // the future would otherwise inflate "Expected" ahead of what's physically in the
+  // drawer today, creating a phantom variance against the Track Cash count.
   const summary = await cashBookService.getCashInHandSummary({
     organizationId,
     branchId,
+    endDate: toBusinessCalendarDate(new Date()),
   });
   return Number(summary?.closingBalance || 0);
 };
