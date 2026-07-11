@@ -256,9 +256,11 @@ const recalculateBalances = async (customerId, _fromTransactionDate) => {
   await consolidateCustomerCashEntries(customerId, CustomerLedger);
 
   const allEntries = await CustomerLedger.find({ customer: customerId })
-    .sort({ transactionDate: 1, createdAt: 1 });
+    .sort({ transactionDate: 1, createdAt: 1 })
+    .select('_id debit credit balance');
 
   let runningBalance = 0;
+  const bulkOps = [];
 
   for (const entry of allEntries) {
     const debit = Number(entry.debit) || 0;
@@ -266,9 +268,19 @@ const recalculateBalances = async (customerId, _fromTransactionDate) => {
     runningBalance += debit - credit;
 
     if (entry.balance !== runningBalance) {
-      entry.balance = runningBalance;
-      await entry.save();
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: entry._id },
+          update: { $set: { balance: runningBalance } },
+        },
+      });
     }
+  }
+
+  // One round trip for all changed rows instead of N sequential .save() calls —
+  // this runs on every ledger entry write, so it scales with a customer's entire history.
+  if (bulkOps.length > 0) {
+    await CustomerLedger.bulkWrite(bulkOps, { ordered: false });
   }
 
   await Customer.findByIdAndUpdate(customerId, { balance: runningBalance });

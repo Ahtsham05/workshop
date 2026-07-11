@@ -9,7 +9,9 @@ const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'dis
 
 const createInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.createInvoice({ ...req.body, ...getBranchContext(req) }, req.user.id);
-  await auditLogService.recordAuditLog({
+  // recordAuditLog never throws (failures are logged internally) — don't make the
+  // client wait on it, it has no bearing on whether the invoice was saved.
+  auditLogService.recordAuditLog({
     req,
     action: 'create',
     module: 'Invoice',

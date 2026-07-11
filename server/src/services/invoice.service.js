@@ -226,6 +226,29 @@ const createInvoice = async (invoiceBody, userId) => {
 
   const isQuotation = invoiceBody.type === 'quotation';
 
+  // Batch-fetch every product/batch/inventory the items reference up front instead of
+  // one round trip per item — this collapses what used to be O(N) to 2N sequential
+  // queries into a fixed 3 parallel queries regardless of invoice size.
+  const productIds = [...new Set(invoiceBody.items.filter((i) => i.productId).map((i) => String(i.productId)))];
+  const batchIds = !isQuotation
+    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && i.batchId).map((i) => String(i.batchId)))]
+    : [];
+  const variantIdsNeedingInventory = !isQuotation
+    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && !i.batchId).map((i) => String(i.variantId)))]
+    : [];
+
+  const [productsList, batchesList, inventoriesList] = await Promise.all([
+    productIds.length ? Product.find({ _id: { $in: productIds } }) : Promise.resolve([]),
+    batchIds.length ? Batch.find({ _id: { $in: batchIds } }) : Promise.resolve([]),
+    variantIdsNeedingInventory.length
+      ? Inventory.find({ variantId: { $in: variantIdsNeedingInventory } })
+      : Promise.resolve([]),
+  ]);
+
+  const productById = new Map(productsList.map((p) => [String(p._id), p]));
+  const batchById = new Map(batchesList.map((b) => [String(b._id), b]));
+  const inventoryByVariantId = new Map(inventoriesList.map((inv) => [String(inv.variantId), inv]));
+
   // Validate products and calculate totals
   const validatedItems = [];
   for (const item of invoiceBody.items) {
@@ -234,7 +257,7 @@ const createInvoice = async (invoiceBody, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Product ID is required for all items');
     }
 
-    const product = await Product.findById(item.productId);
+    const product = productById.get(String(item.productId));
     if (!product) {
       console.error('Product not found:', item.productId);
       throw new ApiError(httpStatus.BAD_REQUEST, `Product with ID ${item.productId} not found`);
@@ -249,7 +272,7 @@ const createInvoice = async (invoiceBody, userId) => {
         // A manually picked batch (no automatic FEFO yet) must have enough on its own —
         // see docs/architecture/universal-product-migration.md.
         if (item.batchId) {
-          const batch = await Batch.findById(item.batchId);
+          const batch = batchById.get(String(item.batchId));
           const available = batch?.quantity ?? 0;
           if (!batch || batch.status !== 'active' || available < item.quantity) {
             throw new ApiError(
@@ -258,7 +281,7 @@ const createInvoice = async (invoiceBody, userId) => {
             );
           }
         } else {
-          const inventory = await Inventory.findOne({ variantId: item.variantId });
+          const inventory = inventoryByVariantId.get(String(item.variantId));
           const available = inventory?.quantity ?? 0;
           if (available < item.quantity) {
             throw new ApiError(
@@ -376,8 +399,10 @@ const createInvoice = async (invoiceBody, userId) => {
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending' && invoice.type !== 'quotation') {
     try {
       const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
-      const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
-      const hasExistingLedger = await CustomerLedger.exists({ customer: invoice.customerId });
+      const [customer, hasExistingLedger] = await Promise.all([
+        Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt'),
+        CustomerLedger.exists({ customer: invoice.customerId }),
+      ]);
 
       // Backward compatibility: preserve legacy opening balances that were saved on customer
       // but never written as opening_balance ledger transactions.
@@ -440,15 +465,16 @@ const createInvoice = async (invoiceBody, userId) => {
   // deducts from that specific Batch; without one, this just decrements the variant's
   // total Inventory.quantity (automatic FEFO splitting is a deliberate follow-up).
   if (!isQuotation) {
-    console.log('Updating stock quantities for invoice type:', invoice.type);
-    for (const item of validatedItems) {
+    // Each line item touches its own product/batch/variant, so the stock writes are
+    // independent of one another — run them concurrently instead of one at a time.
+    await Promise.all(validatedItems.map(async (item) => {
       if (item.variantId && item.batchId) {
         await batchService.sellFromBatch(item.batchId, item.stockQuantity, {
           refType: 'Invoice',
           refId: invoice._id,
           userId,
         });
-        continue;
+        return;
       }
       if (item.variantId) {
         await inventoryService.adjustInventory(item.variantId, {
@@ -458,7 +484,7 @@ const createInvoice = async (invoiceBody, userId) => {
           refId: invoice._id,
           userId,
         });
-        continue;
+        return;
       }
 
       await Product.findByIdAndUpdate(
@@ -466,7 +492,6 @@ const createInvoice = async (invoiceBody, userId) => {
         { $inc: { stockQuantity: -item.stockQuantity } },
         { new: true }
       );
-      console.log(`Stock reduced for product ${item.productId}: -${item.stockQuantity}`);
 
       await inventorySyncService.recordStockChange({
         organizationId: invoice.organizationId,
@@ -478,7 +503,7 @@ const createInvoice = async (invoiceBody, userId) => {
         unitCost: item.cost,
         createdBy: userId,
       });
-    }
+    }));
 
     await imeiService.markImeisSoldForInvoice({
       invoiceId: invoice._id,
@@ -1236,8 +1261,10 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   if (invoice.customerId && invoice.customerId !== 'walk-in') {
     try {
       const ledgerPaymentMethod = resolveInvoiceLedgerPaymentMethod(invoice);
-      const customer = await Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt');
-      const hasExistingLedger = await CustomerLedger.exists({ customer: invoice.customerId });
+      const [customer, hasExistingLedger] = await Promise.all([
+        Customer.findById(invoice.customerId).select('balance organizationId branchId createdAt'),
+        CustomerLedger.exists({ customer: invoice.customerId }),
+      ]);
 
       if (customer && !hasExistingLedger && Number(customer.balance || 0) !== 0) {
         await customerLedgerService.syncOpeningBalanceEntry({

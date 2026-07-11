@@ -8,10 +8,20 @@ export function onEnterAdvance(e: ReactKeyboardEvent, action: () => void) {
   action()
 }
 
+/**
+ * Runs `callback` after the next two paints. Radix popovers/dialogs restore focus
+ * to their trigger on close via a rAF-scheduled effect; waiting a fixed number of
+ * milliseconds either races that (losing focus back to the trigger) or wastes time
+ * padding past it. Two rAFs reliably land after that restore without a magic delay.
+ */
+export function afterPaint(callback: () => void) {
+  requestAnimationFrame(() => requestAnimationFrame(callback))
+}
+
 /** Focus an input/button after popovers close. */
 export function focusField(el: HTMLElement | null | undefined, selectText = true) {
   if (!el) return
-  window.setTimeout(() => {
+  afterPaint(() => {
     el.focus()
     if (
       selectText &&
@@ -20,7 +30,7 @@ export function focusField(el: HTMLElement | null | undefined, selectText = true
     ) {
       el.select()
     }
-  }, 50)
+  })
 }
 
 export type InvoiceSaveShortcutOptions = {

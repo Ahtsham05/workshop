@@ -126,7 +126,9 @@ export default function StudentImportPage() {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array' });
+        // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
+        // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
+        const wb = XLSX.read(data, { type: 'array', codepage: 65001 });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(ws);
         if (!json.length) { setParseError('File is empty — no data rows found.'); return; }

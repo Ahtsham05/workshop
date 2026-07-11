@@ -21,6 +21,48 @@ const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfil
   }
 }
 
+/** Decrements just the sold rows' stock (and batch quantity, if batch-tracked) in the
+ *  purchase-catalog cache in place. Used on invoice *creation* — by far the most
+ *  frequent mutation — so a sale doesn't force a full unpaginated refetch of the whole
+ *  product catalog (every product, with nested batches/stockout history) just to reflect
+ *  a stock change on the handful of items actually sold. */
+const patchPurchaseCatalogStockForSale = (dispatch: any, invoiceData: any) => {
+  const items = invoiceData?.items
+  if (invoiceData?.type === 'quotation' || !Array.isArray(items) || items.length === 0) return
+
+  dispatch(
+    purchaseCatalogApi.util.updateQueryData('getPurchasableCatalog', undefined, (draft: any[]) => {
+      items.forEach((item: any) => {
+        const qty = Number(item.stockQuantity ?? item.quantity ?? 0)
+        if (!qty || !item.productId) return
+
+        const row = item.variantId
+          ? draft.find((r) => r.variantId === item.variantId)
+          : draft.find((r) => r.productId === item.productId && r.type === 'product')
+        if (!row) return
+
+        row.stockQuantity = Math.max(0, Number(row.stockQuantity || 0) - qty)
+
+        if (item.batchId && row.batches) {
+          const batch = row.batches.find((b: any) => b.id === item.batchId)
+          if (batch) batch.quantity = Math.max(0, Number(batch.quantity || 0) - qty)
+        }
+      })
+    }),
+  )
+}
+
+const onInvoiceCreated = async (invoiceData: any, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(imeiApi.util.invalidateTags(['Imei']))
+    dispatch(batchApi.util.invalidateTags(['Batch']))
+    patchPurchaseCatalogStockForSale(dispatch, invoiceData)
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
+
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
 // Custom base query with auth handling
@@ -70,7 +112,7 @@ export const invoiceApi = createApi({
         body: invoiceData,
       }),
       invalidatesTags: ['Invoice'],
-      onQueryStarted: invalidateDownstreamCaches,
+      onQueryStarted: onInvoiceCreated,
     }),
 
     // Get all invoices

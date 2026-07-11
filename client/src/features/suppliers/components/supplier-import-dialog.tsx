@@ -130,7 +130,9 @@ export default function SupplierImportDialog({ open, onClose, onImport }: Suppli
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
+        // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
+        const workbook = XLSX.read(data, { type: 'array', codepage: 65001 });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);

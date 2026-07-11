@@ -261,6 +261,10 @@ export default function InvoicePage() {
   const [heldSheetOpen, setHeldSheetOpen] = useState(false)
   const [heldUiEpoch, setHeldUiEpoch] = useState(0)
   const saleAutosaveRecoveredRef = useRef(false)
+  /** Guards the mount-time products/customers fetch against StrictMode's dev-only
+   * double-invoke, which otherwise fires the fetch twice and can let a stale
+   * response overwrite a newer one (briefly showing an empty product catalog). */
+  const didFetchInitialDataRef = useRef(false)
 
   /** Always-latest snapshot for synchronous persist (tab close / route change / visibility) */
   const salePersistRef = useRef({
@@ -500,9 +504,15 @@ export default function InvoicePage() {
 
   // Fetch products and customers on component mount
   useEffect(() => {
+    // StrictMode invokes mount effects twice in dev; without this guard that fires
+    // this fetch twice, and whichever response lands second wins — briefly showing
+    // an empty catalog if the first (now-stale) response arrives after the real one.
+    if (didFetchInitialDataRef.current) return
+    didFetchInitialDataRef.current = true
+
     console.log('=== INVOICE COMPONENT MOUNT ===')
     console.log('Fetching fresh products and customers data')
-    
+
     setLoading(true)
     
     // Fetch products

@@ -19,7 +19,7 @@ import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User,
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useLanguage } from '@/context/language-context'
-import { Invoice, createEmptyManualInvoiceItem } from '../index'
+import { Invoice, InvoiceItem, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
@@ -40,11 +40,18 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
-import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
 const EMPTY_SELLABLE_CATALOG: PurchaseCatalogItem[] = []
+
+// The product/customer picker dropdowns mount one DOM row (image, badges, text) per
+// match with no virtualization. With 1000+ products/customers, rendering every match
+// on an empty search — cmdk's default behavior — is what actually makes the dropdown
+// feel slow to open, far more than any timing delay. Capping to the first N matches
+// keeps the popover instant; typing to search still filters the full list.
+const MAX_VISIBLE_DROPDOWN_RESULTS = 50
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
@@ -64,7 +71,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
-import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { afterPaint, focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { useSync } from '@/lib/sync/use-sync'
 import { buildOfflineInvoicePayload } from '@/lib/sync/offline-invoice'
 import { getElectronAPI } from '@/lib/sync/electron'
@@ -81,8 +88,6 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
-import { fetchCustomers } from '@/stores/customer.slice'
-import { fetchAllProducts } from '@/stores/product.slice'
 import { usePermissions } from '@/context/permission-context'
 import {
   EntityCreateEmptyPrompt,
@@ -549,9 +554,19 @@ export function InvoicePanel({
     fetchCustomerBalance()
   }, [invoice.customerId])
 
-  // Filter customers by name, Urdu name, or phone
-  const filteredCustomers = customers.filter((customer) =>
-    matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
+  // Filter customers by name, Urdu name, or phone. Memoized — this component
+  // re-renders on nearly every keystroke anywhere in the form (qty, discount, etc.),
+  // and re-scanning a 1000+ row customer list each time was real, felt input lag.
+  const filteredCustomers = useMemo(
+    () => customers.filter((customer) =>
+      matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
+    ),
+    [customers, customerSearchQuery],
+  )
+  // What actually renders — capped so opening the dropdown never mounts 1000+ rows.
+  const visibleCustomers = useMemo(
+    () => filteredCustomers.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS),
+    [filteredCustomers],
   )
 
   // Flat sellable catalog: one row per non-variant product, and one row per real
@@ -559,12 +574,25 @@ export function InvoicePanel({
   // picker shows "Toshiba — Black/64GB" with its own numbers instead of a vague
   // rolled-up product row. See docs/architecture/universal-product-migration.md.
   const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
-  const filteredSellableProducts = sellableCatalog.filter((item) =>
-    matchesBilingualSearch(productSearchQuery, item.name, item.nameUrdu, item.barcode, item.brand?.name),
+  // Memoized for the same reason as filteredCustomers — 1500+ rows re-scanned on
+  // every unrelated re-render was the biggest single source of the sluggishness.
+  const filteredSellableProducts = useMemo(
+    () => sellableCatalog.filter((item) =>
+      matchesBilingualSearch(productSearchQuery, item.name, item.nameUrdu, item.barcode, item.brand?.name),
+    ),
+    [sellableCatalog, productSearchQuery],
+  )
+  // What actually renders — capped so opening the dropdown never mounts 1000+ rows.
+  const visibleSellableProducts = useMemo(
+    () => filteredSellableProducts.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS),
+    [filteredSellableProducts],
   )
 
-  // Handle product selection for manual entries
-  const handleProductSelect = useCallback((itemId: string, product: any, variantId?: string) => {
+  // Handle product selection for manual entries. `itemsOverride` lets callers
+  // (e.g. quick-create right after adding a brand-new row) select into a row that
+  // was just added to state but hasn't flowed back into the `invoice` prop yet.
+  const handleProductSelect = useCallback((itemId: string, product: any, variantId?: string, itemsOverride?: InvoiceItem[]) => {
+    const sourceItems = itemsOverride || invoice.items
     const productId = product._id || product.id
     if (!productId) {
       console.error('Product has no valid ID:', product)
@@ -597,7 +625,7 @@ export function InvoicePanel({
     console.log('Product stock from parameter:', product.stockQuantity)
     
     // Find the current item to get its quantity
-    const currentItem = invoice.items.find(item => item.id === itemId)
+    const currentItem = sourceItems.find(item => item.id === itemId)
     if (!currentItem) {
       console.error('Item not found:', itemId)
       return
@@ -637,7 +665,7 @@ export function InvoicePanel({
       return
     }
     
-    const newItems = invoice.items.map(item =>
+    const newItems = sourceItems.map(item =>
       item.id === itemId
         ? {
             ...item,
@@ -715,13 +743,13 @@ export function InvoicePanel({
     setProductSearchQuery('')
 
     // Focus the quantity input of the just-selected product
-    setTimeout(() => {
+    afterPaint(() => {
       const qtyInput = qtyInputRefs.current[itemId]
       if (qtyInput) {
         qtyInput.focus()
         qtyInput.select()
       }
-    }, 100)
+    })
   }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
 
   // Selecting a flat catalog row (product or real variant) — builds the product-shaped
@@ -813,7 +841,9 @@ export function InvoicePanel({
       ...prev,
       items: [...prev.items, newItem],
     }))
-    setTimeout(() => setProductSelectOpen(newItem.id), 150)
+    // No delay needed — React batches this with the setInvoice above into a single
+    // render, so the new row mounts with its popover already open.
+    setProductSelectOpen(newItem.id)
   }, [invoice.items, setInvoice])
 
   const openProductSelectorForEntry = useCallback(() => {
@@ -854,18 +884,22 @@ export function InvoicePanel({
     [],
   )
 
+  // The create dialogs already POST and return the saved entity — reuse that
+  // response directly instead of re-fetching the entire products/customers list
+  // (which was firing a full /products or /customers?limit=1000 request on every
+  // single quick-create).
   const handleQuickCreated = useCallback(
-    async (type: 'customer' | 'supplier' | 'product', entity: any) => {
+    (type: 'customer' | 'supplier' | 'product', entity: any) => {
       if (type === 'customer') {
-        const data = await dispatch(fetchCustomers({ page: 1, limit: 1000, includeEmployees: true })).unwrap()
-        const list = data?.results || (Array.isArray(data) ? data : [])
-        setCustomers?.(list)
         const customerId = entity._id || entity.id
-        const created = list.find((c: any) => (c._id || c.id) === customerId) || entity
+        setCustomers?.((prev) => {
+          const list = prev || []
+          return list.some((c: any) => (c._id || c.id) === customerId) ? list : [...list, entity]
+        })
         setInvoice((prev) => ({
           ...prev,
           customerId,
-          customerName: created.name,
+          customerName: entity.name,
           type: 'credit',
         }))
         setCustomerSearchQuery('')
@@ -874,13 +908,56 @@ export function InvoicePanel({
       }
 
       if (type === 'product') {
-        const data = await dispatch(fetchAllProducts({})).unwrap()
-        const list = data?.results || (Array.isArray(data) ? data : [])
-        setProducts(list)
-        const created = list.find((p: any) => (p._id || p.id) === (entity._id || entity.id)) || entity
-        if (quickCreateProductItemId) {
-          handleProductSelect(quickCreateProductItemId, created)
+        const productId = entity._id || entity.id
+        setProducts((prev) => (prev.some((p: any) => (p._id || p.id) === productId) ? prev : [...prev, entity]))
+
+        // Keep the item picker and catalog panel in sync without a /purchasable
+        // refetch — insert a best-effort row straight into the RTK Query cache.
+        // (The create endpoint returns the raw, unpopulated doc, so brand/category
+        // objects may be missing here; they'll fill in on the next natural refetch.)
+        dispatch(
+          purchaseCatalogApi.util.updateQueryData('getPurchasableCatalog', undefined, (draft) => {
+            if (draft.some((row) => row.productId === productId)) return
+            draft.push({
+              type: 'product',
+              id: productId,
+              productId,
+              name: entity.name,
+              nameUrdu: entity.nameUrdu,
+              barcode: entity.barcode,
+              image: entity.image,
+              unit: entity.unit,
+              trackImei: entity.trackImei,
+              brand: entity.brand ?? null,
+              categories: entity.categories ?? [],
+              price: entity.price,
+              cost: entity.cost,
+              stockQuantity: entity.stockQuantity,
+              trackBatch: entity.trackBatch,
+              trackExpiry: entity.trackExpiry,
+              batches: entity.batches,
+            })
+          }),
+        )
+
+        // Not created from a specific row's "no results" prompt (e.g. the header
+        // "Add Product" button) — reuse the first still-empty row if there is one,
+        // otherwise add a fresh row, so the new product always ends up selected.
+        let targetItemId = quickCreateProductItemId
+        let targetItems = invoice.items
+        if (!targetItemId) {
+          const emptyItem = invoice.items.find((item) => !item.productId)
+          if (emptyItem) {
+            targetItemId = emptyItem.id
+          } else {
+            const newItem = createEmptyManualInvoiceItem()
+            targetItemId = newItem.id
+            targetItems = [...invoice.items, newItem]
+            setInvoice((prev) => ({ ...prev, items: [...prev.items, newItem] }))
+          }
         }
+
+        handleProductSelect(targetItemId, entity, undefined, targetItems)
         setQuickCreateProductItemId(null)
       }
     },
@@ -888,6 +965,7 @@ export function InvoicePanel({
       dispatch,
       focusInvoiceType,
       handleProductSelect,
+      invoice.items,
       quickCreateProductItemId,
       setCustomers,
       setInvoice,
@@ -1492,7 +1570,7 @@ export function InvoicePanel({
                             </div>
                           )}
                         </CommandItem>
-                        {filteredCustomers.map((customer) => {
+                        {visibleCustomers.map((customer) => {
                           const customerId = customer._id || customer.id
                           const isSelected = invoice.customerId === customerId
                           return (
@@ -1564,6 +1642,14 @@ export function InvoicePanel({
                         ) : null}
                       </CommandGroup>
                     </CommandList>
+                    {filteredCustomers.length > visibleCustomers.length ? (
+                      <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
+                        {t('Showing {{shown}} of {{total}} — keep typing to narrow', {
+                          shown: visibleCustomers.length,
+                          total: filteredCustomers.length,
+                        })}
+                      </div>
+                    ) : null}
                   </Command>
                 </PopoverContent>
               </Popover>
@@ -1826,7 +1912,7 @@ export function InvoicePanel({
                                     )
                                   ) : (
                                     <CommandGroup>
-                                      {filteredSellableProducts.map((catalogItem) => (
+                                      {visibleSellableProducts.map((catalogItem) => (
                                         <CommandItem
                                           key={catalogItem.id}
                                           value={`${catalogItem.id}-${catalogItem.name}`}
@@ -1900,6 +1986,14 @@ export function InvoicePanel({
                                     </CommandGroup>
                                   )}
                                 </CommandList>
+                                {filteredSellableProducts.length > visibleSellableProducts.length ? (
+                                  <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
+                                    {t('Showing {{shown}} of {{total}} — keep typing to narrow', {
+                                      shown: visibleSellableProducts.length,
+                                      total: filteredSellableProducts.length,
+                                    })}
+                                  </div>
+                                ) : null}
                                 </Command>
                               </PopoverContent>
                             </Popover>

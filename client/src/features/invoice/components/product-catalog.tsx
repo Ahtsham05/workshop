@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-// import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -52,6 +52,15 @@ export function ProductCatalog({
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
+  // Each tile is a real DOM subtree (image, badges, text) with no virtualization —
+  // a category with hundreds/thousands of products (e.g. everything uncategorized
+  // under "Other") mounting all of them at once is what made this panel feel slow.
+  // Render a page per category and let the user load more on demand instead.
+  const CATALOG_PAGE_SIZE = 60
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({})
+  const showMoreForCategory = useCallback((categoryId: string) => {
+    setVisibleCounts((prev) => ({ ...prev, [categoryId]: (prev[categoryId] ?? CATALOG_PAGE_SIZE) + CATALOG_PAGE_SIZE }))
+  }, [])
   const [historyDialog, setHistoryDialog] = useState<{
     open: boolean
     productId: string
@@ -285,7 +294,11 @@ export function ProductCatalog({
                 <p>{searchTerm ? t('no_products_found') : t('no_products_available')}</p>
               </div>
             ) : (
-              filteredCategories.map((category) => (
+              filteredCategories.map((category) => {
+                const visibleCount = visibleCounts[category._id] ?? CATALOG_PAGE_SIZE
+                const visibleProducts = category.products.slice(0, visibleCount)
+                const remaining = category.products.length - visibleProducts.length
+                return (
                 <div key={category._id} className='space-y-2'>
                   {/* Category Header */}
                   <div className='flex items-center gap-2'>
@@ -313,7 +326,7 @@ export function ProductCatalog({
                         : 'space-y-1'
                     }
                   >
-                    {category.products.map((product) => (
+                    {visibleProducts.map((product) => (
                       <div
                         key={product.variantId || product._id}
                         onClick={() => {
@@ -516,8 +529,22 @@ export function ProductCatalog({
                       </div>
                     ))}
                   </div>
+
+                  {remaining > 0 && (
+                    <div className='flex justify-center pt-1'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='text-xs'
+                        onClick={() => showMoreForCategory(category._id)}
+                      >
+                        {t('Load {{count}} more', { count: Math.min(remaining, CATALOG_PAGE_SIZE) })}
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         </CardContent>

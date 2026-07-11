@@ -145,7 +145,9 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
     try {
       setImporting(true)
       const data = await file.arrayBuffer()
-      const workbook = XLSX.read(data, { type: 'array' })
+      // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
+      // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
+      const workbook = XLSX.read(data, { type: 'array', codepage: 65001 })
       const sheetName = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[sheetName]
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
