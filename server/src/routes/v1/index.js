@@ -482,12 +482,17 @@ const defaultRoutes = [
     route: whatsappRoute,
   },
   {
+    // Must be mounted before whatsappCloudRoute: that router's blanket
+    // router.use(auth(), branchScope()) has no path restriction, so it would
+    // otherwise intercept /events/stream (and reject it, since EventSource
+    // can't send an Authorization header) before this router's route-specific
+    // sseAuth() — which accepts a ?token= query param instead — ever runs.
     path: '/whatsapp-cloud',
-    route: whatsappCloudRoute,
+    route: whatsappEnterpriseRoute,
   },
   {
     path: '/whatsapp-cloud',
-    route: whatsappEnterpriseRoute,
+    route: whatsappCloudRoute,
   },
   {
     path: '/restaurant',
