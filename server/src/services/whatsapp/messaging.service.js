@@ -2,8 +2,11 @@ const logger = require('../../config/logger');
 const ApiError = require('../../utils/ApiError');
 const httpStatus = require('http-status');
 const connectionService = require('./connection.service');
+const mediaService = require('./media.service');
 const { WhatsAppMessage, WhatsAppConversation, WhatsAppTemplate } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
+
+const MEDIA_PREVIEWS = { image: '📷 Photo', video: '📹 Video', audio: '🎤 Voice message' };
 
 const CUSTOMER_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -246,6 +249,75 @@ async function sendDocument({
   return { wamid, message, success: true };
 }
 
+// image/video/audio/document/sticker via the Cloud API, mirroring the manual sendDocument
+// flow above but generalized across media types and uploading a copy to Cloudinary so the
+// inbox UI has a stable URL to render (WhatsApp media IDs alone can't be fetched by the browser).
+async function sendMedia({
+  organizationId,
+  branchId,
+  phone,
+  buffer,
+  mimeType,
+  filename,
+  caption = '',
+  mediaType,
+  source = 'inbox',
+  sentBy,
+  conversationId,
+}) {
+  const { conn, accessToken } = await resolveConnection(organizationId, branchId);
+  const to = normalizePhone(phone);
+  if (!to) throw new ApiError(httpStatus.BAD_REQUEST, `Invalid phone number: ${phone}`);
+  if (!buffer?.length) throw new ApiError(httpStatus.BAD_REQUEST, 'File is required');
+
+  const safeFilename = filename ? String(filename).replace(/[^\w.\-() ]/g, '_') : undefined;
+  const trimmedCaption = String(caption || '').slice(0, 1024);
+
+  const [mediaId, mediaUrl] = await Promise.all([
+    uploadMedia({ accessToken, phoneNumberId: conn.phoneNumberId, apiVersion: conn.apiVersion }, buffer, mimeType, safeFilename),
+    mediaService.uploadToCloudinary(buffer, mimeType, 'whatsapp'),
+  ]);
+
+  const mediaPayload = { id: mediaId };
+  if (mediaType === 'document') {
+    mediaPayload.filename = safeFilename || 'document';
+    if (trimmedCaption) mediaPayload.caption = trimmedCaption;
+  } else if (mediaType === 'image' || mediaType === 'video') {
+    if (trimmedCaption) mediaPayload.caption = trimmedCaption;
+  }
+
+  const body = await callSendApi(conn, accessToken, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: mediaType,
+    [mediaType]: mediaPayload,
+  });
+
+  const wamid = body.messages?.[0]?.id;
+  const conversation = conversationId
+    ? await WhatsAppConversation.findById(conversationId)
+    : await resolveConversation(organizationId, branchId, to);
+
+  const message = await WhatsAppMessage.create({
+    organizationId,
+    branchId,
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type: mediaType,
+    content: { caption: trimmedCaption || undefined, filename: safeFilename, mediaId, mediaUrl, mediaMimeType: mimeType },
+    wamid,
+    metaMessageId: wamid,
+    status: 'queued',
+    statusHistory: [{ status: 'queued', at: new Date() }],
+    source,
+    sentBy,
+  });
+  await touchConversationOnOutbound(conversation, trimmedCaption || MEDIA_PREVIEWS[mediaType] || `📄 ${safeFilename}`);
+
+  return { wamid, message, success: true };
+}
+
 /**
  * Single entry point that picks free-form text vs. an approved template automatically,
  * based on Meta's 24h customer-service window (measured from the customer's last inbound
@@ -341,6 +413,7 @@ module.exports = {
   sendText,
   sendTemplate,
   sendDocument,
+  sendMedia,
   sendMessage,
   isConnected,
   uploadMedia,

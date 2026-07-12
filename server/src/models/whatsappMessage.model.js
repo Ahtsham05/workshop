@@ -63,7 +63,7 @@ const whatsappMessageSchema = mongoose.Schema(
       default: 'inbox',
     },
   },
-  { timestamps: true },
+  { timestamps: true, keepTimestampsInJSON: true },
 );
 
 whatsappMessageSchema.plugin(toJSON);

@@ -68,6 +68,32 @@ const sendMessage = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+function resolveMediaType(mimeType) {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+
+const sendMediaMessage = catchAsync(async (req, res) => {
+  if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'File is required');
+  const { phone, conversationId, caption } = req.body;
+  const result = await messagingService.sendMedia({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    phone,
+    buffer: req.file.buffer,
+    mimeType: req.file.mimetype,
+    filename: req.file.originalname,
+    caption,
+    mediaType: resolveMediaType(req.file.mimetype),
+    source: 'inbox',
+    sentBy: req.user.id,
+    conversationId,
+  });
+  res.send(result);
+});
+
 const streamEvents = catchAsync(async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -89,5 +115,6 @@ module.exports = {
   updateConversation,
   getUnreadCount,
   sendMessage,
+  sendMediaMessage,
   streamEvents,
 };

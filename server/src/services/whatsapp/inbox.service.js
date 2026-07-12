@@ -1,6 +1,16 @@
 const { WhatsAppConversation, WhatsAppMessage, Student, Customer } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
 const eventsService = require('./events.service');
+const mediaService = require('./media.service');
+
+const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'];
+const MEDIA_PREVIEWS = {
+  audio: '🎤 Voice message',
+  document: '📄 Document',
+  image: '📷 Photo',
+  video: '📹 Video',
+  sticker: '🎨 Sticker',
+};
 
 async function upsertConversation(connection, { contactPhone, contactName, contactWaId }) {
   const phone = normalizePhone(contactPhone);
@@ -79,6 +89,8 @@ function extractInboundContent(msg) {
       return { mediaId: msg.audio?.id, mediaMimeType: msg.audio?.mime_type };
     case 'video':
       return { mediaId: msg.video?.id, caption: msg.video?.caption, mediaMimeType: msg.video?.mime_type };
+    case 'sticker':
+      return { mediaId: msg.sticker?.id, mediaMimeType: msg.sticker?.mime_type };
     default:
       return { text: JSON.stringify(msg) };
   }
@@ -86,10 +98,13 @@ function extractInboundContent(msg) {
 
 async function storeInboundMessage(connection, conversation, msg) {
   const content = extractInboundContent(msg);
-  const preview =
-    content.text ||
-    content.caption ||
-    (msg.type === 'audio' ? '🎤 Voice message' : msg.type === 'document' ? '📄 Document' : `[${msg.type}]`);
+
+  if (MEDIA_TYPES.includes(msg.type) && content.mediaId) {
+    const persisted = await mediaService.persistInboundMedia(connection, content.mediaId);
+    Object.assign(content, persisted);
+  }
+
+  const preview = content.text || content.caption || MEDIA_PREVIEWS[msg.type] || `[${msg.type}]`;
 
   const message = await WhatsAppMessage.create({
     organizationId: connection.organizationId,
@@ -118,12 +133,17 @@ async function storeInboundMessage(connection, conversation, msg) {
   return message;
 }
 
+const AVATAR_POPULATE = [
+  { path: 'customerId', select: 'picture' },
+  { path: 'studentId', select: 'photoUrl' },
+];
+
 async function listConversations(filter, options) {
-  return WhatsAppConversation.paginate(filter, options);
+  return WhatsAppConversation.paginate(filter, { ...options, populate: AVATAR_POPULATE });
 }
 
 async function getConversationById(organizationId, branchId, id) {
-  return WhatsAppConversation.findOne({ _id: id, organizationId, branchId });
+  return WhatsAppConversation.findOne({ _id: id, organizationId, branchId }).populate(AVATAR_POPULATE);
 }
 
 async function listMessages(conversationId, options) {

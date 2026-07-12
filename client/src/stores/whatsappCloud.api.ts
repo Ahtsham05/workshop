@@ -36,6 +36,7 @@ export type WhatsAppConversation = {
   id: string
   contactPhone: string
   contactName?: string
+  avatarUrl?: string
   lastMessageAt?: string
   lastMessagePreview?: string
   lastMessageDirection?: 'inbound' | 'outbound'
@@ -49,7 +50,7 @@ export type WhatsAppMessage = {
   id: string
   direction: 'inbound' | 'outbound'
   type: string
-  content: { text?: string; caption?: string; mediaUrl?: string; filename?: string }
+  content: { text?: string; caption?: string; mediaUrl?: string; mediaMimeType?: string; filename?: string }
   status: WhatsAppMessageStatus
   errorMessage?: string
   errorCode?: string
@@ -132,6 +133,20 @@ export const whatsappCloudApi = createApi({
       query: (body) => ({ url: '/messages/send', method: 'POST', body }),
       invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages'],
     }),
+    sendInboxMedia: builder.mutation<
+      { success: boolean; wamid?: string; message?: WhatsAppMessage },
+      { phone: string; conversationId?: string; caption?: string; file: File }
+    >({
+      query: ({ file, ...rest }) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        if (rest.conversationId) formData.append('conversationId', rest.conversationId)
+        if (rest.caption) formData.append('caption', rest.caption)
+        formData.append('phone', rest.phone)
+        return { url: '/messages/send-media', method: 'POST', body: formData }
+      },
+      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages'],
+    }),
     getAnalyticsOverview: builder.query<
       {
         messagesSent: number
@@ -189,6 +204,7 @@ export const {
   useGetUnreadCountQuery,
   useMarkConversationReadMutation,
   useSendInboxMessageMutation,
+  useSendInboxMediaMutation,
   useGetAnalyticsOverviewQuery,
   useSyncTemplatesMutation,
   useSendCloudInvoicePdfMutation,

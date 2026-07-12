@@ -6,6 +6,7 @@ const validate = require('../../middlewares/validate');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
 const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { whatsappSendLimiter } = require('../../middlewares/whatsappRateLimit');
+const whatsappMediaUpload = require('../../middlewares/whatsappMediaUpload');
 const whatsappCloudValidation = require('../../validations/whatsappCloud.validation');
 const whatsappInboxController = require('../../controllers/whatsappInbox.controller');
 const whatsappEnterpriseController = require('../../controllers/whatsappEnterprise.controller');
@@ -31,6 +32,12 @@ router.post(
   whatsappSendLimiter,
   validate(whatsappCloudValidation.sendMessage),
   whatsappInboxController.sendMessage,
+);
+router.post(
+  '/messages/send-media',
+  whatsappSendLimiter,
+  whatsappMediaUpload.single('file'),
+  whatsappInboxController.sendMediaMessage,
 );
 
 router.get('/templates', whatsappEnterpriseController.listTemplates);

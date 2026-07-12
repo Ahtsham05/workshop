@@ -57,4 +57,4 @@ async function persistInboundMedia(connection, mediaId) {
   }
 }
 
-module.exports = { downloadMediaFromMeta, persistInboundMedia };
+module.exports = { downloadMediaFromMeta, persistInboundMedia, uploadToCloudinary };

@@ -40,8 +40,17 @@ const whatsappConversationSchema = mongoose.Schema(
       default: 'en',
     },
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { virtuals: true } },
 );
+
+// Meta's Cloud API has no endpoint for a contact's WhatsApp profile photo (deliberate
+// privacy restriction — businesses aren't "contacts" the way personal WhatsApp users are).
+// This surfaces the photo the business already has on file for a linked Customer/Student
+// instead, when the conversation has been matched to one. Requires customerId/studentId
+// to be populated by the caller; otherwise resolves to undefined.
+whatsappConversationSchema.virtual('avatarUrl').get(function () {
+  return this.customerId?.picture?.url || this.studentId?.photoUrl?.url || undefined;
+});
 
 whatsappConversationSchema.plugin(toJSON);
 whatsappConversationSchema.plugin(paginate);
