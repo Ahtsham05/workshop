@@ -9,6 +9,8 @@ const KEY_SALE_WS = `workshop_pos_sale_workspace_v${STORAGE_V}`
 const KEY_SALE_HELD = `workshop_pos_sale_held_v${STORAGE_V}`
 const KEY_PURCHASE_WS = `workshop_pos_purchase_workspace_v${STORAGE_V}`
 const KEY_PURCHASE_HELD = `workshop_pos_purchase_held_v${STORAGE_V}`
+const KEY_FASTBILL_WS = `workshop_pos_fastbill_workspace_v${STORAGE_V}`
+const KEY_FASTBILL_HELD = `workshop_pos_fastbill_held_v${STORAGE_V}`
 
 export const POS_HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 export const POS_HOLD_MAX_QUEUE = 25
@@ -137,6 +139,57 @@ export function pushPurchaseHeld(record: PurchaseHeldRecord) {
 export function removePurchaseHeld(id: string) {
   const next = listPurchaseHeld().filter((r) => r.id !== id)
   writeJson(KEY_PURCHASE_HELD, next)
+}
+
+// ── Fast Billing workspace (autosave) ───────────────────────────────────────
+
+export type FastBillWorkspaceSnapshot = {
+  cart: Record<string, unknown>[]
+  customerId: string | null
+  customerName: string
+  paymentMethod: string
+  discount: number
+  paidAmount: number
+  updatedAt: number
+}
+
+export type FastBillHeldRecord = {
+  id: string
+  label: string
+  savedAt: number
+  snapshot: Omit<FastBillWorkspaceSnapshot, 'updatedAt'>
+}
+
+export function loadFastBillWorkspace(): FastBillWorkspaceSnapshot | null {
+  return readJson<FastBillWorkspaceSnapshot>(KEY_FASTBILL_WS)
+}
+
+export function saveFastBillWorkspace(
+  snapshot: Omit<FastBillWorkspaceSnapshot, 'updatedAt'> & { updatedAt?: number },
+) {
+  const full: FastBillWorkspaceSnapshot = {
+    ...snapshot,
+    updatedAt: snapshot.updatedAt ?? Date.now(),
+  }
+  writeJson(KEY_FASTBILL_WS, full)
+}
+
+export function clearFastBillWorkspace() {
+  removeKey(KEY_FASTBILL_WS)
+}
+
+export function listFastBillHeld(): FastBillHeldRecord[] {
+  return readJson<FastBillHeldRecord[]>(KEY_FASTBILL_HELD) ?? []
+}
+
+export function pushFastBillHeld(record: FastBillHeldRecord) {
+  const list = [record, ...listFastBillHeld()].slice(0, POS_HOLD_MAX_QUEUE)
+  writeJson(KEY_FASTBILL_HELD, list)
+}
+
+export function removeFastBillHeld(id: string) {
+  const next = listFastBillHeld().filter((r) => r.id !== id)
+  writeJson(KEY_FASTBILL_HELD, next)
 }
 
 export function newHoldId(): string {

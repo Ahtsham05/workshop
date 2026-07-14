@@ -1,6 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGetAnalyticsOverviewQuery, useGetCloudConnectionQuery } from '@/stores/whatsappCloud.api'
+import { ConversationFunnelWidget } from '@/features/whatsapp/analytics/conversation-funnel-widget'
+import { LiveActivityFeed } from '@/features/whatsapp/analytics/live-activity-feed'
+import { ExpiringWindowsCard } from '@/features/whatsapp/analytics/expiring-windows-card'
 
 function WhatsAppDashboardPage() {
   const { data: connection } = useGetCloudConnectionQuery()
@@ -59,6 +62,15 @@ function WhatsAppDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <div className='grid gap-4 lg:grid-cols-3'>
+        <div className='lg:col-span-2'>
+          <ConversationFunnelWidget />
+        </div>
+        <ExpiringWindowsCard />
+      </div>
+
+      <LiveActivityFeed />
     </div>
   )
 }

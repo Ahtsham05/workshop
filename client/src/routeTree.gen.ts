@@ -57,6 +57,7 @@ import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedFastBillingIndexImport } from './routes/_authenticated/fast-billing/index'
 import { Route as AuthenticatedCustomersIndexImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedChatsIndexImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedCategoriesIndexImport } from './routes/_authenticated/categories/index'
@@ -445,6 +446,13 @@ const AuthenticatedHelpCenterIndexRoute =
   AuthenticatedHelpCenterIndexImport.update({
     id: '/help-center/',
     path: '/help-center/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedFastBillingIndexRoute =
+  AuthenticatedFastBillingIndexImport.update({
+    id: '/fast-billing/',
+    path: '/fast-billing/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1571,6 +1579,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/fast-billing/': {
+      id: '/_authenticated/fast-billing/'
+      path: '/fast-billing'
+      fullPath: '/fast-billing'
+      preLoaderRoute: typeof AuthenticatedFastBillingIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/help-center/': {
       id: '/_authenticated/help-center/'
       path: '/help-center'
@@ -2296,6 +2311,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCategoriesIndexRoute: typeof AuthenticatedCategoriesIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedFastBillingIndexRoute: typeof AuthenticatedFastBillingIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
@@ -2373,6 +2389,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCategoriesIndexRoute: AuthenticatedCategoriesIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+  AuthenticatedFastBillingIndexRoute: AuthenticatedFastBillingIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
@@ -2478,6 +2495,7 @@ export interface FileRoutesByFullPath {
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/fast-billing': typeof AuthenticatedFastBillingIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
@@ -2616,6 +2634,7 @@ export interface FileRoutesByTo {
   '/categories': typeof AuthenticatedCategoriesIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/fast-billing': typeof AuthenticatedFastBillingIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
@@ -2757,6 +2776,7 @@ export interface FileRoutesById {
   '/_authenticated/categories/': typeof AuthenticatedCategoriesIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/_authenticated/fast-billing/': typeof AuthenticatedFastBillingIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
@@ -2900,6 +2920,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/chats'
     | '/customers'
+    | '/fast-billing'
     | '/help-center'
     | '/hr'
     | '/invoice'
@@ -3037,6 +3058,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/chats'
     | '/customers'
+    | '/fast-billing'
     | '/help-center'
     | '/hr'
     | '/invoice'
@@ -3176,6 +3198,7 @@ export interface FileRouteTypes {
     | '/_authenticated/categories/'
     | '/_authenticated/chats/'
     | '/_authenticated/customers/'
+    | '/_authenticated/fast-billing/'
     | '/_authenticated/help-center/'
     | '/_authenticated/hr/'
     | '/_authenticated/invoice/'
@@ -3352,6 +3375,7 @@ export const routeTree = rootRoute
         "/_authenticated/categories/",
         "/_authenticated/chats/",
         "/_authenticated/customers/",
+        "/_authenticated/fast-billing/",
         "/_authenticated/help-center/",
         "/_authenticated/hr/",
         "/_authenticated/invoice/",
@@ -3692,6 +3716,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/customers/": {
       "filePath": "_authenticated/customers/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/fast-billing/": {
+      "filePath": "_authenticated/fast-billing/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/help-center/": {

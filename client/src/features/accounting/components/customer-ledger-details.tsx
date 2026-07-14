@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -26,7 +28,7 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
@@ -79,6 +81,10 @@ import {
 } from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
+import {
+  generateCustomerLedgerStatementHTML,
+  type LedgerStatementRow,
+} from '@/features/accounting/utils/ledger-print-utils';
 
 interface LedgerEntry {
   _id?: string;
@@ -775,6 +781,10 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
+  const [printingStatement, setPrintingStatement] = useState(false);
+  const [statementDialogOpen, setStatementDialogOpen] = useState(false);
+  const [statementLanguage, setStatementLanguage] = useState<'en' | 'ur'>(preferredLanguage === 'ur' ? 'ur' : 'en');
+  const [statementShowInvoiceNumbers, setStatementShowInvoiceNumbers] = useState(true);
   const [viewMode, setViewMode] = useState<LedgerViewMode>(getStoredLedgerViewMode);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [activeCategoryGroup, setActiveCategoryGroup] = useState<LedgerCategoryGroup | null>(null);
@@ -1282,6 +1292,100 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     }
   };
 
+  /** Real Sale invoices (excludes SIM/load-sale/manual rows) get their products expanded on the printed statement. */
+  const isDetailedSaleEntry = (entry: LedgerEntry) =>
+    entry.transactionType === 'sale' &&
+    !isManualEntry(entry) &&
+    !isSimSaleLedgerRow(entry) &&
+    !isLoadSaleLedgerRow(entry) &&
+    Boolean(entry.referenceId);
+
+  const handlePrintStatement = async (options: { language: 'en' | 'ur'; showInvoiceNumbers: boolean }) => {
+    if (entries.length === 0 && Math.abs(openingBalance) < 0.005) {
+      toast.error(t('No transactions found'));
+      return;
+    }
+    setPrintingStatement(true);
+    try {
+      const invoicesById = new Map<string, any>();
+      await Promise.all(
+        entries
+          .filter(isDetailedSaleEntry)
+          .map(async (entry) => {
+            const rid = String(entry.referenceId);
+            if (invoicesById.has(rid)) return;
+            try {
+              const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
+              invoicesById.set(rid, invoice);
+            } catch (error) {
+              console.error('Failed to load invoice for statement print:', error);
+            }
+          }),
+      );
+
+      const statementRows: LedgerStatementRow[] = entries.map((entry) => {
+        const invoice = isDetailedSaleEntry(entry) ? invoicesById.get(String(entry.referenceId)) : undefined;
+        const items = invoice
+          ? (invoice.items || []).map((item: any) => ({
+              name: item.name,
+              nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
+              quantity: Number(item.quantity) || 0,
+              unit: item.unit,
+              unitPrice: Number(item.unitPrice) || 0,
+              subtotal: Number(item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
+            }))
+          : undefined;
+
+        return {
+          date: entry.transactionDate,
+          transactionType: entry.transactionType,
+          isManual: isManualEntry(entry),
+          description: entry.description,
+          reference: entry.reference,
+          invoiceType: entry.invoiceType,
+          debit: entry.debit,
+          credit: entry.credit,
+          balance: entry.balance,
+          items,
+        };
+      });
+
+      const html = generateCustomerLedgerStatementHTML({
+        customerName: customer.name,
+        customerNameUrdu: customer.nameUrdu,
+        customerPhone: customer.phone,
+        customerAddress: customer.address,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        openingBalance,
+        rows: statementRows,
+        totalDebit: periodSummary.periodDebit,
+        totalCredit: periodSummary.periodCredit,
+        closingBalance: periodSummary.closingBalance,
+        companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+          .filter(Boolean)
+          .join(', '),
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
+        language: options.language,
+        showInvoiceNumbers: options.showInvoiceNumbers,
+      });
+
+      openA4PrintWindow(html);
+      toast.success(t('print_invoice_btn'));
+      setStatementDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error(t('print_error'));
+    } finally {
+      setPrintingStatement(false);
+    }
+  };
+
   const getTransactionTypeLabel = (entry: LedgerEntry) => {
     const type = entry.transactionType;
     const manual = isManualEntry(entry);
@@ -1335,6 +1439,10 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setStatementDialogOpen(true)} disabled={printingStatement}>
+            <FileText className="w-4 h-4 mr-2" />
+            {printingStatement ? t('Loading...') : t('Print Statement')}
+          </Button>
           <Button onClick={() => setShowEntryForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
             {t('Add Entry')}
@@ -1384,6 +1492,60 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               onCancel={handleCloseForm}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={statementDialogOpen} onOpenChange={setStatementDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('Print Statement')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-2">
+              <Label>{t('Language')}</Label>
+              <RadioGroup
+                value={statementLanguage}
+                onValueChange={(value) => setStatementLanguage(value as 'en' | 'ur')}
+                className="flex gap-6"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="en" id="statement-lang-en" />
+                  <Label htmlFor="statement-lang-en" className="font-normal">{t('English')}</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="ur" id="statement-lang-ur" />
+                  <Label htmlFor="statement-lang-ur" className="font-normal">{t('Urdu')}</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label htmlFor="statement-show-invoice-numbers" className="font-normal">
+                  {t('Show invoice numbers')}
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('Include invoice/reference numbers on the printed statement')}
+                </p>
+              </div>
+              <Switch
+                id="statement-show-invoice-numbers"
+                checked={statementShowInvoiceNumbers}
+                onCheckedChange={setStatementShowInvoiceNumbers}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setStatementDialogOpen(false)}>
+                {t('Cancel')}
+              </Button>
+              <Button
+                onClick={() => handlePrintStatement({ language: statementLanguage, showInvoiceNumbers: statementShowInvoiceNumbers })}
+                disabled={printingStatement}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                {printingStatement ? t('Loading...') : t('Print Statement')}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

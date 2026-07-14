@@ -81,6 +81,53 @@ export type WhatsAppTemplateSuggestion = {
   status: WhatsAppTemplate['status'] | null
 }
 
+export type FunnelRange = 'today' | '7d' | '30d'
+
+export type FunnelStage = {
+  key: 'sent' | 'delivered' | 'read' | 'replied'
+  label: string
+  count: number
+  percentOfSent: number
+}
+
+export type FunnelStats = {
+  range: FunnelRange
+  since: string
+  stages: FunnelStage[]
+}
+
+export type ActivityEventType =
+  | 'message_received'
+  | 'message_sent'
+  | 'message_queued'
+  | 'message_delivered'
+  | 'message_read'
+  | 'message_failed'
+  | 'template_approved'
+  | 'conversation_started'
+
+export type ActivityEvent = {
+  id: string
+  type: ActivityEventType
+  description: string
+  phone?: string
+  timestamp: string
+}
+
+export type ExpiringConversation = {
+  conversationId: string
+  name: string
+  phone?: string
+  lastInboundAt: string
+  expiresAt: string
+  minutesRemaining: number
+}
+
+export type ExpiringWindows = {
+  expiringWithinHour: number
+  items: ExpiringConversation[]
+}
+
 export const whatsappCloudApi = createApi({
   reducerPath: 'whatsappCloudApi',
   baseQuery: cloudBaseQuery,
@@ -162,6 +209,18 @@ export const whatsappCloudApi = createApi({
       query: (params) => ({ url: '/analytics/overview', params: params || undefined }),
       providesTags: ['WhatsAppAnalytics'],
     }),
+    getFunnelStats: builder.query<FunnelStats, { range?: FunnelRange } | void>({
+      query: (params) => ({ url: '/analytics/funnel-stats', params: params || undefined }),
+      providesTags: ['WhatsAppAnalytics'],
+    }),
+    getActivityFeed: builder.query<{ results: ActivityEvent[] }, { limit?: number } | void>({
+      query: (params) => ({ url: '/analytics/activity-feed', params: params || undefined }),
+      providesTags: ['WhatsAppAnalytics'],
+    }),
+    getExpiringWindows: builder.query<ExpiringWindows, void>({
+      query: () => '/analytics/expiring-windows',
+      providesTags: ['WhatsAppAnalytics'],
+    }),
     syncTemplates: builder.mutation<{ synced: number }, void>({
       query: () => ({ url: '/templates/sync', method: 'POST' }),
       invalidatesTags: ['WhatsAppTemplates'],
@@ -206,6 +265,9 @@ export const {
   useSendInboxMessageMutation,
   useSendInboxMediaMutation,
   useGetAnalyticsOverviewQuery,
+  useGetFunnelStatsQuery,
+  useGetActivityFeedQuery,
+  useGetExpiringWindowsQuery,
   useSyncTemplatesMutation,
   useSendCloudInvoicePdfMutation,
   useGetTemplatesQuery,

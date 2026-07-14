@@ -81,6 +81,21 @@ const getAnalyticsTimeSeries = catchAsync(async (req, res) => {
   res.send(data);
 });
 
+const getFunnelStats = catchAsync(async (req, res) => {
+  const data = await analyticsService.getFunnelStats(req.organizationId, req.branchId, req.query.range);
+  res.send(data);
+});
+
+const getActivityFeed = catchAsync(async (req, res) => {
+  const data = await analyticsService.getActivityFeed(req.organizationId, req.branchId, Number(req.query.limit) || 15);
+  res.send({ results: data });
+});
+
+const getExpiringWindows = catchAsync(async (req, res) => {
+  const data = await analyticsService.getExpiringWindows(req.organizationId, req.branchId);
+  res.send(data);
+});
+
 const sendInvoicePdf = catchAsync(async (req, res) => {
   const { phone, pdfBase64, filename, caption } = req.body;
   const result = await integrationService.sendInvoicePdf({
@@ -161,6 +176,9 @@ module.exports = {
   getCampaignReport,
   getAnalyticsOverview,
   getAnalyticsTimeSeries,
+  getFunnelStats,
+  getActivityFeed,
+  getExpiringWindows,
   sendInvoicePdf,
   sendPaymentReminder,
   sendAttendanceAlert,

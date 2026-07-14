@@ -68,6 +68,9 @@ router.get('/campaigns/:id/report', whatsappEnterpriseController.getCampaignRepo
 
 router.get('/analytics/overview', whatsappEnterpriseController.getAnalyticsOverview);
 router.get('/analytics/messages', whatsappEnterpriseController.getAnalyticsTimeSeries);
+router.get('/analytics/funnel-stats', whatsappEnterpriseController.getFunnelStats);
+router.get('/analytics/activity-feed', whatsappEnterpriseController.getActivityFeed);
+router.get('/analytics/expiring-windows', whatsappEnterpriseController.getExpiringWindows);
 
 router.post(
   '/pos/send-invoice',

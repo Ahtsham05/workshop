@@ -152,6 +152,13 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
+          title: 'Fast Billing',
+          url: '/fast-billing',
+          icon: IconBarcode,
+          permission: 'viewInvoices',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
           title: 'WhatsApp Inbox',
           url: '/whatsapp',
           icon: MessageCircle,
