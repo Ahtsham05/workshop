@@ -35,12 +35,11 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { 
-  ArrowLeft, 
-  // Calendar, 
-  ChevronDown, 
-  Package, 
-  Printer, 
-  Receipt, 
+  ArrowLeft,
+  // Calendar,
+  ChevronDown,
+  Package,
+  Receipt,
   Search,
   User, 
   Check,
@@ -54,7 +53,9 @@ import {
 import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
-import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow, type PrintInvoiceData } from '../utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData } from '../utils/print-utils'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import {
@@ -97,6 +98,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
@@ -415,7 +417,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         userPreferredLanguage: preferredLanguage as 'en' | 'ur',
   }, { customerId: selectedCustomerId }, selectedCustomer)
 
-  const printInvoice = async (invoiceData: any, printType: 'receipt' | 'a4' = 'receipt') => {
+  const printInvoice = async (invoiceData: any, paperSize: PaperSize = defaultPaperSize) => {
     try {
       const refId = invoiceData._id || invoiceData.id
       const previousBalance = await fetchBalanceBeforeInvoice(selectedCustomerId, refId)
@@ -433,10 +435,10 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
           /* prompt in print window */
         }
       }
-      if (printType === 'a4') {
-        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact)
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        openPrintWindow(generateInvoiceHTML(printData), printContact)
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)
@@ -453,7 +455,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       notes?: string
       invoices: any[]
     },
-    printType: 'receipt' | 'a4',
+    paperSize: PaperSize = defaultPaperSize,
   ) => {
     try {
       const previousBalance = await fetchBalanceBeforeInvoice(
@@ -487,10 +489,10 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
           /* prompt in print window */
         }
       }
-      if (printType === 'a4') {
-        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact)
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        openPrintWindow(generateInvoiceHTML(printData), printContact)
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)
@@ -499,7 +501,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   }
 
   // Create credit invoice from selected pending invoices
-  const handleCreateCreditInvoice = async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
+  const handleCreateCreditInvoice = async (printType: 'none' | PaperSize = 'none') => {
     if (!selectedCustomerId || selectedInvoices.size === 0) {
       toast.error(t('please_select_customer_and_invoices'))
       return
@@ -937,24 +939,13 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button
+                              <PrintFormatButton
                                 variant="outline"
                                 size="sm"
-                                onClick={() => printBillGroup(billGroup, 'receipt')}
-                                className="flex items-center gap-1"
-                              >
-                                <Receipt className="h-3 w-3" />
-                                Print
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => printBillGroup(billGroup, 'a4')}
-                                className="flex items-center gap-1"
-                              >
-                                <Printer className="h-3 w-3" />
-                                A4
-                              </Button>
+                                defaultPaperSize={defaultPaperSize}
+                                onPrint={(paperSize) => printBillGroup(billGroup, paperSize)}
+                                label="Print"
+                              />
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1088,24 +1079,18 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
               <Card>
                 <CardContent className="pt-6">
                   <div className="space-y-3">
-                    <Button
-                      onClick={() => handleCreateCreditInvoice('receipt')}
+                    <PrintFormatButton
+                      onPrint={(paperSize) => handleCreateCreditInvoice(paperSize)}
+                      defaultPaperSize={defaultPaperSize}
                       disabled={isCreating}
-                      className="w-full"
-                    >
-                      <Receipt className="mr-2 h-4 w-4" />
-                      {isCreating ? t('creating') : t('create_and_print_receipt')}
-                    </Button>
-                    
-                    <Button
-                      onClick={() => handleCreateCreditInvoice('a4')}
-                      disabled={isCreating}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      <Printer className="mr-2 h-4 w-4" />
-                      {t('create_and_print_a4')}
-                    </Button>
+                      fullWidth
+                      mainButtonContent={
+                        <>
+                          <Receipt className="mr-2 h-4 w-4" />
+                          {isCreating ? t('creating') : t('create_and_print_receipt')}
+                        </>
+                      }
+                    />
 
                     <Button
                       onClick={() => handleCreateCreditInvoice('none')}

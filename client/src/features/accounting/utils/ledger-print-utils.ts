@@ -1,5 +1,6 @@
 import { formatCurrency } from '@/features/invoice/utils/print-utils'
 import { escapeHtml } from '@/lib/escape-html'
+import { PAPER_FORMATS } from '@/features/invoice/utils/paper-format'
 
 export type LedgerStatementLanguage = 'en' | 'ur'
 
@@ -143,7 +144,7 @@ const statementLabels = {
   },
 } as const
 
-type StatementLabels = typeof statementLabels.en
+type StatementLabels = { [K in keyof typeof statementLabels.en]: string }
 
 const fmtDate = (d: string | Date, locale: string) =>
   new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -165,7 +166,11 @@ const balanceClass = (balance: number): string => {
  * opening balance carried forward and a closing "total remaining" footer.
  * Supports English/Urdu print language and an invoice-number visibility toggle.
  */
-export function generateCustomerLedgerStatementHTML(data: CustomerLedgerStatementData): string {
+export function generateCustomerLedgerStatementHTML(
+  data: CustomerLedgerStatementData,
+  sheetSize: 'a4' | 'a5' = 'a4',
+): string {
+  const format = PAPER_FORMATS[sheetSize]
   const {
     customerName,
     customerNameUrdu,
@@ -236,14 +241,14 @@ export function generateCustomerLedgerStatementHTML(data: CustomerLedgerStatemen
   <title>${labels.statement_title} — ${escapeHtml(customerName)}</title>
   <style>
     @media print {
-      @page { margin: 12mm; size: A4; }
-      body { margin: 0; padding: 0; font-size: 11px; }
+      @page { margin: ${format.pageMargin}; size: ${format.pageCss}; }
+      body { margin: 0; padding: 0; font-size: ${format.baseFontPx - 1}px; }
       .no-print { display: none !important; }
     }
 
     body {
       font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 12px;
+      font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
       padding: 20px;
@@ -344,7 +349,7 @@ export function generateCustomerLedgerStatementHTML(data: CustomerLedgerStatemen
       <div class="company-name">${escapeHtml(businessName)}</div>
       <div class="company-details">
         ${companyAddress ? `${escapeHtml(companyAddress)}<br>` : ''}
-        ${[companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(' · ')}
+        ${[companyPhone, companyEmail].filter((v): v is string => Boolean(v)).map(escapeHtml).join(' · ')}
       </div>
     </div>
     <div class="statement-title-block">

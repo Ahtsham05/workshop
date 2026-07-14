@@ -56,6 +56,8 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { useSync } from '@/lib/sync/use-sync'
@@ -109,7 +111,7 @@ export default function PurchasePanel({
   const { isElectron, online } = useSync()
   const canCreateSupplier = hasPermission('createSuppliers' as never)
   const canCreateProduct = hasPermission('createProducts' as never)
-  const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
+  const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [supplierBalance, setSupplierBalance] = useState<number>(0)
@@ -208,6 +210,7 @@ export default function PurchasePanel({
   const suppliers: Supplier[] = normalizeSuppliersList(suppliersData)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
@@ -329,7 +332,7 @@ export default function PurchasePanel({
 
   // Print functionality
   const printPurchase = useCallback(
-    (purchaseData: any, printType: 'receipt' | 'a4') => {
+    (purchaseData: any, paperSize: PaperSize = defaultPaperSize) => {
       try {
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
@@ -345,12 +348,13 @@ export default function PurchasePanel({
             isTrial: orgData?.subscription?.isTrial,
             invoiceNote: branchData?.invoiceNote,
           }
+          const format = PAPER_FORMATS[paperSize]
           const html =
-            printType === 'receipt'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
+            format.family === 'thermal'
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize))
 
-          const printWindow = window.open('', '_blank')
+          const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
           if (printWindow) {
             printWindow.document.write(html)
             printWindow.document.close()
@@ -562,7 +566,7 @@ export default function PurchasePanel({
 
   // Handle save purchase
   const handleSavePurchase = useCallback(
-    async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
+    async (printType: 'none' | PaperSize = 'none') => {
       // Validation
       const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
       if (!supplierId) {
@@ -751,8 +755,8 @@ export default function PurchasePanel({
 
   useInvoiceSaveShortcuts(
     () => handleSavePurchase('none'),
-    () => handleSavePurchase('receipt'),
-    () => handleSavePurchase('a4'),
+    () => handleSavePurchase(defaultPaperSize),
+    () => handleSavePurchase(resolveSheetSize(defaultPaperSize)),
     isLoading,
   )
 
@@ -1625,15 +1629,15 @@ export default function PurchasePanel({
               )}
             </Button>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Button 
-                onClick={() => handleSavePurchase('receipt')}
-                className="w-full"
-                size="lg"
-                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
-                variant="default"
-              >
-                {isLoading && savingType === 'receipt' ? (
+            <PrintFormatButton
+              onPrint={(paperSize) => handleSavePurchase(paperSize)}
+              defaultPaperSize={defaultPaperSize}
+              size="lg"
+              variant="default"
+              fullWidth
+              disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
+              mainButtonContent={
+                isLoading && savingType !== 'none' ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t('Saving...')}
@@ -1643,29 +1647,9 @@ export default function PurchasePanel({
                     <Printer className="mr-2 h-4 w-4" />
                     {t('Save & Print Receipt')} (Ctrl+Enter)
                   </>
-                )}
-              </Button>
-
-              <Button 
-                onClick={() => handleSavePurchase('a4')}
-                className="w-full"
-                size="lg"
-                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
-                variant="default"
-              >
-                {isLoading && savingType === 'a4' ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('Saving...')}
-                  </>
-                ) : (
-                  <>
-                    <Printer className="mr-2 h-4 w-4" />
-                    {t('Save & Print A4')} (Ctrl+F)
-                  </>
-                )}
-              </Button>
-            </div>
+                )
+              }
+            />
           </div>
         </CardContent>
       </Card>

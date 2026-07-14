@@ -464,7 +464,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
         const printed = openPurchasePrintWindow(
           result.purchase,
           resolveSupplierName(order, result.purchase),
-          'receipt',
+          branchData?.printSettings?.paperSize ?? 'thermal80',
           {
             t,
             branchDetails: branchPrintDetails,

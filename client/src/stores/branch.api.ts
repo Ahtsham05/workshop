@@ -11,6 +11,13 @@ export interface BranchBankAccount {
   isActive?: boolean;
 }
 
+/** Default paper size used for invoices/receipts/statements printed from a branch */
+export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5';
+
+export interface BranchPrintSettings {
+  paperSize: PaperSize;
+}
+
 export interface Branch {
   id: string;
   organizationId: string;
@@ -29,6 +36,8 @@ export interface Branch {
   isActive: boolean;
   /** Printed on receipts/invoices (thermal & HTML) for this branch */
   invoiceNote?: string;
+  /** Default print paper size for this branch */
+  printSettings?: BranchPrintSettings;
   /** Fee-collection bank accounts shown to parents/students in the portal */
   bankAccounts?: BranchBankAccount[];
   createdAt: string;
@@ -49,6 +58,7 @@ export interface CreateBranchRequest {
   manager?: string;
   isActive?: boolean;
   invoiceNote?: string;
+  printSettings?: BranchPrintSettings;
   bankAccounts?: BranchBankAccount[];
 }
 

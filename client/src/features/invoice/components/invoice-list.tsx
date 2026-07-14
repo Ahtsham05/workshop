@@ -39,7 +39,6 @@ import {
   Plus,
   Search,
   Filter,
-  Printer,
   Receipt,
   Info,
   // RotateCcw,
@@ -51,7 +50,9 @@ import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { generateInvoiceHTML, openPrintWindow, generateA4InvoiceHTML, openA4PrintWindow } from '../utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import {
@@ -154,6 +155,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -283,7 +285,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     })
   }
 
-  const handlePrintInvoice = async (invoice: any, format: 'receipt' | 'a4' = 'receipt') => {
+  const handlePrintInvoice = async (invoice: any, paperSize: PaperSize = defaultPaperSize) => {
     if (!canPrint) {
       toast.error(permissionMessage(t, 'no_permission_print_invoice'))
       return
@@ -374,12 +376,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         })
       }
 
-      if (format === 'receipt') {
-        const htmlContent = generateInvoiceHTML(printData)
-        openPrintWindow(htmlContent, printContact)
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        const htmlContent = generateInvoiceHTML(printData, resolveThermalSize(paperSize))
+        openPrintWindowForFormat(htmlContent, paperSize, printContact)
       } else {
-        const htmlContent = generateA4InvoiceHTML(printData)
-        openA4PrintWindow(htmlContent, printContact)
+        const htmlContent = generateA4InvoiceHTML(printData, resolveSheetSize(paperSize))
+        openPrintWindowForFormat(htmlContent, paperSize, printContact)
       }
       
       toast.success(`Printing invoice ${invoice.invoiceNumber}`)
@@ -716,27 +718,13 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                         )}
 
                         {canPrint && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePrintInvoice(invoice, 'receipt')}
-                              disabled={printingInvoiceId === invoice._id}
-                              title="Print receipt"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handlePrintInvoice(invoice, 'a4')}
-                              disabled={printingInvoiceId === invoice._id}
-                              title="Print A4 invoice"
-                            >
-                              <Receipt className="h-4 w-4" />
-                            </Button>
-                          </>
+                          <PrintFormatButton
+                            size="sm"
+                            defaultPaperSize={defaultPaperSize}
+                            disabled={printingInvoiceId === invoice._id}
+                            onPrint={(paperSize) => handlePrintInvoice(invoice, paperSize)}
+                            label=""
+                          />
                         )}
 
                         {canDelete && (

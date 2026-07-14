@@ -2,6 +2,9 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
+import { PAPER_FORMATS, type PaperSize } from '@/features/invoice/utils/paper-format'
+
+export type { PaperSize }
 
 /** Match sales invoice thermal/A4: Naskh Arabic stack — no Nastaliq / Jameel Noori. */
 const PURCHASE_PRINT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
@@ -66,7 +69,9 @@ export function generatePurchaseInvoiceHTML(
   branchDetails?: BranchPrintDetails,
   languageOverride?: InvoiceLanguage,
   printInUrdu?: boolean,
+  thermalSize: 'thermal80' | 'thermal58' = 'thermal80',
 ): string {
+  const format = PAPER_FORMATS[thermalSize]
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
   const paidAmount = resolvePaidAmount(purchase)
@@ -104,13 +109,13 @@ export function generatePurchaseInvoiceHTML(
   <title>${labels.purchase_invoice} - ${purchase.invoiceNumber}</title>
   <style>
     @media print {
-      @page { margin: 5mm; size: 80mm auto; }
-      body { margin: 0; padding: 0; font-size: 13px; }
+      @page { margin: ${format.pageMargin}; size: ${format.pageCss}; }
+      body { margin: 0; padding: 0; font-size: ${format.baseFontPx}px; }
       .no-print { display: none !important; }
     }
     body {
       font-family: ${PURCHASE_PRINT_FONT_STACK};
-      font-size: 13px; line-height: 1.4; margin: 0; padding: 8px; width: 300px;
+      font-size: ${format.baseFontPx}px; line-height: 1.4; margin: 0; padding: 8px; width: ${format.bodyWidthPx}px;
       background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .receipt-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
@@ -149,7 +154,7 @@ export function generatePurchaseInvoiceHTML(
     .print-btn-primary { background: #007bff; color: white; }
     .print-btn-secondary { background: #6c757d; color: white; }
     .highlight { background: #ffffcc; padding: 1px 2px; }
-    @media screen { body { max-width: 350px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
+    @media screen { body { max-width: ${(format.bodyWidthPx ?? 300) + 50}px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
   </style>
   <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
 </head>
@@ -235,7 +240,9 @@ export function generatePurchaseInvoiceA4HTML(
   branchDetails?: BranchPrintDetails,
   languageOverride?: InvoiceLanguage,
   printInUrdu?: boolean,
+  sheetSize: 'a4' | 'a5' = 'a4',
 ): string {
+  const format = PAPER_FORMATS[sheetSize]
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
   const paidAmount = resolvePaidAmount(purchase)
@@ -273,10 +280,10 @@ export function generatePurchaseInvoiceA4HTML(
   <meta charset="UTF-8">
   <title>${labels.purchase_invoice} - ${purchase.invoiceNumber}</title>
   <style>
-    @media print { @page { margin: 1in; size: A4; } body { margin: 0; padding: 0; font-size: 12px; } .no-print { display: none !important; } }
+    @media print { @page { margin: ${format.pageMargin}; size: ${format.pageCss}; } body { margin: 0; padding: 0; font-size: ${format.baseFontPx - 2}px; } .no-print { display: none !important; } }
     body {
       font-family: ${PURCHASE_PRINT_FONT_STACK};
-      font-size: 14px; line-height: 1.4; margin: 0; padding: 20px; background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
+      font-size: ${format.baseFontPx}px; line-height: 1.4; margin: 0; padding: 20px; background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid black; padding-bottom: 20px; }
     .company-info { flex: 1; }
@@ -414,7 +421,7 @@ export type PurchasePrintBranchDetails = BranchPrintDetails
 export function openPurchasePrintWindow(
   purchase: any,
   supplierName: string,
-  printType: 'receipt' | 'a4',
+  paperSize: PaperSize,
   options?: {
     t?: (key: string) => string
     branchDetails?: PurchasePrintBranchDetails
@@ -424,8 +431,9 @@ export function openPurchasePrintWindow(
 ): boolean {
   const t = options?.t ?? ((key: string) => key)
   const branchDetails = options?.branchDetails
+  const format = PAPER_FORMATS[paperSize]
   const html =
-    printType === 'receipt'
+    format.family === 'thermal'
       ? generatePurchaseInvoiceHTML(
           purchase,
           supplierName,
@@ -433,6 +441,7 @@ export function openPurchasePrintWindow(
           branchDetails,
           options?.languageOverride,
           options?.printInUrdu,
+          paperSize as 'thermal80' | 'thermal58',
         )
       : generatePurchaseInvoiceA4HTML(
           purchase,
@@ -441,9 +450,10 @@ export function openPurchasePrintWindow(
           branchDetails,
           options?.languageOverride,
           options?.printInUrdu,
+          paperSize as 'a4' | 'a5',
         )
 
-  const printWindow = window.open('', '_blank')
+  const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
   if (!printWindow) {
     return false
   }

@@ -8,6 +8,7 @@ import {
   IconDatabaseCog,
   IconBrandWhatsapp,
   IconDeviceMobile,
+  IconPrinter,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
@@ -90,5 +91,10 @@ const sidebarNavItems = [
     title: 'SMS Gateway',
     icon: <IconDeviceMobile size={18} />,
     href: '/settings/sms-gateway',
+  },
+  {
+    title: 'Printing',
+    icon: <IconPrinter size={18} />,
+    href: '/settings/printing',
   },
 ]

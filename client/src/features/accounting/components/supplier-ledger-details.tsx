@@ -27,6 +27,8 @@ import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import { PrintFormatButton } from '@/components/print-format-button';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
@@ -452,6 +454,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -670,7 +673,12 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       entry.transactionType === 'payment_made' ||
       entry.transactionType === 'purchase_return');
 
-  const handlePrintLinkedPurchase = async (entry: LedgerEntry) => {
+  const usesPurchaseA4Print = (entry: LedgerEntry) =>
+    canPrintLinkedSupplierEntry(entry) &&
+    entry.transactionType !== 'purchase_return' &&
+    !isLoadPurchaseLedgerRow(entry);
+
+  const handlePrintLinkedPurchase = async (entry: LedgerEntry, paperSize: PaperSize = defaultPaperSize) => {
     const id = entry.referenceId ? String(entry.referenceId) : '';
     const rowId = String(entry.id || entry._id || '');
     if (!id || !rowId) return;
@@ -755,15 +763,28 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         isTrial: orgData?.subscription?.isTrial,
         invoiceNote: branchData?.invoiceNote,
       };
-      const html = printModule.generatePurchaseInvoiceHTML(
-        purchase,
-        purchase?.supplier?.name || supplier.name,
-        t,
-        branchDetails,
-        preferredLanguage,
-        getInvoicePrintInUrdu(),
-      );
-      const w = window.open('', '_blank');
+      const format = PAPER_FORMATS[paperSize];
+      const html =
+        format.family === 'thermal'
+          ? printModule.generatePurchaseInvoiceHTML(
+              purchase,
+              purchase?.supplier?.name || supplier.name,
+              t,
+              branchDetails,
+              preferredLanguage,
+              getInvoicePrintInUrdu(),
+              resolveThermalSize(paperSize),
+            )
+          : printModule.generatePurchaseInvoiceA4HTML(
+              purchase,
+              purchase?.supplier?.name || supplier.name,
+              t,
+              branchDetails,
+              preferredLanguage,
+              getInvoicePrintInUrdu(),
+              resolveSheetSize(paperSize),
+            );
+      const w = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`);
       if (w) {
         w.document.write(html);
         w.document.close();
@@ -824,16 +845,26 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const renderLedgerActions = (entry: LedgerEntry) => (
     <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
       {canPrintLinkedSupplierEntry(entry) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePrintLinkedPurchase(entry)}
-          disabled={printingRowId === String(entry.id || entry._id)}
-          className="h-8 w-8 p-0"
-          title={t('print_invoice_btn')}
-        >
-          <Printer className="w-4 h-4 text-slate-700" />
-        </Button>
+        usesPurchaseA4Print(entry) ? (
+          <PrintFormatButton
+            size="sm"
+            defaultPaperSize={defaultPaperSize}
+            disabled={printingRowId === String(entry.id || entry._id)}
+            onPrint={(paperSize) => handlePrintLinkedPurchase(entry, paperSize)}
+            label=""
+          />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handlePrintLinkedPurchase(entry)}
+            disabled={printingRowId === String(entry.id || entry._id)}
+            className="h-8 w-8 p-0"
+            title={t('print_invoice_btn')}
+          >
+            <Printer className="w-4 h-4 text-slate-700" />
+          </Button>
+        )
       )}
       {entry.transactionType === 'payment_made' && entry.debit > 0 && (
         <Button

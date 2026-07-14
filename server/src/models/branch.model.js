@@ -53,6 +53,14 @@ const branchSchema = mongoose.Schema(
       maxlength: 2000,
       default: '',
     },
+    /** Default paper size used for invoices/receipts/statements printed from this branch */
+    printSettings: {
+      paperSize: {
+        type: String,
+        enum: ['thermal80', 'thermal58', 'a4', 'a5'],
+        default: 'thermal80',
+      },
+    },
     /**
      * Fee-collection bank accounts shown to parents/students in the portal when
      * paying fees online. Each account is what a parent transfers fees to and

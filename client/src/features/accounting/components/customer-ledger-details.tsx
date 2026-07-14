@@ -49,9 +49,10 @@ import {
 import {
   generateInvoiceHTML,
   generateA4InvoiceHTML,
-  openPrintWindow,
-  openA4PrintWindow,
+  openPrintWindowForFormat,
 } from '@/features/invoice/utils/print-utils';
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
@@ -759,6 +760,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -992,28 +994,26 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const renderLedgerActions = (entry: LedgerEntry) => (
     <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
       {canPrintLinkedCustomerEntry(entry) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePrintLinkedCustomerDoc(entry, 'receipt')}
-          disabled={printingRowId === String(entry.id || entry._id)}
-          className="h-8 w-8 p-0"
-          title={t('print_invoice_btn')}
-        >
-          <Printer className="w-4 h-4 text-slate-700" />
-        </Button>
-      )}
-      {usesInvoiceA4Print(entry) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePrintLinkedCustomerDoc(entry, 'a4')}
-          disabled={printingRowId === String(entry.id || entry._id)}
-          className="h-8 w-8 p-0"
-          title={t('print_a4') || 'Print A4 invoice'}
-        >
-          <Receipt className="w-4 h-4 text-slate-700" />
-        </Button>
+        usesInvoiceA4Print(entry) ? (
+          <PrintFormatButton
+            size="sm"
+            defaultPaperSize={defaultPaperSize}
+            disabled={printingRowId === String(entry.id || entry._id)}
+            onPrint={(paperSize) => handlePrintLinkedCustomerDoc(entry, paperSize)}
+            label=""
+          />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handlePrintLinkedCustomerDoc(entry)}
+            disabled={printingRowId === String(entry.id || entry._id)}
+            className="h-8 w-8 p-0"
+            title={t('print_invoice_btn')}
+          >
+            <Printer className="w-4 h-4 text-slate-700" />
+          </Button>
+        )
       )}
       {entry.transactionType === 'payment_received' && entry.credit > 0 && (
         <Button
@@ -1099,7 +1099,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
 
   const handlePrintLinkedCustomerDoc = async (
     entry: LedgerEntry,
-    format: 'receipt' | 'a4' = 'receipt',
+    paperSize: PaperSize = defaultPaperSize,
   ) => {
     const rid = entry.referenceId ? String(entry.referenceId) : '';
     const rowId = String(entry.id || entry._id || '');
@@ -1278,10 +1278,10 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         newBalance: entry.balance,
       }, invoice, { phone: contactPhone, whatsapp: contactWhatsapp || contactPhone });
 
-      if (format === 'a4') {
-        openA4PrintWindow(generateA4InvoiceHTML(printData), printContact);
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
       } else {
-        openPrintWindow(generateInvoiceHTML(printData), printContact);
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact);
       }
       toast.success(t('print_invoice_btn'));
     } catch (error) {
@@ -1300,7 +1300,12 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     !isLoadSaleLedgerRow(entry) &&
     Boolean(entry.referenceId);
 
-  const handlePrintStatement = async (options: { language: 'en' | 'ur'; showInvoiceNumbers: boolean }) => {
+  const handlePrintStatement = async (options: {
+    language: 'en' | 'ur';
+    showInvoiceNumbers: boolean;
+    paperSize?: PaperSize;
+  }) => {
+    const sheetSize = resolveSheetSize(options.paperSize ?? defaultPaperSize);
     if (entries.length === 0 && Math.abs(openingBalance) < 0.005) {
       toast.error(t('No transactions found'));
       return;
@@ -1373,9 +1378,9 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         isTrial: orgData?.subscription?.isTrial,
         language: options.language,
         showInvoiceNumbers: options.showInvoiceNumbers,
-      });
+      }, sheetSize);
 
-      openA4PrintWindow(html);
+      openPrintWindowForFormat(html, sheetSize);
       toast.success(t('print_invoice_btn'));
       setStatementDialogOpen(false);
     } catch (error) {
@@ -1537,13 +1542,20 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               <Button variant="outline" onClick={() => setStatementDialogOpen(false)}>
                 {t('Cancel')}
               </Button>
-              <Button
-                onClick={() => handlePrintStatement({ language: statementLanguage, showInvoiceNumbers: statementShowInvoiceNumbers })}
+              <PrintFormatButton
+                defaultPaperSize={resolveSheetSize(defaultPaperSize)}
+                allowedFormats={['a4', 'a5']}
                 disabled={printingStatement}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                {printingStatement ? t('Loading...') : t('Print Statement')}
-              </Button>
+                onPrint={(paperSize) =>
+                  handlePrintStatement({ language: statementLanguage, showInvoiceNumbers: statementShowInvoiceNumbers, paperSize })
+                }
+                mainButtonContent={
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    {printingStatement ? t('Loading...') : t('Print Statement')}
+                  </>
+                }
+              />
             </div>
           </div>
         </DialogContent>

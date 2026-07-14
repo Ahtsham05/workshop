@@ -15,8 +15,10 @@ import {
 import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge'
 import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
+import { PAPER_FORMATS, type PaperSize } from './paper-format'
 
 export type { PrintWindowContact }
+export type { PaperSize }
 
 export interface PrintInvoiceData {
   invoiceNumber: string
@@ -187,7 +189,11 @@ function formatPrintCustomerCell(
   return escapeHtml(lang === 'ur' ? ur || en : en)
 }
 
-export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
+export const generateInvoiceHTML = (
+  data: PrintInvoiceData,
+  thermalSize: 'thermal80' | 'thermal58' = 'thermal80',
+): string => {
+  const format = PAPER_FORMATS[thermalSize]
   const {
     invoiceNumber,
     items,
@@ -279,27 +285,27 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   <style>
     ${printActionsBarStyles}
     @media print {
-      @page { 
-        margin: 5mm; 
-        size: 80mm auto; 
+      @page {
+        margin: ${format.pageMargin};
+        size: ${format.pageCss};
       }
-      body { 
-        margin: 0; 
-        padding: 0; 
-        font-size: 13px;
+      body {
+        margin: 0;
+        padding: 0;
+        font-size: ${format.baseFontPx}px;
       }
       .no-print {
         display: none !important;
       }
     }
-    
+
     body {
       font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 13px;
+      font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
       padding: 8px;
-      width: 300px;
+      width: ${format.bodyWidthPx}px;
       background: white;
       color: #000;
       direction: ${dir};
@@ -614,7 +620,7 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
     
     @media screen {
       body {
-        max-width: 350px;
+        max-width: ${(format.bodyWidthPx ?? 300) + 50}px;
         margin: 20px auto;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         padding: 20px;
@@ -788,8 +794,12 @@ export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   `.trim()
 }
 
-// Generate A4 Invoice HTML with table layout
-export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
+// Generate A4/A5 Invoice HTML with table layout
+export const generateA4InvoiceHTML = (
+  data: PrintInvoiceData,
+  sheetSize: 'a4' | 'a5' = 'a4',
+): string => {
+  const format = PAPER_FORMATS[sheetSize]
   const {
     invoiceNumber,
     items,
@@ -871,7 +881,7 @@ export const generateA4InvoiceHTML = (data: PrintInvoiceData): string => {
   const itemsPerPage =
     typeof data.a4ItemsPerPage === 'number' && data.a4ItemsPerPage > 0
       ? Math.min(80, Math.floor(data.a4ItemsPerPage))
-      : 14
+      : (format.itemsPerPage ?? 14)
 
   const chunks: typeof items[] = []
   for (let i = 0; i < items.length; i += itemsPerPage) {
@@ -1092,23 +1102,23 @@ ${itemizedTotalsTable}
   <style>
     ${printActionsBarStyles}
     @media print {
-      @page { 
-        margin: 1in; 
-        size: A4; 
+      @page {
+        margin: ${format.pageMargin};
+        size: ${format.pageCss};
       }
-      body { 
-        margin: 0; 
-        padding: 0; 
-        font-size: 12px;
+      body {
+        margin: 0;
+        padding: 0;
+        font-size: ${format.baseFontPx - 2}px;
       }
       .no-print {
         display: none !important;
       }
     }
-    
+
     body {
       font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 14px;
+      font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
       padding: 20px;
@@ -1117,7 +1127,7 @@ ${itemizedTotalsTable}
       direction: ${dir};
       text-align: ${startAlign};
     }
-    
+
     .invoice-header {
       display: flex;
       justify-content: space-between;
@@ -1744,16 +1754,26 @@ export function generateA4LandscapeTwoInvoicesHTML(left: PrintInvoiceData, right
 </html>`
 }
 
-export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContact): void => {
+/** Opens a blob-URL print window sized/timed for the given paper format. */
+export const openPrintWindowForFormat = (
+  htmlContent: string,
+  paperSize: PaperSize,
+  contact?: PrintWindowContact,
+): void => {
   ensureInvoicePrintContactBridge()
   ensureInvoiceWhatsAppSendBridge()
   ensureInvoicePrintPdfBridge()
   ensureInvoiceSmsSendBridge()
   if (contact) stashPrintContact(contact)
 
+  const format = PAPER_FORMATS[paperSize]
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
   const blobUrl = URL.createObjectURL(blob)
-  const printWindow = window.open(blobUrl, '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
+  const printWindow = window.open(
+    blobUrl,
+    '_blank',
+    `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`,
+  )
 
   if (!printWindow) {
     URL.revokeObjectURL(blobUrl)
@@ -1771,41 +1791,16 @@ export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContac
         } catch (error) {
           console.error('Print error:', error)
         }
-      }, 1000)
+      }, format.printDelayMs)
     },
     { once: true },
   )
 }
 
-export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowContact): void => {
-  ensureInvoicePrintContactBridge()
-  ensureInvoiceWhatsAppSendBridge()
-  ensureInvoicePrintPdfBridge()
-  ensureInvoiceSmsSendBridge()
-  if (contact) stashPrintContact(contact)
+/** @deprecated Use `openPrintWindowForFormat(html, paperSize, contact)`. Kept for callers not yet migrated. */
+export const openPrintWindow = (htmlContent: string, contact?: PrintWindowContact): void =>
+  openPrintWindowForFormat(htmlContent, 'thermal80', contact)
 
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
-  const blobUrl = URL.createObjectURL(blob)
-  const printWindow = window.open(blobUrl, '_blank', 'width=900,height=1200,scrollbars=yes,resizable=yes')
-
-  if (!printWindow) {
-    URL.revokeObjectURL(blobUrl)
-    throw new Error('Unable to open print window. Please check your popup blocker.')
-  }
-
-  printWindow.addEventListener(
-    'load',
-    () => {
-      URL.revokeObjectURL(blobUrl)
-      if (isElectronApp()) return
-      setTimeout(() => {
-        try {
-          printWindow.print()
-        } catch (error) {
-          console.error('A4 Print error:', error)
-        }
-      }, 1500)
-    },
-    { once: true },
-  )
-}
+/** @deprecated Use `openPrintWindowForFormat(html, paperSize, contact)`. Kept for callers not yet migrated. */
+export const openA4PrintWindow = (htmlContent: string, contact?: PrintWindowContact): void =>
+  openPrintWindowForFormat(htmlContent, 'a4', contact)

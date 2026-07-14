@@ -23,7 +23,9 @@ import { Invoice, InvoiceItem, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
-import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindow, openA4PrintWindow } from '../utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import { sendInvoiceReceiptWhatsApp } from '../utils/send-invoice-whatsapp'
 import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
@@ -254,7 +256,7 @@ export function InvoicePanel({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
-  const [savingType, setSavingType] = useState<'none' | 'receipt' | 'a4' | null>(null)
+  const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [smsDialogOpen, setSmsDialogOpen] = useState(false)
   const [smsDialogPhone, setSmsDialogPhone] = useState('')
@@ -321,11 +323,12 @@ export function InvoicePanel({
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [showConvertDialog, setShowConvertDialog] = useState(false)
   // Print functionality using utility
-  const printInvoice = useCallback(async (invoiceData: any) => {
+  const printInvoice = useCallback(async (invoiceData: any, thermalSize: 'thermal80' | 'thermal58' = 'thermal80') => {
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
@@ -398,9 +401,9 @@ export function InvoicePanel({
         }
       }
 
-      const htmlContent = generateInvoiceHTML(printData)
-      openPrintWindow(htmlContent, printContact)
-      
+      const htmlContent = generateInvoiceHTML(printData, thermalSize)
+      openPrintWindowForFormat(htmlContent, thermalSize, printContact)
+
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {
       console.error('Print error:', error)
@@ -414,7 +417,7 @@ export function InvoicePanel({
   }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // A4 Print functionality using utility
-  const printA4Invoice = useCallback(async (invoiceData: any) => {
+  const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: 'a4' | 'a5' = 'a4') => {
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
@@ -487,9 +490,9 @@ export function InvoicePanel({
         }
       }
 
-      const htmlContent = generateA4InvoiceHTML(printData)
-      openA4PrintWindow(htmlContent, printContact)
-      
+      const htmlContent = generateA4InvoiceHTML(printData, sheetSize)
+      openPrintWindowForFormat(htmlContent, sheetSize, printContact)
+
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {
       console.error('A4 Print error:', error)
@@ -989,7 +992,7 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  const handleSaveInvoice = useCallback(async (printType: 'none' | 'receipt' | 'a4' = 'none') => {
+  const handleSaveInvoice = useCallback(async (printType: 'none' | PaperSize = 'none') => {
     // Validate required fields
     if (!invoice.customerId) {
       toast.error('Please select a customer')
@@ -1218,10 +1221,12 @@ export function InvoicePanel({
       }
 
       // Handle print
-      if (printType === 'receipt') {
-        printInvoice(savedInvoicePayload)
-      } else if (printType === 'a4') {
-        printA4Invoice(savedInvoicePayload)
+      if (printType !== 'none') {
+        if (PAPER_FORMATS[printType].family === 'thermal') {
+          printInvoice(savedInvoicePayload, resolveThermalSize(printType))
+        } else {
+          printA4Invoice(savedInvoicePayload, resolveSheetSize(printType))
+        }
       }
 
       // Handle persistent send method (runs additionally after any save/print)
@@ -1328,8 +1333,8 @@ export function InvoicePanel({
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
-    () => handleSaveInvoice('receipt'),
-    () => handleSaveInvoice('a4'),
+    () => handleSaveInvoice(defaultPaperSize),
+    () => handleSaveInvoice(resolveSheetSize(defaultPaperSize)),
     savingType !== null,
   )
 
@@ -2573,15 +2578,15 @@ export function InvoicePanel({
               )}
             </Button>
 
-            <div className='grid grid-cols-2 gap-3'>
-              <Button 
-                onClick={() => handleSaveInvoice('receipt')}
-                className='w-full'
-                size="lg"
-                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-                variant="default"
-              >
-                {savingType === 'receipt' ? (
+            <PrintFormatButton
+              onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+              defaultPaperSize={defaultPaperSize}
+              size="lg"
+              variant="default"
+              fullWidth
+              disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+              mainButtonContent={
+                savingType !== null && savingType !== 'none' ? (
                   <>
                     <Loader2 className='h-4 w-4 mr-2 animate-spin' />
                     {t('saving')}...
@@ -2589,37 +2594,14 @@ export function InvoicePanel({
                 ) : (
                   <>
                     <Printer className='h-4 w-4 mr-2' />
-                    {isEditing 
+                    {isEditing
                       ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
                       : `${t('save_and_print_receipt')} (Ctrl+Enter)`
                     }
                   </>
-                )}
-              </Button>
-
-              <Button
-                onClick={() => handleSaveInvoice('a4')}
-                className='w-full'
-                size="lg"
-                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-                variant="default"
-              >
-                {savingType === 'a4' ? (
-                  <>
-                    <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                    {t('saving')}...
-                  </>
-                ) : (
-                  <>
-                    <Package className='h-4 w-4 mr-2' />
-                    {isEditing
-                      ? `${t('update_and_print_a4')} (Ctrl+F)`
-                      : `${t('save_and_print_a4')} (Ctrl+F)`
-                    }
-                  </>
-                )}
-              </Button>
-            </div>
+                )
+              }
+            />
 
             {/* Send After Save selector */}
             <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>

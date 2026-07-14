@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt, Printer } from 'lucide-react'
+import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt } from 'lucide-react'
 import { useGetPurchasesQuery } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -29,6 +29,8 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PrintFormatButton } from '@/components/print-format-button'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -43,6 +45,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
@@ -80,7 +83,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   }, [])
 
   const printPurchase = useCallback(
-    async (purchase: any, printType: 'receipt' | 'a4') => {
+    async (purchase: any, paperSize: PaperSize = defaultPaperSize) => {
       try {
         const printModule = await import('@/utils/purchasePrintUtils')
         const branchDetails = {
@@ -96,12 +99,13 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           invoiceNote: branchData?.invoiceNote,
         }
 
+        const format = PAPER_FORMATS[paperSize]
         const html =
-          printType === 'receipt'
-            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
-            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu())
+          format.family === 'thermal'
+            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
+            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize))
 
-        const printWindow = window.open('', '_blank')
+        const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
         if (printWindow) {
           printWindow.document.write(html)
           printWindow.document.close()
@@ -112,7 +116,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
         toast.error(t('Failed to print purchase'))
       }
     },
-    [branchData, t, preferredLanguage, orgData]
+    [branchData, t, preferredLanguage, orgData, defaultPaperSize]
   )
 
   const handleDelete = (purchase: any) => {
@@ -315,22 +319,12 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                             <Edit className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          variant='ghost'
+                        <PrintFormatButton
                           size='sm'
-                          onClick={() => printPurchase(purchase, 'receipt')}
-                          title={t('Print receipt')}
-                        >
-                          <Printer className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='sm'
-                          onClick={() => printPurchase(purchase, 'a4')}
-                          title={t('Print A4')}
-                        >
-                          <Receipt className='h-4 w-4' />
-                        </Button>
+                          defaultPaperSize={defaultPaperSize}
+                          onPrint={(paperSize) => printPurchase(purchase, paperSize)}
+                          label=""
+                        />
                         <Button
                           variant="ghost"
                           size="sm"

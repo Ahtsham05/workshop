@@ -1,5 +1,8 @@
 import { format } from 'date-fns';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
+import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
+import { PAPER_FORMATS, useBranchPaperSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import { PrintFormatButton } from '@/components/print-format-button';
 
 function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
   return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
@@ -91,6 +94,7 @@ export function PaymentReceipt({
 
   const resolvedCompany = resolveReceiptCompany(language, company);
   const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
+  const defaultPaperSize = useBranchPaperSize();
 
   const formatCurrency = (amount: number) => {
     return `Rs ${Math.abs(amount).toFixed(2)}`;
@@ -112,7 +116,7 @@ export function PaymentReceipt({
     }
   };
 
-  const printReceipt = () => {
+  const printReceipt = (paperSize: PaperSize = defaultPaperSize) => {
     const baseCompany = company || {
       name: 'Logix Plus Solutions',
       address: '',
@@ -137,19 +141,13 @@ export function PaymentReceipt({
       isTrial: isTrial ?? false,
     };
 
-    const htmlContent = generateReceiptHTML(printData);
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+    const htmlContent = generateReceiptHTML(printData, paperSize);
+    openPrintWindowForFormat(htmlContent, paperSize);
   };
 
-  const generateReceiptHTML = (data: typeof printReceipt extends () => void ? any : any) => {
+  const generateReceiptHTML = (data: any, paperSize: PaperSize) => {
+    const paperFormat = PAPER_FORMATS[paperSize];
+    const cardWidth = (paperFormat.bodyWidthPx ?? 380) + (paperFormat.family === 'thermal' ? 80 : 220);
     return `
 <!DOCTYPE html>
 <html dir="${dir}" lang="${language}">
@@ -159,13 +157,13 @@ export function PaymentReceipt({
   <style>
     @media print {
       @page {
-        margin: 6mm;
-        size: auto;
+        margin: ${paperFormat.pageMargin};
+        size: ${paperFormat.pageCss};
       }
       body {
         margin: 0;
         padding: 0;
-        font-size: 12px;
+        font-size: ${paperFormat.baseFontPx - 1}px;
       }
       .no-print {
         display: none !important;
@@ -174,11 +172,11 @@ export function PaymentReceipt({
 
     body {
       font-family: ${RECEIPT_FONT_STACK};
-      font-size: 13px;
+      font-size: ${paperFormat.baseFontPx}px;
       line-height: 1.45;
       margin: 0;
       padding: 12px 14px;
-      max-width: 380px;
+      max-width: ${cardWidth}px;
       margin-left: auto;
       margin-right: auto;
       background: #fff;
@@ -359,7 +357,7 @@ export function PaymentReceipt({
     
     @media screen {
       body {
-        max-width: 380px;
+        max-width: ${cardWidth}px;
         margin: 24px auto;
         box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
         padding: 20px 22px;
@@ -750,20 +748,11 @@ export function PaymentReceipt({
       </div>
 
       <div className="no-print" style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button
-          onClick={printReceipt}
-          style={{
-            padding: '10px 30px',
-            fontSize: '16px',
-            background: '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          {labels.print_receipt}
-        </button>
+        <PrintFormatButton
+          label={labels.print_receipt}
+          defaultPaperSize={defaultPaperSize}
+          onPrint={printReceipt}
+        />
       </div>
     </div>
   );

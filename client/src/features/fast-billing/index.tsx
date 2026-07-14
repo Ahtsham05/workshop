@@ -8,7 +8,8 @@ import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/store
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { generateInvoiceHTML, openPrintWindow } from '@/features/invoice/utils/print-utils'
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize } from '@/features/invoice/utils/paper-format'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import {
   loadFastBillWorkspace,
@@ -265,7 +266,13 @@ export default function FastBillingPage() {
           .join(', ') || undefined
       receiptData.companyPhone = branchData?.phone
       receiptData.companyLogo = orgData?.logo?.url
-      openPrintWindow(generateInvoiceHTML(receiptData))
+
+      const paperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        openPrintWindowForFormat(generateInvoiceHTML(receiptData, resolveThermalSize(paperSize)), paperSize)
+      } else {
+        openPrintWindowForFormat(generateA4InvoiceHTML(receiptData, resolveSheetSize(paperSize)), paperSize)
+      }
 
       resetSale()
     } catch (error) {

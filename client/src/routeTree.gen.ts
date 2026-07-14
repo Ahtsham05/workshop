@@ -74,6 +74,7 @@ import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenti
 import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
 import { Route as AuthenticatedSettingsSyncImport } from './routes/_authenticated/settings/sync'
 import { Route as AuthenticatedSettingsSmsGatewayImport } from './routes/_authenticated/settings/sms-gateway'
+import { Route as AuthenticatedSettingsPrintingImport } from './routes/_authenticated/settings/printing'
 import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authenticated/settings/offline'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
@@ -561,6 +562,13 @@ const AuthenticatedSettingsSmsGatewayRoute =
   AuthenticatedSettingsSmsGatewayImport.update({
     id: '/sms-gateway',
     path: '/sms-gateway',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsPrintingRoute =
+  AuthenticatedSettingsPrintingImport.update({
+    id: '/printing',
+    path: '/printing',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1467,6 +1475,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsOfflineImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/printing': {
+      id: '/_authenticated/settings/printing'
+      path: '/printing'
+      fullPath: '/settings/printing'
+      preLoaderRoute: typeof AuthenticatedSettingsPrintingImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/sms-gateway': {
       id: '/_authenticated/settings/sms-gateway'
       path: '/sms-gateway'
@@ -2090,6 +2105,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOfflineRoute: typeof AuthenticatedSettingsOfflineRoute
+  AuthenticatedSettingsPrintingRoute: typeof AuthenticatedSettingsPrintingRoute
   AuthenticatedSettingsSmsGatewayRoute: typeof AuthenticatedSettingsSmsGatewayRoute
   AuthenticatedSettingsSyncRoute: typeof AuthenticatedSettingsSyncRoute
   AuthenticatedSettingsSyncConflictsRoute: typeof AuthenticatedSettingsSyncConflictsRoute
@@ -2109,6 +2125,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsOfflineRoute: AuthenticatedSettingsOfflineRoute,
+    AuthenticatedSettingsPrintingRoute: AuthenticatedSettingsPrintingRoute,
     AuthenticatedSettingsSmsGatewayRoute: AuthenticatedSettingsSmsGatewayRoute,
     AuthenticatedSettingsSyncRoute: AuthenticatedSettingsSyncRoute,
     AuthenticatedSettingsSyncConflictsRoute:
@@ -2479,6 +2496,7 @@ export interface FileRoutesByFullPath {
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
@@ -2618,6 +2636,7 @@ export interface FileRoutesByTo {
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
@@ -2760,6 +2779,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/offline': typeof AuthenticatedSettingsOfflineRoute
+  '/_authenticated/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/_authenticated/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/_authenticated/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
@@ -2904,6 +2924,7 @@ export interface FileRouteTypes {
     | '/settings/local-database'
     | '/settings/notifications'
     | '/settings/offline'
+    | '/settings/printing'
     | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
@@ -3042,6 +3063,7 @@ export interface FileRouteTypes {
     | '/settings/local-database'
     | '/settings/notifications'
     | '/settings/offline'
+    | '/settings/printing'
     | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
@@ -3182,6 +3204,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/offline'
+    | '/_authenticated/settings/printing'
     | '/_authenticated/settings/sms-gateway'
     | '/_authenticated/settings/sync'
     | '/_authenticated/settings/sync-conflicts'
@@ -3416,6 +3439,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/local-database",
         "/_authenticated/settings/notifications",
         "/_authenticated/settings/offline",
+        "/_authenticated/settings/printing",
         "/_authenticated/settings/sms-gateway",
         "/_authenticated/settings/sync",
         "/_authenticated/settings/sync-conflicts",
@@ -3652,6 +3676,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/offline": {
       "filePath": "_authenticated/settings/offline.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/printing": {
+      "filePath": "_authenticated/settings/printing.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/sms-gateway": {
