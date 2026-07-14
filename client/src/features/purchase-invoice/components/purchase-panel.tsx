@@ -57,6 +57,7 @@ import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format'
+import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -211,6 +212,7 @@ export default function PurchasePanel({
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
@@ -352,7 +354,7 @@ export default function PurchasePanel({
           const html =
             format.family === 'thermal'
               ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize))
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize), invoiceTemplate)
 
           const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
           if (printWindow) {
@@ -366,7 +368,7 @@ export default function PurchasePanel({
         toast.error(t('Failed to print'))
       }
     },
-    [branchData, purchase.supplier, t, preferredLanguage, orgData]
+    [branchData, purchase.supplier, t, preferredLanguage, orgData, invoiceTemplate]
   )
 
   // Handle product selection for manual entries

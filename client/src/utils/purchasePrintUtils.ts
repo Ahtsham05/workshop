@@ -3,8 +3,10 @@ import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
 import { PAPER_FORMATS, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 
 export type { PaperSize }
+export type { InvoiceTemplate }
 
 /** Match sales invoice thermal/A4: Naskh Arabic stack — no Nastaliq / Jameel Noori. */
 const PURCHASE_PRINT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
@@ -241,6 +243,7 @@ export function generatePurchaseInvoiceA4HTML(
   languageOverride?: InvoiceLanguage,
   printInUrdu?: boolean,
   sheetSize: 'a4' | 'a5' = 'a4',
+  template: InvoiceTemplate = 'standard',
 ): string {
   const format = PAPER_FORMATS[sheetSize]
   const items = purchase.items || []
@@ -307,6 +310,7 @@ export function generatePurchaseInvoiceA4HTML(
     .items-table .text-right { text-align: ${endAlign}; }
     .items-table .text-center { text-align: center; }
     .items-table .text-left { text-align: ${startAlign}; }
+    .totals-wrapper { display: flex; justify-content: flex-end; padding-top: 20px; margin-bottom: 20px; }
     .totals-table { width: 400px; border-collapse: collapse; border: 2px solid black; border-radius: 8px; overflow: hidden; }
     .totals-table td { padding: 10px 12px; border-bottom: 1px solid #e9ecef; font-size: 13px; }
     .totals-table .total-label { font-weight: 700; text-align: ${endAlign}; background: #f8f9fa; border-right: 1px solid #dee2e6; }
@@ -317,9 +321,12 @@ export function generatePurchaseInvoiceA4HTML(
     .barcode { font-family: 'Libre Barcode 39', 'Courier New', monospace; font-size: 32px; letter-spacing: 2px; margin: 10px 0; font-weight: normal; direction: ltr; }
     .barcode-text { font-size: 12px; color: #666; margin-top: 5px; }
     .notes-section { margin: 30px 0; padding: 15px; background: #f8f9fa; border-right: 4px solid black; border-radius: 8px 0 0 8px; }
+    .terms-heading { font-weight: bold; margin-bottom: 8px; font-size: 16px; }
+    .notes-content { font-size: 14px; }
     .invoice-branch-note { margin: 24px 0 0; padding: 16px; background: #fafafa; border: 1px dashed #ccc; border-radius: 6px; font-size: 13px; text-align: center; line-height: 1.45; white-space: normal; word-break: break-word; }
     .footer { text-align: center; font-size: 12px; color: #666; margin-top: 40px; padding-top: 20px; border-top: 2px solid #e9ecef; }
     .footer-line { margin-bottom: 5px; }
+    .footer-thank-you { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
     .no-print { text-align: center; margin: 30px 0; padding: 20px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; }
     .print-btn { padding: 10px 20px; margin: 0 10px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; }
     .print-btn-primary { background: #007bff; color: white; }
@@ -327,6 +334,7 @@ export function generatePurchaseInvoiceA4HTML(
     .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
     .status-cash { background: #d4edda; color: #155724; } .status-credit { background: #cce5ff; color: #004085; } .status-pending { background: #fff3cd; color: #856404; }
     @media screen { body { max-width: 800px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 40px; border-radius: 12px; } }
+    ${INVOICE_TEMPLATE_CSS[template] ?? ''}
   </style>
   <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
 </head>
@@ -376,14 +384,14 @@ export function generatePurchaseInvoiceA4HTML(
     <tbody>${itemsHTML}</tbody>
   </table>
 
-  <div style="padding-top: 20px; margin-bottom: 20px;">
+  <div class="totals-wrapper">
     <table class="totals-table">
       <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${formatCurrency(totalAmount)}</td></tr>
       <tr class="final-total"><td class="total-label">${labels.total}:</td><td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(totalAmount)}</td></tr>
     </table>
   </div>
 
-  <div style="padding-top: 20px; margin-bottom: 20px;">
+  <div class="totals-wrapper">
     <table class="totals-table">
       <tr style="background: #e8f5e9;"><td class="total-label" style="background: #e8f5e9;">${labels.paid}:</td><td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paidAmount)}</td></tr>
       <tr><td class="total-label" style="font-weight: bold; color: #000;">${labels.balance_due}:</td><td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.max(balance, 0))}</td></tr>
@@ -396,12 +404,12 @@ export function generatePurchaseInvoiceA4HTML(
     <div class="barcode-text">${purchase.invoiceNumber || ''}</div>
   </div>
 
-  ${purchase.notes ? `<div class="notes-section"><div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${labels.notes}:</div><div style="font-size: 14px;">${purchase.notes}</div></div>` : ''}
+  ${purchase.notes ? `<div class="notes-section"><div class="terms-heading">${labels.notes}:</div><div class="notes-content">${purchase.notes}</div></div>` : ''}
 
   ${branchDetails?.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(branchDetails.invoiceNote)}</div>` : ''}
 
   <div class="footer">
-    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${labels.thank_you}</div>
+    <div class="footer-line footer-thank-you">${labels.thank_you}</div>
     <div class="footer-line">${labels.keep_receipt}</div>
     <div style="margin-top: 15px; font-size: 12px; color: #000; font-weight: bold; text-align: center; line-height: 1.3;">${labels.powered_by}</div>
   </div>
@@ -427,6 +435,7 @@ export function openPurchasePrintWindow(
     branchDetails?: PurchasePrintBranchDetails
     languageOverride?: InvoiceLanguage
     printInUrdu?: boolean
+    template?: InvoiceTemplate
   },
 ): boolean {
   const t = options?.t ?? ((key: string) => key)
@@ -451,6 +460,7 @@ export function openPurchasePrintWindow(
           options?.languageOverride,
           options?.printInUrdu,
           paperSize as 'a4' | 'a5',
+          options?.template ?? 'standard',
         )
 
   const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)

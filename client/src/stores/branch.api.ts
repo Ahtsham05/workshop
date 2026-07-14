@@ -14,8 +14,12 @@ export interface BranchBankAccount {
 /** Default paper size used for invoices/receipts/statements printed from a branch */
 export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5';
 
+/** A4/A5 invoice layout/design template */
+export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold';
+
 export interface BranchPrintSettings {
   paperSize: PaperSize;
+  template?: InvoiceTemplate;
 }
 
 export interface Branch {

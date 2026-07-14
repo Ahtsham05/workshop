@@ -16,9 +16,11 @@ import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge
 import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 import { PAPER_FORMATS, type PaperSize } from './paper-format'
+import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from './invoice-template'
 
 export type { PrintWindowContact }
 export type { PaperSize }
+export type { InvoiceTemplate }
 
 export interface PrintInvoiceData {
   invoiceNumber: string
@@ -798,6 +800,7 @@ export const generateInvoiceHTML = (
 export const generateA4InvoiceHTML = (
   data: PrintInvoiceData,
   sheetSize: 'a4' | 'a5' = 'a4',
+  template: InvoiceTemplate = 'standard',
 ): string => {
   const format = PAPER_FORMATS[sheetSize]
   const {
@@ -880,8 +883,8 @@ export const generateA4InvoiceHTML = (
 
   const itemsPerPage =
     typeof data.a4ItemsPerPage === 'number' && data.a4ItemsPerPage > 0
-      ? Math.min(80, Math.floor(data.a4ItemsPerPage))
-      : (format.itemsPerPage ?? 14)
+      ? Math.min(120, Math.floor(data.a4ItemsPerPage))
+      : (INVOICE_TEMPLATE_ITEMS_PER_PAGE[template]?.[sheetSize] ?? format.itemsPerPage ?? 14)
 
   const chunks: typeof items[] = []
   for (let i = 0; i < items.length; i += itemsPerPage) {
@@ -942,8 +945,8 @@ export const generateA4InvoiceHTML = (
 
   const itemizedTotalsTable = showItemizedTotalsTable
     ? `
-<div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
-    <table class="totals-table" style="width: 400px;">
+<div class="totals-wrapper">
+    <table class="totals-table">
       ${isQuoteStyleTotals(type) && subtotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.subtotal}:</td>
@@ -991,8 +994,8 @@ export const generateA4InvoiceHTML = (
 ${itemizedTotalsTable}
 
   ${!isQuoteStyleTotals(type) ? `
-  <div style="padding-top: 20px; margin-top: 20px; margin-bottom: 20px;">
-    <table class="totals-table" style="width: 400px;">
+  <div class="totals-wrapper">
+    <table class="totals-table">
       <tr>
         <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
         <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
@@ -1016,13 +1019,13 @@ ${itemizedTotalsTable}
   
   ${termsHtml ? `
     <div class="notes-section">
-      <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">${urduTexts.terms_and_conditions}:</div>
-      <div class="notes-content" style="font-size: 14px;">${termsHtml}</div>
+      <div class="terms-heading">${urduTexts.terms_and_conditions}:</div>
+      <div class="notes-content">${termsHtml}</div>
     </div>
   ` : ''}
-  
+
   <div class="footer">
-    <div class="footer-line" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${urduTexts.thank_you}</div>
+    <div class="footer-line footer-thank-you">${urduTexts.thank_you}</div>
     <div class="footer-line">${urduTexts.keep_receipt}</div>
   </div>
 `
@@ -1455,14 +1458,22 @@ ${itemizedTotalsTable}
       margin-bottom: 30px;
     }
     
+    .totals-wrapper {
+      display: flex;
+      justify-content: flex-end;
+      padding-top: 20px;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+
     .totals-table {
-      width: 300px;
+      width: 400px;
       border-collapse: collapse;
       border: 2px solid black;
       border-radius: 8px;
       overflow: hidden;
     }
-    
+
     .totals-table td {
       padding: 10px 12px;
       border-bottom: 1px solid #e9ecef;
@@ -1537,7 +1548,14 @@ ${itemizedTotalsTable}
       break-inside: avoid;
     }
 
+    .terms-heading {
+      font-weight: bold;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+
     .notes-section .notes-content {
+      font-size: 14px;
       line-height: 1.5;
       white-space: normal;
       word-break: break-word;
@@ -1592,7 +1610,13 @@ ${itemizedTotalsTable}
     .footer-line {
       margin-bottom: 5px;
     }
-    
+
+    .footer-thank-you {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
     .no-print {
       text-align: center;
       margin: 30px 0;
@@ -1667,6 +1691,7 @@ ${itemizedTotalsTable}
         border-radius: 12px;
       }
     }
+    ${INVOICE_TEMPLATE_CSS[template] ?? ''}
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>

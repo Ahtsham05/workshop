@@ -53,12 +53,18 @@ const branchSchema = mongoose.Schema(
       maxlength: 2000,
       default: '',
     },
-    /** Default paper size used for invoices/receipts/statements printed from this branch */
+    /** Default paper size / layout used for invoices/receipts/statements printed from this branch */
     printSettings: {
       paperSize: {
         type: String,
         enum: ['thermal80', 'thermal58', 'a4', 'a5'],
         default: 'thermal80',
+      },
+      /** A4/A5 invoice layout/design template */
+      template: {
+        type: String,
+        enum: ['standard', 'compact', 'modern', 'classic', 'bold'],
+        default: 'standard',
       },
     },
     /**

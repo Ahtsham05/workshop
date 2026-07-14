@@ -28,6 +28,7 @@ import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
@@ -455,6 +456,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard';
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -783,6 +785,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               preferredLanguage,
               getInvoicePrintInUrdu(),
               resolveSheetSize(paperSize),
+              invoiceTemplate,
             );
       const w = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`);
       if (w) {

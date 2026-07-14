@@ -52,6 +52,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
@@ -156,6 +157,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -380,7 +382,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         const htmlContent = generateInvoiceHTML(printData, resolveThermalSize(paperSize))
         openPrintWindowForFormat(htmlContent, paperSize, printContact)
       } else {
-        const htmlContent = generateA4InvoiceHTML(printData, resolveSheetSize(paperSize))
+        const htmlContent = generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate)
         openPrintWindowForFormat(htmlContent, paperSize, printContact)
       }
       

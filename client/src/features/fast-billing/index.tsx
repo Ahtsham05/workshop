@@ -268,10 +268,11 @@ export default function FastBillingPage() {
       receiptData.companyLogo = orgData?.logo?.url
 
       const paperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+      const invoiceTemplate = branchData?.printSettings?.template ?? 'standard'
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(receiptData, resolveThermalSize(paperSize)), paperSize)
       } else {
-        openPrintWindowForFormat(generateA4InvoiceHTML(receiptData, resolveSheetSize(paperSize)), paperSize)
+        openPrintWindowForFormat(generateA4InvoiceHTML(receiptData, resolveSheetSize(paperSize), invoiceTemplate), paperSize)
       }
 
       resetSale()

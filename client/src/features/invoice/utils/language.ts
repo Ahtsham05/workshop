@@ -158,7 +158,7 @@ export const a4Labels = {
     items_count: 'Items Count',
     product_name: 'Product Name',
     quantity: 'Quantity',
-    unit_price: 'Unit Sale Price',
+    unit_price: 'Price',
     total_amount: 'Total Amount',
     subtotal: 'Subtotal',
     discount: 'Discount',

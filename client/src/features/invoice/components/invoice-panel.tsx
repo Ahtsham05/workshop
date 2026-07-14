@@ -25,6 +25,7 @@ import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import { sendInvoiceReceiptWhatsApp } from '../utils/send-invoice-whatsapp'
@@ -324,6 +325,7 @@ export function InvoicePanel({
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [showConvertDialog, setShowConvertDialog] = useState(false)
@@ -490,7 +492,7 @@ export function InvoicePanel({
         }
       }
 
-      const htmlContent = generateA4InvoiceHTML(printData, sheetSize)
+      const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
       openPrintWindowForFormat(htmlContent, sheetSize, printContact)
 
       // Don't show success toast - let the print dialog speak for itself

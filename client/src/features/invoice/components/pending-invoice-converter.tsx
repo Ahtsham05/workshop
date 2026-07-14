@@ -55,6 +55,7 @@ import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
@@ -99,6 +100,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
@@ -438,7 +440,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact)
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate), paperSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)
@@ -492,7 +494,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact)
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate), paperSize, printContact)
       }
     } catch (error) {
       console.error('Print error:', error)

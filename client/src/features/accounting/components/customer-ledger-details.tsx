@@ -52,6 +52,7 @@ import {
   openPrintWindowForFormat,
 } from '@/features/invoice/utils/print-utils';
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
@@ -761,6 +762,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
+  const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard';
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -1281,7 +1283,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
       } else {
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize)), paperSize, printContact);
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate), paperSize, printContact);
       }
       toast.success(t('print_invoice_btn'));
     } catch (error) {
