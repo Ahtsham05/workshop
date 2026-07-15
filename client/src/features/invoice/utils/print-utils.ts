@@ -1001,19 +1001,19 @@ ${itemizedTotalsTable}
     <table class="totals-table">
       <tr>
         <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
-        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 14px;">
+        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 16px;">
           ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
       ` : ''}
       <tr style="border-top: 2px solid #000;">
         <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="font-size: 16px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
     </table>
   </div>
@@ -1115,7 +1115,7 @@ ${itemizedTotalsTable}
       body {
         margin: 0;
         padding: 0;
-        font-size: ${format.baseFontPx - 2}px;
+        font-size: ${format.baseFontPx}px;
       }
       .no-print {
         display: none !important;
@@ -1162,7 +1162,7 @@ ${itemizedTotalsTable}
     }
     
     .company-details {
-      font-size: 17px;
+      font-size: 19px;
       color: #000;
       line-height: 1.4;
     }
@@ -1173,14 +1173,14 @@ ${itemizedTotalsTable}
     }
 
     .invoice-title {
-      font-size: 26px;
+      font-size: 28px;
       font-weight: bold;
       color: #333;
       margin-bottom: 10px;
     }
 
     .invoice-meta {
-      font-size: 14px;
+      font-size: 16px;
       color: #666;
     }
     
@@ -1215,7 +1215,7 @@ ${itemizedTotalsTable}
     
     .info-title {
       font-weight: bold;
-      font-size: 17px;
+      font-size: 18px;
       color: #333;
       margin: 0 0 4px;
       padding-bottom: 6px;
@@ -1227,7 +1227,7 @@ ${itemizedTotalsTable}
       justify-content: space-between;
       align-items: baseline;
       gap: 12px;
-      font-size: 14px;
+      font-size: 15px;
       width: 100%;
     }
 
@@ -1245,7 +1245,7 @@ ${itemizedTotalsTable}
     }
 
     .customer-field-label {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       color: #555;
       flex-shrink: 0;
@@ -1295,7 +1295,7 @@ ${itemizedTotalsTable}
     }
 
     .bill-to-customer-name {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 500;
       color: #000;
       line-height: 1.45;
@@ -1350,7 +1350,7 @@ ${itemizedTotalsTable}
     .company-contact-line {
       display: inline-block;
       margin-top: 4px;
-      font-size: 17px;
+      font-size: 19px;
       color: #000;
     }
 
@@ -1372,7 +1372,7 @@ ${itemizedTotalsTable}
       padding: 12px 8px;
       text-align: ${startAlign};
       font-weight: 800;
-      font-size: 15px;
+      font-size: 17px;
       border: 1px solid #0056b3;
       border-bottom: 2px solid #0056b3;
     }
@@ -1391,7 +1391,7 @@ ${itemizedTotalsTable}
       border: 1px solid #dee2e6;
       border-bottom: 1px solid #dee2e6;
       vertical-align: top;
-      font-size: 14px;
+      font-size: 16px;
     }
     
     .items-table tr:nth-child(even) {
@@ -1480,7 +1480,7 @@ ${itemizedTotalsTable}
     .totals-table td {
       padding: 10px 12px;
       border-bottom: 1px solid #e9ecef;
-      font-size: 14px;
+      font-size: 16px;
     }
     
     .totals-table .total-label {
