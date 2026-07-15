@@ -42,8 +42,8 @@ const COMPACT_A4_CSS = `
   .invoice-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 2px; }
   .company-logo { max-width: 90px; margin-bottom: 4px; }
   .company-name { font-size: 18px; margin-bottom: 2px; }
-  .company-details { font-size: 10px; }
-  .company-contact-line { font-size: 10px !important; margin-top: 2px; }
+  .company-details { font-size: 13px; }
+  .company-contact-line { font-size: 13px !important; margin-top: 2px; }
   .invoice-title { font-size: 15px; margin-bottom: 4px; }
   .invoice-meta { font-size: 10px; }
   .invoice-info { gap: 8px 16px; margin-bottom: 10px; padding: 8px 10px; }

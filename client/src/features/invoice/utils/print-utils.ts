@@ -336,7 +336,7 @@ export const generateInvoiceHTML = (
     }
     
     .business-info {
-      font-size: 10px;
+      font-size: 13px;
       margin-bottom: 1px;
       color: #000;
     }
@@ -373,7 +373,7 @@ export const generateInvoiceHTML = (
     }
 
     .company-contact-line {
-      font-size: 10px;
+      font-size: 13px;
       margin-top: 2px;
     }
 
