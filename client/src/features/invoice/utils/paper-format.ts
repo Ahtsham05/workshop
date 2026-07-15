@@ -5,7 +5,7 @@ import { RootState } from '@/stores/store'
 export type { PaperSize, PrintOrientation }
 
 /** A resolved sheet size, folding the branch's A5 print orientation into the format key. */
-export type SheetSize = 'a4' | 'a5' | 'a5-landscape'
+export type SheetSize = 'a4' | 'a5' | 'a5-landscape' | 'a4-half-left' | 'a4-half-right'
 
 /** Every key `PAPER_FORMATS`/`openPrintWindowForFormat` can be looked up by. */
 export type PaperFormatKey = PaperSize | 'a5-landscape'
@@ -76,6 +76,26 @@ export const PAPER_FORMATS: Record<PaperFormatKey, PaperFormatConfig> = {
     popup: { width: 900, height: 640 },
     printDelayMs: 1500,
   },
+  'a4-half-left': {
+    family: 'sheet',
+    label: 'A4 — Left half',
+    pageCss: 'A4 landscape',
+    pageMargin: '8mm',
+    baseFontPx: 12,
+    itemsPerPage: 7,
+    popup: { width: 900, height: 640 },
+    printDelayMs: 1500,
+  },
+  'a4-half-right': {
+    family: 'sheet',
+    label: 'A4 — Right half',
+    pageCss: 'A4 landscape',
+    pageMargin: '8mm',
+    baseFontPx: 12,
+    itemsPerPage: 7,
+    popup: { width: 900, height: 640 },
+    printDelayMs: 1500,
+  },
 }
 
 export const PAPER_SIZE_OPTIONS: Array<{ value: PaperSize; label: string; description: string }> = [
@@ -83,6 +103,8 @@ export const PAPER_SIZE_OPTIONS: Array<{ value: PaperSize; label: string; descri
   { value: 'thermal58', label: 'Thermal 58mm', description: 'Best for narrow 58mm receipt printers' },
   { value: 'a4', label: 'A4', description: 'Best for full-page A4 printers' },
   { value: 'a5', label: 'A5', description: 'Best for half-page A5 printers' },
+  { value: 'a4-half-left', label: 'A4 — Left half', description: 'Prints in the left half of a landscape A4 sheet, leaving the right half blank for another invoice' },
+  { value: 'a4-half-right', label: 'A4 — Right half', description: 'Prints in the right half — use on a sheet whose left half is already printed' },
 ]
 
 const DEFAULT_PAPER_SIZE: PaperSize = 'thermal80'
@@ -115,6 +137,17 @@ export function withPrintOrientation(paperSize: 'a4' | 'a5', orientation: PrintO
 export function withPrintOrientation(paperSize: PaperSize, orientation: PrintOrientation): PaperFormatKey
 export function withPrintOrientation(paperSize: PaperSize, orientation: PrintOrientation): PaperFormatKey {
   return paperSize === 'a5' && orientation === 'landscape' ? 'a5-landscape' : paperSize
+}
+
+/**
+ * Resolves a branch's paper size into the sheet format to actually render for full invoice
+ * documents (as opposed to `resolveSheetSize`, which is for tabular documents that must stay
+ * on a full page). Preserves the A4-half-sheet choices as-is; everything else goes through
+ * the normal A4/A5 + orientation resolution.
+ */
+export function resolveSheetFormat(paperSize: PaperSize, orientation: PrintOrientation): SheetSize {
+  if (paperSize === 'a4-half-left' || paperSize === 'a4-half-right') return paperSize
+  return withPrintOrientation(resolveSheetSize(paperSize), orientation)
 }
 
 /** Forces a thermal-family size for documents that only make sense on receipt rolls. */

@@ -54,7 +54,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Checkbox } from '@/components/ui/checkbox'
 import { generateInvoiceHTML, generateA4InvoiceHTML, generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '../utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
@@ -395,7 +395,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         const htmlContent = generateInvoiceHTML(printData, resolveThermalSize(paperSize))
         openPrintWindowForFormat(htmlContent, paperSize, printContact)
       } else {
-        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation)
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation)
         const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
         openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       }
@@ -817,6 +817,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           <PrintFormatButton
                             size="sm"
                             defaultPaperSize={defaultPaperSize}
+                            allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                             disabled={printingInvoiceId === invoice._id}
                             onPrint={(paperSize) => handlePrintInvoice(invoice, paperSize)}
                             label=""

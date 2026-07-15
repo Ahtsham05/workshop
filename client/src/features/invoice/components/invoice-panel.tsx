@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type SheetSize, type PrintOrientation } from '../utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, resolveSheetFormat, type PaperSize, type SheetSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
@@ -419,9 +419,8 @@ export function InvoicePanel({
     }
   }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
-  // A4 Print functionality using utility
-  const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: SheetSize = 'a4') => {
-    try {
+  /** Builds A4/A5 print data + WhatsApp/SMS contact for the invoice being saved/printed. Shared by full and half-sheet printing. */
+  const buildA4PrintData = useCallback(async (invoiceData: any) => {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
 
@@ -493,9 +492,15 @@ export function InvoicePanel({
         }
       }
 
+      return { printData, printContact }
+  }, [invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
+
+  // A4 Print functionality using utility — sheetSize also accepts the A4-half-sheet formats
+  const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: SheetSize = 'a4') => {
+    try {
+      const { printData, printContact } = await buildA4PrintData(invoiceData)
       const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
       openPrintWindowForFormat(htmlContent, sheetSize, printContact)
-
       // Don't show success toast - let the print dialog speak for itself
     } catch (error: any) {
       console.error('A4 Print error:', error)
@@ -506,7 +511,7 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
+  }, [buildA4PrintData, invoiceTemplate])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -1228,7 +1233,7 @@ export function InvoicePanel({
         if (PAPER_FORMATS[printType].family === 'thermal') {
           printInvoice(savedInvoicePayload, resolveThermalSize(printType))
         } else {
-          printA4Invoice(savedInvoicePayload, withPrintOrientation(resolveSheetSize(printType), printOrientation))
+          printA4Invoice(savedInvoicePayload, resolveSheetFormat(printType, printOrientation))
         }
       }
 
@@ -2584,6 +2589,7 @@ export function InvoicePanel({
             <PrintFormatButton
               onPrint={(paperSize) => handleSaveInvoice(paperSize)}
               defaultPaperSize={defaultPaperSize}
+              allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
               size="lg"
               variant="default"
               fullWidth

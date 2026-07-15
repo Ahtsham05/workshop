@@ -54,7 +54,7 @@ import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData } from '../utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '../utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
@@ -441,7 +441,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation)
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation)
         openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact)
       }
     } catch (error) {
@@ -496,7 +496,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact)
       } else {
-        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation)
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation)
         openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact)
       }
     } catch (error) {
@@ -948,6 +948,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 variant="outline"
                                 size="sm"
                                 defaultPaperSize={defaultPaperSize}
+                                allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                                 onPrint={(paperSize) => printBillGroup(billGroup, paperSize)}
                                 label="Print"
                               />
@@ -1087,6 +1088,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                     <PrintFormatButton
                       onPrint={(paperSize) => handleCreateCreditInvoice(paperSize)}
                       defaultPaperSize={defaultPaperSize}
+                      allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
                       disabled={isCreating}
                       fullWidth
                       mainButtonContent={

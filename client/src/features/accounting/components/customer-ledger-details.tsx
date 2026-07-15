@@ -51,7 +51,7 @@ import {
   generateA4InvoiceHTML,
   openPrintWindowForFormat,
 } from '@/features/invoice/utils/print-utils';
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, resolveSheetFormat, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
@@ -1284,7 +1284,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
       } else {
-        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation);
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation);
         openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact);
       }
       toast.success(t('print_invoice_btn'));

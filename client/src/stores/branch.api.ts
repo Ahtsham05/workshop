@@ -12,7 +12,7 @@ export interface BranchBankAccount {
 }
 
 /** Default paper size used for invoices/receipts/statements printed from a branch */
-export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5';
+export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5' | 'a4-half-left' | 'a4-half-right';
 
 /** A4/A5 invoice layout/design template */
 export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold';

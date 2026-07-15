@@ -57,7 +57,7 @@ const branchSchema = mongoose.Schema(
     printSettings: {
       paperSize: {
         type: String,
-        enum: ['thermal80', 'thermal58', 'a4', 'a5'],
+        enum: ['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right'],
         default: 'thermal80',
       },
       /** A4/A5 invoice layout/design template */

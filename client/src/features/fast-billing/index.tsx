@@ -9,7 +9,7 @@ import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation } from '@/features/invoice/utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat } from '@/features/invoice/utils/paper-format'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import {
   loadFastBillWorkspace,
@@ -273,7 +273,7 @@ export default function FastBillingPage() {
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(receiptData, resolveThermalSize(paperSize)), paperSize)
       } else {
-        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation)
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation)
         openPrintWindowForFormat(generateA4InvoiceHTML(receiptData, sheetSize, invoiceTemplate), sheetSize)
       }
 

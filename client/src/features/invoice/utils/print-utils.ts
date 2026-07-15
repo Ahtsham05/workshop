@@ -802,6 +802,9 @@ export const generateA4InvoiceHTML = (
   sheetSize: SheetSize = 'a4',
   template: InvoiceTemplate = 'standard',
 ): string => {
+  if (sheetSize === 'a4-half-left' || sheetSize === 'a4-half-right') {
+    return generateA4HalfLandscapeInvoiceHTML(data, sheetSize === 'a4-half-left' ? 'left' : 'right', template)
+  }
   const format = PAPER_FORMATS[sheetSize]
   const {
     invoiceNumber,
@@ -1715,22 +1718,14 @@ function extractA4PrintBodyInner(html: string): string {
 }
 
 /**
- * Landscape A4 with two (different) invoices side by side, half width each — prints two
- * A5-proportioned invoices on a single A4 sheet from a printer that only carries A4 stock.
- * Long invoices may still span multiple sheets; preview before printing.
+ * Wraps two column bodies (each already-extracted `<body>` inner HTML, or '' for a blank
+ * half) into one landscape-A4 page, split 50/50 with a dashed cut guide down the middle and
+ * content anchored to the top of each half — so a printer loaded only with A4 stock can
+ * carry two A5-proportioned invoices per physical sheet.
  */
-export function generateA4LandscapeTwoInvoicesHTML(
-  left: PrintInvoiceData,
-  right: PrintInvoiceData,
-  template: InvoiceTemplate = 'standard',
-): string {
-  const leftFull = generateA4InvoiceHTML(left, 'a4', template)
-  const headEnd = leftFull.indexOf('</head>')
-  if (headEnd === -1) return leftFull
-
-  const head = leftFull.slice(0, headEnd + 7)
-  const bodyLeft = extractA4PrintBodyInner(leftFull)
-  const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right, 'a4', template))
+function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, rightBodyHtml: string, noPrintLabel: string): string {
+  const headEnd = headSource.indexOf('</head>')
+  const head = headEnd === -1 ? headSource : headSource.slice(0, headEnd + 7)
 
   const extraCss = `
     @media print {
@@ -1749,6 +1744,9 @@ export function generateA4LandscapeTwoInvoicesHTML(
       max-width: 50%;
       box-sizing: border-box;
       padding: 0 10px;
+    }
+    .a4-two-up-col + .a4-two-up-col {
+      border-left: 1px dashed #bbb;
     }
     body {
       max-width: none !important;
@@ -1770,11 +1768,11 @@ export function generateA4LandscapeTwoInvoicesHTML(
   return `${mergedHead}
 <body>
   <div class="a4-two-up">
-    <div class="a4-two-up-col">${bodyLeft}</div>
-    <div class="a4-two-up-col">${bodyRight}</div>
+    <div class="a4-two-up-col">${leftBodyHtml}</div>
+    <div class="a4-two-up-col">${rightBodyHtml}</div>
   </div>
   <div class="no-print">
-    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">Print (landscape 2-up)</div>
+    <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${noPrintLabel}</div>
     <div class="print-actions">
       <button type="button" onclick="window.print()" class="print-btn print-btn-primary">Print</button>
       <button type="button" onclick="window.close()" class="print-btn print-btn-secondary">Close</button>
@@ -1782,6 +1780,41 @@ export function generateA4LandscapeTwoInvoicesHTML(
   </div>
 </body>
 </html>`
+}
+
+/**
+ * Landscape A4 with two (different) invoices side by side, half width each — prints two
+ * A5-proportioned invoices on a single A4 sheet from a printer that only carries A4 stock.
+ * Long invoices may still span multiple sheets; preview before printing.
+ */
+export function generateA4LandscapeTwoInvoicesHTML(
+  left: PrintInvoiceData,
+  right: PrintInvoiceData,
+  template: InvoiceTemplate = 'standard',
+): string {
+  const leftFull = generateA4InvoiceHTML(left, 'a4', template)
+  const bodyLeft = extractA4PrintBodyInner(leftFull)
+  const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right, 'a4', template))
+  return buildA4TwoUpPageHTML(leftFull, bodyLeft, bodyRight, 'Print (landscape 2-up)')
+}
+
+/**
+ * One invoice printed into just the left or right half of a landscape A4 sheet, top-aligned,
+ * with the other half left blank. Print one invoice to the left half, feed the same physical
+ * sheet back into the printer, then print a second invoice to the right half — two invoices
+ * end up on one A4 sheet without needing both at once.
+ */
+export function generateA4HalfLandscapeInvoiceHTML(
+  data: PrintInvoiceData,
+  half: 'left' | 'right' = 'left',
+  template: InvoiceTemplate = 'standard',
+): string {
+  const full = generateA4InvoiceHTML(data, 'a4', template)
+  const body = extractA4PrintBodyInner(full)
+  const label = half === 'left' ? 'Print (left half of A4 sheet)' : 'Print (right half of A4 sheet)'
+  return half === 'left'
+    ? buildA4TwoUpPageHTML(full, body, '', label)
+    : buildA4TwoUpPageHTML(full, '', body, label)
 }
 
 /** Opens a blob-URL print window sized/timed for the given paper format. */
