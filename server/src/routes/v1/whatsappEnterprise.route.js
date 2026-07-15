@@ -15,7 +15,10 @@ const router = express.Router();
 
 router.get('/events/stream', sseAuth(), sseBranchScope(), whatsappInboxController.streamEvents);
 
-router.use(auth(), branchScope());
+// /connection/callback is handled by whatsappCloudRoute and must stay public: Meta
+// redirects the browser here directly (no Authorization header), authenticating the
+// request via its own signed `state` param instead of a session/JWT.
+router.use(/^(?!\/connection\/callback).*/, auth(), branchScope());
 
 router.get('/conversations/unread-count', whatsappInboxController.getUnreadCount);
 router.get('/conversations', whatsappInboxController.listConversations);
