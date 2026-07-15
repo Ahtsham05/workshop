@@ -1155,16 +1155,16 @@ ${itemizedTotalsTable}
     }
     
     .company-name {
-      font-size: 38px;
+      font-size: 48px;
       font-weight: 900;
       color: #007bff;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
     }
     
     .company-details {
-      font-size: 14px;
+      font-size: 17px;
       color: #000;
-      line-height: 1.3;
+      line-height: 1.4;
     }
 
     .invoice-details {
@@ -1350,7 +1350,7 @@ ${itemizedTotalsTable}
     .company-contact-line {
       display: inline-block;
       margin-top: 4px;
-      font-size: 14px;
+      font-size: 17px;
       color: #000;
     }
 
