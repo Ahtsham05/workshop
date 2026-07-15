@@ -578,7 +578,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         balance: totals.total,
         dueDate: dueDate,
         billNumber: billNumber,
-        notes: notes || `Converted from ${selectedInvoices.size} pending invoices - Bill #${billNumber}`,
+        notes: notes,
         deliveryCharge: 0,
         serviceCharge: 0,
         roundingAdjustment: 0

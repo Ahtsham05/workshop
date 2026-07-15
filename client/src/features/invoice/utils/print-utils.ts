@@ -983,7 +983,7 @@ export const generateA4InvoiceHTML = (
       ${isQuoteStyleTotals(type) ? `
       <tr class="final-total">
         <td class="total-label">${urduTexts.total}:</td>
-        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
       ` : ''}
     </table>
@@ -1001,19 +1001,19 @@ ${itemizedTotalsTable}
     <table class="totals-table">
       <tr>
         <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold;">${formatCurrency(total)}</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(total)}</td>
       </tr>
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 13px;">
+        <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 14px;">
           ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
       ` : ''}
       <tr style="border-top: 2px solid #000;">
         <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
     </table>
   </div>
@@ -1155,32 +1155,32 @@ ${itemizedTotalsTable}
     }
     
     .company-name {
-      font-size: 28px;
-      font-weight: bold;
+      font-size: 38px;
+      font-weight: 900;
       color: #007bff;
       margin-bottom: 5px;
     }
     
     .company-details {
-      font-size: 12px;
+      font-size: 14px;
       color: #000;
       line-height: 1.3;
     }
-    
+
     .invoice-details {
       text-align: ${endAlign};
       flex: 1;
     }
-    
+
     .invoice-title {
-      font-size: 24px;
+      font-size: 26px;
       font-weight: bold;
       color: #333;
       margin-bottom: 10px;
     }
-    
+
     .invoice-meta {
-      font-size: 12px;
+      font-size: 14px;
       color: #666;
     }
     
@@ -1215,19 +1215,19 @@ ${itemizedTotalsTable}
     
     .info-title {
       font-weight: bold;
-      font-size: 15px;
+      font-size: 17px;
       color: #333;
       margin: 0 0 4px;
       padding-bottom: 6px;
       border-bottom: 2px solid #dee2e6;
     }
-    
+
     .info-row {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
       gap: 12px;
-      font-size: 13px;
+      font-size: 14px;
       width: 100%;
     }
 
@@ -1245,7 +1245,7 @@ ${itemizedTotalsTable}
     }
 
     .customer-field-label {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: #555;
       flex-shrink: 0;
@@ -1295,7 +1295,7 @@ ${itemizedTotalsTable}
     }
 
     .bill-to-customer-name {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       color: #000;
       line-height: 1.45;
@@ -1312,14 +1312,14 @@ ${itemizedTotalsTable}
     }
 
     .bill-to-invoice-type {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       flex-shrink: 0;
       align-self: center;
     }
 
     .customer-name-highlight {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 800;
       color: #000;
       text-align: inherit;
@@ -1338,7 +1338,7 @@ ${itemizedTotalsTable}
     }
 
     .payment-type-label {
-      font-size: 13px;
+      font-size: 14px;
       margin: 0;
     }
 
@@ -1350,7 +1350,7 @@ ${itemizedTotalsTable}
     .company-contact-line {
       display: inline-block;
       margin-top: 4px;
-      font-size: 13px;
+      font-size: 14px;
       color: #000;
     }
 
@@ -1368,11 +1368,11 @@ ${itemizedTotalsTable}
     }
     
     .items-table th {
-    
+
       padding: 12px 8px;
       text-align: ${startAlign};
       font-weight: 800;
-      font-size: 14px;
+      font-size: 15px;
       border: 1px solid #0056b3;
       border-bottom: 2px solid #0056b3;
     }
@@ -1391,7 +1391,7 @@ ${itemizedTotalsTable}
       border: 1px solid #dee2e6;
       border-bottom: 1px solid #dee2e6;
       vertical-align: top;
-      font-size: 13px;
+      font-size: 14px;
     }
     
     .items-table tr:nth-child(even) {
@@ -1480,7 +1480,7 @@ ${itemizedTotalsTable}
     .totals-table td {
       padding: 10px 12px;
       border-bottom: 1px solid #e9ecef;
-      font-size: 13px;
+      font-size: 14px;
     }
     
     .totals-table .total-label {
@@ -1500,7 +1500,7 @@ ${itemizedTotalsTable}
       background: white;
       color: black;
       font-weight: bold;
-      font-size: 16px;
+      font-size: 18px;
       border-bottom: none;
     }
     
@@ -1554,11 +1554,11 @@ ${itemizedTotalsTable}
     .terms-heading {
       font-weight: bold;
       margin-bottom: 8px;
-      font-size: 16px;
+      font-size: 17px;
     }
 
     .notes-section .notes-content {
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1.5;
       white-space: normal;
       word-break: break-word;
@@ -1603,19 +1603,19 @@ ${itemizedTotalsTable}
     
     .footer {
       text-align: center;
-      font-size: 12px;
+      font-size: 13px;
       color: #666;
       margin-top: 40px;
       padding-top: 20px;
       border-top: 2px solid #e9ecef;
     }
-    
+
     .footer-line {
       margin-bottom: 5px;
     }
 
     .footer-thank-you {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: bold;
       margin-bottom: 10px;
     }
@@ -1665,7 +1665,7 @@ ${itemizedTotalsTable}
       display: inline-block;
       padding: 4px 8px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: bold;
       text-transform: uppercase;
     }

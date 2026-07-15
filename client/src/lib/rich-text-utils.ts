@@ -125,9 +125,14 @@ export function normalizeInvoiceNotesHtml(content: string): string {
   return sanitizeRichHtml(working)
 }
 
+/** Auto-generated bookkeeping line stamped into `notes` by the pending-invoice-to-bill
+ * conversion flow (billNumber already carries this info as its own field) — never worth
+ * showing to the customer on a printed invoice or detail view. */
+const AUTO_CONVERTED_NOTE_LINE = /^\s*Converted from \d+ pending invoices? - Bill #\S+\s*$/im
+
 /** Sanitize rich invoice terms for safe HTML rendering on print and detail views. */
 export function invoiceTermsToSafeHtml(content: string): string {
-  const working = normalizeRichContent(content)
+  const working = normalizeRichContent(content).replace(AUTO_CONVERTED_NOTE_LINE, '').trim()
   if (!working) return ''
 
   if (!hasHtmlTags(working)) {
