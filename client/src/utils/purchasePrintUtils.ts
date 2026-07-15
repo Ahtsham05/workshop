@@ -2,7 +2,7 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
-import { PAPER_FORMATS, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation, type SheetSize } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 
 export type { PaperSize }
@@ -242,7 +242,7 @@ export function generatePurchaseInvoiceA4HTML(
   branchDetails?: BranchPrintDetails,
   languageOverride?: InvoiceLanguage,
   printInUrdu?: boolean,
-  sheetSize: 'a4' | 'a5' = 'a4',
+  sheetSize: SheetSize = 'a4',
   template: InvoiceTemplate = 'standard',
 ): string {
   const format = PAPER_FORMATS[sheetSize]
@@ -436,11 +436,14 @@ export function openPurchasePrintWindow(
     languageOverride?: InvoiceLanguage
     printInUrdu?: boolean
     template?: InvoiceTemplate
+    /** A5 print orientation; ignored for other paper sizes. Defaults to portrait. */
+    orientation?: PrintOrientation
   },
 ): boolean {
   const t = options?.t ?? ((key: string) => key)
   const branchDetails = options?.branchDetails
-  const format = PAPER_FORMATS[paperSize]
+  const formatKey = withPrintOrientation(paperSize, options?.orientation ?? 'portrait')
+  const format = PAPER_FORMATS[formatKey]
   const html =
     format.family === 'thermal'
       ? generatePurchaseInvoiceHTML(
@@ -459,7 +462,7 @@ export function openPurchasePrintWindow(
           branchDetails,
           options?.languageOverride,
           options?.printInUrdu,
-          paperSize as 'a4' | 'a5',
+          formatKey as SheetSize,
           options?.template ?? 'standard',
         )
 

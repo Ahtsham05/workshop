@@ -1,8 +1,14 @@
 import { useSelector } from 'react-redux'
-import { useGetBranchQuery, type PaperSize } from '@/stores/branch.api'
+import { useGetBranchQuery, type PaperSize, type PrintOrientation } from '@/stores/branch.api'
 import { RootState } from '@/stores/store'
 
-export type { PaperSize }
+export type { PaperSize, PrintOrientation }
+
+/** A resolved sheet size, folding the branch's A5 print orientation into the format key. */
+export type SheetSize = 'a4' | 'a5' | 'a5-landscape'
+
+/** Every key `PAPER_FORMATS`/`openPrintWindowForFormat` can be looked up by. */
+export type PaperFormatKey = PaperSize | 'a5-landscape'
 
 export interface PaperFormatConfig {
   family: 'thermal' | 'sheet'
@@ -19,7 +25,7 @@ export interface PaperFormatConfig {
   printDelayMs: number
 }
 
-export const PAPER_FORMATS: Record<PaperSize, PaperFormatConfig> = {
+export const PAPER_FORMATS: Record<PaperFormatKey, PaperFormatConfig> = {
   thermal80: {
     family: 'thermal',
     label: 'Thermal 80mm',
@@ -60,6 +66,16 @@ export const PAPER_FORMATS: Record<PaperSize, PaperFormatConfig> = {
     popup: { width: 640, height: 900 },
     printDelayMs: 1500,
   },
+  'a5-landscape': {
+    family: 'sheet',
+    label: 'A5 Landscape',
+    pageCss: 'A5 landscape',
+    pageMargin: '8mm',
+    baseFontPx: 12,
+    itemsPerPage: 5,
+    popup: { width: 900, height: 640 },
+    printDelayMs: 1500,
+  },
 }
 
 export const PAPER_SIZE_OPTIONS: Array<{ value: PaperSize; label: string; description: string }> = [
@@ -70,6 +86,7 @@ export const PAPER_SIZE_OPTIONS: Array<{ value: PaperSize; label: string; descri
 ]
 
 const DEFAULT_PAPER_SIZE: PaperSize = 'thermal80'
+const DEFAULT_PRINT_ORIENTATION: PrintOrientation = 'portrait'
 
 /** Branch's configured default paper size, falling back to thermal 80mm. */
 export function useBranchPaperSize(): PaperSize {
@@ -78,9 +95,26 @@ export function useBranchPaperSize(): PaperSize {
   return branchData?.printSettings?.paperSize ?? DEFAULT_PAPER_SIZE
 }
 
+/** Branch's configured A5 print orientation, falling back to portrait. Meaningless for non-A5 sizes. */
+export function useBranchPrintOrientation(): PrintOrientation {
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  return branchData?.printSettings?.printOrientation ?? DEFAULT_PRINT_ORIENTATION
+}
+
 /** Forces a sheet-family size for documents that only make sense on full pages (e.g. tabular statements). */
 export function resolveSheetSize(paperSize: PaperSize): 'a4' | 'a5' {
   return paperSize === 'a5' ? 'a5' : 'a4'
+}
+
+/**
+ * Folds the branch's print orientation into a paper-format lookup key. A no-op for every
+ * size except A5 — landscape only exists for A5, so thermal/A4 sizes pass through unchanged.
+ */
+export function withPrintOrientation(paperSize: 'a4' | 'a5', orientation: PrintOrientation): SheetSize
+export function withPrintOrientation(paperSize: PaperSize, orientation: PrintOrientation): PaperFormatKey
+export function withPrintOrientation(paperSize: PaperSize, orientation: PrintOrientation): PaperFormatKey {
+  return paperSize === 'a5' && orientation === 'landscape' ? 'a5-landscape' : paperSize
 }
 
 /** Forces a thermal-family size for documents that only make sense on receipt rolls. */

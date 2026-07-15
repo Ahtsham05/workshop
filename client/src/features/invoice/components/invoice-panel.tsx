@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type SheetSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
@@ -326,6 +326,7 @@ export function InvoicePanel({
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
+  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [showConvertDialog, setShowConvertDialog] = useState(false)
@@ -419,7 +420,7 @@ export function InvoicePanel({
   }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
   // A4 Print functionality using utility
-  const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: 'a4' | 'a5' = 'a4') => {
+  const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: SheetSize = 'a4') => {
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
@@ -1227,7 +1228,7 @@ export function InvoicePanel({
         if (PAPER_FORMATS[printType].family === 'thermal') {
           printInvoice(savedInvoicePayload, resolveThermalSize(printType))
         } else {
-          printA4Invoice(savedInvoicePayload, resolveSheetSize(printType))
+          printA4Invoice(savedInvoicePayload, withPrintOrientation(resolveSheetSize(printType), printOrientation))
         }
       }
 
@@ -1331,7 +1332,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),

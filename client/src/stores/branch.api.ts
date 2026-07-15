@@ -17,9 +17,13 @@ export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5';
 /** A4/A5 invoice layout/design template */
 export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold';
 
+/** Print orientation for the A5 paper size (ignored for other sizes) */
+export type PrintOrientation = 'portrait' | 'landscape';
+
 export interface BranchPrintSettings {
   paperSize: PaperSize;
   template?: InvoiceTemplate;
+  printOrientation?: PrintOrientation;
 }
 
 export interface Branch {

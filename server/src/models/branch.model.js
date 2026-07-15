@@ -66,6 +66,12 @@ const branchSchema = mongoose.Schema(
         enum: ['standard', 'compact', 'modern', 'classic', 'bold'],
         default: 'standard',
       },
+      /** Print orientation for the A5 paper size (ignored for other sizes) */
+      printOrientation: {
+        type: String,
+        enum: ['portrait', 'landscape'],
+        default: 'portrait',
+      },
     },
     /**
      * Fee-collection bank accounts shown to parents/students in the portal when

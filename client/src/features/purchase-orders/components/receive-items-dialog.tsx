@@ -471,6 +471,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
             languageOverride: preferredLanguage,
             printInUrdu: getInvoicePrintInUrdu(),
             template: branchData?.printSettings?.template ?? 'standard',
+            orientation: branchData?.printSettings?.printOrientation ?? 'portrait',
           },
         )
         if (!printed) {

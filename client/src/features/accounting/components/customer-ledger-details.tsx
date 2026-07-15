@@ -51,7 +51,7 @@ import {
   generateA4InvoiceHTML,
   openPrintWindowForFormat,
 } from '@/features/invoice/utils/print-utils';
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
@@ -763,6 +763,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard';
+  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait';
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -1283,7 +1284,8 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
       } else {
-        openPrintWindowForFormat(generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate), paperSize, printContact);
+        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation);
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact);
       }
       toast.success(t('print_invoice_btn'));
     } catch (error) {
@@ -1307,7 +1309,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     showInvoiceNumbers: boolean;
     paperSize?: PaperSize;
   }) => {
-    const sheetSize = resolveSheetSize(options.paperSize ?? defaultPaperSize);
+    const sheetSize = withPrintOrientation(resolveSheetSize(options.paperSize ?? defaultPaperSize), printOrientation);
     if (entries.length === 0 && Math.abs(openingBalance) < 0.005) {
       toast.error(t('No transactions found'));
       return;

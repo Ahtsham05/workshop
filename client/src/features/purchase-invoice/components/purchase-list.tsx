@@ -29,7 +29,7 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 
@@ -48,6 +48,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
+  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
@@ -101,11 +102,11 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           invoiceNote: branchData?.invoiceNote,
         }
 
-        const format = PAPER_FORMATS[paperSize]
+        const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
         const html =
           format.family === 'thermal'
             ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
-            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize), invoiceTemplate)
+            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(paperSize), printOrientation), invoiceTemplate)
 
         const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
         if (printWindow) {

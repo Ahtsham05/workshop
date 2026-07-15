@@ -56,7 +56,7 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchSuppliers } from '@/stores/supplier.slice'
@@ -213,6 +213,7 @@ export default function PurchasePanel({
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
+  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
@@ -350,11 +351,11 @@ export default function PurchasePanel({
             isTrial: orgData?.subscription?.isTrial,
             invoiceNote: branchData?.invoiceNote,
           }
-          const format = PAPER_FORMATS[paperSize]
+          const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
           const html =
             format.family === 'thermal'
               ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveSheetSize(paperSize), invoiceTemplate)
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(paperSize), printOrientation), invoiceTemplate)
 
           const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
           if (printWindow) {

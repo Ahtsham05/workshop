@@ -13,12 +13,12 @@ export const INVOICE_TEMPLATE_OPTIONS: Array<{ value: InvoiceTemplate; label: st
 ]
 
 /** Default line-items-per-page for A4/A5 sheet invoices, per template. Explicit `a4ItemsPerPage` on print data always wins. */
-export const INVOICE_TEMPLATE_ITEMS_PER_PAGE: Record<InvoiceTemplate, { a4: number; a5: number }> = {
-  standard: { a4: 14, a5: 7 },
-  compact: { a4: 32, a5: 16 },
-  modern: { a4: 14, a5: 7 },
-  classic: { a4: 14, a5: 7 },
-  bold: { a4: 12, a5: 6 },
+export const INVOICE_TEMPLATE_ITEMS_PER_PAGE: Record<InvoiceTemplate, { a4: number; a5: number; 'a5-landscape': number }> = {
+  standard: { a4: 14, a5: 7, 'a5-landscape': 5 },
+  compact: { a4: 32, a5: 16, 'a5-landscape': 11 },
+  modern: { a4: 14, a5: 7, 'a5-landscape': 5 },
+  classic: { a4: 14, a5: 7, 'a5-landscape': 5 },
+  bold: { a4: 12, a5: 6, 'a5-landscape': 4 },
 }
 
 const DEFAULT_TEMPLATE: InvoiceTemplate = 'standard'

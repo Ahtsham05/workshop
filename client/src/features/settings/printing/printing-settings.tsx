@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { Loader2, Printer } from 'lucide-react'
+import { Loader2, Printer, RectangleVertical, RectangleHorizontal } from 'lucide-react'
 import ContentSection from '../components/content-section'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,14 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useGetBranchQuery, useUpdateBranchMutation } from '@/stores/branch.api'
 import type { RootState } from '@/stores/store'
-import { PAPER_SIZE_OPTIONS, type PaperSize } from '@/features/invoice/utils/paper-format'
+import { PAPER_SIZE_OPTIONS, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice/utils/print-utils'
+
+const ORIENTATION_OPTIONS: Array<{ value: PrintOrientation; label: string; description: string; icon: typeof RectangleVertical }> = [
+  { value: 'portrait', label: 'Portrait', description: 'Taller than it is wide', icon: RectangleVertical },
+  { value: 'landscape', label: 'Landscape', description: 'Wider than it is tall', icon: RectangleHorizontal },
+]
 
 const SAMPLE_INVOICE_DATA: PrintInvoiceData = {
   invoiceNumber: 'INV-202607-000123',
@@ -66,13 +71,15 @@ export default function PrintingSettings() {
 
   const [paperSize, setPaperSize] = useState<PaperSize>('thermal80')
   const [template, setTemplate] = useState<InvoiceTemplate>('standard')
+  const [orientation, setOrientation] = useState<PrintOrientation>('portrait')
 
   useEffect(() => {
     if (branchData?.printSettings?.paperSize) {
       setPaperSize(branchData.printSettings.paperSize)
     }
     setTemplate(branchData?.printSettings?.template ?? 'standard')
-  }, [branchData?.printSettings?.paperSize, branchData?.printSettings?.template])
+    setOrientation(branchData?.printSettings?.printOrientation ?? 'portrait')
+  }, [branchData?.printSettings?.paperSize, branchData?.printSettings?.template, branchData?.printSettings?.printOrientation])
 
   const previewHtmlByTemplate = useMemo(() => {
     const map: Partial<Record<InvoiceTemplate, string>> = {}
@@ -85,7 +92,10 @@ export default function PrintingSettings() {
   const handleSave = async () => {
     if (!activeBranchId) return
     try {
-      await updateBranch({ branchId: activeBranchId, body: { printSettings: { paperSize, template } } }).unwrap()
+      await updateBranch({
+        branchId: activeBranchId,
+        body: { printSettings: { paperSize, template, printOrientation: orientation } },
+      }).unwrap()
       toast.success('Printing preferences updated')
     } catch {
       toast.error('Failed to update printing preferences')
@@ -94,7 +104,8 @@ export default function PrintingSettings() {
 
   const hasChanges =
     paperSize !== (branchData?.printSettings?.paperSize ?? 'thermal80') ||
-    template !== (branchData?.printSettings?.template ?? 'standard')
+    template !== (branchData?.printSettings?.template ?? 'standard') ||
+    orientation !== (branchData?.printSettings?.printOrientation ?? 'portrait')
 
   return (
     <ContentSection
@@ -133,6 +144,39 @@ export default function PrintingSettings() {
                   </Label>
                 ))}
               </RadioGroup>
+
+              {paperSize === 'a5' && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium">Print orientation</Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Choose how invoices are oriented on A5 paper.
+                  </p>
+                  <RadioGroup
+                    value={orientation}
+                    onValueChange={(value) => setOrientation(value as PrintOrientation)}
+                    className="grid grid-cols-2 gap-3 max-w-sm"
+                  >
+                    {ORIENTATION_OPTIONS.map((option) => (
+                      <Label
+                        key={option.value}
+                        htmlFor={`print-orientation-${option.value}`}
+                        className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${
+                          orientation === option.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <RadioGroupItem value={option.value} id={`print-orientation-${option.value}`} className="mt-0.5" />
+                        <div className="flex items-start gap-2 min-w-0">
+                          <option.icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm">{option.label}</div>
+                            <div className="text-xs text-muted-foreground">{option.description}</div>
+                          </div>
+                        </div>
+                      </Label>
+                    ))}
+                  </RadioGroup>
+                </div>
+              )}
 
               <div className="mt-8">
                 <Label className="text-sm font-medium">Invoice template</Label>

@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
 import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
-import { PAPER_FORMATS, useBranchPaperSize, type PaperSize } from '@/features/invoice/utils/paper-format';
+import { PAPER_FORMATS, useBranchPaperSize, useBranchPrintOrientation, withPrintOrientation, type PaperSize } from '@/features/invoice/utils/paper-format';
 import { PrintFormatButton } from '@/components/print-format-button';
 
 function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
@@ -95,6 +95,7 @@ export function PaymentReceipt({
   const resolvedCompany = resolveReceiptCompany(language, company);
   const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
   const defaultPaperSize = useBranchPaperSize();
+  const printOrientation = useBranchPrintOrientation();
 
   const formatCurrency = (amount: number) => {
     return `Rs ${Math.abs(amount).toFixed(2)}`;
@@ -142,11 +143,11 @@ export function PaymentReceipt({
     };
 
     const htmlContent = generateReceiptHTML(printData, paperSize);
-    openPrintWindowForFormat(htmlContent, paperSize);
+    openPrintWindowForFormat(htmlContent, withPrintOrientation(paperSize, printOrientation));
   };
 
   const generateReceiptHTML = (data: any, paperSize: PaperSize) => {
-    const paperFormat = PAPER_FORMATS[paperSize];
+    const paperFormat = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)];
     const cardWidth = (paperFormat.bodyWidthPx ?? 380) + (paperFormat.family === 'thermal' ? 80 : 220);
     return `
 <!DOCTYPE html>

@@ -44,14 +44,17 @@ import {
   // RotateCcw,
   Clock,
   FileCheck,
+  Columns2,
+  Loader2,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, type PaperSize } from '../utils/paper-format'
+import { Checkbox } from '@/components/ui/checkbox'
+import { generateInvoiceHTML, generateA4InvoiceHTML, generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { fetchBalanceBeforeInvoice } from '../utils/invoice-print-balance'
@@ -124,6 +127,9 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
   const [printInUrdu, setPrintInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [quotationToConvert, setQuotationToConvert] = useState<any>(null)
+  const [twoUpMode, setTwoUpMode] = useState(false)
+  const [twoUpSelection, setTwoUpSelection] = useState<any[]>([])
+  const [printingTwoUp, setPrintingTwoUp] = useState(false)
 
   // Debounce search term
   useEffect(() => {
@@ -158,6 +164,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
+  const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
   // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
@@ -287,14 +294,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     })
   }
 
-  const handlePrintInvoice = async (invoice: any, paperSize: PaperSize = defaultPaperSize) => {
-    if (!canPrint) {
-      toast.error(permissionMessage(t, 'no_permission_print_invoice'))
-      return
-    }
-    try {
-      setPrintingInvoiceId(invoice._id)
-      
+  /** Builds sheet/thermal-agnostic print data + WhatsApp/SMS contact for one invoice. Shared by single and 2-per-page printing. */
+  const buildInvoicePrintData = async (invoice: any) => {
       // Resolve customer name
       const customerName = getCustomerName(invoice)
       const walkInCustomerName = invoice.walkInCustomerName
@@ -378,14 +379,27 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         })
       }
 
+      return { printData, printContact }
+  }
+
+  const handlePrintInvoice = async (invoice: any, paperSize: PaperSize = defaultPaperSize) => {
+    if (!canPrint) {
+      toast.error(permissionMessage(t, 'no_permission_print_invoice'))
+      return
+    }
+    try {
+      setPrintingInvoiceId(invoice._id)
+      const { printData, printContact } = await buildInvoicePrintData(invoice)
+
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
         const htmlContent = generateInvoiceHTML(printData, resolveThermalSize(paperSize))
         openPrintWindowForFormat(htmlContent, paperSize, printContact)
       } else {
-        const htmlContent = generateA4InvoiceHTML(printData, resolveSheetSize(paperSize), invoiceTemplate)
-        openPrintWindowForFormat(htmlContent, paperSize, printContact)
+        const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation)
+        const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+        openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       }
-      
+
       toast.success(`Printing invoice ${invoice.invoiceNumber}`)
     } catch (error) {
       console.error('Print error:', error)
@@ -393,6 +407,42 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     } finally {
       setPrintingInvoiceId(null)
     }
+  }
+
+  /** Combines two different invoices onto a single landscape A4 sheet (two A5-proportioned halves) — for printers that only carry A4 stock. */
+  const handlePrintTwoUp = async () => {
+    if (!canPrint) {
+      toast.error(permissionMessage(t, 'no_permission_print_invoice'))
+      return
+    }
+    if (twoUpSelection.length !== 2) return
+    try {
+      setPrintingTwoUp(true)
+      const [left, right] = twoUpSelection
+      const [{ printData: leftData }, { printData: rightData }] = await Promise.all([
+        buildInvoicePrintData(left),
+        buildInvoicePrintData(right),
+      ])
+      const htmlContent = generateA4LandscapeTwoInvoicesHTML(leftData, rightData, invoiceTemplate)
+      openPrintWindowForFormat(htmlContent, 'a4')
+      toast.success(`Printing ${left.invoiceNumber} & ${right.invoiceNumber} on one A4 sheet`)
+      setTwoUpMode(false)
+      setTwoUpSelection([])
+    } catch (error) {
+      console.error('Print error:', error)
+      toast.error('Failed to print combined invoices')
+    } finally {
+      setPrintingTwoUp(false)
+    }
+  }
+
+  const toggleTwoUpSelection = (invoice: any) => {
+    setTwoUpSelection((prev) => {
+      const exists = prev.some((inv) => inv._id === invoice._id)
+      if (exists) return prev.filter((inv) => inv._id !== invoice._id)
+      if (prev.length >= 2) return prev
+      return [...prev, invoice]
+    })
   }
 
   const handleDelete = (invoice: any) => {
@@ -463,6 +513,20 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <Clock className="h-4 w-4 mr-2" />
             {t('convert_pending_invoices')}
           </Button>
+          {canPrint && (
+            <Button
+              variant={twoUpMode ? 'default' : 'outline'}
+              className="whitespace-nowrap"
+              onClick={() => {
+                setTwoUpMode((v) => !v)
+                setTwoUpSelection([])
+              }}
+              title="Print two different invoices on one A4 sheet (half A5 each) — for printers loaded with A4 paper"
+            >
+              <Columns2 className="h-4 w-4 mr-2" />
+              {twoUpMode ? 'Cancel 2-per-page' : 'Print 2 per page'}
+            </Button>
+          )}
           {canCreate && (
             <Button className="whitespace-nowrap" onClick={onCreateNew}>
               <Plus className="h-4 w-4 mr-2" />
@@ -471,6 +535,23 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           )}
         </div>
       </div>
+
+      {twoUpMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+          <div className="text-sm">
+            <span className="font-medium">{twoUpSelection.length}/2 invoices selected</span>
+            <span className="text-muted-foreground"> — pick two invoices to combine onto one A4 sheet (two A5-sized halves).</span>
+          </div>
+          <Button size="sm" disabled={twoUpSelection.length !== 2 || printingTwoUp} onClick={handlePrintTwoUp}>
+            {printingTwoUp ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Columns2 className="h-4 w-4 mr-2" />
+            )}
+            Print 2 per page
+          </Button>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -585,6 +666,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <Table>
               <TableHeader>
                 <TableRow>
+                  {twoUpMode && <TableHead className="w-10" />}
                   <TableHead>{t('invoice_number')}</TableHead>
                   <TableHead>{t('customer')}</TableHead>
                   <TableHead>{t('phone')}</TableHead>
@@ -598,8 +680,20 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentInvoices.map((invoice: any) => (
-                  <TableRow key={invoice._id}>
+                {currentInvoices.map((invoice: any) => {
+                  const isSelectedForTwoUp = twoUpSelection.some((inv) => inv._id === invoice._id)
+                  return (
+                  <TableRow key={invoice._id} className={isSelectedForTwoUp ? 'bg-primary/5' : undefined}>
+                    {twoUpMode && (
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelectedForTwoUp}
+                          onCheckedChange={() => toggleTwoUpSelection(invoice)}
+                          disabled={!isSelectedForTwoUp && twoUpSelection.length >= 2}
+                          aria-label={`Select ${invoice.invoiceNumber} for 2-per-page printing`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {invoice.invoiceNumber}
@@ -742,7 +836,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

@@ -1,6 +1,6 @@
 import { formatCurrency } from '@/features/invoice/utils/print-utils'
 import { escapeHtml } from '@/lib/escape-html'
-import { PAPER_FORMATS } from '@/features/invoice/utils/paper-format'
+import { PAPER_FORMATS, type SheetSize } from '@/features/invoice/utils/paper-format'
 
 export type LedgerStatementLanguage = 'en' | 'ur'
 
@@ -168,7 +168,7 @@ const balanceClass = (balance: number): string => {
  */
 export function generateCustomerLedgerStatementHTML(
   data: CustomerLedgerStatementData,
-  sheetSize: 'a4' | 'a5' = 'a4',
+  sheetSize: SheetSize = 'a4',
 ): string {
   const format = PAPER_FORMATS[sheetSize]
   const {

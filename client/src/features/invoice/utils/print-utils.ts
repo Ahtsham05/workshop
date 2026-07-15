@@ -15,7 +15,7 @@ import {
 import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge'
 import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
-import { PAPER_FORMATS, type PaperSize } from './paper-format'
+import { PAPER_FORMATS, type PaperSize, type SheetSize, type PaperFormatKey } from './paper-format'
 import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from './invoice-template'
 
 export type { PrintWindowContact }
@@ -799,7 +799,7 @@ export const generateInvoiceHTML = (
 // Generate A4/A5 Invoice HTML with table layout
 export const generateA4InvoiceHTML = (
   data: PrintInvoiceData,
-  sheetSize: 'a4' | 'a5' = 'a4',
+  sheetSize: SheetSize = 'a4',
   template: InvoiceTemplate = 'standard',
 ): string => {
   const format = PAPER_FORMATS[sheetSize]
@@ -1715,17 +1715,22 @@ function extractA4PrintBodyInner(html: string): string {
 }
 
 /**
- * Landscape A4 with two invoices side by side (half width each).
+ * Landscape A4 with two (different) invoices side by side, half width each — prints two
+ * A5-proportioned invoices on a single A4 sheet from a printer that only carries A4 stock.
  * Long invoices may still span multiple sheets; preview before printing.
  */
-export function generateA4LandscapeTwoInvoicesHTML(left: PrintInvoiceData, right: PrintInvoiceData): string {
-  const leftFull = generateA4InvoiceHTML(left)
+export function generateA4LandscapeTwoInvoicesHTML(
+  left: PrintInvoiceData,
+  right: PrintInvoiceData,
+  template: InvoiceTemplate = 'standard',
+): string {
+  const leftFull = generateA4InvoiceHTML(left, 'a4', template)
   const headEnd = leftFull.indexOf('</head>')
   if (headEnd === -1) return leftFull
 
   const head = leftFull.slice(0, headEnd + 7)
   const bodyLeft = extractA4PrintBodyInner(leftFull)
-  const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right))
+  const bodyRight = extractA4PrintBodyInner(generateA4InvoiceHTML(right, 'a4', template))
 
   const extraCss = `
     @media print {
@@ -1782,7 +1787,7 @@ export function generateA4LandscapeTwoInvoicesHTML(left: PrintInvoiceData, right
 /** Opens a blob-URL print window sized/timed for the given paper format. */
 export const openPrintWindowForFormat = (
   htmlContent: string,
-  paperSize: PaperSize,
+  paperSize: PaperFormatKey,
   contact?: PrintWindowContact,
 ): void => {
   ensureInvoicePrintContactBridge()
