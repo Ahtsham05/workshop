@@ -996,10 +996,12 @@ export default function PurchasePanel({
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
                     const switchingCashToCredit = prev.paymentType === 'Cash' && nextPaymentType === 'Credit'
-                    const switchingCashToWallet = prev.paymentType === 'Cash' && nextPaymentType === 'Wallet'
-                    const nextPaid = nextPaymentType === 'Cash'
+                    // Wallet payment means "paid right now from that wallet", same as Cash —
+                    // it should default to fully paid, not owed like Credit. The paid-amount
+                    // field stays editable afterward for the rare partial-wallet-payment case.
+                    const nextPaid = nextPaymentType === 'Cash' || nextPaymentType === 'Wallet'
                       ? currentTotal
-                      : (switchingCashToCredit || switchingCashToWallet)
+                      : switchingCashToCredit
                         ? 0
                         : (prev.paidAmount || 0)
                     return {

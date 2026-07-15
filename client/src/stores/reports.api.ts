@@ -508,6 +508,8 @@ export interface ProfitLossFullReport {
     billLatePaymentLoss: number
   }
   expenses: number
+  unpaidExpenses: number
+  unpaidExpensesCount: number
   netProfit: number
   netProfitMargin: number
   roi: number

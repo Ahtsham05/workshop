@@ -71,7 +71,7 @@ const MODULE_FLOW_LABELS: Record<string, { in: string; out: string; net: string 
   'Sales': { in: 'Sale', out: 'Total Cost', net: 'Profit' },
   'Purchases': { in: 'Refunds', out: 'Paid', net: 'Net Spent' },
   'Load': { in: 'Sold', out: 'Purchased', net: 'Profit' },
-  'Cash Management': { in: 'Received', out: 'Sent', net: 'Net' },
+  'Cash Management': { in: 'Received', out: 'Sent', net: 'Profit' },
   'Sim Sale': { in: 'Sold', out: 'Purchased', net: 'Profit' },
   'Services': { in: 'Collected', out: 'Refunds', net: 'Net' },
   'Agent Bills': { in: 'Collected', out: 'Paid', net: 'Net' },
@@ -1466,11 +1466,12 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               <div>
                 <p className='mb-3 text-sm font-medium'>All Modules Summary — Actual Cash Movement</p>
                 <p className='mb-4 text-xs text-muted-foreground'>
-                  Every module&apos;s sale and purchase amount, side by side — e.g. Load shows what you sold vs what you
-                  purchased, Cash Management shows received vs sent, My Accounts shows what came in vs personal drawings, Supplier
-                  Payments shows what you paid suppliers vs any refunds, Customer Payments shows what you collected vs any refunds.
-                  Sales shows real cost of goods sold and gross profit. Each card's Net always equals its own In minus Out, and the
-                  Grand Total card equals Net Cash Available minus Previous Balance.
+                  Every module&apos;s sale and purchase amount, side by side — e.g. My Accounts shows what came in vs personal
+                  drawings, Supplier Payments shows what you paid suppliers vs any refunds, Customer Payments shows what you
+                  collected vs any refunds. Sales, Load, Sim Sale, and Cash Management show real profit (revenue or commission
+                  minus actual cost) rather than raw cash movement, so buying extra load stock doesn&apos;t show as a loss and
+                  sending/receiving cash shows the commission you actually earned. Every other card's Net equals its own In
+                  minus Out, and the Grand Total card equals Net Cash Available minus Previous Balance.
                 </p>
                 {moduleSummaryRows.length === 0 ? (
                   <EmptyNote label='cash activity' />
@@ -1478,9 +1479,28 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                   <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
                     {moduleSummaryRows.map((row) => {
                       const isSales = row.module === 'Sales'
+                      const isLoad = row.module === 'Load'
+                      const isSimSale = row.module === 'Sim Sale'
+                      const isCashManagement = row.module === 'Cash Management'
                       const totalCost = pnl?.revenue.costOfGoodsSold ?? 0
                       const grossProfit = pnl?.revenue.grossProfit ?? 0
-                      const net = isSales ? grossProfit : row.net
+                      const loadProfit = pnl?.additionalProfits.loadProfit ?? 0
+                      const simSaleProfit = pnl?.additionalProfits.simSaleProfit ?? 0
+                      // Withdrawal/deposit commission earned on cash sent and received — the
+                      // actual earnings from this module, as opposed to the cash that moved.
+                      const cashManagementProfit =
+                        (pnl?.additionalProfits.withdrawalProfit ?? 0) + (pnl?.additionalProfits.depositProfit ?? 0)
+                      // Sales, Load, Sim Sale, and Cash Management are true profit modules (revenue/commission
+                      // minus real cost), so their Net uses the P&L figures instead of raw cash in/out.
+                      const net = isSales
+                        ? grossProfit
+                        : isLoad
+                          ? loadProfit
+                          : isSimSale
+                            ? simSaleProfit
+                            : isCashManagement
+                              ? cashManagementProfit
+                              : row.net
                       const labels = MODULE_FLOW_LABELS[row.module] ?? DEFAULT_FLOW_LABELS
                       return (
                         <div
@@ -1514,6 +1534,48 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                         </div>
                       )
                     })}
+                    {cashCreditSummary.creditSales > 0 && (
+                      <div className='rounded-xl border-2 border-amber-500/20 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/10'>
+                        <p className='text-sm font-semibold'>Credit Sales</p>
+                        <div className='mt-3 space-y-1.5 text-xs'>
+                          <div className='flex items-center justify-between'>
+                            <span className='text-muted-foreground'>Given on Credit</span>
+                            <span className='font-medium'>{fmt(cashCreditSummary.creditSales)}</span>
+                          </div>
+                          <div className='flex items-center justify-between'>
+                            <span className='text-muted-foreground'>Collected</span>
+                            <span className='font-medium text-green-600'>
+                              {fmt(cashCreditSummary.creditSales - cashCreditSummary.creditSalesBalance)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className='mt-3 flex items-center justify-between border-t pt-2'>
+                          <span className='text-xs font-medium text-muted-foreground'>Still Owed by Customers</span>
+                          <span className='text-base font-bold text-amber-600'>{fmt(cashCreditSummary.creditSalesBalance)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {cashCreditSummary.creditPurchases > 0 && (
+                      <div className='rounded-xl border-2 border-amber-500/20 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/10'>
+                        <p className='text-sm font-semibold'>Credit Purchases</p>
+                        <div className='mt-3 space-y-1.5 text-xs'>
+                          <div className='flex items-center justify-between'>
+                            <span className='text-muted-foreground'>Taken on Credit</span>
+                            <span className='font-medium'>{fmt(cashCreditSummary.creditPurchases)}</span>
+                          </div>
+                          <div className='flex items-center justify-between'>
+                            <span className='text-muted-foreground'>Paid</span>
+                            <span className='font-medium text-green-600'>
+                              {fmt(cashCreditSummary.creditPurchases - cashCreditSummary.creditPurchaseBalance)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className='mt-3 flex items-center justify-between border-t pt-2'>
+                          <span className='text-xs font-medium text-muted-foreground'>Still Owed to Suppliers</span>
+                          <span className='text-base font-bold text-amber-600'>{fmt(cashCreditSummary.creditPurchaseBalance)}</span>
+                        </div>
+                      </div>
+                    )}
                     <div
                       className={cn(
                         'rounded-xl border-2 p-4 shadow-sm',
@@ -1623,6 +1685,17 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                   )
                 ) : (
                   <LockedNote label='Total Profit / Loss' />
+                )}
+                {pnl && pnl.unpaidExpenses > 0 && (
+                  <div className='mt-4 rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 shadow-sm dark:bg-amber-950/20'>
+                    <p className='text-sm font-medium text-muted-foreground'>Pending Recurring Expenses (Unpaid)</p>
+                    <p className='text-2xl font-bold text-amber-600'>{fmt(pnl.unpaidExpenses)}</p>
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      {pnl.unpaidExpensesCount} auto-generated expense{pnl.unpaidExpensesCount === 1 ? '' : 's'} (rent,
+                      salary, bills, etc.) came due this period but {pnl.unpaidExpensesCount === 1 ? "hasn't" : "haven't"}{' '}
+                      been marked Paid yet — not counted in Total Profit/Loss above until you confirm payment.
+                    </p>
+                  </div>
                 )}
               </div>
             </CardContent>

@@ -1256,7 +1256,9 @@ const getRoiReport = catchAsync(async (req, res) => {
     currentInventoryValue,
     currentWalletBalance,
   ] = await Promise.all([
-    aggregateSum(Expense, { ...scope, date: { $gte: from, $lte: to } }, '$amount'),
+    // Only expenses actually paid count against profit — auto-generated recurring
+    // cycles sit as isPaid:false placeholders until confirmed paid (see expense.model.js).
+    aggregateSum(Expense, { ...scope, date: { $gte: from, $lte: to }, isPaid: { $ne: false } }, '$amount'),
     // Real-time inventory value: current stock quantity × cost (already reflects all purchases/sales/returns)
     (async () => {
       const result = await Product.aggregate([
@@ -1278,7 +1280,8 @@ const getRoiReport = catchAsync(async (req, res) => {
   // ── Profit aggregations ──────────────────────────────────────────────────
   const [
     salesProfit,
-    loadProfit,
+    loadPurchaseProfit,
+    loadSaleProfit,
     repairProfit,
     serviceProfit,
     simSaleProfit,
@@ -1295,8 +1298,10 @@ const getRoiReport = catchAsync(async (req, res) => {
       { ...scope, invoiceDate: { $gte: from, $lte: to }, status: { $ne: 'cancelled' } },
       { $ifNull: ['$totalProfit', 0] }
     ),
-    // Load profit = purchase savings only (supplier commission/discount)
+    // Load profit has two sources: supplier commission/discount captured when buying load...
     aggregateSum(LoadPurchase, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$profit', 0] }),
+    // ...and any extra charge captured when selling load to a customer.
+    aggregateSum(LoadTransaction, { ...scope, date: { $gte: from, $lte: to } }, { $ifNull: ['$profit', 0] }),
     // Repair profit = charges collected minus parts cost
     (async () => {
       const result = await RepairJob.aggregate([
@@ -1338,6 +1343,8 @@ const getRoiReport = catchAsync(async (req, res) => {
       '$totalAmount'
     ),
   ]);
+
+  const loadProfit = loadPurchaseProfit + loadSaleProfit;
 
   // investment = real-time inventory value + current wallet balances + period expenses
   const investment = currentInventoryValue + currentWalletBalance + totalExpenses;
@@ -1402,7 +1409,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     loadPurchasesByMonth,
     expensesByMonth,
     salesProfitByMonth,
-    loadProfitByMonth,
+    loadPurchaseProfitByMonth,
+    loadSaleProfitByMonth,
     salesReturnsByMonth,
     repairProfitByMonth,
     serviceProfitByMonth,
@@ -1415,8 +1423,12 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
   ] = await Promise.all([
     monthlySum(Purchase, 'purchaseDate', '$totalAmount'),
     monthlySum(LoadPurchase, 'date', '$amount'),
-    monthlySum(Expense, 'date', '$amount'),
+    // Only expenses actually paid count against profit — see isPaid note above.
+    monthlySum(Expense, 'date', '$amount', { isPaid: { $ne: false } }),
     monthlySum(Invoice, 'invoiceDate', { $ifNull: ['$totalProfit', 0] }, { status: { $ne: 'cancelled' } }),
+    // Load profit has two sources: supplier commission/discount at purchase time...
+    monthlySum(LoadPurchase, 'date', { $ifNull: ['$profit', 0] }),
+    // ...and extra charge captured at sale time.
     monthlySum(LoadTransaction, 'date', { $ifNull: ['$profit', 0] }),
     monthlySum(SalesReturn, 'date', '$totalAmount', { status: { $ne: 'rejected' } }),
     (async () => {
@@ -1490,7 +1502,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
     ...Object.keys(loadPurchasesByMonth),
     ...Object.keys(expensesByMonth),
     ...Object.keys(salesProfitByMonth),
-    ...Object.keys(loadProfitByMonth),
+    ...Object.keys(loadPurchaseProfitByMonth),
+    ...Object.keys(loadSaleProfitByMonth),
     ...Object.keys(salesReturnsByMonth),
     ...Object.keys(repairProfitByMonth),
     ...Object.keys(serviceProfitByMonth),
@@ -1508,7 +1521,8 @@ const getMonthlyRoi = catchAsync(async (req, res) => {
       + (expensesByMonth[month] || 0)
       - (purchaseReturnsByMonth[month] || 0);
     const gross = (salesProfitByMonth[month] || 0)
-      + (loadProfitByMonth[month] || 0)
+      + (loadPurchaseProfitByMonth[month] || 0)
+      + (loadSaleProfitByMonth[month] || 0)
       + (repairProfitByMonth[month] || 0)
       + (serviceProfitByMonth[month] || 0)
       + (simSaleProfitByMonth[month] || 0)
@@ -1543,6 +1557,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
     cashWithdrawalProfitAgg,
     cashDepositProfitAgg,
     expenseAgg,
+    unpaidExpenseAgg,
     purchaseAgg,
     stockAgg,
     walletAgg,
@@ -1606,10 +1621,19 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       { $match: { ...scope, date: { $gte: from, $lte: to }, transactionType: 'deposit' } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$profit', 0] } } } },
     ]),
-    // Expenses
+    // Expenses — only ones actually paid count against profit. Auto-generated
+    // recurring cycles sit as isPaid:false placeholders until confirmed paid
+    // (see expense.model.js), so they shouldn't drag profit down before that.
     Expense.aggregate([
-      { $match: { ...scope, date: { $gte: from, $lte: to } } },
+      { $match: { ...scope, date: { $gte: from, $lte: to }, isPaid: { $ne: false } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    // Pending recurring expenses due this period but not yet marked paid —
+    // informational only, so the user can see what's coming without it
+    // dragging down the profit figure above.
+    Expense.aggregate([
+      { $match: { ...scope, date: { $gte: from, $lte: to }, isPaid: false } },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
     // Total Purchases (informational only — not in investment formula)
     Purchase.aggregate([
@@ -1641,6 +1665,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const cwW     = cashWithdrawalProfitAgg[0] || { total: 0 };
   const cwD     = cashDepositProfitAgg[0] || { total: 0 };
   const exp     = expenseAgg[0]        || { total: 0 };
+  const unpaidExp = unpaidExpenseAgg[0] || { total: 0, count: 0 };
   const pur     = purchaseAgg[0]       || { total: 0 };
   const currentInventoryValue = stockAgg[0]?.total  || 0;
   const currentWalletBalance  = walletAgg[0]?.total || 0;
@@ -1651,7 +1676,7 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
   const costOfGoodsSold   = inv.totalCost;
   const grossProfit       = netRevenue - costOfGoodsSold;
 
-  const loadProfit        = ldp.total;
+  const loadProfit        = ld.total + ldp.total;
   const repairProfit      = rep.charges - rep.cost;
   const serviceProfit     = svc.total;
   const simSaleProfit     = sim.total;
@@ -1698,6 +1723,8 @@ const getProfitLossFullReport = catchAsync(async (req, res) => {
       billLatePaymentLoss:   parseFloat(billLatePaymentLoss.toFixed(2)),
     },
     expenses:   parseFloat(expenses.toFixed(2)),
+    unpaidExpenses:      parseFloat(unpaidExp.total.toFixed(2)),
+    unpaidExpensesCount: unpaidExp.count,
     netProfit:  parseFloat(netProfit.toFixed(2)),
     netProfitMargin,
     roi,

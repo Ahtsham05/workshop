@@ -152,8 +152,8 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold text-green-600'>{fmt(s?.purchaseSavings ?? 0)}</div>
-              <p className='text-xs text-muted-foreground'>supplier commission &amp; discounts</p>
+              <div className='text-2xl font-bold text-green-600'>{fmt(s?.totalProfit ?? 0)}</div>
+              <p className='text-xs text-muted-foreground'>supplier commission + extra charges collected</p>
             </CardContent>
           </Card>
           <Card className={kpiCardClass('cyan')}>
