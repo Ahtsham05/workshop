@@ -2,14 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
@@ -259,15 +251,11 @@ export function InvoicePanel({
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
   const [customerBalance, setCustomerBalance] = useState<number>(0)
-  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
-  const [smsDialogPhone, setSmsDialogPhone] = useState('')
-  const [smsDialogMessage, setSmsDialogMessage] = useState('')
-  const [smsDialogCustomerName, setSmsDialogCustomerName] = useState('')
   const [isWhatsAppSending, setIsWhatsAppSending] = useState(false)
   const [sendSms, { isLoading: isSendingSms }] = useSendSmsMutation()
-  const [sendMethod, setSendMethod] = useState<'none' | 'sms' | 'whatsapp'>(() => {
+  const [sendMethod, setSendMethod] = useState<'none' | 'sms' | 'whatsapp' | 'both'>(() => {
     const s = localStorage.getItem('invoiceSendMethod')
-    return s === 'sms' || s === 'whatsapp' ? s : 'none'
+    return s === 'sms' || s === 'whatsapp' || s === 'both' ? s : 'none'
   })
   const [loadingBalance, setLoadingBalance] = useState(false)
   const [cashReceivedInput, setCashReceivedInput] = useState('')
@@ -1238,6 +1226,7 @@ export function InvoicePanel({
       }
 
       // Handle persistent send method (runs additionally after any save/print)
+      // Both SMS and WhatsApp fire immediately — no confirmation dialog.
       if (sendMethod !== 'none') {
         const customerId = resolveCustomerIdString(savedInvoicePayload.customerId)
         // SMS/WhatsApp only for registered customers — walk-in has no phone record
@@ -1247,82 +1236,91 @@ export function InvoicePanel({
           const customer = customers.find(c => String(c._id || c.id) === customerId) || null
           const custName = resolvedCustomerName || customer?.name || ''
 
-          if (sendMethod === 'sms') {
+          const sendSmsNow = async () => {
             // Fetch fresh from API to ensure we have the phone field
             const contact = await fetchAndStashPrintContact(customerId)
             const phone = contact.phone?.trim() || customer?.phone?.trim() || ''
             if (!phone) {
               toast.error(`No phone number for ${custName || 'this customer'}. Add it in the Customers section first.`)
-            } else {
-              const msg = buildInvoiceSmsMessage({
-                branchName: orgData?.name || branchData?.name,
-                invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
-                customerName: custName || undefined,
-                total: Number(savedInvoicePayload.total ?? 0),
-                paidAmount: Number(savedInvoicePayload.paidAmount ?? 0),
-                previousBalance: Number(savedInvoicePayload.previousBalance ?? 0),
-                newBalance: Number(savedInvoicePayload.newBalance ?? 0),
-              })
-              setSmsDialogPhone(phone)
-              setSmsDialogMessage(msg)
-              setSmsDialogCustomerName(custName)
-              setSmsDialogOpen(true)
+              return
             }
-          } else if (sendMethod === 'whatsapp') {
-          const prevBal = savedInvoicePayload.previousBalance ?? customerBalance
-          const netBal = (prevBal || 0) + (savedInvoicePayload.total || 0) - (savedInvoicePayload.paidAmount || 0)
-          const printData = withCustomerContactForPrint({
-            invoiceNumber: savedInvoicePayload.invoiceNumber,
-            items: validItems.map((item: any) => ({
-              name: item.name,
-              nameUrdu: item.nameUrdu,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              subtotal: item.quantity * item.unitPrice,
-              imeis: item.imeis,
-            })),
-            customerId: savedInvoicePayload.customerId,
-            customerName: resolvedCustomerName,
-            walkInCustomerName: resolvedWalkInCustomerName,
-            type: savedInvoicePayload.type,
-            subtotal: savedInvoicePayload.subtotal,
-            tax: savedInvoicePayload.tax,
-            discount: savedInvoicePayload.discount,
-            total: savedInvoicePayload.total,
-            paidAmount: savedInvoicePayload.paidAmount,
-            balance: savedInvoicePayload.balance,
-            notes: savedInvoicePayload.notes,
-            invoiceAddress: branchData?.location?.address?.trim() || undefined,
-            invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
-            deliveryCharge: savedInvoicePayload.deliveryCharge,
-            serviceCharge: savedInvoicePayload.serviceCharge,
-            previousBalance: prevBal,
-            netBalance: netBal,
-            companyName: orgData?.name || branchData?.name,
-            companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
-            companyPhone: branchData?.phone,
-            companyEmail: branchData?.email,
-            companyLogo: orgData?.logo?.url,
-            isTrial: orgData?.subscription?.isTrial,
-            language: savedInvoicePayload.language,
-            isUrduOnly: savedInvoicePayload.isUrduOnly,
-            invoiceDate: savedInvoicePayload.invoiceDate,
-            printInUrdu: getInvoicePrintInUrdu(),
-            printAsQuotation: savedInvoicePayload.type === 'quotation',
-          }, savedInvoicePayload, customer)
-          const wpPhone = printData.customerPhone?.trim() || printData.customerWhatsapp?.trim() || ''
-          if (!wpPhone) {
-            toast.error(`No phone/WhatsApp number for ${custName || 'this customer'}. Add it in the Customers section first.`)
-          } else {
-            setIsWhatsAppSending(true)
-            sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone })
-              .then(res => {
-                if (res.success) toast.success('Invoice sent on WhatsApp')
-                else toast.error(res.error || 'Failed to send on WhatsApp')
-              })
-              .finally(() => setIsWhatsAppSending(false))
+            const msg = buildInvoiceSmsMessage({
+              branchName: orgData?.name || branchData?.name,
+              invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
+              customerName: custName || undefined,
+              total: Number(savedInvoicePayload.total ?? 0),
+              paidAmount: Number(savedInvoicePayload.paidAmount ?? 0),
+              previousBalance: Number(savedInvoicePayload.previousBalance ?? 0),
+              newBalance: Number(savedInvoicePayload.newBalance ?? 0),
+            })
+            try {
+              await sendSms({ to: phone, message: msg, source: 'invoice' }).unwrap()
+              toast.success(`SMS sent to ${custName || phone}`)
+            } catch (err: any) {
+              toast.error(err?.data?.message || 'Failed to send SMS — is a device connected?')
+            }
           }
-        }
+
+          const sendWhatsAppNow = async () => {
+            const prevBal = savedInvoicePayload.previousBalance ?? customerBalance
+            const netBal = (prevBal || 0) + (savedInvoicePayload.total || 0) - (savedInvoicePayload.paidAmount || 0)
+            const printData = withCustomerContactForPrint({
+              invoiceNumber: savedInvoicePayload.invoiceNumber,
+              items: validItems.map((item: any) => ({
+                name: item.name,
+                nameUrdu: item.nameUrdu,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                subtotal: item.quantity * item.unitPrice,
+                imeis: item.imeis,
+              })),
+              customerId: savedInvoicePayload.customerId,
+              customerName: resolvedCustomerName,
+              walkInCustomerName: resolvedWalkInCustomerName,
+              type: savedInvoicePayload.type,
+              subtotal: savedInvoicePayload.subtotal,
+              tax: savedInvoicePayload.tax,
+              discount: savedInvoicePayload.discount,
+              total: savedInvoicePayload.total,
+              paidAmount: savedInvoicePayload.paidAmount,
+              balance: savedInvoicePayload.balance,
+              notes: savedInvoicePayload.notes,
+              invoiceAddress: branchData?.location?.address?.trim() || undefined,
+              invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
+              deliveryCharge: savedInvoicePayload.deliveryCharge,
+              serviceCharge: savedInvoicePayload.serviceCharge,
+              previousBalance: prevBal,
+              netBalance: netBal,
+              companyName: orgData?.name || branchData?.name,
+              companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
+              companyPhone: branchData?.phone,
+              companyEmail: branchData?.email,
+              companyLogo: orgData?.logo?.url,
+              isTrial: orgData?.subscription?.isTrial,
+              language: savedInvoicePayload.language,
+              isUrduOnly: savedInvoicePayload.isUrduOnly,
+              invoiceDate: savedInvoicePayload.invoiceDate,
+              printInUrdu: getInvoicePrintInUrdu(),
+              printAsQuotation: savedInvoicePayload.type === 'quotation',
+            }, savedInvoicePayload, customer)
+            const wpPhone = printData.customerPhone?.trim() || printData.customerWhatsapp?.trim() || ''
+            if (!wpPhone) {
+              toast.error(`No phone/WhatsApp number for ${custName || 'this customer'}. Add it in the Customers section first.`)
+              return
+            }
+            setIsWhatsAppSending(true)
+            try {
+              const res = await sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone })
+              if (res.success) toast.success('Invoice sent on WhatsApp')
+              else toast.error(res.error || 'Failed to send on WhatsApp')
+            } finally {
+              setIsWhatsAppSending(false)
+            }
+          }
+
+          // Fire-and-forget — save/print already completed, sending runs in the background
+          if (sendMethod === 'sms' || sendMethod === 'both') sendSmsNow()
+          if (sendMethod === 'whatsapp' || sendMethod === 'both') sendWhatsAppNow()
         } // end else (registered customer)
       }
 
@@ -1337,7 +1335,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -2616,6 +2614,11 @@ export function InvoicePanel({
             <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
               <p className='text-xs font-medium text-muted-foreground'>
                 Also send after saving:
+                {isSendingSms && (
+                  <span className='ml-2 inline-flex items-center gap-1 text-blue-600'>
+                    <Loader2 className='h-3 w-3 animate-spin' /> Sending SMS…
+                  </span>
+                )}
                 {isWhatsAppSending && (
                   <span className='ml-2 inline-flex items-center gap-1 text-green-600'>
                     <Loader2 className='h-3 w-3 animate-spin' /> Sending WhatsApp…
@@ -2662,12 +2665,25 @@ export function InvoicePanel({
                   <Send className='h-3.5 w-3.5' />
                   WhatsApp
                 </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant={sendMethod === 'both' ? 'default' : 'outline'}
+                  className={cn('flex-1 gap-1.5', sendMethod === 'both' && 'bg-purple-600 hover:bg-purple-700 border-purple-600')}
+                  onClick={() => {
+                    setSendMethod('both')
+                    localStorage.setItem('invoiceSendMethod', 'both')
+                  }}
+                >
+                  <MessageSquare className='h-3.5 w-3.5' />
+                  Both
+                </Button>
               </div>
               {sendMethod !== 'none' && (
                 <p className='text-xs text-muted-foreground'>
-                  {sendMethod === 'sms'
-                    ? 'Every save button will also send an SMS to the customer.'
-                    : 'Every save button will also send the invoice via WhatsApp.'}
+                  {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
+                  {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
+                  {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
                 </p>
               )}
             </div>
@@ -2694,94 +2710,6 @@ export function InvoicePanel({
         }}
       />
 
-      {/* SMS Send Dialog */}
-      <Dialog open={smsDialogOpen} onOpenChange={open => { if (!isSendingSms) setSmsDialogOpen(open) }}>
-        <DialogContent
-          className='sm:max-w-md'
-          onKeyDown={async (e) => {
-            // Ctrl+Enter anywhere, or plain Enter if not in textarea, sends the SMS
-            const inTextarea = (e.target as HTMLElement).tagName === 'TEXTAREA'
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || !inTextarea)) {
-              e.preventDefault()
-              if (isSendingSms || !smsDialogMessage.trim()) return
-              try {
-                await sendSms({ to: smsDialogPhone, message: smsDialogMessage.trim(), source: 'invoice' }).unwrap()
-                toast.success(`SMS sent to ${smsDialogCustomerName || smsDialogPhone}`)
-                setSmsDialogOpen(false)
-              } catch (err: any) {
-                toast.error(err?.data?.message || 'Failed to send SMS — is a device connected?')
-              }
-            }
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle className='flex items-center gap-2'>
-              <MessageSquare className='h-4 w-4 text-blue-500' />
-              Send Invoice SMS{smsDialogCustomerName ? ` to ${smsDialogCustomerName}` : ''}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className='space-y-3'>
-            {/* Phone — read-only, from customer profile */}
-            <div className='flex items-center gap-3 rounded-md border bg-muted/50 px-3 py-2'>
-              <div className='flex-1 min-w-0'>
-                <p className='text-xs text-muted-foreground mb-0.5'>Sending to</p>
-                <p className='text-sm font-medium truncate'>{smsDialogPhone}</p>
-              </div>
-              <span className='text-xs text-muted-foreground shrink-0'>{smsDialogCustomerName}</span>
-            </div>
-
-            {/* Message */}
-            <div className='space-y-1.5'>
-              <div className='flex items-center justify-between'>
-                <Label>Message <span className='text-muted-foreground font-normal'>(Ctrl+Enter to send)</span></Label>
-                <span className='text-xs text-muted-foreground'>{smsDialogMessage.length} chars</span>
-              </div>
-              <Textarea
-                autoFocus
-                rows={10}
-                value={smsDialogMessage}
-                onChange={e => setSmsDialogMessage(e.target.value)}
-                className='font-mono text-xs leading-relaxed'
-                onKeyDown={async (e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault()
-                    if (isSendingSms || !smsDialogMessage.trim()) return
-                    try {
-                      await sendSms({ to: smsDialogPhone, message: smsDialogMessage.trim(), source: 'invoice' }).unwrap()
-                      toast.success(`SMS sent to ${smsDialogCustomerName || smsDialogPhone}`)
-                      setSmsDialogOpen(false)
-                    } catch (err: any) {
-                      toast.error(err?.data?.message || 'Failed to send SMS — is a device connected?')
-                    }
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setSmsDialogOpen(false)} disabled={isSendingSms}>
-              Cancel
-            </Button>
-            <Button
-              disabled={isSendingSms || !smsDialogMessage.trim()}
-              onClick={async () => {
-                try {
-                  await sendSms({ to: smsDialogPhone, message: smsDialogMessage.trim(), source: 'invoice' }).unwrap()
-                  toast.success(`SMS sent to ${smsDialogCustomerName || smsDialogPhone}`)
-                  setSmsDialogOpen(false)
-                } catch (err: any) {
-                  toast.error(err?.data?.message || 'Failed to send SMS — is a device connected?')
-                }
-              }}
-            >
-              {isSendingSms ? <Loader2 className='h-4 w-4 animate-spin mr-2' /> : <Send className='h-4 w-4 mr-2' />}
-              Send SMS
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
