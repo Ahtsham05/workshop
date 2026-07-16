@@ -318,6 +318,23 @@ async function sendMedia({
   return { wamid, message, success: true };
 }
 
+// Shared by sendMessage() and by callers that want to gate a send (e.g. the inbox UI)
+// without going through the template-fallback flow below.
+async function getConversationForPhone({ organizationId, branchId, conversationId, phone }) {
+  if (conversationId) {
+    return WhatsAppConversation.findOne({ _id: conversationId, organizationId, branchId });
+  }
+  const to = normalizePhone(phone);
+  return WhatsAppConversation.findOne({ organizationId, branchId, contactPhone: to });
+}
+
+function isWithinServiceWindow(conversation) {
+  return Boolean(
+    conversation?.lastInboundAt &&
+      Date.now() - new Date(conversation.lastInboundAt).getTime() < CUSTOMER_SERVICE_WINDOW_MS,
+  );
+}
+
 /**
  * Single entry point that picks free-form text vs. an approved template automatically,
  * based on Meta's 24h customer-service window (measured from the customer's last inbound
@@ -340,13 +357,8 @@ async function sendMessage({
   const to = normalizePhone(phone);
   if (!to) throw new ApiError(httpStatus.BAD_REQUEST, `Invalid phone number: ${phone}`);
 
-  const conversation = conversationId
-    ? await WhatsAppConversation.findOne({ _id: conversationId, organizationId, branchId })
-    : await WhatsAppConversation.findOne({ organizationId, branchId, contactPhone: to });
-
-  const withinWindow =
-    conversation?.lastInboundAt &&
-    Date.now() - new Date(conversation.lastInboundAt).getTime() < CUSTOMER_SERVICE_WINDOW_MS;
+  const conversation = await getConversationForPhone({ organizationId, branchId, conversationId, phone: to });
+  const withinWindow = isWithinServiceWindow(conversation);
 
   if (withinWindow) {
     if (!text) {
@@ -403,6 +415,109 @@ async function sendMessage({
   });
 }
 
+function templateHasDocumentHeader(template) {
+  const components = Array.isArray(template?.components) ? template.components : [];
+  return components.some(
+    (c) => String(c?.type).toUpperCase() === 'HEADER' && String(c?.format).toUpperCase() === 'DOCUMENT',
+  );
+}
+
+async function findDocumentHeaderTemplate(organizationId, branchId, internalCategory) {
+  const templates = await WhatsAppTemplate.find({
+    organizationId,
+    branchId,
+    internalCategory,
+    status: 'APPROVED',
+  }).sort({ updatedAt: -1 });
+  return templates.find(templateHasDocumentHeader) || null;
+}
+
+/**
+ * Window-aware document send: sends the PDF as a free-form document within the 24h
+ * customer-service window (like sendDocument), but falls back to an approved template
+ * with a DOCUMENT header once the window has closed — Meta rejects free-form documents
+ * outside the window the same way it rejects free-form text.
+ */
+async function sendDocumentMessage({
+  organizationId,
+  branchId,
+  phone,
+  data,
+  filename = 'document.pdf',
+  caption = '',
+  source = 'invoice',
+  sentBy,
+  conversationId,
+  templateCategory,
+  templateParams = [],
+}) {
+  const to = normalizePhone(phone);
+  if (!to) throw new ApiError(httpStatus.BAD_REQUEST, `Invalid phone number: ${phone}`);
+
+  const conversation = await getConversationForPhone({ organizationId, branchId, conversationId, phone: to });
+
+  if (isWithinServiceWindow(conversation)) {
+    return sendDocument({
+      organizationId,
+      branchId,
+      phone: to,
+      data,
+      filename,
+      caption,
+      source,
+      sentBy,
+      conversationId: conversation?._id,
+    });
+  }
+
+  if (!templateCategory) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'This customer has not messaged you in the last 24 hours — an approved document template is required to reach them.',
+    );
+  }
+
+  const template = await findDocumentHeaderTemplate(organizationId, branchId, templateCategory);
+  if (!template) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `No approved "${templateCategory}" WhatsApp template with a document header found. Create and get one approved in WhatsApp Templates first.`,
+    );
+  }
+
+  const { conn, accessToken } = await resolveConnection(organizationId, branchId);
+  const buffer = decodePdfBuffer(data);
+  if (!buffer?.length) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or empty PDF data');
+
+  const safeFilename = String(filename || 'document.pdf').replace(/[^\w.\-() ]/g, '_') || 'document.pdf';
+  const mediaId = await uploadMedia(
+    { accessToken, phoneNumberId: conn.phoneNumberId, apiVersion: conn.apiVersion },
+    buffer,
+    'application/pdf',
+    safeFilename,
+  );
+
+  const params = Array.isArray(templateParams) ? templateParams : Object.values(templateParams || {});
+  const components = [
+    { type: 'header', parameters: [{ type: 'document', document: { id: mediaId, filename: safeFilename } }] },
+  ];
+  if (params.length) {
+    components.push({ type: 'body', parameters: params.map((v) => ({ type: 'text', text: String(v) })) });
+  }
+
+  return sendTemplate({
+    organizationId,
+    branchId,
+    phone: to,
+    templateName: template.name,
+    language: template.language,
+    components,
+    source,
+    sentBy,
+    conversationId: conversation?._id,
+  });
+}
+
 async function isConnected(organizationId, branchId) {
   const conn = await connectionService.getActiveConnection(organizationId, branchId);
   return Boolean(conn);
@@ -413,8 +528,12 @@ module.exports = {
   sendText,
   sendTemplate,
   sendDocument,
+  sendDocumentMessage,
   sendMedia,
   sendMessage,
   isConnected,
   uploadMedia,
+  getConversationForPhone,
+  isWithinServiceWindow,
+  CUSTOMER_SERVICE_WINDOW_MS,
 };

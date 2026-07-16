@@ -87,6 +87,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                               phone={customer.phone}
                               whatsapp={customer.whatsapp}
                               name={customer.name}
+                              message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
                             />
                             <SmsSendButton
                               phone={customer.phone}

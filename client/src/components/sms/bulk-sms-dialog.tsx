@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   MessageSquare, Send, Loader2, Users, ChevronRight, ChevronLeft,
   CheckCircle2, XCircle, Phone, Check,
@@ -17,10 +17,17 @@ import { useSendSmsMutation, useSendBulkSmsMutation } from '@/stores/smsGateway.
 import { buildCustomerBalanceMessage, buildSupplierBalanceMessage } from '@/utils/sms-messages'
 
 export type BulkSmsRecipient = {
-  _id: string
+  _id?: string
+  id?: string
   name: string
   phone?: string | null
   balance?: number
+}
+
+/** Some callers populate `id`, others `_id` — never assume either is set. Phone is the
+ * last-resort key since every recipient here has already been filtered to have one. */
+function resolveId(r: BulkSmsRecipient): string {
+  return r._id || r.id || r.phone || ''
 }
 
 type Props = {
@@ -75,25 +82,39 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
   const [sendBulkSms] = useSendBulkSmsMutation()
 
   const withPhone = useMemo(() => recipients.filter((r) => r.phone?.trim()), [recipients])
-  const selectedList = useMemo(() => withPhone.filter((r) => selected.has(r._id)), [withPhone, selected])
+  const selectedList = useMemo(() => withPhone.filter((r) => selected.has(resolveId(r))), [withPhone, selected])
 
-  // Initialize when dialog opens
+  const autoSelectedRef = useRef(false)
+
+  // Reset UI state when dialog opens
   useEffect(() => {
     if (open) {
       setStep('select')
-      setSelected(new Set(withPhone.map((r) => r._id)))
       setMessageMode('personalized')
       setTemplate('')
       setProgress({ sent: 0, failed: 0, total: 0 })
       setResults([])
+      autoSelectedRef.current = false
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Select all by default once the recipient list has actually loaded. `recipients` is
+  // fetched asynchronously by the parent page, so it may still be empty/stale right when
+  // the dialog opens — this re-syncs once real data arrives instead of freezing the
+  // selection at whatever `withPhone` looked like at open time. Runs only once per dialog
+  // session (not on every `withPhone` change) so it never clobbers manual toggles.
+  useEffect(() => {
+    if (open && !autoSelectedRef.current && withPhone.length > 0) {
+      setSelected(new Set(withPhone.map(resolveId)))
+      autoSelectedRef.current = true
+    }
+  }, [open, withPhone])
 
   const allSelected = selected.size === withPhone.length && withPhone.length > 0
   const someSelected = selected.size > 0 && selected.size < withPhone.length
 
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(withPhone.map((r) => r._id)))
+    setSelected(allSelected ? new Set() : new Set(withPhone.map(resolveId)))
   }
 
   const toggleOne = (id: string) => {
@@ -191,9 +212,9 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
 
         {/* ── STEP 1: SELECT ── */}
         {step === 'select' && (
-          <>
+          <div className='flex-1 min-h-0 grid overflow-hidden' style={{ gridTemplateRows: 'auto minmax(0,1fr) auto' }}>
             {/* Sub-toolbar */}
-            <div className='flex items-center justify-between px-5 py-2.5 border-b bg-background shrink-0'>
+            <div className='flex items-center justify-between px-5 py-2.5 border-b bg-background'>
               <div className='flex items-center gap-2'>
                 <Checkbox
                   id='select-all'
@@ -214,7 +235,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
             </div>
 
             {/* List */}
-            <ScrollArea className='flex-1 min-h-0'>
+            <ScrollArea className='min-h-0'>
               <div className='px-3 py-2 space-y-0.5'>
                 {withPhone.length === 0 ? (
                   <div className='flex flex-col items-center justify-center py-12 text-muted-foreground'>
@@ -223,10 +244,11 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
                   </div>
                 ) : (
                   withPhone.map((r) => {
-                    const isSelected = selected.has(r._id)
+                    const rId = resolveId(r)
+                    const isSelected = selected.has(rId)
                     return (
                       <label
-                        key={r._id}
+                        key={rId}
                         className={cn(
                           'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors',
                           isSelected ? 'bg-blue-50/70 hover:bg-blue-50' : 'hover:bg-muted/50',
@@ -234,7 +256,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
                       >
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleOne(r._id)}
+                          onCheckedChange={() => toggleOne(rId)}
                           className='shrink-0'
                         />
                         <div className='flex-1 min-w-0'>
@@ -255,16 +277,16 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
             </ScrollArea>
 
             {/* Footer */}
-            <div className='flex items-center justify-between px-6 py-4 border-t bg-background shrink-0'>
+            <div className='flex items-center justify-between px-6 py-4 border-t bg-background'>
               <Button variant='ghost' onClick={() => onOpenChange(false)} className='text-muted-foreground'>
                 Cancel
               </Button>
               <Button onClick={() => setStep('compose')} disabled={selected.size === 0}>
-                Next — {selected.size} recipients
+                Next — {selected.size} {selected.size === 1 ? 'recipient' : 'recipients'}
                 <ChevronRight className='h-4 w-4 ml-1' />
               </Button>
             </div>
-          </>
+          </div>
         )}
 
         {/* ── STEP 2: COMPOSE ── */}
@@ -414,9 +436,9 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
 
         {/* ── STEP 4: DONE ── */}
         {step === 'done' && (
-          <>
+          <div className='flex-1 min-h-0 grid overflow-hidden' style={{ gridTemplateRows: 'auto minmax(0,1fr) auto' }}>
             {/* Summary banner */}
-            <div className='px-6 py-4 shrink-0'>
+            <div className='px-6 py-4'>
               <div className='grid grid-cols-2 gap-3'>
                 <div className='rounded-xl bg-emerald-50 border border-emerald-100 p-3 flex items-center gap-3'>
                   <div className='h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0'>
@@ -440,7 +462,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
             </div>
 
             {/* Result list */}
-            <ScrollArea className='flex-1 min-h-0 border-t'>
+            <ScrollArea className='min-h-0 border-t'>
               <div className='px-4 py-2 space-y-0.5'>
                 {results.map((r, i) => (
                   <div
@@ -460,10 +482,10 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
               </div>
             </ScrollArea>
 
-            <div className='flex justify-end px-6 py-4 border-t bg-background shrink-0'>
+            <div className='flex justify-end px-6 py-4 border-t bg-background'>
               <Button onClick={() => onOpenChange(false)}>Done</Button>
             </div>
-          </>
+          </div>
         )}
       </DialogContent>
     </Dialog>

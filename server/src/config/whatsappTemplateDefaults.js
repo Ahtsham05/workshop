@@ -31,7 +31,7 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       name: 'invoice_ready',
       internalCategory: 'invoice',
       category: 'UTILITY',
-      bodyText: 'Hi {{1}}, your invoice #{{2}} is ready. Amount: Rs {{3}}.',
+      bodyText: 'Hi {{1}}, your invoice #{{2}} is ready. Amount: Rs {{3}}. Previous balance: Rs {{4}}.',
     },
     {
       name: 'order_update',

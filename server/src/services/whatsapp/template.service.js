@@ -66,6 +66,18 @@ function assertValidPlaceholders(bodyText) {
   }
 }
 
+// Meta requires an `example.body_text` sample for every BODY component that contains
+// {{n}} placeholders — without it, template creation fails with a bare "Invalid parameter"
+// (no field-level detail). We don't collect real sample values from the submitter, so we
+// fill in generic-but-plausible placeholders just to satisfy the API contract.
+const EXAMPLE_VALUE_POOL = ['John Doe', '12345', '500', '2026-07-16', '1000'];
+
+function buildBodyExample(bodyText) {
+  const count = countVariables(bodyText);
+  if (!count) return undefined;
+  return Array.from({ length: count }, (_, i) => EXAMPLE_VALUE_POOL[i] || `Value${i + 1}`);
+}
+
 async function createTemplate(organizationId, branchId, { name, language = 'en', category, bodyText, internalCategory = 'general' }) {
   if (!/^[a-z0-9_]+$/.test(name || '')) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Template name must be lowercase letters, numbers and underscores only');
@@ -78,7 +90,12 @@ async function createTemplate(organizationId, branchId, { name, language = 'en',
   }
   const accessToken = connectionService.getDecryptedToken(connection);
 
-  const components = [{ type: 'BODY', text: bodyText }];
+  const bodyComponent = { type: 'BODY', text: bodyText };
+  const exampleValues = buildBodyExample(bodyText);
+  if (exampleValues) {
+    bodyComponent.example = { body_text: [exampleValues] };
+  }
+  const components = [bodyComponent];
   const url = `${connectionService.graphBaseUrl(connection.apiVersion)}/${connection.wabaId}/message_templates`;
   const res = await fetch(url, {
     method: 'POST',

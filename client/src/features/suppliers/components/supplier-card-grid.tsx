@@ -240,6 +240,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
                           phone={supplier.phone}
                           whatsapp={supplier.whatsapp}
                           name={supplier.name}
+                          message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
                         />
                         <SmsSendButton
                           phone={supplier.phone}

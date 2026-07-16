@@ -1726,6 +1726,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   showLabel
                   size="sm"
                   variant="outline"
+                  message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance })}
                 />
                 <SmsSendButton
                   phone={customer.phone}

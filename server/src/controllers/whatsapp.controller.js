@@ -234,7 +234,7 @@ const sendDocument = catchAsync(async (req, res) => {
 });
 
 const sendInvoicePdf = catchAsync(async (req, res) => {
-  const { phone, pdfBase64, filename, caption, invoiceNumber } = req.body;
+  const { phone, pdfBase64, filename, caption, invoiceNumber, templateParams } = req.body;
   if (!phone || !pdfBase64) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'phone and pdfBase64 are required');
   }
@@ -242,7 +242,7 @@ const sendInvoicePdf = catchAsync(async (req, res) => {
   const safeFilename =
     filename || `Invoice-${String(invoiceNumber || 'invoice').replace(/[^\w.-]/g, '-')}.pdf`;
   const defaultCaption = invoiceNumber ? `Invoice ${invoiceNumber}` : 'Invoice';
-  const result = await messagingService.sendDocument({
+  const result = await messagingService.sendDocumentMessage({
     organizationId: req.organizationId,
     branchId: req.branchId,
     phone,
@@ -251,6 +251,8 @@ const sendInvoicePdf = catchAsync(async (req, res) => {
     caption: caption || defaultCaption,
     source: 'invoice',
     sentBy: req.user?.id,
+    templateCategory: 'invoice',
+    templateParams: templateParams || (invoiceNumber ? [invoiceNumber] : []),
   });
   res.send({ success: true, message: 'Invoice PDF sent on WhatsApp', wamid: result.wamid });
 });

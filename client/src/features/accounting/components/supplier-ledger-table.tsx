@@ -87,6 +87,7 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                               phone={supplier.phone}
                               whatsapp={supplier.whatsapp}
                               name={supplier.name}
+                              message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
                             />
                             <SmsSendButton
                               phone={supplier.phone}

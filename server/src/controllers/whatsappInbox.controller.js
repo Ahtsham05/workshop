@@ -54,8 +54,20 @@ const getUnreadCount = catchAsync(async (req, res) => {
   res.send({ count });
 });
 
+const WINDOW_CLOSED_MESSAGE =
+  "This customer hasn't messaged in the last 24 hours, so WhatsApp only allows sending an approved template message. Free-form replies will work again once they message you.";
+
 const sendMessage = catchAsync(async (req, res) => {
   const { phone, text, conversationId } = req.body;
+  const conversation = await messagingService.getConversationForPhone({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    conversationId,
+    phone,
+  });
+  if (!messagingService.isWithinServiceWindow(conversation)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, WINDOW_CLOSED_MESSAGE);
+  }
   const result = await messagingService.sendText({
     organizationId: req.organizationId,
     branchId: req.branchId,
@@ -78,6 +90,15 @@ function resolveMediaType(mimeType) {
 const sendMediaMessage = catchAsync(async (req, res) => {
   if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'File is required');
   const { phone, conversationId, caption } = req.body;
+  const conversation = await messagingService.getConversationForPhone({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    conversationId,
+    phone,
+  });
+  if (!messagingService.isWithinServiceWindow(conversation)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, WINDOW_CLOSED_MESSAGE);
+  }
   const result = await messagingService.sendMedia({
     organizationId: req.organizationId,
     branchId: req.branchId,

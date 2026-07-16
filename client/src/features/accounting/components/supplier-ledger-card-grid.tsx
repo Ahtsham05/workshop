@@ -169,6 +169,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
                           phone={supplier.phone}
                           whatsapp={supplier.whatsapp}
                           name={supplier.name}
+                          message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
                         />
                         <SmsSendButton
                           phone={supplier.phone}

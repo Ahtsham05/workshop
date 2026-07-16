@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import {
   Search,
   Send,
@@ -478,28 +479,36 @@ export default function WhatsAppInboxPage() {
 
   const handleSend = async () => {
     if (!selected || !draft.trim()) return
-    await sendMessage({
-      phone: selected.contactPhone,
-      text: draft.trim(),
-      conversationId: selected.id,
-    }).unwrap()
-    setDraft('')
-    refetchMessages()
-    refetchConversations()
+    try {
+      await sendMessage({
+        phone: selected.contactPhone,
+        text: draft.trim(),
+        conversationId: selected.id,
+      }).unwrap()
+      setDraft('')
+      refetchMessages()
+      refetchConversations()
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to send message')
+    }
   }
 
   const handleSendMedia = async () => {
     if (!selected || !pendingFile) return
-    await sendMedia({
-      phone: selected.contactPhone,
-      conversationId: selected.id,
-      caption: caption.trim() || undefined,
-      file: pendingFile,
-    }).unwrap()
-    setPendingFile(null)
-    setCaption('')
-    refetchMessages()
-    refetchConversations()
+    try {
+      await sendMedia({
+        phone: selected.contactPhone,
+        conversationId: selected.id,
+        caption: caption.trim() || undefined,
+        file: pendingFile,
+      }).unwrap()
+      setPendingFile(null)
+      setCaption('')
+      refetchMessages()
+      refetchConversations()
+    } catch (error: any) {
+      toast.error(error?.data?.message || 'Failed to send file')
+    }
   }
 
   const stopRecording = (discard = false) => {

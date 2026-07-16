@@ -2,6 +2,7 @@ const logger = require('../../config/logger');
 const { Invoice, Customer, Organization } = require('../../models');
 const messagingService = require('./messaging.service');
 const invoicePdfService = require('./invoicePdf.service');
+const customerLedgerService = require('../customerLedger.service');
 
 /**
  * Generate and send the invoice PDF to the customer's WhatsApp number.
@@ -20,8 +21,9 @@ async function sendInvoiceOnCreate(invoiceId) {
 
   const organization = await Organization.findById(invoice.organizationId).select('name').lean();
   const pdfBuffer = await invoicePdfService.generateInvoicePdf(invoice, customer, organization);
+  const previousBalance = await customerLedgerService.getBalanceBeforeReference(invoice.customerId, invoice._id);
 
-  return messagingService.sendDocument({
+  return messagingService.sendDocumentMessage({
     organizationId: invoice.organizationId,
     branchId: invoice.branchId,
     phone,
@@ -29,6 +31,8 @@ async function sendInvoiceOnCreate(invoiceId) {
     filename: `Invoice-${invoice.invoiceNumber}.pdf`,
     caption: `Invoice ${invoice.invoiceNumber}${organization?.name ? ` from ${organization.name}` : ''} — Total: ${invoice.total}`,
     source: 'invoice',
+    templateCategory: 'invoice',
+    templateParams: [customer.name, invoice.invoiceNumber, invoice.total, previousBalance],
   });
 }
 
