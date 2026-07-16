@@ -2,6 +2,7 @@ const { WhatsAppTemplate, Organization } = require('../../models');
 const connectionService = require('./connection.service');
 const ApiError = require('../../utils/ApiError');
 const httpStatus = require('http-status');
+const logger = require('../../config/logger');
 const { getSuggestedTemplates, countVariables } = require('../../config/whatsappTemplateDefaults');
 
 const PLACEHOLDER_RE = /\{\{\s*\d+\s*\}\}/g;
@@ -104,7 +105,14 @@ async function createTemplate(organizationId, branchId, { name, language = 'en',
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(httpStatus.BAD_REQUEST, body.error?.message || 'Template submission to Meta failed');
+    logger.error('WhatsApp template submission failed:', JSON.stringify(body?.error || body));
+    const metaError = body?.error || {};
+    const detail =
+      metaError.error_user_msg ||
+      metaError.error_data?.details ||
+      metaError.message ||
+      'Template submission to Meta failed';
+    throw new ApiError(httpStatus.BAD_REQUEST, detail);
   }
 
   return WhatsAppTemplate.findOneAndUpdate(
