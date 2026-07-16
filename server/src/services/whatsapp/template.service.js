@@ -67,6 +67,27 @@ function assertValidPlaceholders(bodyText) {
   }
 }
 
+// Meta rejects a body that starts or ends right at a variable — punctuation alone after
+// the last {{n}} (e.g. a trailing ".") doesn't count as real content in Meta's eyes.
+const WORD_RE = /[\p{L}\p{N}]/u;
+
+function assertNoLeadingTrailingVariable(bodyText) {
+  const text = String(bodyText || '');
+  const matches = [...text.matchAll(PLACEHOLDER_RE)];
+  if (!matches.length) return;
+
+  const before = text.slice(0, matches[0].index);
+  const last = matches[matches.length - 1];
+  const after = text.slice(last.index + last[0].length);
+
+  if (!WORD_RE.test(before) || !WORD_RE.test(after)) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Template text needs real words before the first variable and after the last one — punctuation alone (like a trailing period) is not enough for WhatsApp.',
+    );
+  }
+}
+
 // Meta requires an `example.body_text` sample for every BODY component that contains
 // {{n}} placeholders — without it, template creation fails with a bare "Invalid parameter"
 // (no field-level detail). We don't collect real sample values from the submitter, so we
@@ -84,6 +105,7 @@ async function createTemplate(organizationId, branchId, { name, language = 'en',
     throw new ApiError(httpStatus.BAD_REQUEST, 'Template name must be lowercase letters, numbers and underscores only');
   }
   assertValidPlaceholders(bodyText);
+  assertNoLeadingTrailingVariable(bodyText);
 
   const connection = await connectionService.getActiveConnection(organizationId, branchId);
   if (!connection?.wabaId) {

@@ -23,7 +23,7 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       name: 'fee_reminder',
       internalCategory: 'fee',
       category: 'UTILITY',
-      bodyText: 'Dear parent of {{1}}, fee for {{2}} is due on {{3}}.',
+      bodyText: 'Dear parent of {{1}}, fee for {{2}} is due on {{3}}. Please pay on time.',
     },
   ],
   [TEMPLATE_GROUPS.POS_ERP]: [
@@ -31,13 +31,14 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       name: 'invoice_ready',
       internalCategory: 'invoice',
       category: 'UTILITY',
-      bodyText: 'Hi {{1}}, your invoice #{{2}} is ready. Amount: Rs {{3}}. Previous balance: Rs {{4}}.',
+      bodyText:
+        'Hi {{1}}, your invoice #{{2}} is ready. Amount: Rs {{3}}. Previous balance: Rs {{4}}. Thank you for your business!',
     },
     {
       name: 'order_update',
       internalCategory: 'order_update',
       category: 'UTILITY',
-      bodyText: 'Hi {{1}}, your order #{{2}} status: {{3}}.',
+      bodyText: 'Hi {{1}}, your order #{{2}} status: {{3}}. Thank you for shopping with us!',
     },
   ],
   [TEMPLATE_GROUPS.GENERAL]: [
