@@ -35,6 +35,18 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
         'Hi {{1}}, your invoice #{{2}} is ready. Amount: Rs {{3}}. Previous balance: Rs {{4}}. Thank you for your business!',
     },
     {
+      // Carries the invoice PDF itself as a DOCUMENT header — needed to reach customers
+      // outside Meta's 24h customer-service window, where a plain document message is
+      // rejected and only an approved template (with the file baked into its header) is
+      // allowed. Same internalCategory as invoice_ready so messaging.service.js's
+      // window-aware fallback (sendDocumentMessage) picks this up automatically once approved.
+      name: 'invoice_pdf',
+      internalCategory: 'invoice',
+      category: 'UTILITY',
+      hasDocumentHeader: true,
+      bodyText: 'Hi {{1}}, your invoice #{{2}} is attached. Thank you for your business!',
+    },
+    {
       name: 'order_update',
       internalCategory: 'order_update',
       category: 'UTILITY',

@@ -53,6 +53,9 @@ export async function sendInvoiceReceiptWhatsApp(params: {
     (params.printData.printInUrdu
       ? params.printData.companyNameUrdu || params.printData.companyName
       : params.printData.companyName || params.printData.companyNameUrdu) || ''
+  // Falls back to the invoice_pdf template's own greeting when no name is known — Meta
+  // rejects an empty template parameter, so this must never be ''.
+  const customerName = params.printData.walkInCustomerName || params.printData.customerName || 'there'
 
   try {
     const result = await store
@@ -65,6 +68,7 @@ export async function sendInvoiceReceiptWhatsApp(params: {
             params.caption ||
             `Invoice ${params.printData.invoiceNumber}${companyName ? ` from ${companyName}` : ''}`,
           invoiceNumber: params.printData.invoiceNumber,
+          templateParams: [customerName, params.printData.invoiceNumber],
         }),
       )
       .unwrap()

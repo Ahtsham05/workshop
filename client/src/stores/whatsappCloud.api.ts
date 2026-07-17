@@ -79,6 +79,8 @@ export type WhatsAppTemplateSuggestion = {
   variableCount: number
   alreadyCreated: boolean
   status: WhatsAppTemplate['status'] | null
+  /** Needs a sample PDF — the template carries a document (e.g. the invoice) in its header so it can be sent outside Meta's 24h window. */
+  hasDocumentHeader?: boolean
 }
 
 export type FunnelRange = 'today' | '7d' | '30d'
@@ -235,7 +237,16 @@ export const whatsappCloudApi = createApi({
     }),
     createTemplate: builder.mutation<
       WhatsAppTemplate,
-      { name: string; language?: string; category: string; bodyText: string; internalCategory?: string }
+      {
+        name: string
+        language?: string
+        category: string
+        bodyText: string
+        internalCategory?: string
+        headerFormat?: 'DOCUMENT'
+        headerSampleBase64?: string
+        headerSampleMimeType?: string
+      }
     >({
       query: (body) => ({ url: '/templates', method: 'POST', body }),
       invalidatesTags: ['WhatsAppTemplates'],

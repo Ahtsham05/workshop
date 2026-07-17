@@ -225,7 +225,11 @@ export default function WhatsAppTemplatesPage() {
         onSubmit={async (payload) => {
           try {
             await createTemplate(payload).unwrap()
-            toast.success('Template submitted to Meta for approval')
+            toast.success(
+              payload.headerFormat === 'DOCUMENT'
+                ? 'Template submitted to Meta for approval. Once approved, invoice PDFs can be sent any time — even outside the 24h window.'
+                : 'Template submitted to Meta for approval',
+            )
             setEditing(null)
           } catch (e: any) {
             toast.error(e?.data?.message || 'Template submission failed')
@@ -234,6 +238,19 @@ export default function WhatsAppTemplatesPage() {
       />
     </div>
   )
+}
+
+/** Reads a File as a base64 string (no data: URL prefix). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      resolve(result.split(',')[1] || '')
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 function TemplateEditDialog({
@@ -249,20 +266,26 @@ function TemplateEditDialog({
     category: string
     bodyText: string
     internalCategory: string
+    headerFormat?: 'DOCUMENT'
+    headerSampleBase64?: string
+    headerSampleMimeType?: string
   }) => Promise<void>
 }) {
   const [bodyText, setBodyText] = useState('')
   const [category, setCategory] = useState('UTILITY')
   const [language, setLanguage] = useState('en')
   const [submitting, setSubmitting] = useState(false)
+  const [sampleFile, setSampleFile] = useState<File | null>(null)
 
   const expectedVariables = suggestion?.variableCount ?? 0
+  const needsSampleDocument = Boolean(suggestion?.hasDocumentHeader)
 
   useEffect(() => {
     if (suggestion) {
       setBodyText(suggestion.bodyText)
       setCategory(suggestion.category)
       setLanguage(suggestion.language || 'en')
+      setSampleFile(null)
     }
   }, [suggestion])
 
@@ -273,6 +296,7 @@ function TemplateEditDialog({
       setBodyText('')
       setCategory('UTILITY')
       setLanguage('en')
+      setSampleFile(null)
     }
     onOpenChange(next)
   }
@@ -291,6 +315,21 @@ function TemplateEditDialog({
           </DialogDescription>
         </DialogHeader>
         <div className='space-y-3'>
+          {needsSampleDocument && (
+            <div className='space-y-1.5'>
+              <Label htmlFor='tpl-sample-doc'>Sample PDF</Label>
+              <Input
+                id='tpl-sample-doc'
+                type='file'
+                accept='application/pdf'
+                onChange={(e) => setSampleFile(e.target.files?.[0] || null)}
+              />
+              <p className='text-xs text-muted-foreground'>
+                Any representative invoice PDF works — Meta uses it to review the layout, not the exact content.
+                Once approved, this template lets you send real invoice PDFs any time, even outside the 24h window.
+              </p>
+            </div>
+          )}
           <div className='space-y-1.5'>
             <Label htmlFor='tpl-body'>Message body</Label>
             <Textarea
@@ -334,18 +373,25 @@ function TemplateEditDialog({
           <Button
             type='button'
             className='bg-[#25D366] hover:bg-[#20bd5a] text-white'
-            disabled={submitting || !bodyText.trim() || variablesMismatch}
+            disabled={submitting || !bodyText.trim() || variablesMismatch || (needsSampleDocument && !sampleFile)}
             onClick={async () => {
               if (!suggestion) return
               setSubmitting(true)
-              await onSubmit({
-                name: suggestion.name,
-                language,
-                category,
-                bodyText: bodyText.trim(),
-                internalCategory: suggestion.internalCategory,
-              })
-              setSubmitting(false)
+              try {
+                const headerSampleBase64 = sampleFile ? await fileToBase64(sampleFile) : undefined
+                await onSubmit({
+                  name: suggestion.name,
+                  language,
+                  category,
+                  bodyText: bodyText.trim(),
+                  internalCategory: suggestion.internalCategory,
+                  ...(needsSampleDocument
+                    ? { headerFormat: 'DOCUMENT' as const, headerSampleBase64, headerSampleMimeType: sampleFile?.type }
+                    : {}),
+                })
+              } finally {
+                setSubmitting(false)
+              }
             }}
           >
             {submitting ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Submit for approval'}

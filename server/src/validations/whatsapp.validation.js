@@ -7,6 +7,7 @@ const sendInvoicePdf = {
     filename: Joi.string().max(200),
     caption: Joi.string().max(1000).allow(''),
     invoiceNumber: Joi.string().max(100),
+    templateParams: Joi.array().items(Joi.string().allow('')).optional(),
   }),
 };
 

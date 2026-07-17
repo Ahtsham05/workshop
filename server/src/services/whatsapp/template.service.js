@@ -3,9 +3,46 @@ const connectionService = require('./connection.service');
 const ApiError = require('../../utils/ApiError');
 const httpStatus = require('http-status');
 const logger = require('../../config/logger');
+const config = require('../../config/config');
 const { getSuggestedTemplates, countVariables } = require('../../config/whatsappTemplateDefaults');
 
 const PLACEHOLDER_RE = /\{\{\s*\d+\s*\}\}/g;
+
+/**
+ * Meta's Resumable Upload API — the only way to attach a file to a template's HEADER
+ * (a template with a DOCUMENT header can then be sent any time, bypassing the 24h
+ * customer-service window that blocks free-form document messages). Two steps: open an
+ * upload session sized for the file, then push the bytes to get back a reusable handle.
+ */
+async function uploadTemplateHeaderMedia(connection, accessToken, buffer, mimeType) {
+  const { appId } = config.whatsapp.meta;
+  if (!appId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Meta app is not configured (META_APP_ID)');
+  }
+
+  const initUrl =
+    `${connectionService.graphBaseUrl(connection.apiVersion)}/${appId}/uploads` +
+    `?file_length=${buffer.length}&file_type=${encodeURIComponent(mimeType)}&access_token=${encodeURIComponent(accessToken)}`;
+  const initRes = await fetch(initUrl, { method: 'POST' });
+  const initBody = await initRes.json().catch(() => ({}));
+  if (!initRes.ok || !initBody.id) {
+    logger.error('WhatsApp header media upload session failed:', initBody?.error || initBody);
+    throw new ApiError(httpStatus.BAD_REQUEST, initBody?.error?.message || 'Failed to start header media upload session');
+  }
+
+  const uploadUrl = `${connectionService.graphBaseUrl(connection.apiVersion)}/${initBody.id}`;
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { Authorization: `OAuth ${accessToken}`, file_offset: '0' },
+    body: buffer,
+  });
+  const uploadBody = await uploadRes.json().catch(() => ({}));
+  if (!uploadRes.ok || !uploadBody.h) {
+    logger.error('WhatsApp header media upload failed:', uploadBody?.error || uploadBody);
+    throw new ApiError(httpStatus.BAD_REQUEST, uploadBody?.error?.message || 'Failed to upload header sample document');
+  }
+  return uploadBody.h;
+}
 
 async function syncFromMeta(organizationId, branchId) {
   const connection = await connectionService.getActiveConnection(organizationId, branchId);
@@ -100,7 +137,16 @@ function buildBodyExample(bodyText) {
   return Array.from({ length: count }, (_, i) => EXAMPLE_VALUE_POOL[i] || `Value${i + 1}`);
 }
 
-async function createTemplate(organizationId, branchId, { name, language = 'en', category, bodyText, internalCategory = 'general' }) {
+async function createTemplate(organizationId, branchId, {
+  name,
+  language = 'en',
+  category,
+  bodyText,
+  internalCategory = 'general',
+  headerFormat,
+  headerSampleBase64,
+  headerSampleMimeType,
+}) {
   if (!/^[a-z0-9_]+$/.test(name || '')) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Template name must be lowercase letters, numbers and underscores only');
   }
@@ -113,12 +159,25 @@ async function createTemplate(organizationId, branchId, { name, language = 'en',
   }
   const accessToken = connectionService.getDecryptedToken(connection);
 
+  const components = [];
+  if (headerFormat === 'DOCUMENT') {
+    if (!headerSampleBase64) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'A sample PDF is required for a document-header template');
+    }
+    const buffer = Buffer.from(String(headerSampleBase64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+    if (!buffer.length) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid sample document');
+    }
+    const handle = await uploadTemplateHeaderMedia(connection, accessToken, buffer, headerSampleMimeType || 'application/pdf');
+    components.push({ type: 'HEADER', format: 'DOCUMENT', example: { header_handle: [handle] } });
+  }
+
   const bodyComponent = { type: 'BODY', text: bodyText };
   const exampleValues = buildBodyExample(bodyText);
   if (exampleValues) {
     bodyComponent.example = { body_text: [exampleValues] };
   }
-  const components = [bodyComponent];
+  components.push(bodyComponent);
   const url = `${connectionService.graphBaseUrl(connection.apiVersion)}/${connection.wabaId}/message_templates`;
   const res = await fetch(url, {
     method: 'POST',

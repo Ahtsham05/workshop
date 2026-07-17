@@ -81,7 +81,7 @@ export const whatsappApi = createApi({
     }),
     sendInvoicePdfWhatsApp: builder.mutation<
       { success: boolean; message: string },
-      { phone: string; pdfBase64: string; filename?: string; caption?: string; invoiceNumber?: string }
+      { phone: string; pdfBase64: string; filename?: string; caption?: string; invoiceNumber?: string; templateParams?: string[] }
     >({
       query: (body) => ({ url: '/send-invoice-pdf', method: 'POST', body }),
     }),

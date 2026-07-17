@@ -70,6 +70,9 @@ const createTemplate = {
       'order_update',
       'general',
     ),
+    headerFormat: Joi.string().valid('DOCUMENT'),
+    headerSampleBase64: Joi.string().when('headerFormat', { is: 'DOCUMENT', then: Joi.required() }),
+    headerSampleMimeType: Joi.string(),
   }),
 };
 
