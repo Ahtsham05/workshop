@@ -80,7 +80,7 @@ async function sendDocumentMessage(config, phone, { mediaId, caption, filename }
     document: {
       id: mediaId,
       caption: String(caption || '').slice(0, 1024),
-      filename: String(filename || 'document.pdf').replace(/[^\w.\-() ]/g, '_') || 'document.pdf',
+      filename: String(filename || 'document.pdf').replace(/[^\p{L}\p{N}.\-() _]/gu, '_') || 'document.pdf',
     },
   };
 

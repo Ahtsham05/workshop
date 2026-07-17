@@ -205,7 +205,7 @@ async function sendDocument({
   const buffer = decodePdfBuffer(data);
   if (!buffer?.length) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or empty PDF data');
 
-  const safeFilename = String(filename || 'document.pdf').replace(/[^\w.\-() ]/g, '_') || 'document.pdf';
+  const safeFilename = String(filename || 'document.pdf').replace(/[^\p{L}\p{N}.\-() _]/gu, '_') || 'document.pdf';
   const mediaId = await uploadMedia(
     { accessToken, phoneNumberId: conn.phoneNumberId, apiVersion: conn.apiVersion },
     buffer,
@@ -270,7 +270,7 @@ async function sendMedia({
   if (!to) throw new ApiError(httpStatus.BAD_REQUEST, `Invalid phone number: ${phone}`);
   if (!buffer?.length) throw new ApiError(httpStatus.BAD_REQUEST, 'File is required');
 
-  const safeFilename = filename ? String(filename).replace(/[^\w.\-() ]/g, '_') : undefined;
+  const safeFilename = filename ? String(filename).replace(/[^\p{L}\p{N}.\-() _]/gu, '_') : undefined;
   const trimmedCaption = String(caption || '').slice(0, 1024);
 
   const [mediaId, mediaUrl] = await Promise.all([
@@ -489,7 +489,7 @@ async function sendDocumentMessage({
   const buffer = decodePdfBuffer(data);
   if (!buffer?.length) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or empty PDF data');
 
-  const safeFilename = String(filename || 'document.pdf').replace(/[^\w.\-() ]/g, '_') || 'document.pdf';
+  const safeFilename = String(filename || 'document.pdf').replace(/[^\p{L}\p{N}.\-() _]/gu, '_') || 'document.pdf';
   const mediaId = await uploadMedia(
     { accessToken, phoneNumberId: conn.phoneNumberId, apiVersion: conn.apiVersion },
     buffer,
