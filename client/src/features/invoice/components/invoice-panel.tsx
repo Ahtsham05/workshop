@@ -1348,7 +1348,7 @@ export function InvoicePanel({
             }
             setIsWhatsAppSending(true)
             try {
-              const res = await sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone })
+              const res = await sendInvoiceReceiptWhatsApp({ printData, phone: wpPhone, template: invoiceTemplate })
               if (res.success) toast.success('Invoice sent on WhatsApp')
               else toast.error(res.error || 'Failed to send on WhatsApp')
             } finally {
@@ -1373,7 +1373,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),

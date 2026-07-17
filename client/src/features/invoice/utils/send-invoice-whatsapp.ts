@@ -3,7 +3,8 @@ import { store } from '@/stores/store'
 
 import { buildInvoicePdfInOpener } from './invoice-print-pdf-bridge'
 import { buildInvoicePdfDownloadFilename } from './invoice-print-whatsapp'
-import { generateInvoiceHTML, type PrintInvoiceData } from './print-utils'
+import { generateA4InvoiceHTML, type PrintInvoiceData } from './print-utils'
+import type { InvoiceTemplate } from './invoice-template'
 
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer()
@@ -31,18 +32,19 @@ function extractErrorMessage(err: unknown): string {
   return e.data?.message || e.message || 'Failed to send on WhatsApp'
 }
 
-/** Save flow helper: build receipt PDF from print data and send via connected WhatsApp. */
+/** Save flow helper: build a full A4 invoice PDF (matching the on-screen print view — not a half-sheet/thermal layout) from print data and send via connected WhatsApp. */
 export async function sendInvoiceReceiptWhatsApp(params: {
   printData: PrintInvoiceData
   phone: string
   caption?: string
+  template?: InvoiceTemplate
 }): Promise<{ success: boolean; message?: string; error?: string }> {
   const phone = params.phone.trim()
   if (!phone) {
     return { success: false, error: 'No phone or WhatsApp number' }
   }
 
-  const html = generateInvoiceHTML(params.printData)
+  const html = generateA4InvoiceHTML(params.printData, 'a4', params.template ?? 'standard')
   const rootHtml = extractPrintRootHtml(html)
   const blob = await buildInvoicePdfInOpener(rootHtml)
   const pdfBase64 = await blobToBase64(blob)
