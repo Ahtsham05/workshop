@@ -3,41 +3,80 @@ import { jsPDF } from 'jspdf'
 
 declare global {
   interface Window {
-    __buildInvoicePdfInOpener?: (invoiceRootHtml: string, options?: BuildInvoicePdfOptions) => Promise<Blob>
+    __buildInvoicePdfInOpener?: (invoiceRootHtml: string) => Promise<Blob>
   }
-}
-
-export type BuildInvoicePdfOptions = {
-  /** Pads short content up to one full A4 page instead of a page sized to fit only the content — for full-sheet A4/A5 invoices, never for thermal receipts. */
-  fillFullPage?: boolean
 }
 
 const PDF_MARGIN_MM = 8
 const A4_WIDTH_MM = 210
 const A4_HEIGHT_MM = 297
-/** Printable-area height/width ratio for one A4 page at PDF_MARGIN_MM — used to pad short invoices up to a full page. */
-const A4_PRINTABLE_RATIO = (A4_HEIGHT_MM - PDF_MARGIN_MM * 2) / (A4_WIDTH_MM - PDF_MARGIN_MM * 2)
+/** Standard A4 CSS-pixel width at 96dpi (210mm) — same constant used for the template preview
+ * thumbnails in Settings -> Printing. Capturing at this fixed width, rather than whatever the
+ * host container happens to be, is what makes wrapping/font proportions match true print
+ * layout consistently every time. */
+const A4_CSS_WIDTH_PX = 794
 
 /**
- * One continuous page, always A4-width, sized to fit the whole invoice — no page-splitting.
- * The previous version sliced a single tall image across fixed 297mm-tall A4 pages by
- * re-drawing the full image at shifting offsets per page; when a table row landed on a slice
- * boundary it visibly rendered twice (once at the bottom of one page, again at the top of the
- * next), and short invoices left a near-blank trailing page. A WhatsApp PDF is read on a
- * screen, not laid on a printer bed, so there's no reason to fragment it — a single tall page
- * (same approach already used for thermal receipts via `pageCss: '80mm auto'`) reads cleanly
- * end-to-end and can never duplicate a row at a page break.
+ * Captures invoice HTML as a true A4-page PDF. Two earlier approaches both had real problems:
+ * slicing one tall screenshot across fixed-height pages re-drew the same image at shifting
+ * offsets and could show a row twice at the slice boundary; capturing everything as one giant
+ * custom-height page avoided that but no longer looked like "A4" (a long invoice came out
+ * taller than several A4 sheets stacked, not proportioned like one). `generateA4InvoiceHTML`
+ * already splits the invoice into complete `.invoice-print-page` chunks sized for one real A4
+ * sheet each (never mid-row) — capturing each chunk on its own true 210x297mm page reuses that
+ * boundary instead of guessing one from pixels, so it's always genuine A4 proportions, one PDF
+ * page per chunk, with zero risk of duplicating a row.
  */
-async function canvasToPdfBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  const imgData = canvas.toDataURL('image/jpeg', 0.92)
+async function buildPdfFromChunks(chunks: HTMLElement[]): Promise<Blob> {
   const margin = PDF_MARGIN_MM
   const printableWidth = A4_WIDTH_MM - margin * 2
-  const imgWidth = printableWidth
-  const imgHeight = (canvas.height * imgWidth) / canvas.width
-  const pageHeight = imgHeight + margin * 2
+  const printableHeight = A4_HEIGHT_MM - margin * 2
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [A4_WIDTH_MM, pageHeight] })
-  pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight)
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]
+    // Belt-and-suspenders: force the chunk itself full-width with !important, in case some
+    // ancestor's !important rule (e.g. the A4-half/two-up layout's `max-width: 1200px
+    // !important`) is still constraining it despite injectFlatPageStyle.
+    const prevChunkCss = chunk.style.cssText
+    // Fixed width, not 100% — 100% would just resolve to whatever the host container's size
+    // happens to be, defeating the point of a fixed reference width.
+    chunk.style.setProperty('max-width', 'none', 'important')
+    chunk.style.setProperty('width', `${A4_CSS_WIDTH_PX}px`, 'important')
+    chunk.style.setProperty('margin', '0', 'important')
+
+    // Measured AFTER setting the fixed width above, so this reflects the true height at that
+    // exact width.
+    const captureWidth = A4_CSS_WIDTH_PX
+    const captureHeight = chunk.scrollHeight || undefined
+
+    // html2canvas lays the clone out in a virtual window sized windowWidth x windowHeight;
+    // left at its default (the real browser window's height), content taller than that forces
+    // it to scroll-and-stitch internally, which is what produced a repeated row — sizing the
+    // virtual window to the chunk's own full height up front avoids that path entirely.
+    const canvas = await html2canvas(chunk, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: captureWidth,
+      windowHeight: captureHeight,
+    })
+
+    chunk.style.cssText = prevChunkCss
+
+    const naturalHeight = (canvas.height * printableWidth) / canvas.width
+    // Only shrinks (never stretches) if a chunk is unexpectedly taller than one real A4 page —
+    // the normal case is naturalHeight <= printableHeight and scale stays 1.
+    const fitScale = naturalHeight > printableHeight ? printableHeight / naturalHeight : 1
+    const imgWidth = printableWidth * fitScale
+    const imgHeight = naturalHeight * fitScale
+
+    if (i > 0) pdf.addPage()
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgWidth, imgHeight)
+  }
+
   return pdf.output('blob')
 }
 
@@ -61,11 +100,11 @@ function injectFlatPageStyle(host: HTMLElement): void {
 }
 
 /** Build invoice PDF in the main app (bundled html2canvas + jspdf). Used when print popup CDN libs fail. */
-export async function buildInvoicePdfInOpener(invoiceRootHtml: string, options?: BuildInvoicePdfOptions): Promise<Blob> {
+export async function buildInvoicePdfInOpener(invoiceRootHtml: string): Promise<Blob> {
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
   host.style.cssText =
-    'position:fixed;left:-12000px;top:0;width:720px;max-width:720px;background:#fff;z-index:-1;pointer-events:none;overflow:visible'
+    `position:fixed;left:-12000px;top:0;width:${A4_CSS_WIDTH_PX}px;max-width:${A4_CSS_WIDTH_PX}px;background:#fff;z-index:-1;pointer-events:none;overflow:visible`
   host.innerHTML = invoiceRootHtml
   injectFlatPageStyle(host)
   document.body.appendChild(host)
@@ -78,32 +117,10 @@ export async function buildInvoicePdfInOpener(invoiceRootHtml: string, options?:
     }
     await new Promise((r) => setTimeout(r, 150))
 
-    if (options?.fillFullPage) {
-      const width = root.scrollWidth || 720
-      const minHeight = Math.ceil(width * A4_PRINTABLE_RATIO)
-      if (root.scrollHeight < minHeight) {
-        root.style.minHeight = `${minHeight}px`
-      }
-    }
+    const pageEls = root.querySelectorAll<HTMLElement>('.invoice-print-page')
+    const chunks = pageEls.length ? Array.from(pageEls) : [root]
 
-    // html2canvas lays the clone out in a virtual window sized windowWidth x windowHeight;
-    // left at its default (the real browser window's height, ~800-1000px), content taller
-    // than that forces it to scroll-and-stitch internally, which is what produced the
-    // repeated row — sizing the virtual window to the full content height up front avoids
-    // that path entirely.
-    const captureWidth = Math.max(root.scrollWidth || 0, 720)
-    const captureHeight = root.scrollHeight || undefined
-    const canvas = await html2canvas(root, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: captureWidth,
-      windowHeight: captureHeight,
-    })
-
-    return canvasToPdfBlob(canvas)
+    return await buildPdfFromChunks(chunks)
   } finally {
     document.body.removeChild(host)
   }

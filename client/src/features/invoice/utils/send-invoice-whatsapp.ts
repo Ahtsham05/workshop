@@ -60,7 +60,7 @@ export async function sendInvoiceReceiptWhatsApp(params: {
 
   const html = generateA4InvoiceHTML(params.printData, 'a4', params.template ?? 'standard')
   const rootHtml = extractPrintRootHtml(html)
-  const blob = await buildInvoicePdfInOpener(rootHtml, { fillFullPage: true })
+  const blob = await buildInvoicePdfInOpener(rootHtml)
   const pdfBase64 = await blobToBase64(blob)
   const filename = buildInvoicePdfDownloadFilename(params.printData)
   const companyName =

@@ -1069,7 +1069,7 @@ ${itemizedTotalsTable}
         <tr>
           <td class="text-center"><strong>${index + 1}</strong></td>
           <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
-          <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
+          <td class="text-center"><strong>${item.quantity}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
         </tr>`
@@ -1244,7 +1244,7 @@ ${itemizedTotalsTable}
     .customer-bill-line {
       display: flex;
       flex-direction: row;
-      align-items: baseline;
+      align-items: flex-start;
       justify-content: flex-start;
       flex-wrap: nowrap;
       gap: 4px;

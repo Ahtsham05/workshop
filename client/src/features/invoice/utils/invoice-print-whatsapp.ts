@@ -339,12 +339,15 @@ export function buildPrintWindowActionsBlock(
   };
 
   /**
-   * Capture invoice HTML as a single continuous A4-width PDF page (does not use jspdf.html —
-   * needs html2canvas on window). Previously sliced one tall image across fixed 297mm-tall A4
-   * pages by re-drawing it at shifting offsets per page; a table row landing on a slice
-   * boundary rendered twice, and short invoices left a near-blank trailing page. This is read
-   * on a screen, not printed on paper, so it's built as one page sized to fit the whole
-   * invoice — always full A4 width, height grows to match content, never split.
+   * Capture invoice HTML as a true A4-page PDF (does not use jspdf.html - needs html2canvas
+   * on window). Two earlier approaches both had real problems: slicing one tall screenshot
+   * across fixed-height pages re-drew the same image at shifting offsets and could show a row
+   * twice at the slice boundary; capturing everything as one giant custom-height page avoided
+   * that but no longer looked like "A4" (a 13-item invoice came out taller than two A4 sheets
+   * stacked). The generator already splits the invoice into complete .invoice-print-page
+   * chunks sized for one real A4 sheet each (never mid-row) - capturing each chunk on its own
+   * true 210x297mm page reuses that boundary instead of guessing one from pixels, so it's
+   * always genuine A4 proportions, one PDF page per chunk, with zero risk of duplicating a row.
    */
   window.__buildInvoicePdfBlob = async function (root) {
     await window.__ensureInvoicePdfLibraries();
@@ -355,57 +358,110 @@ export function buildPrintWindowActionsBlock(
     var prevBarDisplay = actionsBar ? actionsBar.style.display : '';
     if (actionsBar) actionsBar.style.display = 'none';
 
+    // The on-screen "floating card" look (narrow centered width, shadow, rounded corners) comes
+    // from an @media screen rule that may itself be !important (the A4-half/two-up landscape
+    // layout sets max-width: 1200px !important on body) - plain el.style.x = 'none' cannot beat
+    // an !important stylesheet rule, only setProperty with 'important' can. And patching this
+    // only inside html2canvas's onclone callback still measured captureWidth beforehand from
+    // the LIVE (still-narrow) element, so the virtual viewport stayed narrow regardless of what
+    // the clone's CSS said - the fix has to happen on the real document, with !important,
+    // before measuring, so the browser actually reflows wide. Restored in finally.
+    function setImportant(el, prop, value) {
+      el.style.setProperty(prop, value, 'important');
+    }
+    var bodyEl = document.body;
+    var prevBodyCss = bodyEl.style.cssText;
+    setImportant(bodyEl, 'max-width', 'none');
+    setImportant(bodyEl, 'width', '100%');
+    setImportant(bodyEl, 'margin', '0');
+    setImportant(bodyEl, 'box-shadow', 'none');
+    setImportant(bodyEl, 'border-radius', '0');
+
+    var rootEl = document.getElementById('invoice-print-root');
+    var prevRootCss = rootEl ? rootEl.style.cssText : null;
+    if (rootEl) {
+      setImportant(rootEl, 'max-width', 'none');
+      setImportant(rootEl, 'width', '100%');
+      setImportant(rootEl, 'margin', '0');
+      setImportant(rootEl, 'box-shadow', 'none');
+      setImportant(rootEl, 'border-radius', '0');
+      setImportant(rootEl, 'background', '#ffffff');
+    }
+
     try {
       var margin = 8;
       var pageWidthMM = 210;
+      var pageHeightMM = 297;
       var printableWidthMM = pageWidthMM - margin * 2;
-      var a4Ratio = (297 - margin * 2) / printableWidthMM;
-      var captureWidth = Math.max(root.scrollWidth || 0, root.offsetWidth || 0, 720);
-      var minHeight = Math.ceil(captureWidth * a4Ratio);
-      var captureHeight = Math.max(root.scrollHeight || 0, minHeight);
+      var printableHeightMM = pageHeightMM - margin * 2;
 
-      var canvas = await html2canvas(root, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: -window.scrollY,
-        // Sizing html2canvas's virtual window to the full (possibly padded) content height up
-        // front avoids the internal scroll-and-stitch capture that produced the repeated row.
-        windowWidth: captureWidth,
-        windowHeight: captureHeight,
-        onclone: function (clonedDoc) {
-          clonedDoc.querySelectorAll('.no-print').forEach(function (el) {
-            el.style.display = 'none';
-            el.style.visibility = 'hidden';
-          });
-          var clonedRoot = clonedDoc.getElementById('invoice-print-root');
-          if (clonedRoot) {
-            // Flatten the on-screen "floating card" look (shadow/rounded corners/centered
-            // narrow width) — a PDF should read as a flat printed page, not a preview widget.
-            clonedRoot.style.background = '#ffffff';
-            clonedRoot.style.boxShadow = 'none';
-            clonedRoot.style.borderRadius = '0';
-            clonedRoot.style.maxWidth = 'none';
-            clonedRoot.style.margin = '0';
-            if (clonedRoot.scrollHeight < minHeight) {
-              clonedRoot.style.minHeight = minHeight + 'px';
-            }
-          }
-        },
-      });
+      var pageEls = root.querySelectorAll('.invoice-print-page');
+      var chunks = pageEls.length ? Array.prototype.slice.call(pageEls) : [root];
 
-      var imgData = canvas.toDataURL('image/jpeg', 0.92);
-      var imgWidth = printableWidthMM;
-      var imgHeight = (canvas.height * imgWidth) / canvas.width;
-      var pageHeightMM = imgHeight + margin * 2;
-      var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidthMM, pageHeightMM] });
-      pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+      var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // Standard A4 CSS-pixel width at 96dpi (210mm), same constant used for the template
+      // preview thumbnails in Settings -> Printing. Capturing at a FIXED width — rather than
+      // whatever size the popup window happens to be (900px for A4, but a Save/WhatsApp click
+      // right after opening, or a resized window, can catch it narrower) — is what makes
+      // wrapping/font proportions match true print layout consistently every time, instead of
+      // varying with window size (a long name that fit on one line in a wide window would wrap
+      // differently in the PDF if capture width depended on the live window's current size).
+      var A4_CSS_WIDTH_PX = 794;
+
+      for (var i = 0; i < chunks.length; i++) {
+        var chunk = chunks[i];
+        var prevChunkCss = chunk.style.cssText;
+        // Fixed width, not 100% — 100% would still just resolve to whatever the popup window's
+        // current (variable) size is, defeating the point of a fixed reference width.
+        setImportant(chunk, 'max-width', 'none');
+        setImportant(chunk, 'width', A4_CSS_WIDTH_PX + 'px');
+        setImportant(chunk, 'margin', '0');
+
+        // Measured AFTER setting the fixed width above, so this reflects the true height at
+        // that exact width — not at whatever the popup window's current size happens to be.
+        var captureWidth = A4_CSS_WIDTH_PX;
+        var captureHeight = chunk.scrollHeight || undefined;
+
+        var canvas = await html2canvas(chunk, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: -window.scrollY,
+          // Sizing html2canvas's virtual window to the chunk's own full height up front avoids
+          // the internal scroll-and-stitch capture that used to duplicate a row.
+          windowWidth: captureWidth,
+          windowHeight: captureHeight,
+          onclone: function (clonedDoc) {
+            clonedDoc.querySelectorAll('.no-print').forEach(function (el) {
+              el.style.display = 'none';
+              el.style.visibility = 'hidden';
+            });
+          },
+        });
+
+        chunk.style.cssText = prevChunkCss;
+
+        var naturalHeight = (canvas.height * printableWidthMM) / canvas.width;
+        // Only shrinks (never stretches) if a chunk is unexpectedly taller than one real A4
+        // page — normal case is naturalHeight <= printableHeightMM and scale stays 1.
+        var fitScale = naturalHeight > printableHeightMM ? printableHeightMM / naturalHeight : 1;
+        var imgWidth = printableWidthMM * fitScale;
+        var imgHeight = naturalHeight * fitScale;
+
+        if (i > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgWidth, imgHeight);
+      }
 
       return pdf.output('blob');
     } finally {
+      bodyEl.style.cssText = prevBodyCss;
+      if (rootEl && prevRootCss !== null) {
+        rootEl.style.cssText = prevRootCss;
+      }
       if (actionsBar) actionsBar.style.display = prevBarDisplay;
     }
   };
