@@ -120,6 +120,8 @@ export interface Invoice {
   invoiceDate?: string
   dueDate?: string
   notes?: string
+  /** Name of the person collecting the products, for 'pending' invoices — shown in the SMS/WhatsApp handoff message. */
+  receivedByName?: string
   // Payment method (how customer paid)
   paymentMethod?: 'cash' | 'wallet' | 'bank' | 'card'
   walletType?: string

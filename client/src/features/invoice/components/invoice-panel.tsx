@@ -21,7 +21,8 @@ import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import { sendInvoiceReceiptWhatsApp } from '../utils/send-invoice-whatsapp'
-import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
+import { buildInvoiceSmsMessage, buildPendingInvoiceItemsMessageUrdu } from '@/utils/sms-messages'
+import { useSendWhatsAppMessageMutation } from '@/stores/whatsapp.api'
 import {
   fetchAndStashPrintContact,
   resolveCustomerIdString,
@@ -253,6 +254,7 @@ export function InvoicePanel({
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [isWhatsAppSending, setIsWhatsAppSending] = useState(false)
   const [sendSms, { isLoading: isSendingSms }] = useSendSmsMutation()
+  const [sendWhatsAppMessage] = useSendWhatsAppMessageMutation()
   const [sendMethod, setSendMethod] = useState<'none' | 'sms' | 'whatsapp' | 'both'>(() => {
     const s = localStorage.getItem('invoiceSendMethod')
     return s === 'sms' || s === 'whatsapp' || s === 'both' ? s : 'none'
@@ -1075,6 +1077,7 @@ export function InvoicePanel({
         paidAmount: invoice.paidAmount,
         balance: invoice.balance,
         notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
+        receivedByName: invoice.type === 'pending' ? (invoice.receivedByName || '').trim() : undefined,
         deliveryCharge: invoice.deliveryCharge,
         serviceCharge: invoice.serviceCharge,
         roundingAdjustment: invoice.roundingAdjustment,
@@ -1214,6 +1217,7 @@ export function InvoicePanel({
         isUrduOnly: (r.isUrduOnly as boolean | undefined) ?? invoice.isUrduOnly,
         invoiceDate: (r.invoiceDate as string | undefined) || invoice.invoiceDate,
         notes: (r.notes as string | undefined) ?? invoice.notes,
+        receivedByName: (r.receivedByName as string | undefined) ?? invoice.receivedByName,
       }
 
       // Handle print
@@ -1236,6 +1240,22 @@ export function InvoicePanel({
           const customer = customers.find(c => String(c._id || c.id) === customerId) || null
           const custName = resolvedCustomerName || customer?.name || ''
 
+          // Pending invoices are a goods handoff before formal billing — the SMS/WhatsApp
+          // message only lists product names + qty (no prices) plus who collected them,
+          // always in Urdu, instead of the usual financial summary.
+          const isPendingHandoff = savedInvoicePayload.type === 'pending'
+          const pendingMessage = () => buildPendingInvoiceItemsMessageUrdu({
+            branchName: orgData?.name || branchData?.name,
+            invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
+            items: validItems.map((item: any) => ({
+              name: item.name,
+              nameUrdu: item.nameUrdu,
+              quantity: item.quantity,
+              unit: item.unit,
+            })),
+            receivedByName: savedInvoicePayload.receivedByName,
+          })
+
           const sendSmsNow = async () => {
             // Fetch fresh from API to ensure we have the phone field
             const contact = await fetchAndStashPrintContact(customerId)
@@ -1244,7 +1264,7 @@ export function InvoicePanel({
               toast.error(`No phone number for ${custName || 'this customer'}. Add it in the Customers section first.`)
               return
             }
-            const msg = buildInvoiceSmsMessage({
+            const msg = isPendingHandoff ? pendingMessage() : buildInvoiceSmsMessage({
               branchName: orgData?.name || branchData?.name,
               invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
               customerName: custName || undefined,
@@ -1262,6 +1282,24 @@ export function InvoicePanel({
           }
 
           const sendWhatsAppNow = async () => {
+            if (isPendingHandoff) {
+              const contact = await fetchAndStashPrintContact(customerId)
+              const wpPhone = contact.whatsapp?.trim() || contact.phone?.trim() || customer?.phone?.trim() || ''
+              if (!wpPhone) {
+                toast.error(`No phone/WhatsApp number for ${custName || 'this customer'}. Add it in the Customers section first.`)
+                return
+              }
+              setIsWhatsAppSending(true)
+              try {
+                await sendWhatsAppMessage({ phone: wpPhone, message: pendingMessage() }).unwrap()
+                toast.success('WhatsApp message sent')
+              } catch (err: any) {
+                toast.error(err?.data?.message || 'Failed to send on WhatsApp')
+              } finally {
+                setIsWhatsAppSending(false)
+              }
+              return
+            }
             const prevBal = savedInvoicePayload.previousBalance ?? customerBalance
             const netBal = (prevBal || 0) + (savedInvoicePayload.total || 0) - (savedInvoicePayload.paidAmount || 0)
             const printData = withCustomerContactForPrint({
@@ -1335,7 +1373,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -1738,6 +1776,21 @@ export function InvoicePanel({
               onKeyDown={(e) => onEnterAdvance(e, openProductSelectorForEntry)}
             />
           </div>
+
+          {invoice.type === 'pending' && (
+            <div>
+              <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
+              <SmartInput
+                id="receivedByName"
+                placeholder={t('enter_received_by_name') || 'Name of person collecting the products'}
+                value={invoice.receivedByName || ''}
+                onChange={(e) => setInvoice(prev => ({ ...prev, receivedByName: e.target.value }))}
+                showVoiceInput={true}
+                voiceInputSize="sm"
+                className="w-full"
+              />
+            </div>
+          )}
 
           {invoice.customerId === 'walk-in' && (
             <div>

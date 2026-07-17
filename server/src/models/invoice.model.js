@@ -82,6 +82,8 @@ const InvoiceSchema = new mongoose.Schema({
     paidAmount: { type: Number, default: 0, min: 0 },
     balance: { type: Number, default: 0 },
     dueDate: { type: Date },
+    /** Person collecting the products, for 'pending' invoices — shown in the SMS/WhatsApp handoff message. */
+    receivedByName: { type: String, trim: true, default: '' },
     /** Optional delivery / billing address lines on the invoice (shown on prints when set). */
     invoiceAddress: { type: String, default: '' },
     invoiceAddressUrdu: { type: String, default: '' },

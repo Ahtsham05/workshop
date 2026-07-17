@@ -102,3 +102,31 @@ export function buildInvoiceSmsMessage({
   const lines = [h, '', greeting, sep, inv, amt, paid, prevBal, newBal, sep, '', 'Thank you for your business!']
   return lines.filter(l => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
+
+type PendingInvoiceItemsCtx = {
+  branchName?: string | null
+  invoiceNumber?: string | number
+  items: Array<{ name: string; nameUrdu?: string | null; quantity: number; unit?: string }>
+  receivedByName?: string
+}
+
+/** Urdu-only itemized handoff message (product names + qty, no prices) for 'pending' invoices — sent via SMS/WhatsApp when goods leave the store before being formally billed. */
+export function buildPendingInvoiceItemsMessageUrdu({
+  branchName,
+  invoiceNumber,
+  items,
+  receivedByName,
+}: PendingInvoiceItemsCtx): string {
+  const h = branchName ? `*${branchName}*\n` : ''
+  const inv = invoiceNumber ? `انوائس نمبر: #${invoiceNumber}` : ''
+  const itemLines = items
+    .map((item, i) => {
+      const name = item.nameUrdu?.trim() || item.name
+      const unit = item.unit?.trim() ? ` ${item.unit.trim()}` : ''
+      return `${i + 1}. ${name} - مقدار: ${item.quantity}${unit}`
+    })
+    .join('\n')
+  const receiver = receivedByName?.trim() ? `وصول کنندہ: ${receivedByName.trim()}` : ''
+  const lines = [h, 'نیا زیر التواء آرڈر', inv, '', itemLines, '', receiver, '', 'شکریہ!']
+  return lines.filter(l => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}

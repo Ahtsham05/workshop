@@ -267,6 +267,8 @@ const en: Record<string, string> = {
     "customer_dialog_section_photos_title": "Photos & ID",
     "customer_dialog_section_photos_desc": "Optional profile photo and CNIC front and back.",
     "enter_customer_name": "Enter customer name",
+    "received_by": "Received By",
+    "enter_received_by_name": "Name of person collecting the products",
     "name_in_urdu": "Name (Urdu)",
     "name_in_urdu_placeholder": "Urdu name",
     "name_in_urdu_hint": "Filled automatically when you type in English; you can edit it anytime.",
