@@ -338,7 +338,14 @@ export function buildPrintWindowActionsBlock(
     return window.__invoicePdfLibsPromise;
   };
 
-  /** Capture invoice HTML as a multi-page A4 PDF (does not use jspdf.html — needs html2canvas on window). */
+  /**
+   * Capture invoice HTML as a single continuous A4-width PDF page (does not use jspdf.html —
+   * needs html2canvas on window). Previously sliced one tall image across fixed 297mm-tall A4
+   * pages by re-drawing it at shifting offsets per page; a table row landing on a slice
+   * boundary rendered twice, and short invoices left a near-blank trailing page. This is read
+   * on a screen, not printed on paper, so it's built as one page sized to fit the whole
+   * invoice — always full A4 width, height grows to match content, never split.
+   */
   window.__buildInvoicePdfBlob = async function (root) {
     await window.__ensureInvoicePdfLibraries();
     var html2canvas = window.html2canvas;
@@ -349,6 +356,14 @@ export function buildPrintWindowActionsBlock(
     if (actionsBar) actionsBar.style.display = 'none';
 
     try {
+      var margin = 8;
+      var pageWidthMM = 210;
+      var printableWidthMM = pageWidthMM - margin * 2;
+      var a4Ratio = (297 - margin * 2) / printableWidthMM;
+      var captureWidth = Math.max(root.scrollWidth || 0, root.offsetWidth || 0, 720);
+      var minHeight = Math.ceil(captureWidth * a4Ratio);
+      var captureHeight = Math.max(root.scrollHeight || 0, minHeight);
+
       var canvas = await html2canvas(root, {
         scale: 2,
         useCORS: true,
@@ -357,7 +372,10 @@ export function buildPrintWindowActionsBlock(
         backgroundColor: '#ffffff',
         scrollX: 0,
         scrollY: -window.scrollY,
-        windowWidth: Math.max(root.scrollWidth || 0, root.offsetWidth || 0, 720),
+        // Sizing html2canvas's virtual window to the full (possibly padded) content height up
+        // front avoids the internal scroll-and-stitch capture that produced the repeated row.
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
         onclone: function (clonedDoc) {
           clonedDoc.querySelectorAll('.no-print').forEach(function (el) {
             el.style.display = 'none';
@@ -365,33 +383,26 @@ export function buildPrintWindowActionsBlock(
           });
           var clonedRoot = clonedDoc.getElementById('invoice-print-root');
           if (clonedRoot) {
+            // Flatten the on-screen "floating card" look (shadow/rounded corners/centered
+            // narrow width) — a PDF should read as a flat printed page, not a preview widget.
             clonedRoot.style.background = '#ffffff';
             clonedRoot.style.boxShadow = 'none';
+            clonedRoot.style.borderRadius = '0';
+            clonedRoot.style.maxWidth = 'none';
+            clonedRoot.style.margin = '0';
+            if (clonedRoot.scrollHeight < minHeight) {
+              clonedRoot.style.minHeight = minHeight + 'px';
+            }
           }
         },
       });
 
       var imgData = canvas.toDataURL('image/jpeg', 0.92);
-      var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      var pageWidth = pdf.internal.pageSize.getWidth();
-      var pageHeight = pdf.internal.pageSize.getHeight();
-      var margin = 8;
-      var printableWidth = pageWidth - margin * 2;
-      var printableHeight = pageHeight - margin * 2;
-      var imgWidth = printableWidth;
+      var imgWidth = printableWidthMM;
       var imgHeight = (canvas.height * imgWidth) / canvas.width;
-      var heightLeft = imgHeight;
-      var position = 0;
-
+      var pageHeightMM = imgHeight + margin * 2;
+      var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidthMM, pageHeightMM] });
       pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
-      heightLeft -= printableHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', margin, position + margin, imgWidth, imgHeight);
-        heightLeft -= printableHeight;
-      }
 
       return pdf.output('blob');
     } finally {
