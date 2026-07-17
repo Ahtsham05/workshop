@@ -14,14 +14,28 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary)
 }
 
+/**
+ * Extracts the `#invoice-print-root` markup PLUS every `<style>` from `<head>` — without the
+ * stylesheet, the captured PDF has none of the invoice's fonts/padding/table borders/layout
+ * (a `<style>` tag applies wherever it sits in the DOM, so bundling it alongside the root here
+ * is enough — no need to keep it in `<head>` specifically).
+ *
+ * The generator's background/padding/font/RTL-direction rules are written against the `body`
+ * selector, but the capture only ever mounts `#invoice-print-root` (there's no real `<body>`
+ * in this fragment) — so `body {` rules are mirrored onto `#invoice-print-root` too, otherwise
+ * that whole layer of styling silently no-ops against an element it never matches.
+ */
 function extractPrintRootHtml(fullHtml: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(fullHtml, 'text/html')
+  const styles = Array.from(doc.querySelectorAll('style'))
+    .map((s) => `<style>${s.innerHTML.replace(/\bbody(\s*\{)/g, 'body, #invoice-print-root$1')}</style>`)
+    .join('\n')
   const root = doc.getElementById('invoice-print-root')
-  if (root) return root.outerHTML
+  if (root) return styles + root.outerHTML
   const body = doc.body
   if (body?.innerHTML.trim()) {
-    return `<div id="invoice-print-root">${body.innerHTML}</div>`
+    return `${styles}<div id="invoice-print-root">${body.innerHTML}</div>`
   }
   return fullHtml
 }
@@ -46,7 +60,7 @@ export async function sendInvoiceReceiptWhatsApp(params: {
 
   const html = generateA4InvoiceHTML(params.printData, 'a4', params.template ?? 'standard')
   const rootHtml = extractPrintRootHtml(html)
-  const blob = await buildInvoicePdfInOpener(rootHtml)
+  const blob = await buildInvoicePdfInOpener(rootHtml, { fillFullPage: true })
   const pdfBase64 = await blobToBase64(blob)
   const filename = buildInvoicePdfDownloadFilename(params.printData)
   const companyName =
