@@ -63,7 +63,7 @@ const branchSchema = mongoose.Schema(
       /** A4/A5 invoice layout/design template */
       template: {
         type: String,
-        enum: ['standard', 'compact', 'modern', 'classic', 'bold'],
+        enum: ['standard', 'compact', 'modern', 'classic', 'bold', 'ledger'],
         default: 'standard',
       },
       /** Print orientation for the A5 paper size (ignored for other sizes) */

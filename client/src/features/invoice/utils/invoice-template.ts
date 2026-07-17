@@ -10,6 +10,7 @@ export const INVOICE_TEMPLATE_OPTIONS: Array<{ value: InvoiceTemplate; label: st
   { value: 'modern', label: 'Modern', description: 'Colored accent header, badges, and table — clean SaaS look' },
   { value: 'classic', label: 'Classic', description: 'Formal black & white ledger style with serif headings' },
   { value: 'bold', label: 'Bold', description: 'Brand-forward full-width dark header, high visual weight' },
+  { value: 'ledger', label: 'Ledger', description: 'Centered bold underlined header, like a manual bill book' },
 ]
 
 /** Default line-items-per-page for A4/A5 sheet invoices, per template. Explicit `a4ItemsPerPage` on print data always wins. */
@@ -19,6 +20,7 @@ export const INVOICE_TEMPLATE_ITEMS_PER_PAGE: Record<InvoiceTemplate, { a4: numb
   modern: { a4: 14, a5: 7, 'a5-landscape': 5 },
   classic: { a4: 14, a5: 7, 'a5-landscape': 5 },
   bold: { a4: 12, a5: 6, 'a5-landscape': 4 },
+  ledger: { a4: 14, a5: 7, 'a5-landscape': 5 },
 }
 
 const DEFAULT_TEMPLATE: InvoiceTemplate = 'standard'
@@ -39,10 +41,19 @@ export function useBranchInvoiceTemplate(): InvoiceTemplate {
 
 const COMPACT_A4_CSS = `
   body { padding: 10px; }
-  .invoice-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 2px; }
-  .company-logo { max-width: 90px; margin-bottom: 4px; }
-  .company-name { font-size: 18px; margin-bottom: 2px; }
-  .company-details { font-size: 13px; }
+  .invoice-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "logo logo" "name name" "details meta";
+    row-gap: 4px;
+    align-items: start;
+    margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 2px;
+  }
+  .company-info { display: contents; }
+  .company-logo { grid-area: logo; max-width: 90px; margin: 0 auto 4px; }
+  .company-name { grid-area: name; font-size: 38px; font-weight: 800; color: #000; margin-bottom: 2px; }
+  .company-details { grid-area: details; font-size: 13px; }
+  .invoice-details { grid-area: meta; }
   .company-contact-line { font-size: 13px !important; margin-top: 2px; }
   .invoice-title { font-size: 15px; margin-bottom: 4px; }
   .invoice-meta { font-size: 10px; }
@@ -50,14 +61,23 @@ const COMPACT_A4_CSS = `
   .info-section { gap: 4px; }
   .info-title { font-size: 11px; margin: 0 0 2px; padding-bottom: 2px; }
   .info-row, .customer-bill-line, .detail-value, .info-label, .payment-type-label { font-size: 11px; }
-  .bill-to-customer-name, .customer-field-label, .customer-name-highlight { font-size: 11px !important; }
+  .customer-field-label, .customer-name-highlight { font-size: 11px !important; }
+  .bill-to-customer-name {
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    color: #000 !important;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
   .items-table { margin-bottom: 8px; }
-  .items-table th { padding: 4px 5px; font-size: 11px; }
-  .items-table td { padding: 3px 5px; font-size: 10px; }
+  .items-table th { padding: 4px 5px; font-size: 13px; }
+  .items-table td { padding: 3px 5px; font-size: 12px; }
   .totals-wrapper { padding-top: 6px !important; margin-top: 6px !important; margin-bottom: 6px !important; }
   .totals-table { width: 260px !important; }
   .totals-table td { padding: 4px 8px; font-size: 11px; }
+  .totals-table .total-amount { font-size: 14px !important; }
   .totals-table .final-total { font-size: 12px; }
+  .totals-table .final-total .total-amount { font-size: 14px !important; }
   .barcode-section { margin: 8px 0; padding: 6px; }
   .barcode { font-size: 18px; margin: 4px 0; }
   .barcode-text { font-size: 9px; }
@@ -134,6 +154,24 @@ const BOLD_A4_CSS = `
   .footer { border-top: 2px solid #111827; }
 `
 
+/**
+ * Mirrors the layout of a handwritten ledger bill book: business name centered,
+ * bold, and underlined, with the address/contact stacked centered beneath it —
+ * instead of the base template's left-logo/right-meta split header.
+ */
+const LEDGER_A4_CSS = `
+  .invoice-header { flex-direction: column; align-items: center; text-align: center; border-bottom: 4px double #000; padding-bottom: 16px; }
+  .company-info { flex: none; width: 100%; display: flex; flex-direction: column; align-items: center; }
+  .company-logo { margin: 0 auto 8px; }
+  .company-name { display: inline-block; color: #000; font-size: 32px; font-weight: 900; border-bottom: 3px solid #000; padding: 0 6px 6px; margin: 0 auto 10px; }
+  .company-details { text-align: center; font-size: 15px; }
+  .company-contact-line { display: inline-block; margin-top: 4px; font-size: 15px; font-weight: 700; }
+  .invoice-details { flex: none; width: 100%; text-align: center; margin-top: 12px; }
+  .invoice-title { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #000; margin-bottom: 6px; }
+  .invoice-meta { display: flex; justify-content: center; gap: 18px; font-size: 13px; color: #000; }
+  .invoice-meta div { white-space: nowrap; }
+`
+
 /** CSS override block per template; '' for 'standard' (base stylesheet, untouched). */
 export const INVOICE_TEMPLATE_CSS: Record<InvoiceTemplate, string> = {
   standard: '',
@@ -141,4 +179,6 @@ export const INVOICE_TEMPLATE_CSS: Record<InvoiceTemplate, string> = {
   modern: MODERN_A4_CSS,
   classic: CLASSIC_A4_CSS,
   bold: BOLD_A4_CSS,
+  ledger: LEDGER_A4_CSS,
 }
+

@@ -1010,11 +1010,21 @@ ${itemizedTotalsTable}
           ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
+      <tr>
+        <td class="total-label" style="font-weight: bold;">${urduTexts.total_amount}:</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(totalWithPrev)}</td>
+      </tr>
       ` : ''}
+      ${paid > 0 ? `
+      <tr>
+        <td class="total-label" style="background: #f5f5f5;">${urduTexts.amount_paid}:</td>
+        <td class="total-amount" style="background: #f5f5f5; color: #15803d; font-size: 16px; font-weight: bold;">${formatCurrency(paid)}</td>
+      </tr>
       <tr style="border-top: 2px solid #000;">
         <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
         <td class="total-amount" style="font-size: 18px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
       </tr>
+      ` : ''}
     </table>
   </div>
   ` : ''}

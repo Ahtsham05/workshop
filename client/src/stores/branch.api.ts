@@ -15,7 +15,7 @@ export interface BranchBankAccount {
 export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5' | 'a4-half-left' | 'a4-half-right';
 
 /** A4/A5 invoice layout/design template */
-export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold';
+export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold' | 'ledger';
 
 /** Print orientation for the A5 paper size (ignored for other sizes) */
 export type PrintOrientation = 'portrait' | 'landscape';
