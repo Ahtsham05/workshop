@@ -97,6 +97,16 @@ body {
   --sidebar-accent-foreground: oklch(0.98 0.012 255);
   --sidebar-border: oklch(1 0 0 / 14%);
   --sidebar-ring: oklch(0.68 0.14 252);
+
+  /* WhatsApp Web surface palette — used only by the WhatsApp inbox feature. */
+  --wa-panel: #f0f2f5;
+  --wa-hover: #f5f6f6;
+  --wa-active: #f0f2f5;
+  --wa-wallpaper: #efeae2;
+  --wa-bubble-out: #d9fdd3;
+  --wa-bubble-in: #ffffff;
+  --wa-muted: #667781;
+  --wa-accent: #00a884;
 }
 
 .dark {
@@ -132,6 +142,15 @@ body {
   --sidebar-accent-foreground: oklch(0.98 0.01 255);
   --sidebar-border: oklch(1 0 0 / 11%);
   --sidebar-ring: oklch(0.58 0.1 252);
+
+  --wa-panel: #202c33;
+  --wa-hover: #202c33;
+  --wa-active: #2a3942;
+  --wa-wallpaper: #0b141a;
+  --wa-bubble-out: #005c4b;
+  --wa-bubble-in: #202c33;
+  --wa-muted: #8696a0;
+  --wa-accent: #00a884;
 }
 
 @theme inline {
@@ -173,6 +192,15 @@ body {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-wa-panel: var(--wa-panel);
+  --color-wa-hover: var(--wa-hover);
+  --color-wa-active: var(--wa-active);
+  --color-wa-wallpaper: var(--wa-wallpaper);
+  --color-wa-bubble-out: var(--wa-bubble-out);
+  --color-wa-bubble-in: var(--wa-bubble-in);
+  --color-wa-muted: var(--wa-muted);
+  --color-wa-accent: var(--wa-accent);
 }
 
 @layer base {
@@ -220,6 +248,34 @@ body {
 
 @utility faded-bottom {
   @apply after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:hidden after:h-32 after:w-full after:bg-[linear-gradient(180deg,_transparent_10%,_var(--background)_70%)] md:after:block;
+}
+
+/* WhatsApp-style chat bubble tails: a small triangular notch on the first
+   bubble of a consecutive run, pointing toward the sender's side. */
+@utility chat-tail-out {
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -8px;
+    width: 8px;
+    height: 13px;
+    background: var(--wa-bubble-out);
+    clip-path: polygon(0 0, 0 100%, 100% 0);
+  }
+}
+
+@utility chat-tail-in {
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -8px;
+    width: 8px;
+    height: 13px;
+    background: var(--wa-bubble-in);
+    clip-path: polygon(100% 0, 100% 100%, 0 0);
+  }
 }
 
 /* styles.css */

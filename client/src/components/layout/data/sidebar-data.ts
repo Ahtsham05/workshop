@@ -171,6 +171,18 @@ export const sidebarData: SidebarData = {
           permission: 'editSettings',
         },
         {
+          title: 'WhatsApp Message Log',
+          url: '/whatsapp/messages',
+          icon: ClipboardList,
+          permission: 'editSettings',
+        },
+        {
+          title: 'SMS Log',
+          url: '/sms/log',
+          icon: Smartphone,
+          permission: 'editSettings',
+        },
+        {
           title: 'Sales Returns',
           url: '/sales-returns',
           icon: IconRefresh,

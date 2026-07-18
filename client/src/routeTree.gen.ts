@@ -67,9 +67,11 @@ import { Route as AuthenticatedAuditLogsIndexImport } from './routes/_authentica
 import { Route as AuthenticatedAppsIndexImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedAdminIndexImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedAccountingIndexImport } from './routes/_authenticated/accounting/index'
+import { Route as AuthenticatedWhatsappMessagesImport } from './routes/_authenticated/whatsapp/messages'
 import { Route as AuthenticatedWhatsappAnalyticsImport } from './routes/_authenticated/whatsapp/analytics'
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
+import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
 import { Route as AuthenticatedSettingsSyncImport } from './routes/_authenticated/settings/sync'
@@ -517,6 +519,13 @@ const AuthenticatedAccountingIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedWhatsappMessagesRoute =
+  AuthenticatedWhatsappMessagesImport.update({
+    id: '/whatsapp/messages',
+    path: '/whatsapp/messages',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedWhatsappAnalyticsRoute =
   AuthenticatedWhatsappAnalyticsImport.update({
     id: '/whatsapp/analytics',
@@ -537,6 +546,12 @@ const AuthenticatedSubscriptionPaymentRoute =
     path: '/subscription/payment',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedSmsLogRoute = AuthenticatedSmsLogImport.update({
+  id: '/sms/log',
+  path: '/sms/log',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedSettingsWhatsappRoute =
   AuthenticatedSettingsWhatsappImport.update({
@@ -1510,6 +1525,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsWhatsappImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/sms/log': {
+      id: '/_authenticated/sms/log'
+      path: '/sms/log'
+      fullPath: '/sms/log'
+      preLoaderRoute: typeof AuthenticatedSmsLogImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/subscription/payment': {
       id: '/_authenticated/subscription/payment'
       path: '/subscription/payment'
@@ -1529,6 +1551,13 @@ declare module '@tanstack/react-router' {
       path: '/whatsapp/analytics'
       fullPath: '/whatsapp/analytics'
       preLoaderRoute: typeof AuthenticatedWhatsappAnalyticsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/whatsapp/messages': {
+      id: '/_authenticated/whatsapp/messages'
+      path: '/whatsapp/messages'
+      fullPath: '/whatsapp/messages'
+      preLoaderRoute: typeof AuthenticatedWhatsappMessagesImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/accounting/': {
@@ -2316,9 +2345,11 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRestaurantReportsRoute: typeof AuthenticatedRestaurantReportsRoute
   AuthenticatedRestaurantReservationsRoute: typeof AuthenticatedRestaurantReservationsRoute
   AuthenticatedRestaurantTablesRoute: typeof AuthenticatedRestaurantTablesRoute
+  AuthenticatedSmsLogRoute: typeof AuthenticatedSmsLogRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
   AuthenticatedWhatsappAnalyticsRoute: typeof AuthenticatedWhatsappAnalyticsRoute
+  AuthenticatedWhatsappMessagesRoute: typeof AuthenticatedWhatsappMessagesRoute
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -2394,9 +2425,11 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedRestaurantReservationsRoute:
     AuthenticatedRestaurantReservationsRoute,
   AuthenticatedRestaurantTablesRoute: AuthenticatedRestaurantTablesRoute,
+  AuthenticatedSmsLogRoute: AuthenticatedSmsLogRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
   AuthenticatedWhatsappAnalyticsRoute: AuthenticatedWhatsappAnalyticsRoute,
+  AuthenticatedWhatsappMessagesRoute: AuthenticatedWhatsappMessagesRoute,
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
@@ -2501,9 +2534,11 @@ export interface FileRoutesByFullPath {
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
+  '/sms/log': typeof AuthenticatedSmsLogRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
+  '/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
@@ -2641,9 +2676,11 @@ export interface FileRoutesByTo {
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
+  '/sms/log': typeof AuthenticatedSmsLogRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
+  '/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
@@ -2784,9 +2821,11 @@ export interface FileRoutesById {
   '/_authenticated/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
+  '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/_authenticated/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
+  '/_authenticated/whatsapp/messages': typeof AuthenticatedWhatsappMessagesRoute
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
@@ -2929,9 +2968,11 @@ export interface FileRouteTypes {
     | '/settings/sync'
     | '/settings/sync-conflicts'
     | '/settings/whatsapp'
+    | '/sms/log'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/whatsapp/analytics'
+    | '/whatsapp/messages'
     | '/accounting'
     | '/admin'
     | '/apps'
@@ -3068,9 +3109,11 @@ export interface FileRouteTypes {
     | '/settings/sync'
     | '/settings/sync-conflicts'
     | '/settings/whatsapp'
+    | '/sms/log'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/whatsapp/analytics'
+    | '/whatsapp/messages'
     | '/accounting'
     | '/admin'
     | '/apps'
@@ -3209,9 +3252,11 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/sync'
     | '/_authenticated/settings/sync-conflicts'
     | '/_authenticated/settings/whatsapp'
+    | '/_authenticated/sms/log'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
     | '/_authenticated/whatsapp/analytics'
+    | '/_authenticated/whatsapp/messages'
     | '/_authenticated/accounting/'
     | '/_authenticated/admin/'
     | '/_authenticated/apps/'
@@ -3386,9 +3431,11 @@ export const routeTree = rootRoute
         "/_authenticated/restaurant/reports",
         "/_authenticated/restaurant/reservations",
         "/_authenticated/restaurant/tables",
+        "/_authenticated/sms/log",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
         "/_authenticated/whatsapp/analytics",
+        "/_authenticated/whatsapp/messages",
         "/_authenticated/accounting/",
         "/_authenticated/admin/",
         "/_authenticated/apps/",
@@ -3698,6 +3745,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/whatsapp.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/sms/log": {
+      "filePath": "_authenticated/sms/log.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/subscription/payment": {
       "filePath": "_authenticated/subscription/payment.tsx",
       "parent": "/_authenticated"
@@ -3708,6 +3759,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/whatsapp/analytics": {
       "filePath": "_authenticated/whatsapp/analytics.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/whatsapp/messages": {
+      "filePath": "_authenticated/whatsapp/messages.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/accounting/": {

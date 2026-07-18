@@ -1,7 +1,16 @@
+const mongoose = require('mongoose');
+const httpStatus = require('http-status');
+const ApiError = require('../../utils/ApiError');
 const { WhatsAppConversation, WhatsAppMessage, Student, Customer } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
+const { resolveContactNamesByPhone } = require('../../utils/resolveContactName');
 const eventsService = require('./events.service');
 const mediaService = require('./media.service');
+
+// $match in an aggregation pipeline does no schema-aware casting (unlike .find()/
+// .countDocuments()), so an organizationId/branchId that arrives as a header string
+// rather than an ObjectId instance silently matches zero documents.
+const toObjectId = (id) => (id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(id));
 
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'];
 const MEDIA_PREVIEWS = {
@@ -97,6 +106,18 @@ function extractInboundContent(msg) {
 }
 
 async function storeInboundMessage(connection, conversation, msg) {
+  // Meta redelivers webhooks it didn't get a fast/200 response for (common for media
+  // messages, which take longer to process) — without this check, every redelivery
+  // created a second identical message and re-triggered the AI assistant reply.
+  const existing = await WhatsAppMessage.findOne({
+    organizationId: connection.organizationId,
+    branchId: connection.branchId,
+    wamid: msg.id,
+  });
+  if (existing) {
+    return { message: existing, isNew: false };
+  }
+
   const content = extractInboundContent(msg);
 
   if (MEDIA_TYPES.includes(msg.type) && content.mediaId) {
@@ -130,7 +151,7 @@ async function storeInboundMessage(connection, conversation, msg) {
   eventsService.emitNewMessage(connection.organizationId, connection.branchId, conversation._id, message._id);
   eventsService.emitConversationUpdate(connection.organizationId, connection.branchId, conversation._id);
 
-  return message;
+  return { message, isNew: true };
 }
 
 const AVATAR_POPULATE = [
@@ -148,6 +169,126 @@ async function getConversationById(organizationId, branchId, id) {
 
 async function listMessages(conversationId, options) {
   return WhatsAppMessage.paginate({ conversationId }, options);
+}
+
+const SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
+
+// Org/branch-wide message log — every WhatsApp message sent (or received), regardless of
+// which conversation it belongs to. Powers the "Message Log" dashboard: filterable by
+// status/source/direction/date and searchable by contact, with a status-group summary
+// (computed over the same filters minus `status` itself) so the filter tabs can show live
+// counts without a second round trip per tab.
+async function listAllMessages(organizationId, branchId, filters = {}) {
+  const { status, direction = 'outbound', source, search, from, to, page = 1, limit = 20 } = filters;
+
+  const baseMatch = { organizationId: toObjectId(organizationId), branchId: toObjectId(branchId) };
+  if (direction && direction !== 'all') baseMatch.direction = direction;
+  if (source) baseMatch.source = source;
+  if (from || to) {
+    baseMatch.createdAt = {};
+    if (from) baseMatch.createdAt.$gte = new Date(from);
+    if (to) baseMatch.createdAt.$lte = new Date(to);
+  }
+
+  if (search) {
+    const conversations = await WhatsAppConversation.find({
+      organizationId,
+      branchId,
+      $or: [
+        { contactName: { $regex: search, $options: 'i' } },
+        { contactPhone: { $regex: search, $options: 'i' } },
+      ],
+    }).select('_id');
+    baseMatch.conversationId = { $in: conversations.map((c) => c._id) };
+  }
+
+  const match = { ...baseMatch };
+  if (status === 'success') match.status = { $in: SUCCESS_STATUSES };
+  else if (status && status !== 'all') match.status = status;
+
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+
+  const [results, totalResults, counts] = await Promise.all([
+    WhatsAppMessage.find(match)
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .populate({
+        path: 'conversationId',
+        select: 'contactName contactPhone customerId studentId',
+        populate: [
+          { path: 'customerId', select: 'name' },
+          { path: 'studentId', select: 'parent.fatherName parent.motherName parent.guardianName' },
+        ],
+      })
+      .populate('sentBy', 'name'),
+    WhatsAppMessage.countDocuments(match),
+    WhatsAppMessage.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          success: { $sum: { $cond: [{ $in: ['$status', SUCCESS_STATUSES] }, 1, 0] } },
+          failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+          queued: { $sum: { $cond: [{ $eq: ['$status', 'queued'] }, 1, 0] } },
+        },
+      },
+    ]),
+  ]);
+
+  const { total = 0, success = 0, failed = 0, queued = 0 } = counts[0] || {};
+
+  // Prefer the name saved against the linked Customer/Student over the contact's own
+  // WhatsApp profile name (contactName) — the latter is whatever the customer set on
+  // their own phone, which is often not the name the business actually knows them by.
+  const withResolvedNames = results.map((m) => {
+    const json = m.toJSON();
+    const conversation = json.conversationId;
+    if (conversation) {
+      const parent = conversation.studentId?.parent;
+      const studentName = parent?.fatherName || parent?.motherName || parent?.guardianName;
+      conversation.contactName = conversation.customerId?.name || studentName || undefined;
+      delete conversation.customerId;
+      delete conversation.studentId;
+    }
+    return json;
+  });
+
+  // Conversations created before a matching Customer/Supplier/Student existed (or whose
+  // regex match at creation time simply missed) never got customerId/studentId linked —
+  // fall back to a live phone lookup so the log still shows a saved name where one exists.
+  const unresolved = withResolvedNames
+    .map((m) => m.conversationId)
+    .filter((c) => c && !c.contactName && c.contactPhone);
+  if (unresolved.length) {
+    const nameMap = await resolveContactNamesByPhone(organizationId, branchId, unresolved.map((c) => c.contactPhone));
+    for (const conversation of unresolved) {
+      conversation.contactName = nameMap.get(normalizePhone(conversation.contactPhone)?.slice(-10));
+    }
+  }
+
+  return {
+    results: withResolvedNames,
+    page: pageNum,
+    limit: limitNum,
+    totalPages: Math.max(1, Math.ceil(totalResults / limitNum)),
+    totalResults,
+    summary: { total, success, failed, queued },
+  };
+}
+
+// Deleting is restricted to failed messages — this is a log-cleanup action, not a way to
+// edit conversation history, so anything that actually sent (queued/sent/delivered/read)
+// stays put.
+async function deleteMessage(organizationId, branchId, messageId) {
+  const message = await WhatsAppMessage.findOne({ _id: messageId, organizationId, branchId });
+  if (!message) throw new ApiError(httpStatus.NOT_FOUND, 'Message not found');
+  if (message.status !== 'failed') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Only failed messages can be deleted');
+  }
+  await WhatsAppMessage.deleteOne({ _id: message._id });
 }
 
 async function markConversationRead(organizationId, branchId, conversationId) {
@@ -184,6 +325,8 @@ module.exports = {
   listConversations,
   getConversationById,
   listMessages,
+  listAllMessages,
+  deleteMessage,
   markConversationRead,
   getUnreadCount,
   updateConversation,

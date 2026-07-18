@@ -144,6 +144,26 @@ async function startApplication() {
     logger.warn('Index migration warning (non-fatal):', err.message);
   }
 
+  // The SMS Gateway's "connected socket" registry lives in process memory (server/src/
+  // services/smsGateway.service.js `connectedSockets`) and always starts empty on boot —
+  // so any device still marked isOnline:true from before this restart is stale by
+  // definition (no socket can exist for it yet). Left uncorrected, a send picks that
+  // "online" device, finds no live socket, and the message sits at status 'pending'
+  // forever with no error. Devices reconnect and re-mark themselves online within
+  // seconds regardless.
+  try {
+    const { SmsDevice } = require('./models');
+    const { modifiedCount } = await SmsDevice.updateMany(
+      { isOnline: true },
+      { isOnline: false, socketId: null },
+    );
+    if (modifiedCount > 0) {
+      logger.info(`Reset ${modifiedCount} stale SMS gateway device(s) to offline on startup`);
+    }
+  } catch (err) {
+    logger.warn('SMS gateway device reset warning (non-fatal):', err.message);
+  }
+
   try {
     const { roleService } = require('./services');
     await roleService.createDefaultRoles();

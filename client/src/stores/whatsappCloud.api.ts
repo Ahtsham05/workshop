@@ -50,11 +50,59 @@ export type WhatsAppMessage = {
   id: string
   direction: 'inbound' | 'outbound'
   type: string
-  content: { text?: string; caption?: string; mediaUrl?: string; mediaMimeType?: string; filename?: string }
+  content: {
+    text?: string
+    caption?: string
+    mediaUrl?: string
+    mediaMimeType?: string
+    filename?: string
+    templateName?: string
+  }
   status: WhatsAppMessageStatus
   errorMessage?: string
   errorCode?: string
   createdAt: string
+}
+
+export type WhatsAppMessageSource =
+  | 'inbox'
+  | 'invoice'
+  | 'campaign'
+  | 'attendance'
+  | 'fee'
+  | 'result'
+  | 'ai'
+  | 'api'
+  | 'homework'
+  | 'holiday'
+
+// A message as returned by the org/branch-wide message log (as opposed to a
+// conversation-scoped WhatsAppMessage) — includes who it was to/from and how it was sent.
+export type WhatsAppLogMessage = WhatsAppMessage & {
+  direction: 'inbound' | 'outbound'
+  source: WhatsAppMessageSource
+  conversationId?: { id: string; contactName?: string; contactPhone: string } | string
+  sentBy?: { id: string; name?: string } | string
+}
+
+export type MessageLogStatusFilter = 'all' | 'success' | 'failed' | 'queued'
+export type MessageLogDirectionFilter = 'outbound' | 'inbound' | 'all'
+
+export type MessageLogSummary = {
+  total: number
+  success: number
+  failed: number
+  queued: number
+}
+
+export type SendMessageResult = {
+  success: boolean
+  wamid?: string
+  message?: WhatsAppMessage
+  // True when the send was blocked by WhatsApp's 24h re-engagement window rather than
+  // actually failing — the attempt is still saved (as a failed message) so it's visible
+  // and resendable once the customer messages back and reopens the window.
+  blockedByWindow?: boolean
 }
 
 export type WhatsAppTemplate = {
@@ -133,7 +181,14 @@ export type ExpiringWindows = {
 export const whatsappCloudApi = createApi({
   reducerPath: 'whatsappCloudApi',
   baseQuery: cloudBaseQuery,
-  tagTypes: ['WhatsAppConnection', 'WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppAnalytics', 'WhatsAppTemplates'],
+  tagTypes: [
+    'WhatsAppConnection',
+    'WhatsAppConversations',
+    'WhatsAppMessages',
+    'WhatsAppMessageLog',
+    'WhatsAppAnalytics',
+    'WhatsAppTemplates',
+  ],
   endpoints: (builder) => ({
     getCloudConnection: builder.query<WhatsAppCloudConnection, void>({
       query: () => '/connection',
@@ -176,14 +231,14 @@ export const whatsappCloudApi = createApi({
       invalidatesTags: ['WhatsAppConversations'],
     }),
     sendInboxMessage: builder.mutation<
-      { success: boolean; wamid?: string; message?: WhatsAppMessage },
+      SendMessageResult,
       { phone: string; text: string; conversationId?: string }
     >({
       query: (body) => ({ url: '/messages/send', method: 'POST', body }),
-      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages'],
+      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppMessageLog', 'WhatsAppAnalytics'],
     }),
     sendInboxMedia: builder.mutation<
-      { success: boolean; wamid?: string; message?: WhatsAppMessage },
+      SendMessageResult,
       { phone: string; conversationId?: string; caption?: string; file: File }
     >({
       query: ({ file, ...rest }) => {
@@ -194,7 +249,36 @@ export const whatsappCloudApi = createApi({
         formData.append('phone', rest.phone)
         return { url: '/messages/send-media', method: 'POST', body: formData }
       },
-      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages'],
+      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppMessageLog', 'WhatsAppAnalytics'],
+    }),
+    resendInboxMessage: builder.mutation<SendMessageResult, string>({
+      query: (messageId) => ({ url: `/messages/${messageId}/resend`, method: 'POST' }),
+      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppMessageLog', 'WhatsAppAnalytics'],
+    }),
+    deleteInboxMessage: builder.mutation<void, string>({
+      query: (messageId) => ({ url: `/messages/${messageId}`, method: 'DELETE' }),
+      invalidatesTags: ['WhatsAppConversations', 'WhatsAppMessages', 'WhatsAppMessageLog', 'WhatsAppAnalytics'],
+    }),
+    getAllMessages: builder.query<
+      {
+        results: WhatsAppLogMessage[]
+        page: number
+        limit: number
+        totalPages: number
+        totalResults: number
+        summary: MessageLogSummary
+      },
+      {
+        status?: MessageLogStatusFilter
+        direction?: MessageLogDirectionFilter
+        source?: WhatsAppMessageSource
+        search?: string
+        page?: number
+        limit?: number
+      } | void
+    >({
+      query: (params) => ({ url: '/messages', params: params || undefined }),
+      providesTags: ['WhatsAppMessageLog'],
     }),
     getAnalyticsOverview: builder.query<
       {
@@ -275,6 +359,9 @@ export const {
   useMarkConversationReadMutation,
   useSendInboxMessageMutation,
   useSendInboxMediaMutation,
+  useResendInboxMessageMutation,
+  useDeleteInboxMessageMutation,
+  useGetAllMessagesQuery,
   useGetAnalyticsOverviewQuery,
   useGetFunnelStatsQuery,
   useGetActivityFeedQuery,

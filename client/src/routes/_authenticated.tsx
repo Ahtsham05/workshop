@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { createFileRoute, redirect, Outlet, Link } from '@tanstack/react-router'
+import { createFileRoute, redirect, Outlet, Link, useLocation } from '@tanstack/react-router'
+import { cn } from '@/lib/utils'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { AuthenticatedHeader } from '@/components/layout/authenticated-header'
 import { Main } from '@/components/layout/main'
@@ -31,6 +32,10 @@ import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
  * propagated, showing a persistent "Checking Authentication" spinner.
  */
 function AuthenticatedLayout() {
+  const { pathname } = useLocation()
+  // The WhatsApp inbox is its own full-bleed chat UI (own header/composer, no page
+  // padding) — it doesn't want the fixed-header spacer that every other page needs.
+  const isWhatsAppInbox = pathname.replace(/\/+$/, '') === '/whatsapp'
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
@@ -87,7 +92,12 @@ function AuthenticatedLayout() {
               </div>
             )}
             <LocalDatabaseSetupBanner />
-            <Main className="min-h-0 flex-1 overflow-auto">
+            <Main
+              className={cn(
+                'min-h-0 flex-1 overflow-auto',
+                isWhatsAppInbox && 'peer-[.header-fixed]/header:mt-0',
+              )}
+            >
               <Outlet />
             </Main>
           </div>

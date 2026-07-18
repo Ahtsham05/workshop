@@ -37,6 +37,12 @@ const getMessages = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const listAllMessages = catchAsync(async (req, res) => {
+  const filters = pick(req.query, ['status', 'direction', 'source', 'search', 'from', 'to', 'page', 'limit']);
+  const result = await inboxService.listAllMessages(req.organizationId, req.branchId, filters);
+  res.send(result);
+});
+
 const markRead = catchAsync(async (req, res) => {
   const conversation = await inboxService.markConversationRead(req.organizationId, req.branchId, req.params.id);
   if (!conversation) throw new ApiError(httpStatus.NOT_FOUND, 'Conversation not found');
@@ -54,9 +60,6 @@ const getUnreadCount = catchAsync(async (req, res) => {
   res.send({ count });
 });
 
-const WINDOW_CLOSED_MESSAGE =
-  "This customer hasn't messaged in the last 24 hours, so WhatsApp only allows sending an approved template message. Free-form replies will work again once they message you.";
-
 const sendMessage = catchAsync(async (req, res) => {
   const { phone, text, conversationId } = req.body;
   const conversation = await messagingService.getConversationForPhone({
@@ -66,7 +69,14 @@ const sendMessage = catchAsync(async (req, res) => {
     phone,
   });
   if (!messagingService.isWithinServiceWindow(conversation)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, WINDOW_CLOSED_MESSAGE);
+    const result = await messagingService.recordBlockedMessage({
+      organizationId: req.organizationId,
+      branchId: req.branchId,
+      conversationId: conversation._id,
+      type: 'text',
+      content: { text },
+    });
+    return res.send(result);
   }
   const result = await messagingService.sendText({
     organizationId: req.organizationId,
@@ -97,7 +107,16 @@ const sendMediaMessage = catchAsync(async (req, res) => {
     phone,
   });
   if (!messagingService.isWithinServiceWindow(conversation)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, WINDOW_CLOSED_MESSAGE);
+    const result = await messagingService.recordBlockedMessage({
+      organizationId: req.organizationId,
+      branchId: req.branchId,
+      conversationId: conversation._id,
+      type: resolveMediaType(req.file.mimetype),
+      content: { caption, filename: req.file.originalname },
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+    });
+    return res.send(result);
   }
   const result = await messagingService.sendMedia({
     organizationId: req.organizationId,
@@ -113,6 +132,20 @@ const sendMediaMessage = catchAsync(async (req, res) => {
     conversationId,
   });
   res.send(result);
+});
+
+const resendMessage = catchAsync(async (req, res) => {
+  const result = await messagingService.resendMessage({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    messageId: req.params.id,
+  });
+  res.send(result);
+});
+
+const deleteMessage = catchAsync(async (req, res) => {
+  await inboxService.deleteMessage(req.organizationId, req.branchId, req.params.id);
+  res.status(httpStatus.NO_CONTENT).send();
 });
 
 const streamEvents = catchAsync(async (req, res) => {
@@ -132,10 +165,13 @@ module.exports = {
   listConversations,
   getConversation,
   getMessages,
+  listAllMessages,
   markRead,
   updateConversation,
   getUnreadCount,
   sendMessage,
   sendMediaMessage,
+  resendMessage,
+  deleteMessage,
   streamEvents,
 };

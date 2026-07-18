@@ -19,8 +19,12 @@ import {
   Pause,
   Video,
   Phone,
+  Loader2,
+  ArrowLeft,
+  RotateCw,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -36,6 +40,7 @@ import {
   useGetConversationMessagesQuery,
   useGetConversationsQuery,
   useMarkConversationReadMutation,
+  useResendInboxMessageMutation,
   useSendInboxMediaMutation,
   useSendInboxMessageMutation,
   type WhatsAppConversation,
@@ -149,11 +154,16 @@ function groupMessagesForDisplay(messages: WhatsAppMessage[]) {
   return groups
 }
 
-function MessageStatusIndicator({ status, errorMessage }: Pick<WhatsAppMessage, 'status' | 'errorMessage'>) {
+function MessageStatusIndicator({
+  status,
+  errorMessage,
+  variant = 'default',
+}: Pick<WhatsAppMessage, 'status' | 'errorMessage'> & { variant?: 'default' | 'overlay' }) {
+  const base = variant === 'overlay' ? 'text-white/90' : 'text-wa-muted'
   const icon = {
-    queued: <Clock className='h-3 w-3 text-muted-foreground' />,
-    sent: <Check className='h-3 w-3 text-muted-foreground' />,
-    delivered: <CheckCheck className='h-3 w-3 text-muted-foreground' />,
+    queued: <Clock className={cn('h-3 w-3', base)} />,
+    sent: <Check className={cn('h-3 w-3', base)} />,
+    delivered: <CheckCheck className={cn('h-3 w-3', base)} />,
     read: <CheckCheck className='h-3 w-3 text-[#53BDEB]' />,
     failed: <AlertCircle className='h-3 w-3 text-destructive' />,
   }[status]
@@ -193,6 +203,39 @@ function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function truncateWords(text: string, wordLimit = 5) {
+  const words = text.trim().split(/\s+/)
+  if (words.length <= wordLimit) return text.trim()
+  return `${words.slice(0, wordLimit).join(' ')}…`
+}
+
+// WhatsApp's own text markup: *bold*, _italic_, ~strikethrough~, ```monospace```.
+// Markers don't cross line breaks, matching WhatsApp's own parsing rule.
+const WA_FORMAT_REGEX = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|```[^`\n]+```)/g
+
+function renderFormattedText(text: string) {
+  return text.split(WA_FORMAT_REGEX).map((part, i) => {
+    if (!part) return null
+    if (part.startsWith('```') && part.endsWith('```') && part.length >= 6) {
+      return (
+        <code key={i} className='rounded bg-black/10 px-1 py-0.5 font-mono text-[0.9em] dark:bg-white/10'>
+          {part.slice(3, -3)}
+        </code>
+      )
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+      return <strong key={i}>{part.slice(1, -1)}</strong>
+    }
+    if (part.startsWith('_') && part.endsWith('_') && part.length >= 2) {
+      return <em key={i}>{part.slice(1, -1)}</em>
+    }
+    if (part.startsWith('~') && part.endsWith('~') && part.length >= 2) {
+      return <s key={i}>{part.slice(1, -1)}</s>
+    }
+    return part
+  })
 }
 
 // Waveform-style pill player standing in for WhatsApp's voice-note UI — native <audio controls>
@@ -235,7 +278,7 @@ function AudioPlayer({ src }: { src: string }) {
       <button
         type='button'
         onClick={togglePlay}
-        className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white'
+        className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wa-accent text-white'
       >
         {playing ? <Pause className='h-4 w-4' /> : <Play className='h-4 w-4 ml-0.5' />}
       </button>
@@ -244,9 +287,9 @@ function AudioPlayer({ src }: { src: string }) {
           className='h-1 rounded-full bg-muted-foreground/25 cursor-pointer relative'
           onClick={seek}
         >
-          <div className='h-1 rounded-full bg-[#00A884] absolute inset-y-0 left-0' style={{ width: `${progress * 100}%` }} />
+          <div className='h-1 rounded-full bg-wa-accent absolute inset-y-0 left-0' style={{ width: `${progress * 100}%` }} />
           <div
-            className='h-2.5 w-2.5 rounded-full bg-[#00A884] absolute top-1/2 -translate-y-1/2 -translate-x-1/2'
+            className='h-2.5 w-2.5 rounded-full bg-wa-accent absolute top-1/2 -translate-y-1/2 -translate-x-1/2'
             style={{ left: `${progress * 100}%` }}
           />
         </div>
@@ -261,35 +304,51 @@ function AudioPlayer({ src }: { src: string }) {
 function MessageBubbleContent({ msg }: { msg: WhatsAppMessage }) {
   const { content, type } = msg
 
-  if (type === 'image' || type === 'sticker') {
+  if (type === 'sticker') {
+    return content.mediaUrl ? (
+      <img src={content.mediaUrl} alt='Sticker' className='h-32 w-32 object-contain' />
+    ) : (
+      <p className='text-xs italic text-muted-foreground'>Sticker (unavailable)</p>
+    )
+  }
+
+  if (type === 'image') {
     return (
-      <div className='space-y-1'>
+      <>
         {content.mediaUrl ? (
-          <a href={content.mediaUrl} target='_blank' rel='noreferrer'>
+          <a href={content.mediaUrl} target='_blank' rel='noreferrer' className='block'>
             <img
               src={content.mediaUrl}
               alt={content.caption || 'Photo'}
-              className={cn('rounded-md object-cover', type === 'sticker' ? 'h-28 w-28' : 'max-h-64 max-w-full')}
+              className='block max-h-72 w-full min-w-48 rounded-[6px] object-cover'
             />
           </a>
         ) : (
-          <p className='text-xs italic text-muted-foreground'>📷 Photo (unavailable)</p>
+          <p className='px-1.5 py-1 text-xs italic text-muted-foreground'>📷 Photo (unavailable)</p>
         )}
-        {content.caption && <p className='text-sm'>{content.caption}</p>}
-      </div>
+        {content.caption && (
+          <p className='px-1.5 pt-1.5 pb-0.5 text-sm whitespace-pre-wrap break-words'>
+            {renderFormattedText(content.caption)}
+          </p>
+        )}
+      </>
     )
   }
 
   if (type === 'video') {
     return (
-      <div className='space-y-1'>
+      <>
         {content.mediaUrl ? (
-          <video controls src={content.mediaUrl} className='max-h-64 max-w-full rounded-md' />
+          <video controls src={content.mediaUrl} className='block max-h-72 w-full min-w-48 rounded-[6px]' />
         ) : (
-          <p className='text-xs italic text-muted-foreground'>📹 Video (unavailable)</p>
+          <p className='px-1.5 py-1 text-xs italic text-muted-foreground'>📹 Video (unavailable)</p>
         )}
-        {content.caption && <p className='text-sm'>{content.caption}</p>}
-      </div>
+        {content.caption && (
+          <p className='px-1.5 pt-1.5 pb-0.5 text-sm whitespace-pre-wrap break-words'>
+            {renderFormattedText(content.caption)}
+          </p>
+        )}
+      </>
     )
   }
 
@@ -311,22 +370,113 @@ function MessageBubbleContent({ msg }: { msg: WhatsAppMessage }) {
           target='_blank'
           rel='noreferrer'
           className={cn(
-            'flex items-center gap-2 rounded-md border bg-background/60 px-2.5 py-2',
+            'flex items-center gap-2.5 rounded-md border bg-background/60 px-2.5 py-2',
             !content.mediaUrl && 'pointer-events-none opacity-60',
           )}
         >
-          <FileText className='h-6 w-6 shrink-0 text-muted-foreground' />
+          <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-wa-accent/15 text-wa-accent'>
+            <FileText className='h-5 w-5' />
+          </span>
           <span className='min-w-0 flex-1'>
             <span className='block truncate text-sm font-medium'>{content.filename || 'Document'}</span>
           </span>
-          {content.mediaUrl && <Download className='h-4 w-4 shrink-0 text-muted-foreground' />}
+          {content.mediaUrl && <Download className='h-4 w-4 shrink-0 text-wa-muted' />}
         </a>
-        {content.caption && <p className='text-sm'>{content.caption}</p>}
+        {content.caption && (
+          <p className='text-sm whitespace-pre-wrap break-words'>{renderFormattedText(content.caption)}</p>
+        )}
       </div>
     )
   }
 
-  return <p className='whitespace-pre-wrap break-words'>{content.text || content.caption || `[${type}]`}</p>
+  const plainText = content.text || content.caption || `[${type}]`
+  return <p className='whitespace-pre-wrap break-words'>{renderFormattedText(plainText)}</p>
+}
+
+// One-tap resend for a failed outbound message — re-sends in place (same bubble,
+// new status) rather than requiring the user to retype/reattach anything.
+function RetryButton({ messageId, overlay }: { messageId: string; overlay?: boolean }) {
+  const [resend, { isLoading }] = useResendInboxMessageMutation()
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type='button'
+          disabled={isLoading}
+          onClick={async () => {
+            try {
+              const result = await resend(messageId).unwrap()
+              if (result.blockedByWindow) {
+                toast.error(result.message?.errorMessage || 'Still outside the 24-hour reply window.')
+              }
+            } catch (error: any) {
+              toast.error(error?.data?.message || 'Failed to resend message')
+            }
+          }}
+          className={cn(
+            'inline-flex items-center rounded-full disabled:opacity-60',
+            overlay ? 'text-white' : 'text-destructive',
+          )}
+        >
+          <RotateCw className={cn('h-3 w-3', isLoading && 'animate-spin')} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Tap to resend</TooltipContent>
+    </Tooltip>
+  )
+}
+
+// Wraps MessageBubbleContent with the actual chat-bubble chrome. Photos render edge-to-edge
+// with a WhatsApp-style overlay timestamp pill; stickers get no bubble/background at all;
+// everything else keeps the padded bubble with an inline trailing timestamp.
+function MessageBubble({ msg, isGroupStart }: { msg: WhatsAppMessage; isGroupStart: boolean }) {
+  const isOut = msg.direction === 'outbound'
+  const time = formatMessageTime(msg.createdAt)
+  const marginTop = isGroupStart ? 'mt-2' : 'mt-0.5'
+
+  if (msg.type === 'sticker') {
+    return (
+      <div className={cn('relative w-32', marginTop, isOut && 'ml-auto')}>
+        <MessageBubbleContent msg={msg} />
+        <p className={cn('flex items-center gap-1 text-[10px] text-wa-muted', isOut ? 'justify-end' : 'justify-start')}>
+          {time}
+          {isOut && <MessageStatusIndicator status={msg.status} errorMessage={msg.errorMessage} />}
+          {isOut && msg.status === 'failed' && <RetryButton messageId={msg.id} />}
+        </p>
+      </div>
+    )
+  }
+
+  const isMedia = (msg.type === 'image' || msg.type === 'video') && !!msg.content.mediaUrl
+  const overlayFooter = msg.type === 'image' && isMedia && !msg.content.caption
+
+  return (
+    <div
+      className={cn(
+        'relative w-fit max-w-[80%] md:max-w-[65%] rounded-lg text-sm shadow-sm text-[#111b21] dark:text-[#e9edef]',
+        isMedia ? 'p-[3px]' : 'px-3 py-2',
+        marginTop,
+        isOut
+          ? cn('ml-auto bg-wa-bubble-out', isGroupStart && 'rounded-tr-none chat-tail-out')
+          : cn('bg-wa-bubble-in', isGroupStart && 'rounded-tl-none chat-tail-in'),
+      )}
+    >
+      <MessageBubbleContent msg={msg} />
+      {overlayFooter ? (
+        <span className='absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/45 px-1.5 py-0.5 text-[11px] text-white'>
+          {time}
+          {isOut && <MessageStatusIndicator status={msg.status} errorMessage={msg.errorMessage} variant='overlay' />}
+          {isOut && msg.status === 'failed' && <RetryButton messageId={msg.id} overlay />}
+        </span>
+      ) : (
+        <p className={cn('flex items-center justify-end gap-1 text-[10px] text-wa-muted', isMedia ? 'px-1.5 pb-0.5 pt-1' : 'mt-1')}>
+          {time}
+          {isOut && <MessageStatusIndicator status={msg.status} errorMessage={msg.errorMessage} />}
+          {isOut && msg.status === 'failed' && <RetryButton messageId={msg.id} />}
+        </p>
+      )}
+    </div>
+  )
 }
 
 function ConversationRow({
@@ -343,28 +493,37 @@ function ConversationRow({
     <button
       type='button'
       className={cn(
-        'flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5',
-        active && 'bg-black/[0.04] dark:bg-white/[0.06]',
+        'flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-wa-hover',
+        active && 'bg-wa-active',
       )}
       onClick={onClick}
     >
-      <ContactAvatar label={label} photoUrl={conv.avatarUrl} />
+      <ContactAvatar label={label} photoUrl={conv.avatarUrl} size='lg' />
       <div className='min-w-0 flex-1 border-b pb-3 -mb-3'>
         <div className='flex items-baseline justify-between gap-2'>
-          <span className={cn('truncate', conv.unreadCount > 0 ? 'font-semibold' : 'font-medium')}>{label}</span>
+          <span className={cn('min-w-0 truncate', conv.unreadCount > 0 ? 'font-semibold' : 'font-medium')}>
+            {label}
+          </span>
           <span
             className={cn(
               'shrink-0 text-xs',
-              conv.unreadCount > 0 ? 'text-[#00A884] font-medium' : 'text-muted-foreground',
+              conv.unreadCount > 0 ? 'text-wa-accent font-medium' : 'text-wa-muted',
             )}
           >
             {formatConversationTimestamp(conv.lastMessageAt)}
           </span>
         </div>
         <div className='flex items-center justify-between gap-2 mt-0.5'>
-          <p className='truncate text-sm text-muted-foreground'>{conv.lastMessagePreview || 'No messages yet'}</p>
+          <p className='flex min-w-0 flex-1 items-center gap-1 text-sm text-wa-muted'>
+            {conv.lastMessageDirection === 'outbound' && (
+              <CheckCheck className='h-3.5 w-3.5 shrink-0' />
+            )}
+            <span className='min-w-0 flex-1 truncate'>
+              {conv.lastMessagePreview ? truncateWords(conv.lastMessagePreview) : 'No messages yet'}
+            </span>
+          </p>
           {conv.unreadCount > 0 && (
-            <span className='flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#00A884] px-1.5 text-[11px] font-semibold text-white'>
+            <span className='flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-wa-accent px-1.5 text-[11px] font-semibold text-white'>
               {conv.unreadCount}
             </span>
           )}
@@ -403,17 +562,31 @@ export default function WhatsAppInboxPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const draftInputRef = useRef<HTMLTextAreaElement>(null)
 
-  const { data: connection } = useGetCloudConnectionQuery()
-  const { data: conversations, refetch: refetchConversations } = useGetConversationsQuery({
+  // Auto-grow the composer like WhatsApp's: expands with content up to ~5 lines, then scrolls.
+  useEffect(() => {
+    const el = draftInputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }, [draft])
+
+  const { data: connection, isLoading: connectionLoading } = useGetCloudConnectionQuery()
+  const {
+    data: conversations,
+    isLoading: conversationsLoading,
+    refetch: refetchConversations,
+  } = useGetConversationsQuery({
     search: search || undefined,
     unreadOnly,
     limit: 50,
   })
-  const { data: messages, refetch: refetchMessages } = useGetConversationMessagesQuery(
-    { id: selectedId!, limit: 100 },
-    { skip: !selectedId },
-  )
+  const {
+    data: messages,
+    isLoading: messagesLoading,
+    refetch: refetchMessages,
+  } = useGetConversationMessagesQuery({ id: selectedId!, limit: 100 }, { skip: !selectedId })
   const [markRead] = useMarkConversationReadMutation()
   const [sendMessage, { isLoading: sending }] = useSendInboxMessageMutation()
   const [sendMedia, { isLoading: sendingMedia }] = useSendInboxMediaMutation()
@@ -427,7 +600,14 @@ export default function WhatsAppInboxPage() {
   const [threadSearch, setThreadSearch] = useState('')
 
   const visibleMessages = useMemo(() => {
-    const all = messages?.results ?? []
+    // Defensive de-dupe by id: guards against any already-duplicated historical rows
+    // (e.g. from redelivered webhooks before that was fixed server-side).
+    const seen = new Set<string>()
+    const all = (messages?.results ?? []).filter((m) => {
+      if (seen.has(m.id)) return false
+      seen.add(m.id)
+      return true
+    })
     if (!threadSearch.trim()) return all
     const needle = threadSearch.trim().toLowerCase()
     return all.filter((m) => (m.content.text || m.content.caption || '').toLowerCase().includes(needle))
@@ -480,7 +660,7 @@ export default function WhatsAppInboxPage() {
   const handleSend = async () => {
     if (!selected || !draft.trim()) return
     try {
-      await sendMessage({
+      const result = await sendMessage({
         phone: selected.contactPhone,
         text: draft.trim(),
         conversationId: selected.id,
@@ -488,6 +668,9 @@ export default function WhatsAppInboxPage() {
       setDraft('')
       refetchMessages()
       refetchConversations()
+      if (result.blockedByWindow) {
+        toast.error(result.message?.errorMessage || "Outside the 24-hour reply window — saved, tap to resend once they message you.")
+      }
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to send message')
     }
@@ -496,7 +679,7 @@ export default function WhatsAppInboxPage() {
   const handleSendMedia = async () => {
     if (!selected || !pendingFile) return
     try {
-      await sendMedia({
+      const result = await sendMedia({
         phone: selected.contactPhone,
         conversationId: selected.id,
         caption: caption.trim() || undefined,
@@ -506,6 +689,9 @@ export default function WhatsAppInboxPage() {
       setCaption('')
       refetchMessages()
       refetchConversations()
+      if (result.blockedByWindow) {
+        toast.error(result.message?.errorMessage || "Outside the 24-hour reply window — saved, tap to resend once they message you.")
+      }
     } catch (error: any) {
       toast.error(error?.data?.message || 'Failed to send file')
     }
@@ -549,10 +735,20 @@ export default function WhatsAppInboxPage() {
     }
   }, [])
 
+  if (connectionLoading) {
+    return (
+      <div className='flex h-[calc(100vh-4rem)] items-center justify-center'>
+        <Loader2 className='h-6 w-6 animate-spin text-wa-accent' />
+      </div>
+    )
+  }
+
   if (!connection?.connected) {
     return (
       <div className='p-6 max-w-lg mx-auto text-center space-y-4'>
-        <MessageCircle className='h-12 w-12 mx-auto text-muted-foreground' />
+        <div className='mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-wa-panel'>
+          <MessageCircle className='h-8 w-8 text-wa-accent' />
+        </div>
         <h1 className='text-xl font-semibold'>WhatsApp Inbox</h1>
         <p className='text-muted-foreground'>
           Connect WhatsApp Business in Settings → WhatsApp to use the shared inbox.
@@ -563,50 +759,93 @@ export default function WhatsAppInboxPage() {
 
   return (
     <div className='flex h-[calc(100vh-4rem)] -mx-4 -my-6 overflow-hidden bg-background'>
-      <aside className='w-full max-w-sm border-r flex flex-col'>
-        <div className='p-3 border-b space-y-2'>
-          <h1 className='font-semibold flex items-center gap-2'>
-            <MessageCircle className='h-5 w-5 text-[#25D366]' />
-            Inbox
-          </h1>
+      <aside
+        className={cn(
+          'min-w-0 w-full max-w-sm lg:max-w-md xl:max-w-lg overflow-x-hidden border-r flex-col',
+          selected ? 'hidden md:flex' : 'flex',
+        )}
+      >
+        <div className='p-3 pb-2 border-b space-y-3 bg-wa-panel'>
+          <div className='flex items-center justify-between gap-2 px-1'>
+            <div className='min-w-0'>
+              <h1 className='text-[19px] font-semibold leading-tight'>Chats</h1>
+              {connection?.verifiedName && (
+                <p className='truncate text-xs text-wa-muted'>Connected as {connection.verifiedName}</p>
+              )}
+            </div>
+            <MessageCircle className='h-5 w-5 shrink-0 text-wa-accent' />
+          </div>
           <div className='relative'>
-            <Search className='absolute left-3 top-2.5 h-4 w-4 text-muted-foreground' />
+            <Search className='absolute left-3 top-2.5 h-4 w-4 text-wa-muted' />
             <Input
-              className='pl-9 rounded-full bg-muted/60 border-transparent'
-              placeholder='Search conversations…'
+              className='pl-9 rounded-lg bg-background border-transparent'
+              placeholder='Search or start a new chat'
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button
-            variant={unreadOnly ? 'default' : 'outline'}
-            size='sm'
-            className={cn('rounded-full', unreadOnly && 'bg-[#00A884] hover:bg-[#00A884]/90')}
-            onClick={() => setUnreadOnly((v) => !v)}
-          >
-            Unread
-          </Button>
+          <div className='flex gap-2'>
+            <button
+              type='button'
+              className={cn(
+                'rounded-full px-3 py-1 text-sm font-medium transition-colors',
+                !unreadOnly ? 'bg-wa-accent/15 text-wa-accent' : 'bg-background text-wa-muted hover:bg-wa-hover',
+              )}
+              onClick={() => setUnreadOnly(false)}
+            >
+              All
+            </button>
+            <button
+              type='button'
+              className={cn(
+                'rounded-full px-3 py-1 text-sm font-medium transition-colors',
+                unreadOnly ? 'bg-wa-accent/15 text-wa-accent' : 'bg-background text-wa-muted hover:bg-wa-hover',
+              )}
+              onClick={() => setUnreadOnly(true)}
+            >
+              Unread
+            </button>
+          </div>
         </div>
         <ScrollArea className='flex-1 [&_[data-slot=scroll-area-scrollbar]]:hidden'>
-          {conversations?.results.map((conv) => (
-            <ConversationRow
-              key={conv.id}
-              conv={conv}
-              active={selectedId === conv.id}
-              onClick={() => setSelectedId(conv.id)}
-            />
-          ))}
+          {conversationsLoading ? (
+            <div className='flex flex-col items-center justify-center gap-2 py-16 text-wa-muted'>
+              <Loader2 className='h-5 w-5 animate-spin' />
+              <span className='text-sm'>Loading chats…</span>
+            </div>
+          ) : conversations?.results.length ? (
+            conversations.results.map((conv) => (
+              <ConversationRow
+                key={conv.id}
+                conv={conv}
+                active={selectedId === conv.id}
+                onClick={() => setSelectedId(conv.id)}
+              />
+            ))
+          ) : (
+            <div className='py-16 text-center text-sm text-wa-muted'>
+              {search ? 'No chats match your search' : 'No conversations yet'}
+            </div>
+          )}
         </ScrollArea>
       </aside>
 
-      <main className='flex-1 flex flex-col min-w-0'>
+      <main className={cn('flex-1 flex-col min-w-0', selected ? 'flex' : 'hidden md:flex')}>
         {selected ? (
           <>
-            <div className='flex items-center gap-3 p-2.5 border-b bg-background'>
-              <ContactAvatar label={selected.contactName || selected.contactPhone} photoUrl={selected.avatarUrl} size='lg' />
+            <div className='flex items-center gap-3 p-2.5 border-b bg-wa-panel'>
+              <Button
+                variant='ghost'
+                size='icon'
+                className='rounded-full text-wa-muted shrink-0 md:hidden'
+                onClick={() => setSelectedId(null)}
+              >
+                <ArrowLeft className='h-5 w-5' />
+              </Button>
+              <ContactAvatar label={selected.contactName || selected.contactPhone} photoUrl={selected.avatarUrl} />
               <div className='min-w-0 flex-1'>
                 <p className='font-medium truncate'>{selected.contactName || selected.contactPhone}</p>
-                <p className='text-xs text-muted-foreground'>+{selected.contactPhone}</p>
+                <p className='text-xs text-wa-muted'>+{selected.contactPhone}</p>
               </div>
               <div className='flex items-center gap-1'>
                 <Tooltip>
@@ -614,7 +853,7 @@ export default function WhatsAppInboxPage() {
                     <Button
                       variant='ghost'
                       size='icon'
-                      className='rounded-full text-muted-foreground opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
+                      className='rounded-full text-wa-muted opacity-50 cursor-not-allowed hover:bg-transparent hover:text-wa-muted'
                       onClick={(e) => e.preventDefault()}
                     >
                       <Video className='h-5 w-5' />
@@ -627,7 +866,7 @@ export default function WhatsAppInboxPage() {
                     <Button
                       variant='ghost'
                       size='icon'
-                      className='rounded-full text-muted-foreground opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
+                      className='rounded-full text-wa-muted opacity-50 cursor-not-allowed hover:bg-transparent hover:text-wa-muted'
                       onClick={(e) => e.preventDefault()}
                     >
                       <Phone className='h-5 w-5' />
@@ -638,7 +877,7 @@ export default function WhatsAppInboxPage() {
                 <Button
                   variant='ghost'
                   size='icon'
-                  className={cn('rounded-full text-muted-foreground', threadSearchOpen && 'bg-muted text-foreground')}
+                  className={cn('rounded-full text-wa-muted', threadSearchOpen && 'bg-wa-hover text-foreground')}
                   onClick={() => setThreadSearchOpen((v) => !v)}
                 >
                   <Search className='h-5 w-5' />
@@ -646,12 +885,12 @@ export default function WhatsAppInboxPage() {
               </div>
             </div>
             {threadSearchOpen && (
-              <div className='p-2 border-b bg-background'>
+              <div className='p-2 border-b bg-wa-panel'>
                 <div className='relative'>
-                  <Search className='absolute left-3 top-2.5 h-4 w-4 text-muted-foreground' />
+                  <Search className='absolute left-3 top-2.5 h-4 w-4 text-wa-muted' />
                   <Input
                     autoFocus
-                    className='pl-9 rounded-full bg-muted/60 border-transparent'
+                    className='pl-9 rounded-lg bg-background border-transparent'
                     placeholder='Search in this chat…'
                     value={threadSearch}
                     onChange={(e) => setThreadSearch(e.target.value)}
@@ -660,42 +899,35 @@ export default function WhatsAppInboxPage() {
               </div>
             )}
             <ScrollArea
-              className='flex-1 p-4 text-[#111b21]/[0.06] dark:text-white/[0.05] bg-[#EFEAE2] dark:bg-[#0B141A] [&_[data-slot=scroll-area-scrollbar]]:hidden'
+              className='flex-1 p-4 text-[#111b21]/[0.06] dark:text-white/[0.05] bg-wa-wallpaper [&_[data-slot=scroll-area-scrollbar]]:hidden'
               style={WALLPAPER_STYLE}
             >
-              <div className='space-y-1 relative'>
-                {messageGroups.map((group) => (
-                  <div key={group.dayLabel}>
-                    <div className='flex justify-center py-2'>
-                      <span className='rounded-md bg-white/90 dark:bg-[#182229] px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm'>
-                        {group.dayLabel}
-                      </span>
+              {messagesLoading ? (
+                <div className='flex h-full items-center justify-center'>
+                  <Loader2 className='h-5 w-5 animate-spin text-wa-muted' />
+                </div>
+              ) : messageGroups.length === 0 ? (
+                <div className='flex h-full items-center justify-center text-sm text-wa-muted'>
+                  {threadSearch ? 'No messages match your search' : 'No messages yet'}
+                </div>
+              ) : (
+                <div className='space-y-1 relative'>
+                  {messageGroups.map((group) => (
+                    <div key={group.dayLabel}>
+                      <div className='flex justify-center py-2'>
+                        <span className='rounded-md bg-wa-panel/90 px-3 py-1 text-xs font-medium text-wa-muted shadow-sm'>
+                          {group.dayLabel}
+                        </span>
+                      </div>
+                      <div className='space-y-1'>
+                        {group.items.map(({ message: msg, isGroupStart }) => (
+                          <MessageBubble key={msg.id} msg={msg} isGroupStart={isGroupStart} />
+                        ))}
+                      </div>
                     </div>
-                    <div className='space-y-1'>
-                      {group.items.map(({ message: msg, isGroupStart }) => (
-                        <div
-                          key={msg.id}
-                          className={cn(
-                            'max-w-[80%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm text-[#111b21] dark:text-[#e9edef]',
-                            isGroupStart ? 'mt-2' : 'mt-0.5',
-                            msg.direction === 'outbound'
-                              ? cn('ml-auto bg-[#D9FDD3] dark:bg-[#005C4B]', isGroupStart && 'rounded-tr-none')
-                              : cn('bg-white dark:bg-[#202C33]', isGroupStart && 'rounded-tl-none'),
-                          )}
-                        >
-                          <MessageBubbleContent msg={msg} />
-                          <p className='flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1'>
-                            {formatMessageTime(msg.createdAt)}
-                            {msg.direction === 'outbound' && (
-                              <MessageStatusIndicator status={msg.status} errorMessage={msg.errorMessage} />
-                            )}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </ScrollArea>
 
             <input
@@ -722,18 +954,18 @@ export default function WhatsAppInboxPage() {
             />
 
             {pendingFile ? (
-              <div className='p-3 border-t space-y-2'>
-                <div className='flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-2'>
+              <div className='p-3 border-t bg-wa-panel space-y-2'>
+                <div className='flex items-center gap-2 rounded-md border bg-background px-2.5 py-2'>
                   {pendingFilePreviewUrl ? (
                     <img src={pendingFilePreviewUrl} alt='' className='h-10 w-10 rounded object-cover' />
                   ) : pendingFile.type.startsWith('audio/') ? (
-                    <Mic className='h-5 w-5 shrink-0 text-muted-foreground' />
+                    <Mic className='h-5 w-5 shrink-0 text-wa-muted' />
                   ) : (
-                    <FileText className='h-5 w-5 shrink-0 text-muted-foreground' />
+                    <FileText className='h-5 w-5 shrink-0 text-wa-muted' />
                   )}
                   <span className='min-w-0 flex-1'>
                     <span className='block truncate text-sm font-medium'>{pendingFile.name}</span>
-                    <span className='block text-xs text-muted-foreground'>{formatBytes(pendingFile.size)}</span>
+                    <span className='block text-xs text-wa-muted'>{formatBytes(pendingFile.size)}</span>
                   </span>
                   <Button variant='ghost' size='icon' className='h-7 w-7' onClick={() => setPendingFile(null)}>
                     <X className='h-4 w-4' />
@@ -741,7 +973,7 @@ export default function WhatsAppInboxPage() {
                 </div>
                 <div className='flex gap-2'>
                   <Input
-                    className='rounded-full bg-muted/60 border-transparent'
+                    className='flex-1 rounded-full bg-background border-transparent'
                     placeholder='Add a caption…'
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
@@ -749,7 +981,7 @@ export default function WhatsAppInboxPage() {
                   />
                   <Button
                     size='icon'
-                    className='rounded-full bg-[#00A884] hover:bg-[#00A884]/90 shrink-0'
+                    className='rounded-full bg-wa-accent hover:bg-wa-accent/90 shrink-0'
                     onClick={handleSendMedia}
                     disabled={sendingMedia}
                   >
@@ -758,7 +990,7 @@ export default function WhatsAppInboxPage() {
                 </div>
               </div>
             ) : isRecording ? (
-              <div className='p-3 border-t flex items-center gap-3'>
+              <div className='p-3 border-t bg-wa-panel flex items-center gap-3'>
                 <span className='flex items-center gap-2 text-sm text-destructive'>
                   <span className='h-2 w-2 rounded-full bg-destructive animate-pulse' />
                   Recording {String(Math.floor(recordSeconds / 60)).padStart(2, '0')}:
@@ -770,18 +1002,18 @@ export default function WhatsAppInboxPage() {
                 </Button>
                 <Button
                   size='icon'
-                  className='rounded-full bg-[#00A884] hover:bg-[#00A884]/90'
+                  className='rounded-full bg-wa-accent hover:bg-wa-accent/90'
                   onClick={() => stopRecording()}
                 >
                   <Square className='h-4 w-4' />
                 </Button>
               </div>
             ) : (
-              <div className='p-3 border-t flex gap-2 items-center'>
+              <div className='p-3 border-t bg-wa-panel flex gap-2 items-end'>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant='ghost' size='icon' type='button' className='rounded-full shrink-0'>
-                      <Paperclip className='h-5 w-5 text-muted-foreground' />
+                      <Paperclip className='h-5 w-5 text-wa-muted' />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align='start'>
@@ -793,17 +1025,25 @@ export default function WhatsAppInboxPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Input
-                  className='rounded-full bg-muted/60 border-transparent'
+                <Textarea
+                  ref={draftInputRef}
+                  showVoiceInput={false}
+                  rows={1}
+                  className='flex-1 min-h-0 max-h-[120px] resize-none overflow-y-auto rounded-3xl border-transparent bg-background px-4 py-2 text-sm leading-relaxed shadow-none'
                   placeholder='Type a message…'
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSend()
+                    }
+                  }}
                 />
                 {draft.trim() ? (
                   <Button
                     size='icon'
-                    className='rounded-full bg-[#00A884] hover:bg-[#00A884]/90 shrink-0'
+                    className='rounded-full bg-wa-accent hover:bg-wa-accent/90 shrink-0'
                     onClick={handleSend}
                     disabled={sending}
                   >
@@ -812,7 +1052,7 @@ export default function WhatsAppInboxPage() {
                 ) : (
                   <Button
                     size='icon'
-                    className='rounded-full bg-[#00A884] hover:bg-[#00A884]/90 shrink-0'
+                    className='rounded-full bg-wa-accent hover:bg-wa-accent/90 shrink-0'
                     onClick={startRecording}
                   >
                     <Mic className='h-4 w-4' />
@@ -822,8 +1062,17 @@ export default function WhatsAppInboxPage() {
             )}
           </>
         ) : (
-          <div className='flex-1 flex items-center justify-center text-muted-foreground bg-[#EFEAE2]/40 dark:bg-[#0B141A]/40'>
-            Select a conversation
+          <div className='flex-1 flex flex-col items-center justify-center gap-5 border-t-4 border-wa-accent bg-background'>
+            <div className='flex h-24 w-24 items-center justify-center rounded-full bg-wa-panel'>
+              <MessageCircle className='h-11 w-11 text-wa-muted' />
+            </div>
+            <div className='text-center max-w-sm space-y-1.5'>
+              <h2 className='text-2xl font-light'>WhatsApp Inbox</h2>
+              <p className='text-sm text-wa-muted'>
+                Send and receive WhatsApp messages from one shared inbox. Select a conversation on the left to get
+                started.
+              </p>
+            </div>
           </div>
         )}
       </main>

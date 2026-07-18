@@ -33,12 +33,27 @@ export type SmsDevice = {
 export type SmsMessage = {
   _id: string
   to: string
+  contactName?: string
   message: string
   status: 'pending' | 'dispatched' | 'sent' | 'delivered' | 'failed'
   error?: string
   source: string
   sentAt?: string
   createdAt: string
+}
+
+export type SmsMessageStatusFilter = 'all' | 'success' | 'failed' | 'pending'
+
+export type SmsMessageSummary = {
+  total: number
+  success: number
+  failed: number
+  pending: number
+}
+
+export type SmsResendResult = {
+  success: boolean
+  message?: SmsMessage
 }
 
 export const smsGatewayApi = createApi({
@@ -66,9 +81,27 @@ export const smsGatewayApi = createApi({
       query: (body) => ({ url: '/send-bulk', method: 'POST', body }),
       invalidatesTags: ['SmsMessages'],
     }),
-    getMessages: builder.query<{ results: SmsMessage[]; total: number; page: number; totalPages: number }, { page?: number; limit?: number; status?: string }>({
-      query: (params) => ({ url: '/messages', params }),
+    getMessages: builder.query<
+      {
+        results: SmsMessage[]
+        page: number
+        limit: number
+        totalPages: number
+        totalResults: number
+        summary: SmsMessageSummary
+      },
+      { page?: number; limit?: number; status?: SmsMessageStatusFilter; source?: string; search?: string } | void
+    >({
+      query: (params) => ({ url: '/messages', params: params || undefined }),
       providesTags: ['SmsMessages'],
+    }),
+    resendSms: builder.mutation<SmsResendResult, string>({
+      query: (messageId) => ({ url: `/messages/${messageId}/resend`, method: 'POST' }),
+      invalidatesTags: ['SmsMessages'],
+    }),
+    deleteSms: builder.mutation<void, string>({
+      query: (messageId) => ({ url: `/messages/${messageId}`, method: 'DELETE' }),
+      invalidatesTags: ['SmsMessages'],
     }),
   }),
 })
@@ -80,4 +113,6 @@ export const {
   useSendSmsMutation,
   useSendBulkSmsMutation,
   useGetMessagesQuery,
+  useResendSmsMutation,
+  useDeleteSmsMutation,
 } = smsGatewayApi

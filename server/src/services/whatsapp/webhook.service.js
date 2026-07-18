@@ -73,7 +73,8 @@ async function handleInboundMessage(connection, msg, contact) {
     contactWaId: contact?.wa_id,
   });
 
-  const messageDoc = await inboxService.storeInboundMessage(connection, conversation, msg);
+  const { message: messageDoc, isNew } = await inboxService.storeInboundMessage(connection, conversation, msg);
+  if (!isNew) return; // Duplicate webhook delivery for an already-stored message — nothing else to do.
 
   if (['text', 'audio'].includes(msg.type)) {
     const organization = await Organization.findById(connection.organizationId).select('businessType').lean();

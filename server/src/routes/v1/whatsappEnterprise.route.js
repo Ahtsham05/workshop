@@ -22,6 +22,7 @@ router.use(/^(?!\/connection\/callback).*/, auth(), branchScope());
 
 router.get('/conversations/unread-count', whatsappInboxController.getUnreadCount);
 router.get('/conversations', whatsappInboxController.listConversations);
+router.get('/messages', whatsappInboxController.listAllMessages);
 router.get('/conversations/:id', whatsappInboxController.getConversation);
 router.get('/conversations/:id/messages', whatsappInboxController.getMessages);
 router.patch(
@@ -42,6 +43,8 @@ router.post(
   whatsappMediaUpload.single('file'),
   whatsappInboxController.sendMediaMessage,
 );
+router.post('/messages/:id/resend', whatsappSendLimiter, whatsappInboxController.resendMessage);
+router.delete('/messages/:id', whatsappInboxController.deleteMessage);
 
 router.get('/templates', whatsappEnterpriseController.listTemplates);
 router.get('/templates/suggestions', whatsappEnterpriseController.getSuggestedTemplates);

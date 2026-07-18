@@ -10,6 +10,10 @@ const MEDIA_PREVIEWS = { image: '📷 Photo', video: '📹 Video', audio: '🎤 
 
 const CUSTOMER_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+const WINDOW_CLOSED_ERROR_CODE = 'window_closed';
+const WINDOW_CLOSED_MESSAGE =
+  "This customer hasn't messaged in the last 24 hours, so WhatsApp only allows sending an approved template message. Free-form replies will work again once they message you.";
+
 function graphUrl(apiVersion, path) {
   return `${connectionService.graphBaseUrl(apiVersion)}/${path}`;
 }
@@ -335,6 +339,45 @@ function isWithinServiceWindow(conversation) {
   );
 }
 
+// Records what the inbox UI tried to send when the 24h re-engagement window is closed,
+// as a normal failed outbound message — instead of just rejecting the request and losing
+// what was typed. This makes it visible in the thread (with a reason) and in Analytics'
+// failed count, and resendable in place once the customer messages back and reopens the
+// window. Media is still uploaded to our own permanent storage (never to Meta, since that
+// send never happens) so a later resend has bytes to work with.
+async function recordBlockedMessage({ organizationId, branchId, conversationId, phone, type, content, buffer, mimeType }) {
+  const conversation = conversationId
+    ? await WhatsAppConversation.findById(conversationId)
+    : await resolveConversation(organizationId, branchId, normalizePhone(phone));
+
+  let finalContent = content;
+  if (buffer?.length) {
+    const mediaUrl = await mediaService.uploadToCloudinary(buffer, mimeType, 'whatsapp');
+    finalContent = { ...content, mediaUrl, mediaMimeType: mimeType };
+  }
+
+  const message = await WhatsAppMessage.create({
+    organizationId,
+    branchId,
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type,
+    content: finalContent,
+    status: 'failed',
+    statusHistory: [{ status: 'failed', at: new Date(), error: WINDOW_CLOSED_MESSAGE }],
+    errorCode: WINDOW_CLOSED_ERROR_CODE,
+    errorMessage: WINDOW_CLOSED_MESSAGE,
+    source: 'inbox',
+  });
+
+  await touchConversationOnOutbound(
+    conversation,
+    finalContent.text || finalContent.caption || MEDIA_PREVIEWS[type] || `📄 ${finalContent.filename || 'Document'}`,
+  );
+
+  return { success: false, blockedByWindow: true, message };
+}
+
 /**
  * Single entry point that picks free-form text vs. an approved template automatically,
  * based on Meta's 24h customer-service window (measured from the customer's last inbound
@@ -523,6 +566,95 @@ async function isConnected(organizationId, branchId) {
   return Boolean(conn);
 }
 
+// Re-sends a message that previously failed, in place (same document, new wamid/status)
+// rather than creating a second bubble — matches WhatsApp's own "tap to retry" behavior.
+// Media is re-uploaded to Meta from our permanent Cloudinary copy, since a failed send's
+// Meta media id isn't safe to reuse.
+async function resendMessage({ organizationId, branchId, messageId }) {
+  const message = await WhatsAppMessage.findOne({
+    _id: messageId,
+    organizationId,
+    branchId,
+    direction: 'outbound',
+  });
+  if (!message) throw new ApiError(httpStatus.NOT_FOUND, 'Message not found');
+  if (message.status !== 'failed') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Only failed messages can be resent');
+  }
+
+  const conversation = await WhatsAppConversation.findById(message.conversationId);
+  if (!conversation) throw new ApiError(httpStatus.NOT_FOUND, 'Conversation not found');
+
+  if (!isWithinServiceWindow(conversation)) {
+    message.errorCode = WINDOW_CLOSED_ERROR_CODE;
+    message.errorMessage = WINDOW_CLOSED_MESSAGE;
+    message.statusHistory.push({ status: 'failed', at: new Date(), error: WINDOW_CLOSED_MESSAGE });
+    await message.save();
+    return { success: false, blockedByWindow: true, message };
+  }
+
+  const { conn, accessToken } = await resolveConnection(organizationId, branchId);
+  const to = normalizePhone(conversation.contactPhone);
+
+  let body;
+  if (message.type === 'text') {
+    body = await callSendApi(conn, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: { body: String(message.content.text || '').slice(0, 4096) },
+    });
+  } else {
+    if (!message.content.mediaUrl) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Original media is no longer available to resend');
+    }
+    const res = await fetch(message.content.mediaUrl);
+    if (!res.ok) throw new ApiError(httpStatus.BAD_REQUEST, 'Could not re-download the original media file');
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const mediaId = await uploadMedia(
+      { accessToken, phoneNumberId: conn.phoneNumberId, apiVersion: conn.apiVersion },
+      buffer,
+      message.content.mediaMimeType,
+      message.content.filename,
+    );
+
+    const mediaPayload = { id: mediaId };
+    if (message.type === 'document') {
+      mediaPayload.filename = message.content.filename || 'document';
+      if (message.content.caption) mediaPayload.caption = message.content.caption;
+    } else if (message.type === 'image' || message.type === 'video') {
+      if (message.content.caption) mediaPayload.caption = message.content.caption;
+    }
+
+    body = await callSendApi(conn, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: message.type,
+      [message.type]: mediaPayload,
+    });
+    message.content.mediaId = mediaId;
+  }
+
+  const wamid = body.messages?.[0]?.id;
+  message.wamid = wamid;
+  message.metaMessageId = wamid;
+  message.status = 'queued';
+  message.errorCode = undefined;
+  message.errorMessage = undefined;
+  message.statusHistory.push({ status: 'queued', at: new Date() });
+  await message.save();
+
+  await touchConversationOnOutbound(
+    conversation,
+    message.content.text || message.content.caption || MEDIA_PREVIEWS[message.type] || `📄 ${message.content.filename || 'Document'}`,
+  );
+
+  return { wamid, message, success: true };
+}
+
 module.exports = {
   resolveConnection,
   sendText,
@@ -531,9 +663,12 @@ module.exports = {
   sendDocumentMessage,
   sendMedia,
   sendMessage,
+  resendMessage,
+  recordBlockedMessage,
   isConnected,
   uploadMedia,
   getConversationForPhone,
   isWithinServiceWindow,
   CUSTOMER_SERVICE_WINDOW_MS,
+  WINDOW_CLOSED_MESSAGE,
 };

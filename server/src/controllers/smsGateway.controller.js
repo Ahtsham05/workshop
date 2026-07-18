@@ -78,15 +78,44 @@ const sendBulkSms = catchAsync(async (req, res) => {
 const getMessages = catchAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
-  const status = req.query.status || undefined;
+  const { status, source, search } = req.query;
   const data = await smsGatewayService.getMessages({
     organizationId: req.organizationId,
     branchId: req.branchId,
     page,
     limit,
     status,
+    source,
+    search,
   });
   res.send(data);
 });
 
-module.exports = { registerDevice, listDevices, deleteDevice, sendSms, sendBulkSms, getMessages };
+const resendSms = catchAsync(async (req, res) => {
+  const result = await smsGatewayService.resendSms({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    messageId: req.params.id,
+  });
+  res.send(result);
+});
+
+const deleteSms = catchAsync(async (req, res) => {
+  await smsGatewayService.deleteSms({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    messageId: req.params.id,
+  });
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
+module.exports = {
+  registerDevice,
+  listDevices,
+  deleteDevice,
+  sendSms,
+  sendBulkSms,
+  getMessages,
+  resendSms,
+  deleteSms,
+};

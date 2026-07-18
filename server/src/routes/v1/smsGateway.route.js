@@ -18,5 +18,7 @@ router.post('/send-bulk', smsGatewayController.sendBulkSms);
 
 // History
 router.get('/messages', smsGatewayController.getMessages);
+router.post('/messages/:id/resend', smsGatewayController.resendSms);
+router.delete('/messages/:id', smsGatewayController.deleteSms);
 
 module.exports = router;
