@@ -71,6 +71,7 @@ const createTemplate = {
       'payment_made',
       'order_update',
       'purchase_order',
+      'pending_invoice',
       'general',
     ),
     headerFormat: Joi.string().valid('DOCUMENT'),

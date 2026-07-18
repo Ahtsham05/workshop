@@ -154,3 +154,15 @@ export function buildPendingInvoiceItemsMessageUrdu({
   const lines = [h, 'نیا زیر التواء آرڈر', inv, '', itemLines, '', receiver, '', 'شکریہ!']
   return lines.filter(l => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
+
+/** Flattened "Item x2, Item2 x1" item summary for the approved `pending_invoice` template's
+ * {{2}} variable — Meta templates can't loop over an array, so line items are joined into one. */
+export function buildPendingInvoiceItemsSummaryUrdu(items: PendingInvoiceItemsCtx['items']) {
+  return items
+    .map((item) => {
+      const name = item.nameUrdu?.trim() || item.name
+      const unit = item.unit?.trim() ? ` ${item.unit.trim()}` : ''
+      return `${name} x${item.quantity}${unit}`
+    })
+    .join('، ')
+}

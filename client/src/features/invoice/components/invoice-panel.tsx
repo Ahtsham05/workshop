@@ -21,7 +21,7 @@ import type { InvoiceTemplate } from '../utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
 import { withCustomerContactForPrint } from '../utils/invoice-print-whatsapp'
 import { sendInvoiceReceiptWhatsApp } from '../utils/send-invoice-whatsapp'
-import { buildInvoiceSmsMessage, buildPendingInvoiceItemsMessageUrdu } from '@/utils/sms-messages'
+import { buildInvoiceSmsMessage, buildPendingInvoiceItemsMessageUrdu, buildPendingInvoiceItemsSummaryUrdu } from '@/utils/sms-messages'
 import { useSendWhatsAppMessageMutation } from '@/stores/whatsapp.api'
 import {
   fetchAndStashPrintContact,
@@ -1291,7 +1291,23 @@ export function InvoicePanel({
               }
               setIsWhatsAppSending(true)
               try {
-                await sendWhatsAppMessage({ phone: wpPhone, message: pendingMessage() }).unwrap()
+                await sendWhatsAppMessage({
+                  phone: wpPhone,
+                  message: pendingMessage(),
+                  templateCategory: 'pending_invoice',
+                  templateParams: [
+                    String(savedInvoicePayload.invoiceNumber || ''),
+                    buildPendingInvoiceItemsSummaryUrdu(
+                      validItems.map((item: any) => ({
+                        name: item.name,
+                        nameUrdu: item.nameUrdu,
+                        quantity: item.quantity,
+                        unit: item.unit,
+                      })),
+                    ),
+                    savedInvoicePayload.receivedByName?.trim() || '-',
+                  ],
+                }).unwrap()
                 toast.success('WhatsApp message sent')
               } catch (err: any) {
                 toast.error(err?.data?.message || 'Failed to send on WhatsApp')

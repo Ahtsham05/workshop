@@ -46,6 +46,7 @@ const whatsappTemplateSchema = mongoose.Schema(
         'payment_made',
         'order_update',
         'purchase_order',
+        'pending_invoice',
         'general',
       ],
       default: 'general',

@@ -81,6 +81,17 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       category: 'UTILITY',
       bodyText: 'Hi {{1}}, we have created purchase order #{{2}} with you. Items: {{3}}. Please confirm availability. Thank you!',
     },
+    {
+      // Goods-handoff receipt for a "pending" (not yet formally billed) invoice — matches
+      // buildPendingInvoiceItemsMessageUrdu's SMS wording: item names + qty (no prices) plus
+      // who collected them, always in Urdu. {{2}} carries the flattened item summary (Meta
+      // templates can't loop over an array) and {{3}} is the receivedByName.
+      name: 'pending_invoice',
+      internalCategory: 'pending_invoice',
+      category: 'UTILITY',
+      language: 'ur',
+      bodyText: 'نیا زیر التواء آرڈر #{{1}}۔ اشیاء: {{2}}۔ وصول کنندہ: {{3}}۔ شکریہ!',
+    },
   ],
   [TEMPLATE_GROUPS.GENERAL]: [
     {
@@ -112,7 +123,7 @@ function countVariables(bodyText) {
 function getSuggestedTemplates(businessType) {
   const group = getTemplateGroup(businessType);
   const list = DEFAULT_TEMPLATES_BY_GROUP[group] || [];
-  return list.map((t) => ({ ...t, language: 'en', variableCount: countVariables(t.bodyText) }));
+  return list.map((t) => ({ ...t, language: t.language || 'en', variableCount: countVariables(t.bodyText) }));
 }
 
 module.exports = {
