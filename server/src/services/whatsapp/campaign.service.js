@@ -75,11 +75,23 @@ async function createCampaign(data) {
 }
 
 async function runCampaign(campaign, phones, sentBy) {
+  const template = await WhatsAppTemplate.findById(campaign.templateId);
+  // Re-verify approval at actual send time, not just at campaign creation — Meta can revoke
+  // or pause a template's approval any time between scheduling and the campaign actually
+  // running, and createCampaign's check is otherwise stale by then.
+  if (!template || template.status !== 'APPROVED') {
+    campaign.status = 'failed';
+    campaign.startedAt = new Date();
+    campaign.completedAt = new Date();
+    campaign.stats.rejected = phones.length;
+    await campaign.save();
+    return campaign;
+  }
+
   campaign.status = 'running';
   campaign.startedAt = new Date();
   await campaign.save();
 
-  const template = await WhatsAppTemplate.findById(campaign.templateId);
   const components = buildTemplateComponents(template, campaign.templateParams);
 
   for (const phone of phones) {

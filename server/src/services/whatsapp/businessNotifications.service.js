@@ -57,7 +57,7 @@ async function sendLedgerUpdate(customerId) {
         ? `Hi ${customer.name}, you have a credit balance of ${Math.abs(balance).toFixed(2)} with us.`
         : `Hi ${customer.name}, your account balance is fully settled. Thank you!`;
 
-  return messagingService.sendText({
+  return messagingService.sendMessage({
     organizationId: customer.organizationId,
     branchId: customer.branchId,
     phone,

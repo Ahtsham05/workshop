@@ -18,6 +18,8 @@ const sendDocument = {
     filename: Joi.string().max(200),
     caption: Joi.string().max(1000).allow(''),
     mimetype: Joi.string().max(100),
+    templateCategory: Joi.string().max(100),
+    templateParams: Joi.array().items(Joi.string().allow('')).optional(),
   }),
 };
 

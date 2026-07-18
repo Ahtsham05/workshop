@@ -97,7 +97,7 @@ const getExpiringWindows = catchAsync(async (req, res) => {
 });
 
 const sendInvoicePdf = catchAsync(async (req, res) => {
-  const { phone, pdfBase64, filename, caption } = req.body;
+  const { phone, pdfBase64, filename, caption, invoiceNumber } = req.body;
   const result = await integrationService.sendInvoicePdf({
     organizationId: req.organizationId,
     branchId: req.branchId,
@@ -105,6 +105,7 @@ const sendInvoicePdf = catchAsync(async (req, res) => {
     pdfBase64,
     filename,
     caption,
+    invoiceNumber,
     sentBy: req.user.id,
   });
   res.send({ success: true, ...result });

@@ -2,8 +2,19 @@ const messagingService = require('./messaging.service');
 const { Student, Invoice, Customer, FeeVoucher } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
 
-async function sendInvoicePdf({ organizationId, branchId, phone, pdfBase64, filename, caption, sentBy }) {
-  return messagingService.sendDocument({
+async function sendInvoicePdf({ organizationId, branchId, phone, pdfBase64, filename, caption, invoiceNumber, sentBy }) {
+  // sendDocumentMessage (not sendDocument) so a send outside Meta's 24h customer-service
+  // window falls back to the approved "invoice" document-header template instead of a
+  // free-form document Meta would reject.
+  const customer = await Customer.findOne({
+    organizationId,
+    branchId,
+    $or: [{ phone }, { whatsapp: phone }],
+  })
+    .select('name')
+    .lean();
+
+  return messagingService.sendDocumentMessage({
     organizationId,
     branchId,
     phone,
@@ -12,6 +23,8 @@ async function sendInvoicePdf({ organizationId, branchId, phone, pdfBase64, file
     caption,
     source: 'invoice',
     sentBy,
+    templateCategory: 'invoice',
+    templateParams: invoiceNumber ? [customer?.name || 'there', invoiceNumber] : [],
   });
 }
 

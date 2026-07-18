@@ -52,7 +52,7 @@ async function sendDocument(phone, payload, reqContext = {}) {
     };
   }
 
-  const result = await messagingService.sendDocument({
+  const result = await messagingService.sendDocumentMessage({
     organizationId,
     branchId,
     phone,
@@ -61,6 +61,8 @@ async function sendDocument(phone, payload, reqContext = {}) {
     caption: payload.caption,
     source: payload.source || 'invoice',
     sentBy,
+    templateCategory: payload.templateCategory,
+    templateParams: payload.templateParams,
   });
   return { ...result, provider: 'cloud' };
 }

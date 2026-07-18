@@ -22,7 +22,11 @@ async function assertConnected(req) {
   }
 }
 
-async function sendBulkViaCloud(req, recipients, getMessage) {
+// Routes bulk/broadcast sends through messagingService.sendMessage (not sendText) so each
+// recipient outside Meta's 24h customer-service window is reported as a clean per-recipient
+// failure — with an optional templateCategory fallback — instead of firing free-form text
+// that Meta silently rejects async (or penalizes the business's quality rating for).
+async function sendBulkViaCloud(req, recipients, getMessage, { templateCategory, templateParams } = {}) {
   await assertConnected(req);
   let sent = 0;
   const failed = [];
@@ -30,11 +34,13 @@ async function sendBulkViaCloud(req, recipients, getMessage) {
     const r = recipients[i];
     const text = getMessage(r);
     try {
-      await messagingService.sendText({
+      await messagingService.sendMessage({
         organizationId: req.organizationId,
         branchId: req.branchId,
         phone: r.phone,
         text,
+        templateCategory,
+        templateParams,
         source: 'api',
         sentBy: req.user?.id,
       });
@@ -109,16 +115,16 @@ const sendMessage = catchAsync(async (req, res) => {
 });
 
 const sendBulkMessages = catchAsync(async (req, res) => {
-  const { recipients, message } = req.body;
+  const { recipients, message, templateCategory, templateParams } = req.body;
   if (!recipients?.length || !message) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'recipients (array) and message are required');
   }
-  const result = await sendBulkViaCloud(req, recipients, () => message);
+  const result = await sendBulkViaCloud(req, recipients, () => message, { templateCategory, templateParams });
   res.send(result);
 });
 
 const sendToClass = catchAsync(async (req, res) => {
-  const { classId, message } = req.body;
+  const { classId, message, templateCategory, templateParams } = req.body;
   if (!classId || !message) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'classId and message are required');
   }
@@ -131,12 +137,15 @@ const sendToClass = catchAsync(async (req, res) => {
   if (!recipients.length) {
     return res.send({ total: 0, sent: 0, failed: [], message: 'No students with phone numbers found in this class' });
   }
-  const result = await sendBulkViaCloud(req, recipients, (r) => message.replace(/\{name\}/gi, r.name));
+  const result = await sendBulkViaCloud(req, recipients, (r) => message.replace(/\{name\}/gi, r.name), {
+    templateCategory,
+    templateParams,
+  });
   res.send(result);
 });
 
 const sendToAll = catchAsync(async (req, res) => {
-  const { message, classId } = req.body;
+  const { message, classId, templateCategory, templateParams } = req.body;
   if (!message) throw new ApiError(httpStatus.BAD_REQUEST, 'message is required');
   const filter = { status: 'active' };
   if (classId) filter.classId = classId;
@@ -148,12 +157,15 @@ const sendToAll = catchAsync(async (req, res) => {
   if (!recipients.length) {
     return res.send({ total: 0, sent: 0, failed: [], message: 'No students with phone numbers found' });
   }
-  const result = await sendBulkViaCloud(req, recipients, (r) => message.replace(/\{name\}/gi, r.name));
+  const result = await sendBulkViaCloud(req, recipients, (r) => message.replace(/\{name\}/gi, r.name), {
+    templateCategory,
+    templateParams,
+  });
   res.send(result);
 });
 
 const sendFeeAlerts = catchAsync(async (req, res) => {
-  const { studentIds, classId, message, feeStatus } = req.body;
+  const { studentIds, classId, message, feeStatus, templateCategory, templateParams } = req.body;
   const FeeVoucher = require('../models/feeVoucher.model');
 
   let statusFilter;
@@ -216,17 +228,20 @@ const sendFeeAlerts = catchAsync(async (req, res) => {
     return res.send({ total: 0, sent: 0, failed: [], message: 'No matching fee vouchers with parent phone numbers found' });
   }
 
-  const result = await sendBulkViaCloud(req, recipients, (r) => r._message);
+  const result = await sendBulkViaCloud(req, recipients, (r) => r._message, { templateCategory, templateParams });
   res.send(result);
 });
 
 const sendDocument = catchAsync(async (req, res) => {
-  const { phone, pdfBase64, filename, caption, mimetype } = req.body;
+  const { phone, pdfBase64, filename, caption, templateCategory, templateParams } = req.body;
   if (!phone || !pdfBase64) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'phone and pdfBase64 are required');
   }
   await assertConnected(req);
-  const result = await messagingService.sendDocument({
+  // sendDocumentMessage (not sendDocument) so a send outside the 24h window fails with a
+  // clear reason — or uses an approved document-header template if the caller supplies one —
+  // instead of Meta silently rejecting a free-form document async.
+  const result = await messagingService.sendDocumentMessage({
     organizationId: req.organizationId,
     branchId: req.branchId,
     phone,
@@ -235,6 +250,8 @@ const sendDocument = catchAsync(async (req, res) => {
     caption: caption || '',
     source: 'invoice',
     sentBy: req.user?.id,
+    templateCategory,
+    templateParams,
   });
   res.send({ success: true, message: 'Document sent on WhatsApp', wamid: result.wamid });
 });
@@ -269,7 +286,7 @@ const sendTest = catchAsync(async (req, res) => {
   if (!phone) {
     return res.send({ success: true, message: 'WhatsApp Cloud API is connected and ready.' });
   }
-  await messagingService.sendText({
+  await messagingService.sendMessage({
     organizationId: req.organizationId,
     branchId: req.branchId,
     phone,

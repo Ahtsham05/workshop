@@ -25,6 +25,7 @@ const sendInvoicePdf = {
     pdfBase64: Joi.string().required(),
     filename: Joi.string(),
     caption: Joi.string(),
+    invoiceNumber: Joi.string().max(100),
   }),
 };
 
