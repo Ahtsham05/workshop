@@ -1718,7 +1718,7 @@ ${itemizedTotalsTable}
   `.trim()
 }
 
-function extractA4PrintBodyInner(html: string): string {
+export function extractA4PrintBodyInner(html: string): string {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
   if (!bodyMatch) return ''
   const inner = bodyMatch[1]
@@ -1733,7 +1733,7 @@ function extractA4PrintBodyInner(html: string): string {
  * content anchored to the top of each half — so a printer loaded only with A4 stock can
  * carry two A5-proportioned invoices per physical sheet.
  */
-function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, rightBodyHtml: string, noPrintLabel: string): string {
+export function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, rightBodyHtml: string, noPrintLabel: string): string {
   const headEnd = headSource.indexOf('</head>')
   const head = headEnd === -1 ? headSource : headSource.slice(0, headEnd + 7)
 
