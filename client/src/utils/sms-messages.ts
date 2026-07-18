@@ -103,6 +103,30 @@ export function buildInvoiceSmsMessage({
   return lines.filter(l => l !== null && l !== undefined).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+type PurchaseOrderCtx = {
+  branchName?: string | null
+  supplierName?: string
+  orderNumber?: string | number
+  items: Array<{ name: string; quantity: number; unit?: string }>
+}
+
+/** Builds the free-text (within-window) message AND the flattened item summary used as the
+ * approved template's {{3}} variable outside the 24h window — see `buildPurchaseOrderItemsSummary`. */
+export function buildPurchaseOrderItemsSummary(items: PurchaseOrderCtx['items']) {
+  return items
+    .map((item) => `${item.name} x${item.quantity}${item.unit ? ` ${item.unit}` : ''}`)
+    .join(', ')
+}
+
+export function buildPurchaseOrderMessage({ branchName, supplierName, orderNumber, items }: PurchaseOrderCtx) {
+  const h = heading(branchName)
+  const greeting = supplierName ? `Hi ${supplierName},\n\n` : ''
+  const itemLines = items
+    .map((item, i) => `${i + 1}. ${item.name} - Qty: ${item.quantity}${item.unit ? ` ${item.unit}` : ''}`)
+    .join('\n')
+  return `${h}\n${greeting}We have created purchase order #${orderNumber} with you.\n\n${itemLines}\n\nPlease confirm availability. Thank you!`
+}
+
 type PendingInvoiceItemsCtx = {
   branchName?: string | null
   invoiceNumber?: string | number

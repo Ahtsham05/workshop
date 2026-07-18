@@ -60,6 +60,10 @@ import {
   type PurchaseOrderStatus,
 } from '@/stores/purchaseOrder.api'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildPurchaseOrderMessage, buildPurchaseOrderItemsSummary } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 const STATUS_STYLES: Record<PurchaseOrderStatus, string> = {
   draft: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
@@ -90,6 +94,7 @@ export default function PurchaseOrderList({
   onView,
   onReceive,
 }: Props) {
+  const branchName = useBranchName()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState<string>('all')
@@ -396,6 +401,51 @@ export default function PurchaseOrderList({
                             <Button variant='ghost' size='sm' onClick={() => onView(po)} title='View'>
                               <Eye className='h-4 w-4' />
                             </Button>
+                            {(po.supplier?.phone || po.supplier?.whatsapp) ? (
+                              <>
+                                <WhatsAppSendButton
+                                  phone={po.supplier?.phone}
+                                  whatsapp={po.supplier?.whatsapp}
+                                  name={po.supplier?.name}
+                                  message={buildPurchaseOrderMessage({
+                                    branchName,
+                                    supplierName: po.supplier?.name,
+                                    orderNumber: po.orderNumber,
+                                    items: (po.items || []).map((i) => ({
+                                      name: i.productName || 'Item',
+                                      quantity: i.quantity,
+                                      unit: i.unit,
+                                    })),
+                                  })}
+                                  templateCategory='purchase_order'
+                                  templateParams={[
+                                    po.supplier?.name || 'there',
+                                    po.orderNumber,
+                                    buildPurchaseOrderItemsSummary(
+                                      (po.items || []).map((i) => ({
+                                        name: i.productName || 'Item',
+                                        quantity: i.quantity,
+                                        unit: i.unit,
+                                      })),
+                                    ),
+                                  ]}
+                                />
+                                <SmsSendButton
+                                  phone={po.supplier?.phone}
+                                  name={po.supplier?.name}
+                                  defaultMessage={buildPurchaseOrderMessage({
+                                    branchName,
+                                    supplierName: po.supplier?.name,
+                                    orderNumber: po.orderNumber,
+                                    items: (po.items || []).map((i) => ({
+                                      name: i.productName || 'Item',
+                                      quantity: i.quantity,
+                                      unit: i.unit,
+                                    })),
+                                  })}
+                                />
+                              </>
+                            ) : null}
                             {canReceive ? (
                               <Button
                                 variant='ghost'

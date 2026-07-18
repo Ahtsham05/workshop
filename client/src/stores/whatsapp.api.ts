@@ -70,7 +70,10 @@ export const whatsappApi = createApi({
     testWhatsApp: builder.mutation<{ success: boolean; message: string }, { phone?: string } | void>({
       query: (body) => ({ url: '/test', method: 'POST', body: body || {} }),
     }),
-    sendWhatsAppMessage: builder.mutation<{ success: boolean }, { phone: string; message: string }>({
+    sendWhatsAppMessage: builder.mutation<
+      { success: boolean },
+      { phone: string; message: string; templateCategory?: string; templateParams?: (string | number)[] }
+    >({
       query: (body) => ({ url: '/send', method: 'POST', body }),
     }),
     sendWhatsAppDocument: builder.mutation<

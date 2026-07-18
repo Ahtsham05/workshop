@@ -9,6 +9,8 @@ type Props = {
   whatsapp?: string | null
   name?: string
   message?: string
+  templateCategory?: string
+  templateParams?: (string | number)[]
   size?: 'sm' | 'icon' | 'default'
   variant?: 'ghost' | 'outline' | 'default'
   className?: string
@@ -25,6 +27,8 @@ export function WhatsAppSendButton({
   whatsapp,
   name,
   message,
+  templateCategory,
+  templateParams,
   size = 'icon',
   variant = 'ghost',
   className,
@@ -50,7 +54,7 @@ export function WhatsAppSendButton({
       wa.openConnectionDialog()
       return
     }
-    wa.openComposeDialog({ phone: number, name, defaultMessage: message })
+    wa.openComposeDialog({ phone: number, name, defaultMessage: message, templateCategory, templateParams })
   }
 
   const label = wa?.isReady ? 'Send WhatsApp' : 'WhatsApp'

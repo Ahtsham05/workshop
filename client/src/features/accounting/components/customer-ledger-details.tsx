@@ -1693,8 +1693,28 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             />
           )}
           {selectedPayment && customer.phone && (
-            <div className="mt-3 flex items-center gap-2 border-t pt-3">
-              <span className="text-sm text-muted-foreground">Send payment confirmation via SMS:</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+              <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
+              <WhatsAppSendButton
+                phone={customer.phone}
+                whatsapp={customer.whatsapp}
+                name={customer.name}
+                showLabel
+                size="sm"
+                variant="outline"
+                message={buildPaymentReceivedMessage({
+                  branchName,
+                  name: customer.name,
+                  amount: selectedPayment.entry.credit,
+                  remainingBalance: selectedPayment.currentBalance,
+                })}
+                templateCategory="payment_received"
+                templateParams={[
+                  customer.name || 'there',
+                  Math.abs(selectedPayment.entry.credit ?? 0).toFixed(0),
+                  Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
+                ]}
+              />
               <SmsSendButton
                 phone={customer.phone}
                 name={customer.name}
@@ -1727,6 +1747,8 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   size="sm"
                   variant="outline"
                   message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance })}
+                  templateCategory="payment_reminder"
+                  templateParams={[customer.name || 'there', Math.abs((currentBalance ?? customer.balance) ?? 0).toFixed(0)]}
                 />
                 <SmsSendButton
                   phone={customer.phone}

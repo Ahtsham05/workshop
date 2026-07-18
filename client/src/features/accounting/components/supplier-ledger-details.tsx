@@ -1096,8 +1096,28 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             />
           )}
           {selectedPayment && supplier.phone && (
-            <div className="mt-3 flex items-center gap-2 border-t pt-3">
-              <span className="text-sm text-muted-foreground">Send payment confirmation via SMS:</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+              <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
+              <WhatsAppSendButton
+                phone={supplier.phone}
+                whatsapp={(supplier as { whatsapp?: string }).whatsapp}
+                name={supplier.name}
+                showLabel
+                size="sm"
+                variant="outline"
+                message={buildPaymentMadeMessage({
+                  branchName,
+                  name: supplier.name,
+                  amount: selectedPayment.entry.debit,
+                  remainingBalance: selectedPayment.currentBalance,
+                })}
+                templateCategory="payment_made"
+                templateParams={[
+                  supplier.name || 'there',
+                  Math.abs(selectedPayment.entry.debit ?? 0).toFixed(0),
+                  Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
+                ]}
+              />
               <SmsSendButton
                 phone={supplier.phone}
                 name={supplier.name}

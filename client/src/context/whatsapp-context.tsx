@@ -21,6 +21,8 @@ type ComposeTarget = {
   phone: string
   name?: string
   defaultMessage?: string
+  templateCategory?: string
+  templateParams?: (string | number)[]
 }
 
 type WhatsAppContextValue = {
@@ -33,7 +35,12 @@ type WhatsAppContextValue = {
   } | null
   openConnectionDialog: () => void
   openComposeDialog: (target: ComposeTarget) => void
-  sendMessage: (phone: string, message: string) => Promise<boolean>
+  sendMessage: (
+    phone: string,
+    message: string,
+    templateCategory?: string,
+    templateParams?: (string | number)[],
+  ) => Promise<boolean>
   sendInvoicePdf: (payload: {
     phone: string
     pdfBase64: string
@@ -69,14 +76,14 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendMessage = useCallback(
-    async (phone: string, message: string) => {
+    async (phone: string, message: string, templateCategory?: string, templateParams?: (string | number)[]) => {
       if (!isReady) {
         toast.error('WhatsApp is not connected')
         openConnectionDialog()
         return false
       }
       try {
-        await sendWhatsAppMessage({ phone, message }).unwrap()
+        await sendWhatsAppMessage({ phone, message, templateCategory, templateParams }).unwrap()
         toast.success('Message queued — check Inbox for delivery status')
         return true
       } catch (err: unknown) {
@@ -155,7 +162,9 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
             phone={composeTarget?.phone ?? ''}
             name={composeTarget?.name}
             defaultMessage={composeTarget?.defaultMessage ?? ''}
-            onSend={sendMessage}
+            onSend={(phone, message) =>
+              sendMessage(phone, message, composeTarget?.templateCategory, composeTarget?.templateParams)
+            }
             isReady={isReady}
             onConnect={openConnectionDialog}
           />

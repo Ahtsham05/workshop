@@ -21,6 +21,10 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildPurchaseOrderMessage, buildPurchaseOrderItemsSummary } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/stores/purchaseOrder.api'
 
 const STATUS_STYLES: Record<PurchaseOrderStatus, string> = {
@@ -82,6 +86,7 @@ interface Props {
 }
 
 export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Props) {
+  const branchName = useBranchName()
   if (!order) return null
 
   const orderedQty = order.items.reduce((s, i) => s + Number(i.quantity || 0), 0)
@@ -171,6 +176,47 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                 sub={`${remainingQty} remaining · ${pct}%`}
               />
             </div>
+
+            {(order.supplier?.phone || order.supplier?.whatsapp) && (
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='text-xs text-muted-foreground'>Send this order to supplier:</span>
+                <WhatsAppSendButton
+                  phone={order.supplier?.phone}
+                  whatsapp={order.supplier?.whatsapp}
+                  name={order.supplier?.name}
+                  showLabel
+                  size='sm'
+                  variant='outline'
+                  message={buildPurchaseOrderMessage({
+                    branchName,
+                    supplierName: order.supplier?.name,
+                    orderNumber: order.orderNumber,
+                    items: order.items.map((i) => ({ name: i.productName || 'Item', quantity: i.quantity, unit: i.unit })),
+                  })}
+                  templateCategory='purchase_order'
+                  templateParams={[
+                    order.supplier?.name || 'there',
+                    order.orderNumber,
+                    buildPurchaseOrderItemsSummary(
+                      order.items.map((i) => ({ name: i.productName || 'Item', quantity: i.quantity, unit: i.unit })),
+                    ),
+                  ]}
+                />
+                <SmsSendButton
+                  phone={order.supplier?.phone}
+                  name={order.supplier?.name}
+                  showLabel
+                  size='sm'
+                  variant='outline'
+                  defaultMessage={buildPurchaseOrderMessage({
+                    branchName,
+                    supplierName: order.supplier?.name,
+                    orderNumber: order.orderNumber,
+                    items: order.items.map((i) => ({ name: i.productName || 'Item', quantity: i.quantity, unit: i.unit })),
+                  })}
+                />
+              </div>
+            )}
 
             <div className='rounded-lg border bg-background p-3'>
               <div className='mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-wide text-muted-foreground'>

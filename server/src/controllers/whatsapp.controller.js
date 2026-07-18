@@ -88,14 +88,20 @@ const clearSession = catchAsync(async (req, res) => {
 });
 
 const sendMessage = catchAsync(async (req, res) => {
-  const { phone, message } = req.body;
+  const { phone, message, templateCategory, templateParams } = req.body;
   if (!phone || !message) throw new ApiError(httpStatus.BAD_REQUEST, 'phone and message are required');
   await assertConnected(req);
-  await messagingService.sendText({
+  // Routes through messagingService.sendMessage (not sendText) so a send outside Meta's 24h
+  // customer-service window fails fast with a clear reason — or falls back to an approved
+  // template when the caller supplies templateCategory — instead of the Cloud API silently
+  // accepting the free-form text and rejecting it asynchronously via webhook (error 131047).
+  await messagingService.sendMessage({
     organizationId: req.organizationId,
     branchId: req.branchId,
     phone,
     text: message,
+    templateCategory,
+    templateParams,
     source: 'api',
     sentBy: req.user?.id,
   });

@@ -52,6 +52,35 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       category: 'UTILITY',
       bodyText: 'Hi {{1}}, your order #{{2}} status: {{3}}. Thank you for shopping with us!',
     },
+    {
+      name: 'payment_reminder',
+      internalCategory: 'payment_reminder',
+      category: 'UTILITY',
+      bodyText: 'Dear {{1}}, this is a reminder that you have an outstanding balance of Rs {{2}} with us. Please make the payment at your earliest convenience.',
+    },
+    {
+      // Sent to a customer right after we record a payment from them.
+      name: 'payment_received',
+      internalCategory: 'payment_received',
+      category: 'UTILITY',
+      bodyText: 'Dear {{1}}, we have received a payment of Rs {{2}} from you. Your remaining balance is Rs {{3}}. Thank you!',
+    },
+    {
+      // Sent to a supplier right after we record a payment to them.
+      name: 'payment_made',
+      internalCategory: 'payment_made',
+      category: 'UTILITY',
+      bodyText: 'Dear {{1}}, we have made a payment of Rs {{2}} to you. Remaining balance: Rs {{3}}. Thank you for your services!',
+    },
+    {
+      // Sent to a supplier when a new purchase order is created — {{3}} carries the
+      // flattened "Product A x10, Product B x5" item summary (Meta templates can't loop
+      // over an array, so the line items are joined into a single variable).
+      name: 'purchase_order',
+      internalCategory: 'purchase_order',
+      category: 'UTILITY',
+      bodyText: 'Hi {{1}}, we have created purchase order #{{2}} with you. Items: {{3}}. Please confirm availability. Thank you!',
+    },
   ],
   [TEMPLATE_GROUPS.GENERAL]: [
     {
@@ -59,6 +88,18 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       internalCategory: 'payment_reminder',
       category: 'UTILITY',
       bodyText: 'Hi {{1}}, your payment of Rs {{2}} for {{3}} is due.',
+    },
+    {
+      name: 'payment_received',
+      internalCategory: 'payment_received',
+      category: 'UTILITY',
+      bodyText: 'Dear {{1}}, we have received a payment of Rs {{2}} from you. Your remaining balance is Rs {{3}}. Thank you!',
+    },
+    {
+      name: 'payment_made',
+      internalCategory: 'payment_made',
+      category: 'UTILITY',
+      bodyText: 'Dear {{1}}, we have made a payment of Rs {{2}} to you. Remaining balance: Rs {{3}}. Thank you for your services!',
     },
   ],
 };
