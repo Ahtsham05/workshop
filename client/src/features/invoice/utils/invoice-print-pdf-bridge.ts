@@ -86,9 +86,12 @@ async function buildPdfFromChunks(chunks: HTMLElement[]): Promise<Blob> {
  * should read as a flat printed page, not a screenshot of a preview widget.
  */
 function injectFlatPageStyle(host: HTMLElement): void {
+  // Scoped to #invoice-print-root only — a bare `body` selector here would leak into the
+  // real app document, since <style> tags aren't confined to the hidden `host` subtree
+  // they're appended under; they apply document-wide regardless of DOM position.
   const style = document.createElement('style')
   style.textContent = `
-    body, #invoice-print-root {
+    #invoice-print-root {
       max-width: none !important;
       margin: 0 !important;
       box-shadow: none !important;

@@ -22,14 +22,18 @@ async function blobToBase64(blob: Blob): Promise<string> {
  *
  * The generator's background/padding/font/RTL-direction rules are written against the `body`
  * selector, but the capture only ever mounts `#invoice-print-root` (there's no real `<body>`
- * in this fragment) — so `body {` rules are mirrored onto `#invoice-print-root` too, otherwise
- * that whole layer of styling silently no-ops against an element it never matches.
+ * in this fragment) — so every `body {` selector is rewritten to target `#invoice-print-root`
+ * instead. This must be a *replacement*, not an addition: this HTML gets injected into the
+ * live opener document (see `buildInvoicePdfInOpener`), which has a real `<body>` — keeping
+ * `body` in the selector list (e.g. `body, #invoice-print-root {`) would apply the invoice's
+ * own direction/text-align/margin rules to the actual app body, visibly mirroring the whole
+ * app to RTL for as long as the PDF capture runs.
  */
 function extractPrintRootHtml(fullHtml: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(fullHtml, 'text/html')
   const styles = Array.from(doc.querySelectorAll('style'))
-    .map((s) => `<style>${s.innerHTML.replace(/\bbody(\s*\{)/g, 'body, #invoice-print-root$1')}</style>`)
+    .map((s) => `<style>${s.innerHTML.replace(/\bbody(\s*\{)/g, '#invoice-print-root$1')}</style>`)
     .join('\n')
   const root = doc.getElementById('invoice-print-root')
   if (root) return styles + root.outerHTML
