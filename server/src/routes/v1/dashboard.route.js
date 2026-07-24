@@ -30,6 +30,22 @@ router
   .route('/recent-activities')
   .get(auth('viewDashboard'), dashboardController.getRecentActivities);
 
+router
+  .route('/products-by-category')
+  .get(auth('viewDashboard'), dashboardController.getProductsByCategory);
+
+router
+  .route('/products-by-brand')
+  .get(auth('viewDashboard'), dashboardController.getProductsByBrand);
+
+router
+  .route('/category-products/:categoryId')
+  .get(auth('viewDashboard'), dashboardController.getCategoryProducts);
+
+router
+  .route('/brand-products/:brandId')
+  .get(auth('viewDashboard'), dashboardController.getBrandProducts);
+
 module.exports = router;
 
 /**

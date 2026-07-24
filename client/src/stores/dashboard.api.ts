@@ -155,10 +155,50 @@ export interface RecentActivity {
   status: string
 }
 
+export interface CategoryProductData {
+  categoryId?: string
+  categoryName: string
+  totalQuantity: number
+  totalRevenue: number
+  totalCost: number
+  profit: number
+  productCount: number
+  margin: number
+}
+
+export interface BrandProductData {
+  brandId?: string
+  brandName: string
+  brandLogo?: { url: string; publicId: string }
+  totalQuantity: number
+  totalRevenue: number
+  totalCost: number
+  profit: number
+  productCount: number
+  hasImeiProducts: boolean
+  margin: number
+}
+
+export interface ProductDetail {
+  invoiceId: string
+  invoiceNo: string
+  invoiceDate: string
+  customerName: string
+  productId: string
+  productName: string
+  productImage?: { url: string; publicId: string }
+  quantity: number
+  unitPrice: number
+  revenue: number
+  cost: number
+  profit: number
+  trackImei: boolean
+}
+
 export const dashboardApi = createApi({
   reducerPath: 'dashboardApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities'],
+  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'CategoryProducts', 'BrandProducts'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({
       query: (params) => ({
@@ -199,6 +239,34 @@ export const dashboardApi = createApi({
       }),
       providesTags: ['RecentActivities'],
     }),
+    getProductsByCategory: builder.query<CategoryProductData[], DashboardDateParams>({
+      query: (params) => ({
+        url: '/products-by-category',
+        params,
+      }),
+      providesTags: ['CategoryProducts'],
+    }),
+    getProductsByBrand: builder.query<BrandProductData[], DashboardDateParams>({
+      query: (params) => ({
+        url: '/products-by-brand',
+        params,
+      }),
+      providesTags: ['BrandProducts'],
+    }),
+    getCategoryProducts: builder.query<ProductDetail[], { categoryId: string } & DashboardDateParams>({
+      query: ({ categoryId, ...params }) => ({
+        url: `/category-products/${categoryId}`,
+        params,
+      }),
+      providesTags: ['CategoryProducts'],
+    }),
+    getBrandProducts: builder.query<ProductDetail[], { brandId: string } & DashboardDateParams>({
+      query: ({ brandId, ...params }) => ({
+        url: `/brand-products/${brandId}`,
+        params,
+      }),
+      providesTags: ['BrandProducts'],
+    }),
   }),
 })
 
@@ -209,4 +277,8 @@ export const {
   useGetTopCustomersQuery,
   useGetLowStockProductsQuery,
   useGetRecentActivitiesQuery,
+  useGetProductsByCategoryQuery,
+  useGetProductsByBrandQuery,
+  useGetCategoryProductsQuery,
+  useGetBrandProductsQuery,
 } = dashboardApi

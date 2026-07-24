@@ -701,6 +701,448 @@ const getRecentActivities = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send(activities);
 });
 
+/**
+ * Get product sales grouped by category
+ * @route GET /v1/dashboard/products-by-category
+ */
+const getProductsByCategory = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  // Aggregate sales data by category
+  const categoryData = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    { $unwind: { path: '$product.categories', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: {
+          categoryId: '$product.categories._id',
+          categoryName: '$product.categories.name',
+        },
+        totalQuantity: { $sum: '$items.quantity' },
+        totalRevenue: { $sum: '$items.subtotal' },
+        totalCost: { $sum: { $multiply: ['$items.quantity', '$product.cost'] } },
+        productCount: { $addToSet: '$items.productId' },
+      }
+    },
+    {
+      $addFields: {
+        profit: { $subtract: ['$totalRevenue', '$totalCost'] },
+        productCount: { $size: '$productCount' },
+      }
+    },
+    { $sort: { totalRevenue: -1 } },
+    {
+      $project: {
+        _id: 0,
+        categoryId: '$_id.categoryId',
+        categoryName: { $ifNull: ['$_id.categoryName', 'Uncategorized'] },
+        totalQuantity: 1,
+        totalRevenue: 1,
+        totalCost: 1,
+        profit: 1,
+        productCount: 1,
+        margin: {
+          $cond: {
+            if: { $gt: ['$totalRevenue', 0] },
+            then: { $multiply: [{ $divide: ['$profit', '$totalRevenue'] }, 100] },
+            else: 0
+          }
+        }
+      }
+    }
+  ]);
+
+  res.status(httpStatus.OK).send(categoryData);
+});
+
+/**
+ * Get product sales grouped by brand
+ * @route GET /v1/dashboard/products-by-brand
+ */
+const getProductsByBrand = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  const brandData = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
+      $lookup: {
+        from: 'brands',
+        localField: 'product.brandId',
+        foreignField: '_id',
+        as: 'brand'
+      }
+    },
+    {
+      $group: {
+        _id: {
+          brandId: '$product.brandId',
+          brandName: { $arrayElemAt: ['$brand.name', 0] },
+          brandLogo: { $arrayElemAt: ['$brand.logo', 0] },
+        },
+        totalQuantity: { $sum: '$items.quantity' },
+        totalRevenue: { $sum: '$items.subtotal' },
+        totalCost: { $sum: { $multiply: ['$items.quantity', '$product.cost'] } },
+        productCount: { $addToSet: '$items.productId' },
+        hasImeiProducts: { $max: '$product.trackImei' },
+      }
+    },
+    {
+      $addFields: {
+        profit: { $subtract: ['$totalRevenue', '$totalCost'] },
+        productCount: { $size: '$productCount' },
+      }
+    },
+    { $sort: { totalRevenue: -1 } },
+    {
+      $project: {
+        _id: 0,
+        brandId: '$_id.brandId',
+        brandName: { $ifNull: ['$_id.brandName', 'No Brand'] },
+        brandLogo: '$_id.brandLogo',
+        totalQuantity: 1,
+        totalRevenue: 1,
+        totalCost: 1,
+        profit: 1,
+        productCount: 1,
+        hasImeiProducts: 1,
+        margin: {
+          $cond: {
+            if: { $gt: ['$totalRevenue', 0] },
+            then: { $multiply: [{ $divide: ['$profit', '$totalRevenue'] }, 100] },
+            else: 0
+          }
+        }
+      }
+    }
+  ]);
+
+  res.status(httpStatus.OK).send(brandData);
+});
+
+/**
+ * Get detailed product breakdown for a specific category
+ * @route GET /v1/dashboard/category-products/:categoryId
+ */
+const getCategoryProducts = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { categoryId } = req.params;
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  const products = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
+      $match: {
+        'product.categories._id': new mongoose.Types.ObjectId(categoryId)
+      }
+    },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customer'
+      }
+    },
+    {
+      $addFields: {
+        customerName: {
+          $cond: {
+            if: { $gt: [{ $size: '$customer' }, 0] },
+            then: { $arrayElemAt: ['$customer.name', 0] },
+            else: 'Walk-in Customer'
+          }
+        },
+        itemCost: { $multiply: ['$items.quantity', '$product.cost'] },
+        calculatedUnitPrice: {
+          $cond: {
+            if: { $and: [{ $gt: ['$items.price', 0] }, { $ne: ['$items.price', null] }] },
+            then: '$items.price',
+            else: {
+              $cond: {
+                if: { $gt: ['$items.quantity', 0] },
+                then: { $divide: ['$items.subtotal', '$items.quantity'] },
+                else: 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        invoiceId: '$_id',
+        invoiceNo: '$invoiceNumber',
+        invoiceDate: 1,
+        customerName: 1,
+        productId: '$items.productId',
+        productName: '$product.name',
+        productImage: '$product.image',
+        quantity: '$items.quantity',
+        unitPrice: '$calculatedUnitPrice',
+        revenue: '$items.subtotal',
+        cost: '$itemCost',
+        profit: { $subtract: ['$items.subtotal', '$itemCost'] },
+        trackImei: '$product.trackImei',
+      }
+    },
+    { $sort: { invoiceDate: -1 } }
+  ]);
+
+  res.status(httpStatus.OK).send(products);
+});
+
+/**
+ * Get detailed product breakdown for a specific brand
+ * @route GET /v1/dashboard/brand-products/:brandId
+ */
+const getBrandProducts = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { brandId } = req.params;
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  const products = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
+      $match: {
+        'product.brandId': new mongoose.Types.ObjectId(brandId)
+      }
+    },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customer'
+      }
+    },
+    {
+      $addFields: {
+        customerName: {
+          $cond: {
+            if: { $gt: [{ $size: '$customer' }, 0] },
+            then: { $arrayElemAt: ['$customer.name', 0] },
+            else: 'Walk-in Customer'
+          }
+        },
+        itemCost: { $multiply: ['$items.quantity', '$product.cost'] },
+        calculatedUnitPrice: {
+          $cond: {
+            if: { $and: [{ $gt: ['$items.price', 0] }, { $ne: ['$items.price', null] }] },
+            then: '$items.price',
+            else: {
+              $cond: {
+                if: { $gt: ['$items.quantity', 0] },
+                then: { $divide: ['$items.subtotal', '$items.quantity'] },
+                else: 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        invoiceId: '$_id',
+        invoiceNo: '$invoiceNumber',
+        invoiceDate: 1,
+        customerName: 1,
+        productId: '$items.productId',
+        productName: '$product.name',
+        productImage: '$product.image',
+        quantity: '$items.quantity',
+        unitPrice: '$calculatedUnitPrice',
+        revenue: '$items.subtotal',
+        cost: '$itemCost',
+        profit: { $subtract: ['$items.subtotal', '$itemCost'] },
+        trackImei: '$product.trackImei',
+      }
+    },
+    { $sort: { invoiceDate: -1 } }
+  ]);
+
+  res.status(httpStatus.OK).send(products);
+});
+
 module.exports = {
   getDashboardStats,
   getRevenueData,
@@ -708,4 +1150,8 @@ module.exports = {
   getTopCustomers,
   getLowStockProducts,
   getRecentActivities,
+  getProductsByCategory,
+  getProductsByBrand,
+  getCategoryProducts,
+  getBrandProducts,
 };
