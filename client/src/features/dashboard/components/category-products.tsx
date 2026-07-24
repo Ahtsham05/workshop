@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Layers, TrendingUp, Package } from 'lucide-react'
+import { Layers, Package } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useGetProductsByCategoryQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'

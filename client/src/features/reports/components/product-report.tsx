@@ -6,11 +6,11 @@ import { useGetProductsByCategoryQuery, useGetProductsByBrandQuery, useGetCatego
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye, Layers, Tag, Package, Smartphone, TrendingUp, AlertCircle, X } from 'lucide-react'
+import { Eye, Layers, Tag, Package, Smartphone, TrendingUp } from 'lucide-react'
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -320,7 +320,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
           <>
             {/* Category Summary */}
             <div className='grid gap-4 md:grid-cols-4'>
-              <Card className={kpiCardClass('blue')}>
+              <Card className={kpiCardClass('sky')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('Total Categories')}</CardTitle>
                 </CardHeader>
@@ -338,7 +338,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('Across all categories')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('green')}>
+              <Card className={kpiCardClass('emerald')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
                 </CardHeader>
@@ -421,7 +421,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               <Button
                                 variant='ghost'
                                 size='sm'
-                                onClick={() => setSelectedCategoryId(category.categoryId)}
+                                onClick={() => setSelectedCategoryId(category.categoryId || null)}
                                 disabled={!category.categoryId}
                               >
                                 <Eye className='h-4 w-4' />
@@ -449,7 +449,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
           <>
             {/* Brand Summary */}
             <div className='grid gap-4 md:grid-cols-4'>
-              <Card className={kpiCardClass('purple')}>
+              <Card className={kpiCardClass('violet')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('Total Brands')}</CardTitle>
                 </CardHeader>
@@ -467,7 +467,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('Across all brands')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('green')}>
+              <Card className={kpiCardClass('emerald')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
                 </CardHeader>
@@ -567,7 +567,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               <Button
                                 variant='ghost'
                                 size='sm'
-                                onClick={() => setSelectedBrandId(brand.brandId)}
+                                onClick={() => setSelectedBrandId(brand.brandId || null)}
                                 disabled={!brand.brandId}
                               >
                                 <Eye className='h-4 w-4' />
@@ -694,7 +694,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                           </div>
                         </CardContent>
                       </Card>
-                      <Card className={kpiCardClass('green')}>
+                      <Card className={kpiCardClass('emerald')}>
                         <CardContent className='pt-3 pb-3'>
                           <div className='text-xs text-muted-foreground'>{t('Total Profit')}</div>
                           <div className='text-lg font-bold text-green-600'>
@@ -818,7 +818,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                           </div>
                         </CardContent>
                       </Card>
-                      <Card className={kpiCardClass('green')}>
+                      <Card className={kpiCardClass('emerald')}>
                         <CardContent className='pt-3 pb-3'>
                           <div className='text-xs text-muted-foreground'>{t('Total Profit')}</div>
                           <div className='text-lg font-bold text-green-600'>

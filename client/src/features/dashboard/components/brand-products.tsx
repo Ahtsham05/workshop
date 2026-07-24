@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tag, Smartphone, Package } from 'lucide-react'
+import { Tag, Smartphone } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useGetProductsByBrandQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Layers, Tag, Package, Smartphone, TrendingUp, DollarSign } from 'lucide-react'
+import { Layers, Tag, Smartphone, TrendingUp, DollarSign } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useGetProductsByCategoryQuery, useGetProductsByBrandQuery } from '@/stores/dashboard.api'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -47,7 +47,6 @@ export function ProductAnalyticsSummary({ dateRange }: Props) {
   const totalCategoryRevenue = categories?.reduce((sum, cat) => sum + cat.totalRevenue, 0) || 0
   const totalBrandRevenue = brands?.reduce((sum, brand) => sum + brand.totalRevenue, 0) || 0
   const totalCategoryProfit = categories?.reduce((sum, cat) => sum + cat.profit, 0) || 0
-  const totalBrandProfit = brands?.reduce((sum, brand) => sum + brand.profit, 0) || 0
   const imeiProductBrands = brands?.filter(b => b.hasImeiProducts).length || 0
 
   const topCategory = categories?.[0]
