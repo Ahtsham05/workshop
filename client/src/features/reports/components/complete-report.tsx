@@ -88,6 +88,12 @@ const MODULE_FLOW_LABELS: Record<string, { in: string; out: string; net: string 
 }
 const DEFAULT_FLOW_LABELS = { in: 'Received', out: 'Paid', net: 'Net' }
 
+// Display-only overrides — "Cash Management" moves money through Jazzcash/Easypaisa/Bank,
+// so the card title should name those channels instead of the generic module name.
+const MODULE_DISPLAY_LABELS: Record<string, string> = {
+  'Cash Management': 'Jazzcash / Easypaisa / Bank',
+}
+
 interface PersonalLedgerEntry {
   transactionType: string
   category?: string
@@ -1512,7 +1518,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                               : 'border-red-500/20 bg-red-50/50 dark:bg-red-950/10',
                           )}
                         >
-                          <p className='text-sm font-semibold'>{row.module}</p>
+                          <p className='text-sm font-semibold'>{MODULE_DISPLAY_LABELS[row.module] ?? row.module}</p>
                           <div className='mt-3 space-y-1.5 text-xs'>
                             <div className='flex items-center justify-between'>
                               <span className='text-muted-foreground'>{isSales ? 'Sale' : labels.in}</span>

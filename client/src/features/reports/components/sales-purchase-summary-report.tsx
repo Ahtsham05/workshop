@@ -1,6 +1,7 @@
-import { forwardRef, useImperativeHandle, useMemo } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -23,7 +24,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { Receipt, ShoppingCart, TrendingUp, Wallet, DollarSign } from 'lucide-react'
+import { Receipt, ShoppingCart, TrendingUp, Wallet, DollarSign, Download, Loader2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -43,6 +44,7 @@ import {
   reportKpiValueClass,
   reportSectionTitleClass,
 } from '../utils/report-styles'
+import { buildReportPdf, downloadBlob } from '../utils/report-pdf'
 
 interface SalesPurchaseSummaryReportProps {
   startDate: string
@@ -82,6 +84,8 @@ export const SalesPurchaseSummaryReport = forwardRef<
   SalesPurchaseSummaryReportProps
 >(({ startDate, endDate }, ref) => {
   const { t } = useLanguage()
+  const reportContentRef = useRef<HTMLDivElement>(null)
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
 
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
@@ -160,6 +164,20 @@ export const SalesPurchaseSummaryReport = forwardRef<
     },
   }))
 
+  const handleDownloadPdf = async () => {
+    if (!reportContentRef.current) return
+    setIsDownloadingPdf(true)
+    try {
+      const blob = await buildReportPdf(reportContentRef.current)
+      downloadBlob(blob, `sales-purchase-summary-${format(new Date(), 'yyyy-MM-dd')}.pdf`)
+    } catch (error) {
+      console.error('Report PDF export error:', error)
+      toast.error(t('Failed to generate PDF'))
+    } finally {
+      setIsDownloadingPdf(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className='space-y-4'>
@@ -179,6 +197,14 @@ export const SalesPurchaseSummaryReport = forwardRef<
 
   return (
     <div className='space-y-6'>
+      <div className='flex justify-end'>
+        <Button variant='outline' size='sm' onClick={handleDownloadPdf} disabled={isDownloadingPdf}>
+          {isDownloadingPdf ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Download className='mr-2 h-4 w-4' />}
+          Download PDF
+        </Button>
+      </div>
+
+      <div ref={reportContentRef} className='space-y-6'>
       <div className={cn(reportKpiGridClass, showCashBookFeatures && 'lg:grid-cols-3 xl:grid-cols-5')}>
         <Card className={kpiCardClass('emerald')}>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
@@ -407,6 +433,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   )
 })
