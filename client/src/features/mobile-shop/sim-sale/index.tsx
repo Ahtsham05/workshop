@@ -62,6 +62,10 @@ import {
   MOBILE_FORM_KEYBOARD_HINT,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 
 type SimSaleFormState = {
@@ -113,6 +117,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const [previewReceipt, setPreviewReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const branchName = useBranchName()
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: walletsData } = useGetWalletsQuery()
@@ -721,6 +726,39 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildSimSaleReceipt(sale))} />
+                              <WhatsAppSendButton
+                                phone={sale.customerMobile}
+                                name={sale.customerName}
+                                message={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: sale.customerName,
+                                  title: `Sim Sale Receipt — Job #${sale.jobNumber}`,
+                                  lines: [
+                                    { label: 'Product', value: sale.productName || '—' },
+                                    { label: 'Sale Amount', value: `Rs. ${Number(sale.saleAmount).toFixed(0)}` },
+                                  ],
+                                })}
+                                templateCategory='sim_sale_receipt'
+                                templateParams={[
+                                  sale.customerName || 'there',
+                                  sale.productName || 'SIM',
+                                  sale.jobNumber,
+                                  Number(sale.saleAmount).toFixed(0),
+                                ]}
+                              />
+                              <SmsSendButton
+                                phone={sale.customerMobile}
+                                name={sale.customerName}
+                                defaultMessage={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: sale.customerName,
+                                  title: `Sim Sale Receipt — Job #${sale.jobNumber}`,
+                                  lines: [
+                                    { label: 'Product', value: sale.productName || '—' },
+                                    { label: 'Sale Amount', value: `Rs. ${Number(sale.saleAmount).toFixed(0)}` },
+                                  ],
+                                })}
+                              />
                               <Button size='icon' variant='ghost' onClick={() => handleEdit(sale)}>
                                 <Pencil className='h-4 w-4' />
                               </Button>

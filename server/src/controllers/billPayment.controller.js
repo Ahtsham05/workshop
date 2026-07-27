@@ -66,6 +66,7 @@ const getBillPaymentReceipt = catchAsync(async (req, res) => {
   const previous = await billPaymentService.getPreviousOutstandingBill(billPayment);
   res.send({
     customerName: billPayment.customerName,
+    customerPhone: billPayment.customerPhone,
     companyName: billPayment.companyName,
     billType: billPayment.billType,
     referenceNumber: billPayment.referenceNumber,

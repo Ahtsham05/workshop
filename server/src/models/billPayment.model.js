@@ -20,6 +20,10 @@ const billPaymentSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    customerPhone: {
+      type: String,
+      trim: true,
+    },
     billType: {
       type: String,
       enum: ['electricity', 'gas', 'water', 'internet', 'other'],

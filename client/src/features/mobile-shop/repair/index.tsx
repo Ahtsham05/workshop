@@ -67,6 +67,10 @@ import {
 } from '@/lib/business-timezone'
 import { generateRepairReceiptHTML, openRepairPrintWindow } from './repair-print-utils'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +182,7 @@ export default function RepairPage() {
   const [deleteStockConfirm, setDeleteStockConfirm] = useState<RepairStockEntry | null>(null)
 
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const branchName = useBranchName()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -774,6 +779,43 @@ export default function RepairPage() {
                           >
                             <Printer className='h-4 w-4' />
                           </Button>
+                          <WhatsAppSendButton
+                            phone={repair.phone}
+                            name={repair.customerName}
+                            message={buildMobileShopReceiptMessage({
+                              branchName,
+                              name: repair.customerName,
+                              title: `${repair.deviceModel} Repair Job`,
+                              lines: [
+                                { label: 'Issue', value: repair.issue },
+                                { label: 'Status', value: cfg?.label || repair.status },
+                                { label: 'Charges', value: fmtAmt(repair.charges) },
+                                { label: 'Balance', value: balance > 0 ? fmtAmt(balance) : 'Paid' },
+                              ],
+                            })}
+                            templateCategory='repair_receipt'
+                            templateParams={[
+                              repair.customerName,
+                              repair.deviceModel,
+                              cfg?.label || repair.status,
+                              balance > 0 ? balance.toLocaleString() : '0',
+                            ]}
+                          />
+                          <SmsSendButton
+                            phone={repair.phone}
+                            name={repair.customerName}
+                            defaultMessage={buildMobileShopReceiptMessage({
+                              branchName,
+                              name: repair.customerName,
+                              title: `${repair.deviceModel} Repair Job`,
+                              lines: [
+                                { label: 'Issue', value: repair.issue },
+                                { label: 'Status', value: cfg?.label || repair.status },
+                                { label: 'Charges', value: fmtAmt(repair.charges) },
+                                { label: 'Balance', value: balance > 0 ? fmtAmt(balance) : 'Paid' },
+                              ],
+                            })}
+                          />
                           <Button
                             size='icon'
                             variant='ghost'

@@ -91,6 +91,10 @@ import { openAgentBillPrintWindow } from './agent-bill-receipt-utils'
 import { UtilityCompanyManager } from './utility-company-manager'
 import { formatBusinessDate, getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
 import { AgentBillDialog } from './agent-bill-dialog'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +107,7 @@ type BillRow = {
   // bill is actually settled late. Saved as this bill's `expectedLateAmount`.
   afterDueAmount: string
   customerName: string
+  customerPhone: string
   referenceNumber: string
 }
 
@@ -180,6 +185,7 @@ const makeEmptyBillRow = (): BillRow => ({
   billAmount: '',
   afterDueAmount: '',
   customerName: '',
+  customerPhone: '',
   referenceNumber: '',
 })
 
@@ -622,6 +628,7 @@ export default function BillPaymentsPage() {
   const currentUser = useSelector((state: RootState) => state.auth.data?.user)
   const isAgentUser = currentUser?.email === AGENT_BILL_EMAIL
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const branchName = useBranchName()
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !currentUser?.organizationId })
   const agentBillReceiptOptions = {
@@ -867,6 +874,7 @@ export default function BillPaymentsPage() {
           // knows the after-due figure instead of the cashier guessing it later.
           expectedLateAmount: parseFloat(row.afterDueAmount) || undefined,
           customerName: row.customerName || undefined,
+          customerPhone: row.customerPhone || undefined,
           referenceNumber: row.referenceNumber || undefined,
         })),
       }
@@ -906,6 +914,7 @@ export default function BillPaymentsPage() {
           billAmount,
           expectedLateAmount: parseFloat(row.afterDueAmount) || undefined,
           customerName: row.customerName || 'Walk-in',
+          customerPhone: row.customerPhone || undefined,
           referenceNumber: row.referenceNumber || oldBill.referenceNumber,
         },
         oldBillId: oldBill.id,
@@ -1136,6 +1145,43 @@ export default function BillPaymentsPage() {
                                 creation, so a receipt is valid immediately, not just
                                 once the shop has settled with the utility company. */}
                             <PrintReceiptButton billId={bill.id} />
+                            <WhatsAppSendButton
+                              phone={bill.customerPhone}
+                              name={bill.customerName}
+                              message={buildMobileShopReceiptMessage({
+                                branchName,
+                                name: bill.customerName,
+                                title: `${bill.companyName} Bill Receipt`,
+                                lines: [
+                                  { label: 'Reference #', value: bill.referenceNumber },
+                                  { label: 'Bill Amount', value: `Rs. ${bill.billAmount.toLocaleString()}` },
+                                  { label: 'Service Charge', value: `Rs. ${bill.serviceCharge.toLocaleString()}` },
+                                  { label: 'Total Paid', value: `Rs. ${bill.totalReceived.toLocaleString()}` },
+                                ],
+                              })}
+                              templateCategory='bill_payment_receipt'
+                              templateParams={[
+                                bill.customerName,
+                                bill.companyName,
+                                bill.totalReceived.toLocaleString(),
+                                bill.referenceNumber,
+                              ]}
+                            />
+                            <SmsSendButton
+                              phone={bill.customerPhone}
+                              name={bill.customerName}
+                              defaultMessage={buildMobileShopReceiptMessage({
+                                branchName,
+                                name: bill.customerName,
+                                title: `${bill.companyName} Bill Receipt`,
+                                lines: [
+                                  { label: 'Reference #', value: bill.referenceNumber },
+                                  { label: 'Bill Amount', value: `Rs. ${bill.billAmount.toLocaleString()}` },
+                                  { label: 'Service Charge', value: `Rs. ${bill.serviceCharge.toLocaleString()}` },
+                                  { label: 'Total Paid', value: `Rs. ${bill.totalReceived.toLocaleString()}` },
+                                ],
+                              })}
+                            />
                             <Button
                               size='icon'
                               variant='ghost'
@@ -1360,6 +1406,41 @@ export default function BillPaymentsPage() {
                               >
                                 <Printer className='h-4 w-4' />
                               </Button>
+                              <WhatsAppSendButton
+                                phone={bill.mobileNo}
+                                name={bill.customerName}
+                                message={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: bill.customerName,
+                                  title: `${bill.companyName || 'Bill'} Receipt`,
+                                  lines: [
+                                    { label: 'Reference #', value: bill.referenceNumber },
+                                    { label: 'Current Bill', value: `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` },
+                                    { label: 'Total', value: `Rs. ${bill.totalAmount.toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                                templateCategory='bill_payment_receipt'
+                                templateParams={[
+                                  bill.customerName,
+                                  bill.companyName || 'Bill',
+                                  bill.totalAmount.toLocaleString('en-PK'),
+                                  bill.referenceNumber,
+                                ]}
+                              />
+                              <SmsSendButton
+                                phone={bill.mobileNo}
+                                name={bill.customerName}
+                                defaultMessage={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: bill.customerName,
+                                  title: `${bill.companyName || 'Bill'} Receipt`,
+                                  lines: [
+                                    { label: 'Reference #', value: bill.referenceNumber },
+                                    { label: 'Current Bill', value: `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` },
+                                    { label: 'Total', value: `Rs. ${bill.totalAmount.toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                              />
                               {/* Delete */}
                               <Button
                                 size='icon'
@@ -1512,6 +1593,7 @@ export default function BillPaymentsPage() {
                         After Due Date (Rs.)
                       </TableHead>
                       <TableHead>Customer Name</TableHead>
+                      <TableHead>Customer Phone</TableHead>
                       <TableHead>Ref #</TableHead>
                       <TableHead className='w-[50px]'></TableHead>
                     </TableRow>
@@ -1553,6 +1635,15 @@ export default function BillPaymentsPage() {
                             value={row.customerName}
                             onChange={(e) => updateBillRow(i, 'customerName', e.target.value)}
                             onKeyDown={(e) => handleBillRowKeyDown(e, 'customer', i)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type='tel'
+                            placeholder='Optional'
+                            className='h-8'
+                            value={row.customerPhone}
+                            onChange={(e) => updateBillRow(i, 'customerPhone', e.target.value)}
                           />
                         </TableCell>
                         <TableCell>

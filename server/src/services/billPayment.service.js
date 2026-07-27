@@ -223,6 +223,7 @@ const createBillPaymentsBatch = async (body) => {
       billAmount: Number(bill.billAmount),
       expectedLateAmount: bill.expectedLateAmount != null ? Number(bill.expectedLateAmount) : undefined,
       customerName: bill.customerName || 'Walk-in',
+      customerPhone: bill.customerPhone,
       referenceNumber: bill.referenceNumber || '-',
     };
     const created = await createBillPayment(singleBody);

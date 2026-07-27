@@ -1,33 +1,31 @@
-const { BUSINESS_TYPES } = require('./businessTypes');
+const { BUSINESS_TYPES, MOBILE_SHOP_BUSINESS_TYPES } = require('./businessTypes');
 
-// Groups the org-wide business types (server/src/config/businessTypes.js) into the three
-// WhatsApp template presets the product asks for, without redefining what a "business type"
-// is app-wide — organization.businessType remains the single source of truth per client.
+// Groups the org-wide business types (server/src/config/businessTypes.js) into the WhatsApp
+// template presets the product asks for, without redefining what a "business type" is
+// app-wide — organization.businessType remains the single source of truth per client.
 const TEMPLATE_GROUPS = {
   SCHOOL: 'school',
   POS_ERP: 'pos_erp',
+  MOBILE_SHOP: 'mobile_shop',
   GENERAL: 'general',
 };
 
-const POS_ERP_BUSINESS_TYPES = ['retail', 'wholesale', 'wholesale_retail', 'mobile_shop', 'pharmacy', 'factory'];
+// mobile_shop gets its own group (below) instead of the generic POS/ERP one, so its
+// receipt templates (bill payment, sim sale, repair, etc.) only ever get suggested to
+// mobile shop orgs — not to every retail/pharmacy/factory org on the generic preset.
+const POS_ERP_BUSINESS_TYPES = ['retail', 'wholesale', 'wholesale_retail', 'pharmacy', 'factory'];
 
 function getTemplateGroup(businessType) {
   if (businessType === 'school' || businessType === 'education') return TEMPLATE_GROUPS.SCHOOL;
+  if (MOBILE_SHOP_BUSINESS_TYPES.includes(businessType)) return TEMPLATE_GROUPS.MOBILE_SHOP;
   if (POS_ERP_BUSINESS_TYPES.includes(businessType)) return TEMPLATE_GROUPS.POS_ERP;
   return TEMPLATE_GROUPS.GENERAL;
 }
 
-const DEFAULT_TEMPLATES_BY_GROUP = {
-  [TEMPLATE_GROUPS.SCHOOL]: [
-    {
-      name: 'fee_reminder',
-      internalCategory: 'fee',
-      category: 'UTILITY',
-      bodyText: 'Dear parent of {{1}}, fee for {{2}} is due on {{3}}. Please pay on time.',
-    },
-  ],
-  [TEMPLATE_GROUPS.POS_ERP]: [
-    {
+// Shared by both POS_ERP and MOBILE_SHOP groups — mobile shops still raise regular
+// invoices/purchase orders/payments alongside their bill-payment/repair/etc. receipts.
+const POS_ERP_TEMPLATES = [
+  {
       name: 'invoice_ready',
       internalCategory: 'invoice',
       category: 'UTILITY',
@@ -92,7 +90,68 @@ const DEFAULT_TEMPLATES_BY_GROUP = {
       language: 'ur',
       bodyText: 'نیا زیر التواء آرڈر #{{1}}۔ اشیاء: {{2}}۔ وصول کنندہ: {{3}}۔ شکریہ!',
     },
+];
+
+// Receipt templates for the Mobile Shop module's own tabs (bill payments, sim sale, load,
+// repair, services, installments) — internalCategory values match the templateCategory
+// props wired into each tab's WhatsAppSendButton.
+const MOBILE_SHOP_TEMPLATES = [
+  {
+    // Covers both the Bills and Agent Bill Records tables — same receipt shape.
+    name: 'bill_payment_receipt',
+    internalCategory: 'bill_payment_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, your {{2}} bill payment of Rs {{3}} (Ref #{{4}}) has been received. Thank you!',
+  },
+  {
+    name: 'service_receipt',
+    internalCategory: 'service_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, your service invoice #{{2}} for Rs {{3}} has been recorded. Thank you for your business!',
+  },
+  {
+    name: 'sim_sale_receipt',
+    internalCategory: 'sim_sale_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, thank you for your {{2}} purchase (Job #{{3}}) worth Rs {{4}}. Visit us again!',
+  },
+  {
+    name: 'load_sale_receipt',
+    internalCategory: 'load_sale_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, Rs {{2}} {{3}} load has been sent to {{4}}. Thank you!',
+  },
+  {
+    name: 'cash_transaction_receipt',
+    internalCategory: 'cash_transaction_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, your {{2}} transaction of Rs {{3}} has been completed. Thank you!',
+  },
+  {
+    name: 'repair_receipt',
+    internalCategory: 'repair_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, your {{2}} repair job is now {{3}}. Balance due: Rs {{4}}. Thank you!',
+  },
+  {
+    name: 'installment_receipt',
+    internalCategory: 'installment_receipt',
+    category: 'UTILITY',
+    bodyText: 'Dear {{1}}, installment plan {{2}} has an outstanding balance of Rs {{3}} ({{4}}/{{5}} paid). Thank you!',
+  },
+];
+
+const DEFAULT_TEMPLATES_BY_GROUP = {
+  [TEMPLATE_GROUPS.SCHOOL]: [
+    {
+      name: 'fee_reminder',
+      internalCategory: 'fee',
+      category: 'UTILITY',
+      bodyText: 'Dear parent of {{1}}, fee for {{2}} is due on {{3}}. Please pay on time.',
+    },
   ],
+  [TEMPLATE_GROUPS.POS_ERP]: POS_ERP_TEMPLATES,
+  [TEMPLATE_GROUPS.MOBILE_SHOP]: [...POS_ERP_TEMPLATES, ...MOBILE_SHOP_TEMPLATES],
   [TEMPLATE_GROUPS.GENERAL]: [
     {
       name: 'payment_reminder',

@@ -62,6 +62,10 @@ import {
 } from '@/lib/mobile-form-keyboard'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -145,6 +149,7 @@ const isDueSoon = (plan: InstallmentPlanRecord) =>
 
 export default function InstallmentsPage() {
   const dispatch = useDispatch<AppDispatch>()
+  const branchName = useBranchName()
   const allProducts = useSelector((s: RootState) => s.product.products)
   const dataFetched = useRef(false)
 
@@ -672,6 +677,52 @@ export default function InstallmentsPage() {
                               + Pay
                             </Button>
                           )}
+                          <WhatsAppSendButton
+                            phone={plan.customerPhone}
+                            name={plan.customerName}
+                            message={buildMobileShopReceiptMessage({
+                              branchName,
+                              name: plan.customerName,
+                              title: `Installment Plan ${plan.planNumber}`,
+                              lines: [
+                                { label: 'Item', value: plan.itemDescription },
+                                { label: 'Total Amount', value: fmt(plan.totalAmount) },
+                                { label: 'Outstanding', value: fmt(plan.totalOutstanding) },
+                                { label: 'Installments Paid', value: `${plan.paidInstallments}/${plan.totalInstallments}` },
+                                {
+                                  label: 'Next Due',
+                                  value: plan.nextDueDate ? format(new Date(plan.nextDueDate), 'dd MMM yyyy') : '',
+                                },
+                              ],
+                            })}
+                            templateCategory='installment_receipt'
+                            templateParams={[
+                              plan.customerName || 'there',
+                              plan.planNumber,
+                              Number(plan.totalOutstanding).toLocaleString(),
+                              String(plan.paidInstallments),
+                              String(plan.totalInstallments),
+                            ]}
+                          />
+                          <SmsSendButton
+                            phone={plan.customerPhone}
+                            name={plan.customerName}
+                            defaultMessage={buildMobileShopReceiptMessage({
+                              branchName,
+                              name: plan.customerName,
+                              title: `Installment Plan ${plan.planNumber}`,
+                              lines: [
+                                { label: 'Item', value: plan.itemDescription },
+                                { label: 'Total Amount', value: fmt(plan.totalAmount) },
+                                { label: 'Outstanding', value: fmt(plan.totalOutstanding) },
+                                { label: 'Installments Paid', value: `${plan.paidInstallments}/${plan.totalInstallments}` },
+                                {
+                                  label: 'Next Due',
+                                  value: plan.nextDueDate ? format(new Date(plan.nextDueDate), 'dd MMM yyyy') : '',
+                                },
+                              ],
+                            })}
+                          />
                           <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => setDetailPlanId(plan.id)}>
                             <ChevronRight className='h-4 w-4' />
                           </Button>
