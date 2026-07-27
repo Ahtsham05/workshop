@@ -80,6 +80,10 @@ export default function Dashboard() {
   const showCashBookFeatures = isCashBookBusiness(businessType)
   const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t)
   const netProfitAfterExpense = (stats?.totalProfit || 0) - (stats?.totalExpenses || 0)
+  const inventorySaleCost = (stats?.totalSales || 0) - (stats?.salesProfit || 0)
+  const simSaleCost = (stats?.totalSimSale || 0) - (stats?.totalSimSaleProfit || 0)
+  const repairCost = (stats?.totalRepairIncome || 0) - (stats?.totalRepairProfit || 0)
+  const totalCost = inventorySaleCost + simSaleCost + repairCost
 
   if (!isPlatformAdmin && !hasExplicitPermission('viewDashboard')) {
     return <Navigate to={getDefaultHomeRoute(user)} replace />
@@ -254,6 +258,15 @@ export default function Dashboard() {
                 isLoading={statsLoading}
                 tone='emerald'
                 link={reportLink('services')}
+              />
+              <StatCard
+                title={t('Total Cost')}
+                value={totalCost}
+                icon={<Package className='h-4 w-4' />}
+                valuePrefix='Rs '
+                description={`${t('Inventory')}: Rs ${inventorySaleCost.toLocaleString()} · ${t('Sim Sale')}: Rs ${simSaleCost.toLocaleString()} · ${t('Repair')}: Rs ${repairCost.toLocaleString()}`}
+                isLoading={statsLoading}
+                tone='orange'
               />
             </>
           )}
