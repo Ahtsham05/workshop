@@ -248,7 +248,7 @@ async function getExpenseSummary(args, ctx) {
   const { startDate, endDate } = resolveDashboardDateRange({ period });
 
   const rows = await Expense.aggregate([
-    { $match: { ...buildAggScope(ctx), ...buildDateMatch('date', startDate, endDate) } },
+    { $match: { ...buildAggScope(ctx), ...buildDateMatch('date', startDate, endDate), isPaid: { $ne: false } } },
     { $group: { _id: '$category', total: { $sum: '$amount' } } },
     { $sort: { total: -1 } },
   ]);

@@ -130,6 +130,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     Expense.find({
       organizationId,
       ...(branchId ? { branchId } : {}),
+      isPaid: { $ne: false },
       ...(startDate || endDate
         ? {
             date: {

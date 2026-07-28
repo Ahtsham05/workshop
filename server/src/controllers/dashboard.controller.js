@@ -138,7 +138,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
       { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
     ]),
     Expense.aggregate([
-      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate) } },
+      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate), isPaid: { $ne: false } } },
       { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
     ]),
   ]);
