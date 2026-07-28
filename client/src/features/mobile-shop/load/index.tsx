@@ -115,6 +115,10 @@ import {
 } from '@/lib/mobile-form-keyboard'
 import { getTimeoutErrorMessage, isRequestTimeoutError } from '@/lib/api-timeout'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 type PurchaseFormState = {
   walletId: string
@@ -567,6 +571,7 @@ function LoadManagementPage({
   const [previewReceipt, setPreviewReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const branchName = useBranchName()
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
@@ -2057,6 +2062,39 @@ function LoadManagementPage({
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildLoadSaleReceipt(t))} />
+                              <WhatsAppSendButton
+                                phone={t.mobileNumber === 'N/A' ? undefined : t.mobileNumber}
+                                name={t.customerName?.trim() || (t as any).customerId?.name}
+                                message={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: t.customerName?.trim() || (t as any).customerId?.name,
+                                  title: `${t.network || 'Load'} Sale Receipt`,
+                                  lines: [
+                                    { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
+                                    { label: 'Amount', value: `Rs. ${Number(t.amount).toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                                templateCategory='load_sale_receipt'
+                                templateParams={[
+                                  t.customerName?.trim() || (t as any).customerId?.name || 'there',
+                                  Number(t.amount).toLocaleString('en-PK'),
+                                  t.network || 'Load',
+                                  t.mobileNumber === 'N/A' ? '-' : t.mobileNumber,
+                                ]}
+                              />
+                              <SmsSendButton
+                                phone={t.mobileNumber === 'N/A' ? undefined : t.mobileNumber}
+                                name={t.customerName?.trim() || (t as any).customerId?.name}
+                                defaultMessage={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: t.customerName?.trim() || (t as any).customerId?.name,
+                                  title: `${t.network || 'Load'} Sale Receipt`,
+                                  lines: [
+                                    { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
+                                    { label: 'Amount', value: `Rs. ${Number(t.amount).toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                              />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
                               <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteTransaction(t.id)}><Trash2 className='h-4 w-4' /></Button>
                             </div>
@@ -2691,6 +2729,36 @@ function LoadManagementPage({
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildCashWithdrawalReceipt(w))} />
+                              <WhatsAppSendButton
+                                phone={w.customerNumber}
+                                name={w.customerName}
+                                message={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: w.customerName,
+                                  title: `${w.transactionType === 'withdrawal' ? cashTxLabel('withdrawal') : cashTxLabel('deposit')} Receipt`,
+                                  lines: [
+                                    { label: 'Amount', value: `Rs. ${Number(w.amount).toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                                templateCategory='cash_transaction_receipt'
+                                templateParams={[
+                                  w.customerName || 'there',
+                                  w.transactionType === 'withdrawal' ? cashTxLabel('withdrawal') : cashTxLabel('deposit'),
+                                  Number(w.amount).toLocaleString('en-PK'),
+                                ]}
+                              />
+                              <SmsSendButton
+                                phone={w.customerNumber}
+                                name={w.customerName}
+                                defaultMessage={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: w.customerName,
+                                  title: `${w.transactionType === 'withdrawal' ? cashTxLabel('withdrawal') : cashTxLabel('deposit')} Receipt`,
+                                  lines: [
+                                    { label: 'Amount', value: `Rs. ${Number(w.amount).toLocaleString('en-PK')}` },
+                                  ],
+                                })}
+                              />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditWithdrawal(w)}><Pencil className='h-4 w-4' /></Button>
                               <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteWithdrawal(w.id)}><Trash2 className='h-4 w-4' /></Button>
                             </div>

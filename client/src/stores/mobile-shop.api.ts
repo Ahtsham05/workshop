@@ -254,6 +254,7 @@ export interface UtilityCompanyRecord {
 export interface BillPaymentRecord {
   id: string
   customerName: string
+  customerPhone?: string
   billType: BillType
   companyId: string
   companyName: string
@@ -277,6 +278,7 @@ export interface BillPaymentRecord {
 
 export interface CreateBillPaymentInput {
   customerName: string
+  customerPhone?: string
   billType: BillType
   companyId: string
   companyName: string
@@ -302,7 +304,13 @@ export interface CreateBillPaymentsBatchInput {
   paymentDate?: string
   paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
-  bills: { billAmount: number; expectedLateAmount?: number; customerName?: string; referenceNumber?: string }[]
+  bills: {
+    billAmount: number
+    expectedLateAmount?: number
+    customerName?: string
+    customerPhone?: string
+    referenceNumber?: string
+  }[]
 }
 
 export interface BillPaymentTrendItem {

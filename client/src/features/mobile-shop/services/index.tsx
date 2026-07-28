@@ -47,6 +47,10 @@ import {
   toBusinessDateTimeLocal,
 } from '@/lib/business-timezone'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
+import { useBranchName } from '@/hooks/use-branch-name'
 
 type CatalogForm = {
   serviceName: string
@@ -119,6 +123,7 @@ export default function ServicesPage({
   const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
+  const branchName = useBranchName()
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: catalogData } = useGetServicesQuery({ page: catalogPage, limit: catalogLimit })
@@ -868,7 +873,39 @@ export default function ServicesPage({
                           <TableCell className='text-right'>{invoice.items?.length ?? 0}</TableCell>
                           <TableCell className='text-right font-semibold'>{fmtAmt(invoice.totalAmount)}</TableCell>
                           <TableCell className='text-right'>
-                            <div className='flex justify-end gap-2'>
+                            <div className='flex justify-end items-center gap-2'>
+                              <WhatsAppSendButton
+                                phone={invoice.customerPhone}
+                                name={invoice.customerName}
+                                message={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: invoice.customerName,
+                                  title: `Service Invoice #${invoice.invoiceNumber}`,
+                                  lines: [
+                                    { label: 'Items', value: String(invoice.items?.length ?? 0) },
+                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount) },
+                                  ],
+                                })}
+                                templateCategory='service_receipt'
+                                templateParams={[
+                                  invoice.customerName || 'there',
+                                  invoice.invoiceNumber,
+                                  Number(invoice.totalAmount).toLocaleString(),
+                                ]}
+                              />
+                              <SmsSendButton
+                                phone={invoice.customerPhone}
+                                name={invoice.customerName}
+                                defaultMessage={buildMobileShopReceiptMessage({
+                                  branchName,
+                                  name: invoice.customerName,
+                                  title: `Service Invoice #${invoice.invoiceNumber}`,
+                                  lines: [
+                                    { label: 'Items', value: String(invoice.items?.length ?? 0) },
+                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount) },
+                                  ],
+                                })}
+                              />
                               <Button variant='outline' size='sm' onClick={() => handleEditInvoice(invoice)}>
                                 Edit
                               </Button>

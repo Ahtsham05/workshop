@@ -166,3 +166,23 @@ export function buildPendingInvoiceItemsSummaryUrdu(items: PendingInvoiceItemsCt
     })
     .join('، ')
 }
+
+type MobileShopReceiptCtx = {
+  branchName?: string | null
+  name?: string
+  title: string
+  lines: Array<{ label: string; value: string }>
+  footer?: string
+}
+
+/** Generic label/value receipt message shared by the Mobile Shop tabs (bill payments,
+ * services, sim sale, load, repair, installments) instead of a dedicated builder per tab. */
+export function buildMobileShopReceiptMessage({ branchName, name, title, lines, footer }: MobileShopReceiptCtx) {
+  const h = heading(branchName)
+  const greeting = name ? `Dear ${name},\n\n` : ''
+  const body = lines
+    .filter((l) => l.value !== undefined && l.value !== null && l.value !== '')
+    .map(({ label, value }) => `${label}: ${value}`)
+    .join('\n')
+  return `${h}\n${greeting}${title}\n\n${body}\n\n${footer || 'Thank you for your business!'}`
+}

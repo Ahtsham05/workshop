@@ -6,6 +6,7 @@ const PAYMENT_METHODS = ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'];
 const createBillPayment = {
   body: Joi.object().keys({
     customerName: Joi.string().required(),
+    customerPhone: Joi.string().allow(''),
     billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other').required(),
     companyId: Joi.string().custom(objectId).required(),
     companyName: Joi.string().required(),
@@ -48,6 +49,7 @@ const updateBillPayment = {
   body: Joi.object()
     .keys({
       customerName: Joi.string(),
+      customerPhone: Joi.string().allow(''),
       billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other'),
       companyId: Joi.string().custom(objectId),
       companyName: Joi.string(),
@@ -111,6 +113,7 @@ const createBillPaymentsBatch = {
           billAmount: Joi.number().min(0.01).required(),
           expectedLateAmount: Joi.number().min(0),
           customerName: Joi.string().allow('').default(''),
+          customerPhone: Joi.string().allow(''),
           referenceNumber: Joi.string().allow('').default(''),
         })
       )
@@ -124,6 +127,7 @@ const settleCombinedBill = {
     newBill: Joi.object()
       .keys({
         customerName: Joi.string().required(),
+        customerPhone: Joi.string().allow(''),
         billType: Joi.string().valid('electricity', 'gas', 'water', 'internet', 'other').required(),
         companyId: Joi.string().custom(objectId).required(),
         companyName: Joi.string().required(),
