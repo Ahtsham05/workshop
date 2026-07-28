@@ -146,6 +146,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [categorySearchQuery, setCategorySearchQuery] = useState('')
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
   const [imeiDraft, setImeiDraft] = useState('')
@@ -366,19 +367,20 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         return
       }
     }
-    if (isEdit) {
-      const productId = currentRow?.id || currentRow?._id
-      await dispatch(updateProduct({ ...values, _id: productId })).then(async () => {
-        toast.success(t('product_updated_successfully'))
-        if (values.hasVariants && draftVariants.length > 0) {
-          await createPendingVariants(productId)
-        }
-        setFetch?.((prev: any) => !prev)
-        dispatch(imeiApi.util.invalidateTags(['Imei']))
-        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
-      })
-    } else {
-      try {
+    setIsSubmitting(true)
+    try {
+      if (isEdit) {
+        const productId = currentRow?.id || currentRow?._id
+        await dispatch(updateProduct({ ...values, _id: productId })).then(async () => {
+          toast.success(t('product_updated_successfully'))
+          if (values.hasVariants && draftVariants.length > 0) {
+            await createPendingVariants(productId)
+          }
+          setFetch?.((prev: any) => !prev)
+          dispatch(imeiApi.util.invalidateTags(['Imei']))
+          dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
+        })
+      } else {
         const created = await dispatch(addProduct(values)).unwrap()
         toast.success(t('product_created_successfully'))
         if (values.hasVariants && draftVariants.length > 0) {
@@ -387,12 +389,14 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         setFetch?.((prev: any) => !prev)
         dispatch(imeiApi.util.invalidateTags(['Imei']))
         onCreated?.(created)
-      } catch {
-        return
       }
+      form.reset()
+      onOpenChange(false)
+    } catch {
+      return
+    } finally {
+      setIsSubmitting(false)
     }
-    form.reset()
-    onOpenChange(false)
   }
 
 
@@ -1302,8 +1306,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
           </Form>
         </div>
         <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4'>
-          <Button type='submit' form='user-form'>
-            {t('save_changes')}
+          <Button type='submit' form='user-form' disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

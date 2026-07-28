@@ -3,7 +3,7 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -112,6 +112,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
   }, [open, isEdit, defaultName, form])
 
   const dispatch = useDispatch<AppDispatch>()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const { picture, idCardFront, idCardBack, ...rest } = values
@@ -128,23 +129,26 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
           ...(idCardFront ? { idCardFront } : {}),
           ...(idCardBack ? { idCardBack } : {}),
         }
-    if (isEdit) {
-      await dispatch(updateSupplier({ ...payload, _id: currentRow?.id })).then(() => {
-        toast.success(t('supplier_updated_success'))
-        setFetch?.((prev: any) => !prev)
-      })
-    } else {
-      try {
+    setIsSubmitting(true)
+    try {
+      if (isEdit) {
+        await dispatch(updateSupplier({ ...payload, _id: currentRow?.id })).then(() => {
+          toast.success(t('supplier_updated_success'))
+          setFetch?.((prev: any) => !prev)
+        })
+      } else {
         const created = await dispatch(addSupplier(payload)).unwrap()
         toast.success(t('supplier_created_success'))
         setFetch?.((prev: any) => !prev)
         onCreated?.(created)
-      } catch {
-        return
       }
+      form.reset()
+      onOpenChange(false)
+    } catch {
+      return
+    } finally {
+      setIsSubmitting(false)
     }
-    form.reset()
-    onOpenChange(false)
   }
 
   return (
@@ -354,8 +358,8 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
           </Form>
         </div>
         <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80'>
-          <Button type='submit' form='supplier-form'>
-            {t('save_changes')}
+          <Button type='submit' form='supplier-form' disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -29,7 +29,7 @@ import { AppDispatch } from '@/stores/store'
 import { addCustomer, updateCustomer } from '@/stores/customer.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { EntityFormSection } from '@/components/entity-form-section'
 
 const imageRefSchema = z
@@ -95,6 +95,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
   }, [open, isEdit, defaultName, form])
 
   const dispatch = useDispatch<AppDispatch>()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Auto-copy phone to WhatsApp field
   useEffect(() => {
@@ -121,16 +122,17 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           ...(idCardFront ? { idCardFront } : {}),
           ...(idCardBack ? { idCardBack } : {}),
         }
-    if (isEdit) {
-      const updated = await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).unwrap()
-      toast.success(
-        updated?.offlinePending
-          ? 'Customer updated offline — will sync when you are back online'
-          : t('customer_updated_success'),
-      )
-      setFetch?.((prev: any) => !prev)
-    } else {
-      try {
+    setIsSubmitting(true)
+    try {
+      if (isEdit) {
+        const updated = await dispatch(updateCustomer({ ...payload, _id: currentRow?.id })).unwrap()
+        toast.success(
+          updated?.offlinePending
+            ? 'Customer updated offline — will sync when you are back online'
+            : t('customer_updated_success'),
+        )
+        setFetch?.((prev: any) => !prev)
+      } else {
         const created = await dispatch(addCustomer(payload)).unwrap()
         toast.success(
           created?.offlinePending
@@ -139,12 +141,14 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         )
         setFetch?.((prev: any) => !prev)
         onCreated?.(created)
-      } catch {
-        return
       }
+      form.reset()
+      onOpenChange(false)
+    } catch {
+      return
+    } finally {
+      setIsSubmitting(false)
     }
-    form.reset()
-    onOpenChange(false)
   }
   
   return (
@@ -353,8 +357,8 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           </Form>
         </div>
         <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80'>
-          <Button type='submit' form='customer-form'>
-            {t('save_changes')}
+          <Button type='submit' form='customer-form' disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>
