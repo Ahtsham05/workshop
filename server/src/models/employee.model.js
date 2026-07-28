@@ -49,7 +49,6 @@ const employeeSchema = mongoose.Schema(
       type: String,
       required: false,
       trim: true,
-      sparse: true,
     },
     dateOfBirth: {
       type: Date,
@@ -178,7 +177,13 @@ employeeSchema.virtual('fullName').get(function () {
 // Index for better query performance
 employeeSchema.index({ organizationId: 1, branchId: 1, employeeId: 1 }, { unique: true });
 employeeSchema.index({ organizationId: 1, branchId: 1, email: 1 }, { unique: true });
-employeeSchema.index({ organizationId: 1, branchId: 1, cnic: 1 }, { unique: true, sparse: true });
+// Sparse alone only skips docs where cnic is absent — it still enforces uniqueness
+// across docs where cnic is stored as "" (blank field from the form), which caused
+// every employee without a CNIC to collide. Partial filter excludes blanks too.
+employeeSchema.index(
+  { organizationId: 1, branchId: 1, cnic: 1 },
+  { unique: true, partialFilterExpression: { cnic: { $type: 'string', $ne: '' } } }
+);
 employeeSchema.index({ department: 1 });
 employeeSchema.index({ employmentStatus: 1 });
 

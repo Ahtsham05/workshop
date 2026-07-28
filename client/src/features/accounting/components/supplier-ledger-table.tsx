@@ -52,8 +52,8 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                 <TableRow>
                   <TableHead>{t('Supplier Name')}</TableHead>
                   <TableHead>{t('Balance')}</TableHead>
-                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
+                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Last Transaction')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
                 </TableRow>
@@ -78,6 +78,15 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                     <TableCell className={getBalanceColor(supplier.balance)}>
                       Rs{formatBalance(supplier.balance)}
                     </TableCell>
+                    <TableCell>
+                      {supplier.balance > 0 ? (
+                        <Badge variant='destructive'>{t('Payable')}</Badge>
+                      ) : supplier.balance < 0 ? (
+                        <Badge variant='default' className='bg-green-600'>{t('Receivable')}</Badge>
+                      ) : (
+                        <Badge variant='secondary'>{t('Settled')}</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className='text-gray-600 text-sm'>
                       <div className='flex items-center gap-1'>
                         <span>{supplier.phone || '-'}</span>
@@ -97,15 +106,6 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                           </>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {supplier.balance > 0 ? (
-                        <Badge variant='destructive'>{t('Payable')}</Badge>
-                      ) : supplier.balance < 0 ? (
-                        <Badge variant='default' className='bg-green-600'>{t('Receivable')}</Badge>
-                      ) : (
-                        <Badge variant='secondary'>{t('Settled')}</Badge>
-                      )}
                     </TableCell>
                     <TableCell className='text-gray-500 text-sm'>
                       {supplier.lastTransactionDate

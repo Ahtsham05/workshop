@@ -9,9 +9,13 @@ import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
+import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
 
 export const useCustomerColumns = (): ColumnDef<Customer>[] => {
   const { t } = useLanguage()
+  const branchName = useBranchName()
 
   return [
     {
@@ -52,6 +56,19 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
       enableHiding: true,
     },
     {
+      accessorKey: 'balance',
+      header: ({ column }) => <DataTableColumnHeader column={column} title='balance' />,
+      cell: ({ row }) => {
+        const { label, amount, className } = formatCustomerBalanceDisplay(Number(row.original.balance ?? 0), t)
+        return (
+          <div className='flex items-center gap-2'>
+            <span className={`font-medium tabular-nums ${className}`}>{amount}</span>
+            <span className='text-xs text-muted-foreground'>{label}</span>
+          </div>
+        )
+      },
+    },
+    {
       accessorKey: 'email',
       header: ({ column }) => <DataTableColumnHeader column={column} title='email' />,
       cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('email')}</LongText>,
@@ -72,8 +89,17 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
         return (
           <div className='flex items-center gap-1'>
             <span className='text-sm'>{whatsapp || phone}</span>
-            <WhatsAppSendButton phone={phone} whatsapp={whatsapp} name={row.original.name} />
-            <SmsSendButton phone={phone} name={row.original.name} />
+            <WhatsAppSendButton
+              phone={phone}
+              whatsapp={whatsapp}
+              name={row.original.name}
+              message={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+            />
+            <SmsSendButton
+              phone={phone}
+              name={row.original.name}
+              defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+            />
           </div>
         )
       },

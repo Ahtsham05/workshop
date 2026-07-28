@@ -31,7 +31,7 @@ export function DataTableColumnHeader<TData, TValue>({
   const isUrdu = language === 'ur';
   
   if (!column.getCanSort()) {
-    return <div className={cn(className, isUrdu && 'text-left')}>{title}</div>
+    return <div className={cn(className, isUrdu && 'text-left')}>{t(title)}</div>
   }
 
   return (
@@ -46,7 +46,7 @@ export function DataTableColumnHeader<TData, TValue>({
               isUrdu ? '-mr-3' : '-ml-3'
             )}
           >
-            <span>{title}</span>
+            <span>{t(title)}</span>
             {column.getIsSorted() === 'desc' ? (
               <ArrowDownIcon className={isUrdu ? 'mr-2 h-4 w-4' : 'ml-2 h-4 w-4'} />
             ) : column.getIsSorted() === 'asc' ? (

@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function CustomersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: Props) {
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(currentRow.name)
   const dispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
 

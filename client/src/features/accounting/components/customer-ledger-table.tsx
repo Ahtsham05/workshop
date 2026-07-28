@@ -52,8 +52,8 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                 <TableRow>
                   <TableHead>{t('Customer Name')}</TableHead>
                   <TableHead>{t('Balance')}</TableHead>
-                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
+                  <TableHead>{t('Phone')}</TableHead>
                   <TableHead>{t('Last Transaction')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
                 </TableRow>
@@ -78,6 +78,15 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                     <TableCell className={getBalanceColor(customer.balance)}>
                       Rs{formatBalance(customer.balance)}
                     </TableCell>
+                    <TableCell>
+                      {customer.balance > 0 ? (
+                        <Badge variant='destructive'>{t('Receivable')}</Badge>
+                      ) : customer.balance < 0 ? (
+                        <Badge variant='default' className='bg-green-600'>{t('Payable')}</Badge>
+                      ) : (
+                        <Badge variant='secondary'>{t('Settled')}</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className='text-gray-600 text-sm'>
                       <div className='flex items-center gap-1'>
                         <span>{customer.phone || '-'}</span>
@@ -97,15 +106,6 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                           </>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {customer.balance > 0 ? (
-                        <Badge variant='destructive'>{t('Receivable')}</Badge>
-                      ) : customer.balance < 0 ? (
-                        <Badge variant='default' className='bg-green-600'>{t('Payable')}</Badge>
-                      ) : (
-                        <Badge variant='secondary'>{t('Settled')}</Badge>
-                      )}
                     </TableCell>
                     <TableCell className='text-gray-500 text-sm'>
                       {customer.lastTransactionDate
