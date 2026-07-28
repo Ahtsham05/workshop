@@ -1518,22 +1518,22 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                               : 'border-red-500/20 bg-red-50/50 dark:bg-red-950/10',
                           )}
                         >
-                          <p className='text-sm font-semibold'>{MODULE_DISPLAY_LABELS[row.module] ?? row.module}</p>
-                          <div className='mt-3 space-y-1.5 text-xs'>
+                          <p className='text-base font-semibold'>{MODULE_DISPLAY_LABELS[row.module] ?? row.module}</p>
+                          <div className='mt-3 space-y-2 text-sm'>
                             <div className='flex items-center justify-between'>
                               <span className='text-muted-foreground'>{isSales ? 'Sale' : labels.in}</span>
-                              <span className='font-medium text-green-600'>{row.income > 0 ? fmt(row.income) : '—'}</span>
+                              <span className='font-semibold text-green-600'>{row.income > 0 ? fmt(row.income) : '—'}</span>
                             </div>
                             <div className='flex items-center justify-between'>
                               <span className='text-muted-foreground'>{isSales ? 'Total Cost' : labels.out}</span>
-                              <span className='font-medium text-red-600'>
+                              <span className='font-semibold text-red-600'>
                                 {isSales ? (totalCost > 0 ? fmt(totalCost) : '—') : row.expense > 0 ? fmt(row.expense) : '—'}
                               </span>
                             </div>
                           </div>
                           <div className='mt-3 flex items-center justify-between border-t pt-2'>
-                            <span className='text-xs font-medium text-muted-foreground'>{isSales ? 'Profit' : labels.net}</span>
-                            <span className={cn('text-base font-bold', net < 0 ? 'text-red-600' : 'text-green-600')}>
+                            <span className='text-sm font-medium text-muted-foreground'>{isSales ? 'Profit' : labels.net}</span>
+                            <span className={cn('text-xl font-bold', net < 0 ? 'text-red-600' : 'text-green-600')}>
                               {net < 0 ? '-' : '+'}{fmt(Math.abs(net))}
                             </span>
                           </div>
@@ -1542,43 +1542,43 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                     })}
                     {cashCreditSummary.creditSales > 0 && (
                       <div className='rounded-xl border-2 border-amber-500/20 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/10'>
-                        <p className='text-sm font-semibold'>Credit Sales</p>
-                        <div className='mt-3 space-y-1.5 text-xs'>
+                        <p className='text-base font-semibold'>Credit Sales</p>
+                        <div className='mt-3 space-y-2 text-sm'>
                           <div className='flex items-center justify-between'>
                             <span className='text-muted-foreground'>Given on Credit</span>
-                            <span className='font-medium'>{fmt(cashCreditSummary.creditSales)}</span>
+                            <span className='font-semibold'>{fmt(cashCreditSummary.creditSales)}</span>
                           </div>
                           <div className='flex items-center justify-between'>
                             <span className='text-muted-foreground'>Collected</span>
-                            <span className='font-medium text-green-600'>
+                            <span className='font-semibold text-green-600'>
                               {fmt(cashCreditSummary.creditSales - cashCreditSummary.creditSalesBalance)}
                             </span>
                           </div>
                         </div>
                         <div className='mt-3 flex items-center justify-between border-t pt-2'>
-                          <span className='text-xs font-medium text-muted-foreground'>Still Owed by Customers</span>
-                          <span className='text-base font-bold text-amber-600'>{fmt(cashCreditSummary.creditSalesBalance)}</span>
+                          <span className='text-sm font-medium text-muted-foreground'>Still Owed by Customers</span>
+                          <span className='text-xl font-bold text-amber-600'>{fmt(cashCreditSummary.creditSalesBalance)}</span>
                         </div>
                       </div>
                     )}
                     {cashCreditSummary.creditPurchases > 0 && (
                       <div className='rounded-xl border-2 border-amber-500/20 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/10'>
-                        <p className='text-sm font-semibold'>Credit Purchases</p>
-                        <div className='mt-3 space-y-1.5 text-xs'>
+                        <p className='text-base font-semibold'>Credit Purchases</p>
+                        <div className='mt-3 space-y-2 text-sm'>
                           <div className='flex items-center justify-between'>
                             <span className='text-muted-foreground'>Taken on Credit</span>
-                            <span className='font-medium'>{fmt(cashCreditSummary.creditPurchases)}</span>
+                            <span className='font-semibold'>{fmt(cashCreditSummary.creditPurchases)}</span>
                           </div>
                           <div className='flex items-center justify-between'>
                             <span className='text-muted-foreground'>Paid</span>
-                            <span className='font-medium text-green-600'>
+                            <span className='font-semibold text-green-600'>
                               {fmt(cashCreditSummary.creditPurchases - cashCreditSummary.creditPurchaseBalance)}
                             </span>
                           </div>
                         </div>
                         <div className='mt-3 flex items-center justify-between border-t pt-2'>
-                          <span className='text-xs font-medium text-muted-foreground'>Still Owed to Suppliers</span>
-                          <span className='text-base font-bold text-amber-600'>{fmt(cashCreditSummary.creditPurchaseBalance)}</span>
+                          <span className='text-sm font-medium text-muted-foreground'>Still Owed to Suppliers</span>
+                          <span className='text-xl font-bold text-amber-600'>{fmt(cashCreditSummary.creditPurchaseBalance)}</span>
                         </div>
                       </div>
                     )}
@@ -1588,20 +1588,20 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                         moduleSummaryTotal >= 0 ? 'border-primary/40 bg-primary/5' : 'border-red-500/40 bg-red-50 dark:bg-red-950/20',
                       )}
                     >
-                      <p className='text-sm font-semibold'>Grand Total</p>
-                      <div className='mt-3 space-y-1.5 text-xs'>
+                      <p className='text-base font-semibold'>Grand Total</p>
+                      <div className='mt-3 space-y-2 text-sm'>
                         <div className='flex items-center justify-between'>
                           <span className='text-muted-foreground'>Total In</span>
-                          <span className='font-medium text-green-600'>{fmt(moduleSummaryTotalIn)}</span>
+                          <span className='font-semibold text-green-600'>{fmt(moduleSummaryTotalIn)}</span>
                         </div>
                         <div className='flex items-center justify-between'>
                           <span className='text-muted-foreground'>Total Out</span>
-                          <span className='font-medium text-red-600'>{fmt(moduleSummaryTotalOut)}</span>
+                          <span className='font-semibold text-red-600'>{fmt(moduleSummaryTotalOut)}</span>
                         </div>
                       </div>
                       <div className='mt-3 flex items-center justify-between border-t pt-2'>
-                        <span className='text-xs font-medium text-muted-foreground'>Net</span>
-                        <span className={cn('text-base font-bold', moduleSummaryTotal < 0 ? 'text-red-600' : 'text-green-600')}>
+                        <span className='text-sm font-medium text-muted-foreground'>Net</span>
+                        <span className={cn('text-xl font-bold', moduleSummaryTotal < 0 ? 'text-red-600' : 'text-green-600')}>
                           {moduleSummaryTotal < 0 ? '-' : '+'}{fmt(Math.abs(moduleSummaryTotal))}
                         </span>
                       </div>
