@@ -58,10 +58,16 @@ const createEmployee = async (employeeBody) => {
   if (employeeBody.cnic && await Employee.findOne({ ...tenantFilter, cnic: employeeBody.cnic })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'CNIC already registered');
   }
-  
+
   // Clean up invalid ObjectIds (for mock data compatibility)
   const cleanedBody = { ...employeeBody };
-  
+
+  // Store a blank CNIC as "not provided" rather than "", so it stays excluded
+  // from the unique cnic index instead of colliding with other blank employees.
+  if (cleanedBody.cnic === '') {
+    delete cleanedBody.cnic;
+  }
+
   // If shift is not a valid ObjectId, remove it
   if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
     delete cleanedBody.shift;
@@ -195,7 +201,14 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
   
   // Clean up invalid ObjectIds (for mock data compatibility)
   const cleanedBody = { ...updateBody };
-  
+
+  // Store a blank CNIC as "not provided" rather than "", so it stays excluded
+  // from the unique cnic index instead of colliding with other blank employees.
+  if (cleanedBody.cnic === '') {
+    cleanedBody.cnic = undefined;
+    employee.cnic = undefined;
+  }
+
   // If shift is not a valid ObjectId, remove it
   if (cleanedBody.shift && !cleanedBody.shift.match(/^[0-9a-fA-F]{24}$/)) {
     delete cleanedBody.shift;

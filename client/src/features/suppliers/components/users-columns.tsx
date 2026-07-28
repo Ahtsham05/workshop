@@ -9,10 +9,13 @@ import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
 
 export function useSupplierColumns() {
   const { t, language } = useLanguage()
   const isUrdu = language === 'ur'
+  const branchName = useBranchName()
 
   const selectColumn: ColumnDef<Supplier> = {
     id: 'select',
@@ -76,8 +79,17 @@ export function useSupplierColumns() {
       return (
         <div className='flex items-center gap-1'>
           <span className='text-sm'>{whatsapp || phone}</span>
-          <WhatsAppSendButton phone={phone} whatsapp={whatsapp} name={row.original.name} />
-          <SmsSendButton phone={phone} name={row.original.name} />
+          <WhatsAppSendButton
+            phone={phone}
+            whatsapp={whatsapp}
+            name={row.original.name}
+            message={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+          />
+          <SmsSendButton
+            phone={phone}
+            name={row.original.name}
+            defaultMessage={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+          />
         </div>
       )
     },
@@ -122,10 +134,10 @@ export function useSupplierColumns() {
     columns = [
       selectColumn,
       nameColumn,
+      balanceColumn,
       emailColumn,
       phoneColumn,
       whatsappColumn,
-      balanceColumn,
       addressColumn,
       actionsColumn,
     ]
@@ -133,10 +145,10 @@ export function useSupplierColumns() {
     columns = [
       selectColumn,
       nameColumn,
+      balanceColumn,
       emailColumn,
       phoneColumn,
       whatsappColumn,
-      balanceColumn,
       addressColumn,
       actionsColumn,
     ]
