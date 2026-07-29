@@ -233,13 +233,18 @@ const SidebarMenuCollapsedDropdown = ({
 }
 
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
+  const [hrefPath] = href.split('?')
+  const itemUrl = item.url ?? ''
+  const [itemPath, itemQuery] = itemUrl.split('?')
+
+  // Items that target a specific query string (e.g. a sidebar sub-link
+  // pointing at one tab of a shared page) must match that query exactly,
+  // otherwise every sibling sharing the same base path would light up together.
+  if (itemQuery) return href === itemUrl
+
   return (
-    href === item.url || // exact match including query string
-    href.split('?')[0] === item.url || // base path matches (no query)
-    href === item.url?.split('?')[0] || // item url without query matches full href
+    hrefPath === itemPath ||
     !!item?.items?.filter((i) => i.url === href).length || // if child nav is active
-    (mainNav &&
-      href.split('/')[1] !== '' &&
-      href.split('/')[1] === item?.url?.split('/')[1])
+    (mainNav && hrefPath.split('/')[1] !== '' && hrefPath.split('/')[1] === itemPath.split('/')[1])
   )
 }

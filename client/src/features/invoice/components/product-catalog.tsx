@@ -179,7 +179,7 @@ export function ProductCatalog({
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               onKeyPress={handleSearchKeyPress}
-              className={`pl-10 pr-20 ${isBarcodeMode ? 'border-blue-500 bg-blue-50' : ''}`}
+              className={`pl-10 pr-20 ${isBarcodeMode ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : ''}`}
             />
             <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
               <VoiceInputButton 
@@ -224,8 +224,8 @@ export function ProductCatalog({
           </div>
 
           {isBarcodeMode && (
-            <div className='bg-blue-50 border border-blue-200 rounded-lg p-3'>
-              <p className='text-sm text-blue-700 flex items-center gap-2'>
+            <div className='bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3'>
+              <p className='text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2'>
                 <Scan className='h-4 w-4' />
                 {t('barcode_mode_active')} - {t('press_enter_to_search')}
               </p>
@@ -254,7 +254,7 @@ export function ProductCatalog({
                         className='w-8 h-8 rounded object-cover'
                       />
                     ) : (
-                      <div className='w-8 h-8 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
+                      <div className='w-8 h-8 rounded bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center'>
                         <Package className='h-4 w-4 text-gray-400' />
                       </div>
                     )}
@@ -338,15 +338,15 @@ export function ProductCatalog({
                           }
                         }}
                         className={showImages
-                          ? `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white ${
+                          ? `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-card ${
                               getDisplayStock(product) > 0
                                 ? 'hover:shadow-sm cursor-pointer'
-                                : 'opacity-60 cursor-not-allowed bg-gray-50'
+                                : 'opacity-60 cursor-not-allowed bg-muted'
                             }`
                           : `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors ${
                               getDisplayStock(product) > 0
                                 ? 'hover:bg-muted/30 cursor-pointer'
-                                : 'opacity-60 cursor-not-allowed bg-gray-50'
+                                : 'opacity-60 cursor-not-allowed bg-muted'
                             }`
                         }
                       >
@@ -360,7 +360,7 @@ export function ProductCatalog({
                                 className='w-full h-full object-cover'
                               />
                             ) : (
-                              <div className='w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
+                              <div className='w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center'>
                                 <Package className='h-8 w-8 text-gray-400' />
                               </div>
                             )}
@@ -459,7 +459,7 @@ export function ProductCatalog({
                                 currentPrice: product.price
                               })
                             }}
-                            className={`${showImages ? 'w-full mt-1' : ''} flex items-center justify-center gap-1 p-1.5 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors text-xs`}
+                            className={`${showImages ? 'w-full mt-1' : ''} flex items-center justify-center gap-1 p-1.5 rounded border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 transition-colors text-xs`}
                             title={t('view_history')}
                           >
                             <History className="h-3 w-3" />

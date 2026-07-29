@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { ProductDetailDialog } from './product-detail-dialog'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
-import { cn } from '@/lib/utils'
+import LongText from '@/components/long-text'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface ProductReportProps {
@@ -280,7 +280,9 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                       const label = reportEntityName(language, product.productName, product.productNameUrdu)
                       return (
                       <TableRow key={product._id}>
-                        <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>{label}</TableCell>
+                        <TableCell className='font-medium max-w-[220px]'>
+                          <LongText className={reportEntityNameClass(language, label)}>{label}</LongText>
+                        </TableCell>
                         <TableCell className='text-right'>{product.totalQuantitySold} {product.unit || 'pcs'}</TableCell>
                         <TableCell className='text-right'>{formatCurrency(product.totalRevenue)}</TableCell>
                         <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>

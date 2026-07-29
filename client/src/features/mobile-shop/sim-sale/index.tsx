@@ -707,7 +707,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                         <TableRow key={sale.id}>
                           <TableCell className='font-medium'>#{sale.jobNumber}</TableCell>
                           <TableCell>{format(new Date(sale.date), 'dd-MM-yyyy')}</TableCell>
-                          <TableCell>{sale.productName || '—'}</TableCell>
+                          <TableCell className='max-w-[180px] truncate' title={sale.productName || undefined}>{sale.productName || '—'}</TableCell>
                           <TableCell>{sale.walletType || '—'}</TableCell>
                           <TableCell>
                             <div className='font-medium'>{sale.customerName || '—'}</div>

@@ -506,7 +506,7 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                 <TableBody>
                   {selectedReturn.items.map((item, i) => (
                     <TableRow key={i}>
-                      <TableCell>{item.name}</TableCell>
+                      <TableCell className='max-w-[220px] truncate' title={item.name}>{item.name}</TableCell>
                       <TableCell>{item.quantity}</TableCell>
                       <TableCell>
                         PKR {(item.costPrice ?? 0).toLocaleString()}

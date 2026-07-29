@@ -377,7 +377,7 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                 <TableBody>
                   {selectedReturn.items.map((item, i) => (
                     <TableRow key={i}>
-                      <TableCell>{item.name}</TableCell>
+                      <TableCell className='max-w-[220px] truncate' title={item.name}>{item.name}</TableCell>
                       <TableCell>{item.quantity}</TableCell>
                       <TableCell>PKR {(item.price ?? 0).toLocaleString()}</TableCell>
                       <TableCell>PKR {item.total.toLocaleString()}</TableCell>

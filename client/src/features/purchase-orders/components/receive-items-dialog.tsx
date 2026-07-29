@@ -798,9 +798,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                   )}
                   {fullyReceivedAlready ? (
                     <div className='flex items-center gap-2 px-2.5 py-2 text-xs text-emerald-700'>
-                      <Package className='h-3.5 w-3.5' />
-                      <span className='font-medium'>{r.productName}</span>
-                      <span className='text-muted-foreground'>· Fully received</span>
+                      <Package className='h-3.5 w-3.5 shrink-0' />
+                      <span className='min-w-0 truncate font-medium' title={r.productName}>{r.productName}</span>
+                      <span className='shrink-0 text-muted-foreground'>· Fully received</span>
                     </div>
                   ) : null}
                 </div>

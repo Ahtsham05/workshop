@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -198,17 +198,31 @@ export const sidebarData: SidebarData = {
         },
         {
           title: 'Accounts',
-          url: '/accounting',
           icon: IconChecklist,
           permission: 'viewAccounting',
           excludeBusinessTypes: ['school', 'restaurant'],
+          items: [
+            { title: 'Dashboard', url: '/accounting?tab=dashboard' as never, icon: IconLayoutDashboard },
+            { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash },
+            { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers },
+            { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding },
+            { title: 'Recurring', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent },
+            { title: 'My Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard },
+          ],
         },
         {
           title: 'Accounts System',
-          url: '/school/accounts',
           icon: IconCash,
           permission: 'viewAccountsSystem',
           excludeBusinessTypes: ['school', 'restaurant'],
+          items: [
+            { title: 'Dashboard', url: '/school/accounts?tab=dashboard' as never, icon: IconLayoutDashboard },
+            { title: 'Chart of Accounts', url: '/school/accounts?tab=coa' as never, icon: BookOpen },
+            { title: 'Journal Entries', url: '/school/accounts?tab=journal' as never, icon: FileText },
+            { title: 'Bank & Cash', url: '/school/accounts?tab=bank' as never, icon: Landmark },
+            { title: 'Budgets', url: '/school/accounts?tab=budget' as never, icon: PiggyBank },
+            { title: 'Financial Statements', url: '/school/accounts?tab=statements' as never, icon: BarChart3 },
+          ],
         },
         {
           title: 'Cash Book',
@@ -932,10 +946,34 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: 'Reports',
-          url: '/reports',
           icon: IconLockAccess,
           permission: 'viewReports',
           excludeBusinessTypes: ['school', 'restaurant'],
+          items: [
+            { title: 'Activities Report', url: '/reports?tab=activities' as never, icon: IconHistory },
+            { title: 'Summary Report', url: '/reports?tab=summary' as never, icon: IconReportAnalytics },
+            { title: 'Final Report', url: '/reports?tab=complete' as never, icon: BarChart3, businessTypes: ['mobile_shop'] },
+            { title: 'Sales Report', url: '/reports?tab=sales' as never, icon: ShoppingCart },
+            { title: 'Purchases Report', url: '/reports?tab=purchases' as never, icon: Receipt },
+            { title: 'Products Report', url: '/reports?tab=products' as never, icon: IconCategory },
+            { title: 'Customers Report', url: '/reports?tab=customers' as never, icon: IconUsers },
+            { title: 'Suppliers Report', url: '/reports?tab=suppliers' as never, icon: IconBuilding },
+            { title: 'Expenses Report', url: '/reports?tab=expenses' as never, icon: IconCash },
+            { title: 'Inventory Report', url: '/reports?tab=inventory' as never, icon: IconPackages },
+            { title: 'Batch & Expiry Report', url: '/reports?tab=batch-expiry' as never, icon: IconClock },
+            { title: 'Tax Report', url: '/reports?tab=tax' as never, icon: IconClipboardCheck },
+            { title: 'Sales Returns Report', url: '/reports?tab=sales-returns' as never, icon: IconRefresh },
+            { title: 'Purchase Returns Report', url: '/reports?tab=purchase-returns' as never, icon: IconTransfer },
+            { title: 'Load Report', url: '/reports?tab=load' as never, icon: Smartphone, businessTypes: ['mobile_shop'], requiredFeature: 'load' },
+            { title: 'Wallet Report', url: '/reports?tab=my-wallet' as never, icon: WalletCards, requiredFeature: 'wallet' },
+            { title: 'Repair Report', url: '/reports?tab=repair' as never, icon: Wrench, businessTypes: ['mobile_shop'], requiredFeature: 'repair' },
+            { title: 'Services Report', url: '/reports?tab=services' as never, icon: Sparkles, businessTypes: ['mobile_shop'] },
+            { title: 'Bill Payments Report', url: '/reports?tab=bill-payments' as never, icon: QrCode, businessTypes: ['mobile_shop'], requiredFeature: 'bill_payment' },
+            { title: 'Profit Loss Report', url: '/reports?tab=profit-loss' as never, icon: TrendingDown, requiredFeature: 'profit_loss' },
+            { title: 'ROI Report', url: '/reports?tab=roi' as never, icon: BarChart3, requiredFeature: 'roi' },
+            { title: 'Sim Sale Report', url: '/reports?tab=sim-sale' as never, icon: Smartphone, businessTypes: ['mobile_shop'] },
+            { title: 'Installments Report', url: '/reports?tab=installments' as never, icon: IconCalendar, businessTypes: ['mobile_shop'] },
+          ],
         },
         {
           title: 'Barcode Generator',

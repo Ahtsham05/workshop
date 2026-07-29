@@ -151,7 +151,7 @@ export function ProductCatalog({
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               onKeyPress={handleSearchKeyPress}
-              className={`pl-10 pr-20 ${isBarcodeMode ? 'border-blue-500 bg-blue-50' : ''}`}
+              className={`pl-10 pr-20 ${isBarcodeMode ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : ''}`}
             />
             <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
               <VoiceInputButton 
@@ -182,8 +182,8 @@ export function ProductCatalog({
           </div>
 
           {isBarcodeMode && (
-            <div className='bg-blue-50 border border-blue-200 rounded-lg p-3'>
-              <p className='text-sm text-blue-700 flex items-center gap-2'>
+            <div className='bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3'>
+              <p className='text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2'>
                 <Scan className='h-4 w-4' />
                 {t('barcode_mode_active')} - {t('press_enter_to_search')}
               </p>
@@ -212,7 +212,7 @@ export function ProductCatalog({
                         className='w-8 h-8 rounded object-cover'
                       />
                     ) : (
-                      <div className='w-8 h-8 rounded bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
+                      <div className='w-8 h-8 rounded bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center'>
                         <Package className='h-4 w-4 text-gray-400' />
                       </div>
                     )}
@@ -262,7 +262,7 @@ export function ProductCatalog({
                         key={product.variantId || product._id}
                         onClick={() => handleQuickAdd(product, 1)}
                         className={showImages
-                          ? 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-white hover:shadow-sm cursor-pointer'
+                          ? 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-card hover:shadow-sm cursor-pointer'
                           : 'min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors hover:bg-muted/30 cursor-pointer'
                         }
                       >
@@ -276,12 +276,12 @@ export function ProductCatalog({
                                 className='w-full h-full object-cover'
                               />
                             ) : (
-                              <div className='w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center'>
+                              <div className='w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center'>
                                 <Package className='h-8 w-8 text-gray-400' />
                               </div>
                             )}
                             {/* Stock info badge - shows current stock */}
-                            <Badge variant="outline" className='absolute top-1 right-1 text-xs px-1.5 py-0.5 bg-white/90 backdrop-blur-sm'>
+                            <Badge variant="outline" className='absolute top-1 right-1 text-xs px-1.5 py-0.5 bg-card/90 backdrop-blur-sm'>
                               {getDisplayStock(product)}
                             </Badge>
                           </div>
@@ -391,7 +391,7 @@ export function ProductCatalog({
 
                         {/* Stock info badge for list view */}
                         {!showImages && (
-                          <Badge variant="outline" className='text-xs px-1.5 py-0.5 bg-white/90'>
+                          <Badge variant="outline" className='text-xs px-1.5 py-0.5 bg-card/90'>
                             {getDisplayStock(product)}
                           </Badge>
                         )}

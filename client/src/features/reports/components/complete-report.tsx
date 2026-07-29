@@ -773,7 +773,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                           <TableBody>
                             {itemRows.map((row) => (
                               <TableRow key={row._id}>
-                                <TableCell className='font-medium'>{row.productName}</TableCell>
+                                <TableCell className='font-medium max-w-[200px] truncate' title={row.productName}>{row.productName}</TableCell>
                                 <TableCell className='text-right'>{row.totalQuantitySold}</TableCell>
                                 <TableCell className='text-right'>{fmt(row.purchaseAmount)}</TableCell>
                                 <TableCell className='text-right'>{fmt(row.totalRevenue)}</TableCell>
@@ -939,7 +939,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
                     <TableBody>
                       {simSaleProductRows.map((row) => (
                         <TableRow key={row.productName}>
-                          <TableCell className='font-medium'>{row.productName}</TableCell>
+                          <TableCell className='font-medium max-w-[200px] truncate' title={row.productName}>{row.productName}</TableCell>
                           <TableCell className='text-right'>{row.count}</TableCell>
                           <TableCell className='text-right'>{fmt(row.purchaseAmount)}</TableCell>
                           <TableCell className='text-right'>{fmt(row.saleAmount)}</TableCell>

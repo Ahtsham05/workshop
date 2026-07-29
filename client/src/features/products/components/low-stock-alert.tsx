@@ -117,10 +117,10 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
 
   if (lowStockProducts.length === 0 && outOfStockProducts.length === 0) {
     return (
-      <Card className="border-green-200 bg-green-50">
+      <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/20">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-green-700">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
               <Package className="w-5 h-5" />
               <span>{t('all_products_well_stocked')}</span>
             </div>
@@ -135,11 +135,11 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
 
   return (
     <>
-      <Card className="border-orange-200 bg-orange-50">
+      <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               <CardTitle className="text-lg">{t('low_stock_alert')}</CardTitle>
             </div>
             <div className="flex items-center gap-2">
@@ -158,28 +158,28 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
         <CardContent className="space-y-4">
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-3 border border-orange-200">
-              <div className="flex items-center gap-2 text-red-600 mb-1">
+            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 mb-1">
                 <TrendingDown className="w-4 h-4" />
                 <span className="text-xs font-medium">{t('out_of_stock')}</span>
               </div>
-              <div className="text-2xl font-bold">{outOfStockProducts.length}</div>
+              <div className="text-2xl font-bold text-foreground">{outOfStockProducts.length}</div>
             </div>
-            
-            <div className="bg-white rounded-lg p-3 border border-orange-200">
-              <div className="flex items-center gap-2 text-orange-600 mb-1">
+
+            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
+              <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 mb-1">
                 <AlertTriangle className="w-4 h-4" />
                 <span className="text-xs font-medium">{t('critical_stock')}</span>
               </div>
-              <div className="text-2xl font-bold">{criticalStockProducts.length}</div>
+              <div className="text-2xl font-bold text-foreground">{criticalStockProducts.length}</div>
             </div>
-            
-            <div className="bg-white rounded-lg p-3 border border-orange-200">
-              <div className="flex items-center gap-2 text-yellow-600 mb-1">
+
+            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
+              <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
                 <Package className="w-4 h-4" />
                 <span className="text-xs font-medium">{t('low_stock')}</span>
               </div>
-              <div className="text-2xl font-bold">{lowStockProducts.length}</div>
+              <div className="text-2xl font-bold text-foreground">{lowStockProducts.length}</div>
             </div>
           </div>
 
@@ -209,18 +209,18 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
           {criticalStockProducts.length > 0 && (
             <Alert>
               <AlertDescription>
-                <div className="font-semibold mb-2 text-orange-700">{t('critical_stock_products')}:</div>
+                <div className="font-semibold mb-2 text-orange-700 dark:text-orange-400">{t('critical_stock_products')}:</div>
                 <div className="space-y-1">
                   {criticalStockProducts.slice(0, 3).map((product) => (
                     <div key={product._id || product.id} className="flex items-center justify-between">
                       <span className="text-sm">{product.name}</span>
-                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900">
                         {getDisplayStock(product)} {t('left')}
                       </Badge>
                     </div>
                   ))}
                   {criticalStockProducts.length > 3 && (
-                    <div className="text-sm italic text-gray-600">
+                    <div className="text-sm italic text-gray-600 dark:text-gray-400">
                       {`${t('and')} ${criticalStockProducts.length - 3} ${t('more')}...`}
                     </div>
                   )}
@@ -232,7 +232,7 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
           {/* Low Stock Products */}
           {lowStockProducts.length > 0 && criticalStockProducts.length !== lowStockProducts.length && (
             <div>
-              <div className="font-medium text-sm mb-2 text-orange-700">{t('low_stock_products')}:</div>
+              <div className="font-medium text-sm mb-2 text-orange-700 dark:text-orange-400">{t('low_stock_products')}:</div>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {lowStockProducts
                   .filter(p => getDisplayStock(p) > Math.floor(threshold / 2))
@@ -240,15 +240,15 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
                   .map((product) => {
                     const expiry = expiringByProduct.get((product._id || product.id || '').toString())
                     return (
-                      <div key={product._id || product.id} className="flex items-center justify-between bg-white p-2 rounded border border-orange-100">
-                        <span className="text-sm">{product.name}</span>
+                      <div key={product._id || product.id} className="flex items-center justify-between bg-card p-2 rounded border border-orange-100 dark:border-orange-900/40">
+                        <span className="text-sm text-foreground">{product.name}</span>
                         <div className="flex items-center gap-1.5">
                           {expiry && (
-                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900">
                               {t('expires_in_days', { days: daysUntil(expiry) }) || `Expires in ${daysUntil(expiry)}d`}
                             </Badge>
                           )}
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900">
                             {getDisplayStock(product)} {t('left')}
                           </Badge>
                         </div>
@@ -280,12 +280,12 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
                 value={tempThreshold}
                 onChange={(e) => setTempThreshold(parseInt(e.target.value) || 1)}
               />
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {t('alert_when_stock_below_threshold')}
               </p>
             </div>
-            
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/40 rounded-lg">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4" />
                 <span className="text-sm font-medium">{t('enable_notifications')}</span>

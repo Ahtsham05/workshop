@@ -13,6 +13,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
+import LongText from '@/components/long-text'
 
 type ExpiryFilter = 'all' | '30' | '60' | '90' | 'expired'
 
@@ -161,8 +162,8 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
                   const label = reportEntityName(language, r.productName, r.productNameUrdu)
                   return (
                     <TableRow key={r.id}>
-                      <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>
-                        {label}
+                      <TableCell className='font-medium max-w-[200px]'>
+                        <LongText className={reportEntityNameClass(language, label)}>{label}</LongText>
                       </TableCell>
                       <TableCell className='text-muted-foreground text-sm'>{r.variantLabel || '—'}</TableCell>
                       <TableCell className='font-mono text-xs'>{r.batchNumber}</TableCell>

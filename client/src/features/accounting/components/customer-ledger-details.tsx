@@ -218,7 +218,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
                   : ''
                 return (
                 <TableRow key={index}>
-                  <TableCell>{item.name || item.product?.name || item.productName || '-'}</TableCell>
+                  <TableCell className="max-w-[200px] truncate" title={item.name || item.product?.name || item.productName || '-'}>{item.name || item.product?.name || item.productName || '-'}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{variantLabel || '—'}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
                   <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
@@ -348,7 +348,7 @@ function SalesReturnDialogContent({
             {sr.items && sr.items.length > 0 ? (
               sr.items.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell>{item.name || '-'}</TableCell>
+                  <TableCell className="max-w-[200px] truncate" title={item.name || '-'}>{item.name || '-'}</TableCell>
                   <TableCell>{item.quantity ?? 0}</TableCell>
                   <TableCell>Rs{formatCurrency(item.price)}</TableCell>
                   <TableCell className="text-right">Rs{formatCurrency(item.total)}</TableCell>

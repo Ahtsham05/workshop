@@ -274,8 +274,8 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                               key={idx}
                               className='border-b last:border-0 hover:bg-muted/20'
                             >
-                              <td className='px-4 py-3'>
-                                <p className='font-medium leading-tight'>{productName}</p>
+                              <td className='px-4 py-3 max-w-[220px]'>
+                                <p className='truncate font-medium leading-tight' title={productName}>{productName}</p>
                                 <p className='mt-0.5 text-xs text-muted-foreground'>
                                   {item.unit || 'pcs'}
                                 </p>

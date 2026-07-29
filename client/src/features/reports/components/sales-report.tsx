@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
+import LongText from '@/components/long-text'
 
 interface SalesReportProps {
   startDate: string
@@ -575,9 +576,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 colSpan={3}
                                 className='pl-10 text-sm text-muted-foreground py-2'
                               >
-                                <span
+                                <LongText
                                   className={cn(
-                                    'font-medium text-foreground',
+                                    'font-medium text-foreground max-w-[240px]',
                                     reportEntityNameClass(
                                       language,
                                       reportEntityName(language, item.name, item.nameUrdu),
@@ -585,7 +586,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                   )}
                                 >
                                   {reportEntityName(language, item.name, item.nameUrdu)}
-                                </span>
+                                </LongText>
                                 {item.imeis && item.imeis.length > 0 && (
                                   <span className='block text-xs text-muted-foreground'>
                                     IMEI: {item.imeis.join(', ')}
@@ -710,16 +711,15 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       {viewInvoice.items.map((item, idx) => (
                         <TableRow key={idx}>
                           <TableCell className='text-muted-foreground text-sm'>{idx + 1}</TableCell>
-                          <TableCell
-                            className={cn(
-                              'font-medium',
-                              reportEntityNameClass(
+                          <TableCell className='font-medium max-w-[240px]'>
+                            <LongText
+                              className={reportEntityNameClass(
                                 language,
                                 reportEntityName(language, item.name, item.nameUrdu),
-                              ),
-                            )}
-                          >
-                            {reportEntityName(language, item.name, item.nameUrdu)}
+                              )}
+                            >
+                              {reportEntityName(language, item.name, item.nameUrdu)}
+                            </LongText>
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
                                 IMEI: {item.imeis.join(', ')}

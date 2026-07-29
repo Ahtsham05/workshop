@@ -12,9 +12,9 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { kpiCardClass } from '@/lib/stat-card-tones'
-import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { reportEntityName } from '../utils/report-entity-name'
+import { ReportProductNameCell } from './report-product-name-cell'
 import { expiryBadge } from '../utils/expiry-badge'
-import { cn } from '@/lib/utils'
 
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
@@ -147,7 +147,6 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             </TableHeader>
             <TableBody>
               {data?.data?.map((product) => {
-                const label = reportEntityName(language, product.name, product.nameUrdu)
                 const hasBatches = (product.batches?.length || 0) > 0
                 const isOpen = expandedRows.has(product._id)
                 return (
@@ -163,13 +162,18 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                         </Button>
                       )}
                     </TableCell>
-                    <TableCell className={cn('font-medium', reportEntityNameClass(language, label))}>
-                      {label}
-                      {hasBatches && (
-                        <span className='ml-2 text-xs text-muted-foreground'>
-                          ({product.batches!.length} {product.batches!.length === 1 ? 'batch' : 'batches'})
-                        </span>
-                      )}
+                    <TableCell className='font-medium max-w-[220px]'>
+                      <ReportProductNameCell
+                        nameEn={product.name}
+                        nameUrdu={product.nameUrdu}
+                        suffix={
+                          hasBatches && (
+                            <span className='ml-2 shrink-0 text-xs text-muted-foreground'>
+                              ({product.batches!.length} {product.batches!.length === 1 ? 'batch' : 'batches'})
+                            </span>
+                          )
+                        }
+                      />
                     </TableCell>
                     <TableCell>{product.barcode || 'N/A'}</TableCell>
                     <TableCell>{product.category}</TableCell>

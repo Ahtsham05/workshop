@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
+import LongText from '@/components/long-text'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -175,7 +176,9 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
                     const pn = reportEntityName(language, row.productName, row.productNameUrdu)
                     return (
                     <TableRow key={row._id}>
-                      <TableCell className={`font-medium ${reportEntityNameClass(language, pn)}`}>{pn}</TableCell>
+                      <TableCell className='font-medium max-w-[220px]'>
+                        <LongText className={reportEntityNameClass(language, pn)}>{pn}</LongText>
+                      </TableCell>
                       <TableCell className='text-right'>{row.totalQty}</TableCell>
                       <TableCell className='text-right text-blue-600 font-medium'>{fmt(row.totalValue)}</TableCell>
                       <TableCell className='text-right'>
@@ -217,7 +220,9 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
                       <TableRow key={`${row.returnNumber}-${idx}`}>
                         <TableCell className='whitespace-nowrap'>{format(new Date(row.date), 'MMM dd, yyyy')}</TableCell>
                         <TableCell className='font-mono text-xs'>{row.returnNumber}</TableCell>
-                        <TableCell className={cn('font-medium', reportEntityNameClass(language, pn))}>{pn}</TableCell>
+                        <TableCell className='font-medium max-w-[200px]'>
+                          <LongText className={reportEntityNameClass(language, pn)}>{pn}</LongText>
+                        </TableCell>
                         <TableCell className='text-muted-foreground text-sm'>{row.variantLabel || '—'}</TableCell>
                         <TableCell className='font-mono text-xs text-muted-foreground'>{row.batchNumber || '—'}</TableCell>
                         <TableCell>{expiryBadge(row.expiryDate)}</TableCell>

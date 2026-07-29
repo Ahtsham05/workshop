@@ -156,7 +156,7 @@ export default function StockTransfer() {
                   const isDest = branchId(tr.toBranchId) === activeBranchId
                   return (
                     <TableRow key={tr.id}>
-                      <TableCell className='font-medium'>{tr.productName}</TableCell>
+                      <TableCell className='font-medium max-w-[200px] truncate' title={tr.productName}>{tr.productName}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
                       <TableCell className='text-right'>{tr.quantity}</TableCell>

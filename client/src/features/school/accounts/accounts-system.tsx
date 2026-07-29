@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearch } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -75,6 +76,8 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'statements', label: 'Financial Statements', icon: BarChart3 },
 ];
 
+const TAB_KEYS = TABS.map((t) => t.key);
+
 function fmt(n: number | undefined | null) {
   return `PKR ${(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
@@ -131,7 +134,15 @@ function exportToPDF(title: string, headers: string[], rows: string[][], fileNam
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function AccountsSystem() {
-  const [tab, setTab] = useState<TabKey>('dashboard');
+  const search = useSearch({ from: '/_authenticated/school/accounts/' });
+  const initialTab = (search.tab && TAB_KEYS.includes(search.tab as TabKey) ? search.tab : 'dashboard') as TabKey;
+  const [tab, setTab] = useState<TabKey>(initialTab);
+
+  useEffect(() => {
+    if (search.tab && TAB_KEYS.includes(search.tab as TabKey)) {
+      setTab(search.tab as TabKey);
+    }
+  }, [search.tab]);
 
   return (
     <div className="h-full w-full p-4 space-y-5">
