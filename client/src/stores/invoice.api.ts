@@ -4,18 +4,22 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
+import { mobileShopApi } from './mobile-shop.api'
 
 /** Invoice mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
- *  batchApi, so a sale's effect on stock/IMEI status doesn't auto-invalidate the IMEI
- *  picker, the product catalog's stock+batch chips, or the per-variant batch list —
- *  those would otherwise stay stale until a full page reload. Force that refresh
- *  explicitly whenever an invoice is created/updated/deleted/cancelled/converted. */
+ *  batchApi/mobileShopApi, so a sale's effect on stock/IMEI status, or on the cash book
+ *  (invoices post cash-book entries server-side), doesn't auto-invalidate the IMEI
+ *  picker, the product catalog's stock+batch chips, the per-variant batch list, or the
+ *  Cash Book page — those would otherwise stay stale until a full page reload. Force
+ *  that refresh explicitly whenever an invoice is created/updated/deleted/cancelled/
+ *  converted, or paid. */
 const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
+    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -57,6 +61,7 @@ const onInvoiceCreated = async (invoiceData: any, { dispatch, queryFulfilled }: 
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
+    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
     patchPurchaseCatalogStockForSale(dispatch, invoiceData)
   } catch {
     // mutation failed — nothing to invalidate
@@ -169,6 +174,7 @@ export const invoiceApi = createApi({
         body: paymentData,
       }),
       invalidatesTags: ( { id }) => [{ type: 'Invoice', id }],
+      onQueryStarted: invalidateDownstreamCaches,
     }),
 
     // Cancel invoice

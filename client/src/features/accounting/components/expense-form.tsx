@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { useDispatch } from 'react-redux'
+import type { AppDispatch } from '@/stores/store'
+import { mobileShopApi } from '@/stores/mobile-shop.api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +69,7 @@ export function ExpenseForm({
   isEdit = false,
 }: ExpenseFormProps) {
   const { t } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
   const [newCatName, setNewCatName] = useState('')
@@ -230,6 +234,7 @@ export function ExpenseForm({
         await Axios({ ...summery.addExpense, data: payload })
         toast.success(t('Expense created successfully'))
       }
+      dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
       onSave()
     } catch (error: any) {
       toast.error(error?.response?.data?.message || t('Failed to save expense'))

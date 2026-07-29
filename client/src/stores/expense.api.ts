@@ -1,5 +1,18 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
+import { mobileShopApi } from './mobile-shop.api'
+
+/** Paying an expense posts a cash-book entry server-side, but expenseApi is a separate
+ *  RTK Query slice from mobileShopApi (which owns the Cash Book page's cache), so that
+ *  page would otherwise keep showing stale totals until a full reload. */
+const invalidateCashBook = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+  try {
+    await queryFulfilled
+    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 export interface ExpenseRecord {
   id: string
@@ -57,10 +70,12 @@ export const expenseApi = createApi({
     payExpense: builder.mutation<ExpenseRecord, string>({
       query: (expenseId) => ({ url: `/expenses/${expenseId}/pay`, method: 'PATCH' }),
       invalidatesTags: ['Expenses'],
+      onQueryStarted: invalidateCashBook,
     }),
     payExpensesBulk: builder.mutation<PayBulkResult, { referenceId?: string; category?: string; all?: boolean }>({
       query: (body) => ({ url: '/expenses/pay-bulk', method: 'POST', body }),
       invalidatesTags: ['Expenses'],
+      onQueryStarted: invalidateCashBook,
     }),
   }),
 })

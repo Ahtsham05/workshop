@@ -570,7 +570,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
     try {
       const entryId = entry.id || entry._id;
       await Axios.delete(`${summery.deleteSupplierLedgerEntry.url}/${entryId}`);
-      dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard']));
+      dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard', 'CashBook']));
       toast.success(t('Ledger entry deleted successfully'));
       fetchLedgerEntries();
       fetchSupplierBalance();
