@@ -30,6 +30,7 @@ import { Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } fro
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 import { normalizeSuppliersList } from './utils/catalog-helpers';
+import { computeDiscountAmount, type DiscountType } from './utils/discount';
 import {
   clearPurchaseWorkspace,
   savePurchaseWorkspace,
@@ -52,6 +53,11 @@ export interface PurchaseItem {
   stockQuantity?: number;
   purchasePrice: number; // price we bought it at (cost)
   sellingPrice?: number; // price we will sell it at (retail)
+  // Line-level discount (e.g. supplier discounts this one product on the invoice).
+  // Applied on top of quantity * purchasePrice; discountValue is the raw entered
+  // number (Rs or %), resolved via computeDiscountAmount().
+  discountType?: DiscountType;
+  discountValue?: number;
   isManualEntry?: boolean; // flag for manual product selection
   imeis?: string[]; // IMEI/serial numbers received, when product.trackImei is true
   // Real (non-default) variant this line item is for, when product.hasVariants.
@@ -106,6 +112,9 @@ export interface Purchase {
   items: PurchaseItem[];
   subtotal: number;
   total: number;
+  // Overall invoice-level discount, applied on top of any per-item discounts.
+  discountType?: DiscountType;
+  discountValue?: number;
   paidAmount?: number;
   balance?: number;
   paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet';
@@ -144,6 +153,8 @@ const PurchaseInvoicePage = () => {
     items: [createEmptyPurchaseManualItem()],
     subtotal: 0,
     total: 0,
+    discountType: 'fixed',
+    discountValue: 0,
     paidAmount: 0,
     balance: 0,
     paymentType: 'Cash',
@@ -232,6 +243,8 @@ const PurchaseInvoicePage = () => {
       items: [createEmptyPurchaseManualItem()],
       subtotal: 0,
       total: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       paidAmount: 0,
       balance: 0,
       paymentType: 'Cash',
@@ -304,13 +317,20 @@ const PurchaseInvoicePage = () => {
       toast.error(t('nothing_to_hold'));
       return;
     }
-    const purchaseLineTotal = purchase.items.reduce(
+    const grossLineTotal = purchase.items.reduce(
       (sum, item) => sum + item.quantity * (item.purchasePrice || 0),
       0,
     );
+    const itemDiscountTotal = purchase.items.reduce((sum, item) => {
+      const gross = item.quantity * (item.purchasePrice || 0);
+      return sum + computeDiscountAmount(gross, item.discountType, item.discountValue);
+    }, 0);
+    const subtotal = grossLineTotal - itemDiscountTotal;
+    const overallDiscount = computeDiscountAmount(subtotal, purchase.discountType, purchase.discountValue);
+    const purchaseLineTotal = subtotal - overallDiscount;
     const purchaseForHold: Purchase = {
       ...purchase,
-      subtotal: purchaseLineTotal,
+      subtotal,
       total: purchaseLineTotal,
     };
     const supName =
@@ -672,17 +692,49 @@ const PurchaseInvoicePage = () => {
     }));
   }, []);
 
-  // Calculate totals
+  // Update per-item discount (type and/or raw value) — supplier discounting one
+  // specific product line, on top of any overall invoice-level discount.
+  const updateItemDiscount = useCallback(
+    (productId: string, patch: { type?: DiscountType; value?: number }, variantId?: string) => {
+      setPurchase((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => {
+          const itemProductId = item.product.id || (item.product as any)._id;
+          const matches = itemProductId === productId && (item.variantId || undefined) === (variantId || undefined);
+          if (!matches) return item;
+          return {
+            ...item,
+            discountType: patch.type ?? item.discountType ?? 'fixed',
+            discountValue: patch.value ?? item.discountValue ?? 0,
+          };
+        }),
+      }));
+    },
+    [],
+  );
+
+  // Calculate totals — gross line amounts, minus any per-item discounts, gives the
+  // Subtotal; the overall invoice-level discount is then applied on top of that.
   const calculateTotals = useCallback(() => {
-    const subtotal = purchase.items.reduce(
+    const grossSubtotal = purchase.items.reduce(
       (sum, item) => sum + (item.quantity * (item.purchasePrice || 0)),
       0
     );
+    const itemDiscountTotal = purchase.items.reduce((sum, item) => {
+      const gross = item.quantity * (item.purchasePrice || 0);
+      return sum + computeDiscountAmount(gross, item.discountType, item.discountValue);
+    }, 0);
+    const subtotal = grossSubtotal - itemDiscountTotal;
+    const discount = computeDiscountAmount(subtotal, purchase.discountType, purchase.discountValue);
+    const total = subtotal - discount;
     return {
+      grossSubtotal,
+      itemDiscountTotal,
       subtotal,
-      total: subtotal,
+      discount,
+      total,
     };
-  }, [purchase.items]);
+  }, [purchase.items, purchase.discountType, purchase.discountValue]);
 
   // Handle barcode search
   const handleBarcodeSearch = useCallback(
@@ -711,6 +763,8 @@ const PurchaseInvoicePage = () => {
       items: [createEmptyPurchaseManualItem()],
       subtotal: 0,
       total: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       paidAmount: 0,
       balance: 0,
       paymentType: 'Cash',
@@ -732,6 +786,8 @@ const PurchaseInvoicePage = () => {
       items: [createEmptyPurchaseManualItem()],
       subtotal: 0,
       total: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       paidAmount: 0,
       balance: 0,
       paymentType: 'Cash',
@@ -791,6 +847,8 @@ const PurchaseInvoicePage = () => {
           stockQuantity: item.stockQuantity,
           purchasePrice: item.priceAtPurchase,
           sellingPrice: item.sellingPriceAtPurchase || variant?.price || 0,
+          discountType: item.discountType || 'fixed',
+          discountValue: item.discountValue || 0,
           imeis: item.imeis || [],
           batchNumber: item.batchNumber,
           expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : undefined,
@@ -808,6 +866,8 @@ const PurchaseInvoicePage = () => {
         stockQuantity: item.stockQuantity,
         purchasePrice: item.priceAtPurchase, // Map priceAtPurchase to purchasePrice
         sellingPrice: item.sellingPriceAtPurchase || item.product?.price || 0,
+        discountType: item.discountType || 'fixed',
+        discountValue: item.discountValue || 0,
         imeis: item.imeis || [],
       };
     });
@@ -821,6 +881,8 @@ const PurchaseInvoicePage = () => {
       date: purchaseToEdit.purchaseDate || purchaseToEdit.date || new Date().toISOString(),
       paymentType: purchaseToEdit.paymentType || 'Cash', // Ensure paymentType has valid default
       walletType: purchaseToEdit.walletType || undefined,
+      discountType: purchaseToEdit.discountType || 'fixed',
+      discountValue: purchaseToEdit.discountValue || 0,
     });
   }, [purchasableCatalog]);
 
@@ -1025,6 +1087,7 @@ const PurchaseInvoicePage = () => {
               removeFromPurchase={removeFromPurchase}
               updatePurchasePrice={updatePurchasePrice}
               updateSellingPrice={updateSellingPrice}
+              updateItemDiscount={updateItemDiscount}
               calculateTotals={calculateTotals}
               onBackToList={handleBackToList}
               onSaveSuccess={handleSaveSuccess}

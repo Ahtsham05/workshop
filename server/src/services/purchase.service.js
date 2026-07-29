@@ -59,6 +59,35 @@ const getPurchaseVariantId = (item) => {
  * product must be matched/adjusted as separate lines, not conflated. */
 const getPurchaseItemKey = (item) => `${getPurchaseProductId(item)}:${getPurchaseVariantId(item)}`;
 
+/** Sum of all line totals (each already net of its own item-level discount) — the
+ * base the invoice-level discount is spread proportionally across in
+ * resolveItemNetUnitCost. */
+const resolvePurchaseSubtotal = (items) =>
+  (items || []).reduce((sum, item) => {
+    const quantity = Number(item.quantity || 0);
+    const lineTotal = item.total != null ? Number(item.total) : quantity * Number(item.priceAtPurchase || 0);
+    return sum + lineTotal;
+  }, 0);
+
+/**
+ * True per-unit cost after both this line's own discount and its proportional share
+ * of the invoice-level discount — what actually gets recorded as inventory cost
+ * (product.cost, batch costPerUnit, inventory sync unitCost, IMEI purchasePrice), so
+ * margin/ROI/profit reports reflect what was really paid, not the pre-discount price.
+ * `priceAtPurchase` itself is left untouched everywhere else — it's the negotiated
+ * unit price shown on the purchase record/print, unaffected by this allocation.
+ */
+const resolveItemNetUnitCost = (item, purchaseSubtotal, purchaseDiscount) => {
+  const quantity = Number(item.quantity || 0);
+  if (quantity <= 0) return Number(item.priceAtPurchase || 0);
+  const lineTotal = item.total != null ? Number(item.total) : quantity * Number(item.priceAtPurchase || 0);
+  const discount = Number(purchaseDiscount || 0);
+  const shareOfPurchaseDiscount =
+    discount > 0 && purchaseSubtotal > 0 ? (lineTotal / purchaseSubtotal) * discount : 0;
+  const netLineTotal = Math.max(0, lineTotal - shareOfPurchaseDiscount);
+  return netLineTotal / quantity;
+};
+
 const resolvePurchaseLedgerPaymentMethod = (purchase) => {
   const type = String(purchase.paymentType || 'Cash');
   if (type === 'Wallet') {
@@ -212,9 +241,12 @@ const createPurchase = async (purchaseBody) => {
   const purchase = await Purchase.create(normalizedBody);
 
   const supplierDoc = purchase.supplier ? await Supplier.findById(purchase.supplier).select('name') : null;
+  const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
+  const purchaseDiscount = Number(purchase.discount || 0);
 
   // Now, update the stock quantity of each product in the purchase
   for (const item of purchase.items) {
+    const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
     // Real-variant line item — bypasses the legacy Product.stockQuantity path entirely
     // (that field is a fallback-only display value once a product hasVariants; it must
     // never be mutated by variant-specific purchasing). Batch/expiry-tracked variants
@@ -231,7 +263,7 @@ const createPurchase = async (purchaseBody) => {
           await batchService.createBatch(variant._id, {
             batchNumber: item.batchNumber,
             quantity: quantityDelta,
-            costPerUnit: item.priceAtPurchase,
+            costPerUnit: netUnitCost,
             sellingPrice: item.sellingPriceAtPurchase,
             expiryDate: item.expiryDate,
             purchaseId: purchase._id,
@@ -259,9 +291,10 @@ const createPurchase = async (purchaseBody) => {
       // Increase stock in product stock unit (typically pcs)
       product.stockQuantity += conversion.stockQuantity;
 
-      // Update the product's cost price to the latest purchase price
+      // Update the product's cost price to the latest purchase price — net of any
+      // item/invoice discount, since that's what was actually paid per unit.
       if (item.priceAtPurchase > 0) {
-        product.cost = item.priceAtPurchase;
+        product.cost = netUnitCost;
       }
 
       // Update the product's selling price if provided
@@ -279,7 +312,7 @@ const createPurchase = async (purchaseBody) => {
         type: 'purchase',
         refType: 'Purchase',
         refId: purchase._id,
-        unitCost: item.priceAtPurchase,
+        unitCost: netUnitCost,
         createdBy: purchase.createdBy,
       });
 
@@ -291,7 +324,7 @@ const createPurchase = async (purchaseBody) => {
           productName: product.name,
           imeis: item.imeis,
           type: product.trackSerial ? 'serial' : 'imei',
-          purchasePrice: item.priceAtPurchase,
+          purchasePrice: netUnitCost,
           supplierId: purchase.supplier || null,
           supplierName: supplierDoc?.name || '',
           purchaseDate: purchase.purchaseDate,
@@ -417,9 +450,12 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const businessType = await getOrganizationBusinessType(purchase.organizationId);
   const supplierIdForUpdate = updateBody.supplier || originalSupplier;
   const supplierDocForUpdate = supplierIdForUpdate ? await Supplier.findById(supplierIdForUpdate).select('name') : null;
+  const updateSubtotal = resolvePurchaseSubtotal(updateBody.items || purchase.items);
+  const updateDiscount = Number(updateBody.discount ?? purchase.discount ?? 0);
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {
+    const netUnitCost = resolveItemNetUnitCost(updatedItem, updateSubtotal, updateDiscount);
     const updatedItemKey = `${updatedItem.product.toString()}:${updatedItem.variantId ? updatedItem.variantId.toString() : ''}`;
 
     // Find the existing purchase item — matched by (product, variant) so two
@@ -474,9 +510,10 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         updatedItem.conversionFactor = updatedStock.conversionFactor;
         updatedItem.stockQuantity = updatedStock.stockQuantity;
 
-        // Update the product's cost price to the latest purchase price
+        // Update the product's cost price to the latest purchase price — net of any
+        // item/invoice discount, since that's what was actually paid per unit.
         if (updatedItem.priceAtPurchase > 0) {
-          product.cost = updatedItem.priceAtPurchase;
+          product.cost = netUnitCost;
         }
 
         // Update the product's selling price if provided
@@ -494,7 +531,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           type: 'purchase',
           refType: 'Purchase',
           refId: purchase._id,
-          unitCost: updatedItem.priceAtPurchase,
+          unitCost: netUnitCost,
           createdBy: purchase.createdBy,
         });
 
@@ -505,7 +542,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             productName: product.name,
             imeis: updatedItem.imeis || [],
             type: product.trackSerial ? 'serial' : 'imei',
-            purchasePrice: updatedItem.priceAtPurchase,
+            purchasePrice: netUnitCost,
             supplierId: supplierIdForUpdate || null,
             supplierName: supplierDocForUpdate?.name || '',
             purchaseDate: purchase.purchaseDate,
@@ -527,7 +564,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           await batchService.createBatch(variant._id, {
             batchNumber: updatedItem.batchNumber,
             quantity: quantityDelta,
-            costPerUnit: updatedItem.priceAtPurchase,
+            costPerUnit: netUnitCost,
             sellingPrice: updatedItem.sellingPriceAtPurchase,
             expiryDate: updatedItem.expiryDate,
             purchaseId: purchase._id,
@@ -555,9 +592,10 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
         updatedItem.conversionFactor = updatedStock.conversionFactor;
         updatedItem.stockQuantity = updatedStock.stockQuantity;
 
-        // Update the product's cost price to the latest purchase price
+        // Update the product's cost price to the latest purchase price — net of any
+        // item/invoice discount, since that's what was actually paid per unit.
         if (updatedItem.priceAtPurchase > 0) {
-          product.cost = updatedItem.priceAtPurchase;
+          product.cost = netUnitCost;
         }
 
         // Update the product's selling price if provided
@@ -575,7 +613,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           type: 'purchase',
           refType: 'Purchase',
           refId: purchase._id,
-          unitCost: updatedItem.priceAtPurchase,
+          unitCost: netUnitCost,
           createdBy: purchase.createdBy,
         });
 
@@ -586,7 +624,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             productName: product.name,
             imeis: updatedItem.imeis,
             type: product.trackSerial ? 'serial' : 'imei',
-            purchasePrice: updatedItem.priceAtPurchase,
+            purchasePrice: netUnitCost,
             supplierId: supplierIdForUpdate || null,
             supplierName: supplierDocForUpdate?.name || '',
             purchaseDate: purchase.purchaseDate,

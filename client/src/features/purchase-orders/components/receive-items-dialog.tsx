@@ -41,6 +41,7 @@ import { isMobileShopBusiness } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { openPurchasePrintWindow } from '@/utils/purchasePrintUtils'
+import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
 
 type Row = {
   productId: string
@@ -55,6 +56,10 @@ type Row = {
   receivedQuantity: number
   priceAtPurchase: number
   sellingPriceAtPurchase?: number
+  // Prorated from the order line's own discount rate by default (see
+  // buildRowsFromOrder) — editable per-row, same as price/sell price above.
+  discountType?: DiscountType
+  discountValue?: number
   notes?: string
   variantId?: string
   trackBatch?: boolean
@@ -91,6 +96,14 @@ function buildRowsFromOrder(order: PurchaseOrder): Row[] {
     const ordered = Number(it.quantity || 0)
     const alreadyReceived = Number(it.receivedQuantity || 0)
     const remaining = Math.max(0, ordered - alreadyReceived)
+    // Default this row's discount to the order line's own discount *rate* (not its
+    // flat Rs amount) — a receipt can be a partial quantity and/or at a different
+    // actual price than expectedPrice, so the rate is what should carry over.
+    // Expressed as a percentage so it's re-derivable regardless of how much/at what
+    // price is actually received. Mirrors receiveItems in purchaseOrder.service.js.
+    const orderedGross = ordered * Number(it.expectedPrice || 0)
+    const orderLineDiscountAmount = Number(it.discountAmount || 0)
+    const itemDiscountRate = orderedGross > 0 ? orderLineDiscountAmount / orderedGross : 0
     return {
       productId,
       productName,
@@ -108,6 +121,8 @@ function buildRowsFromOrder(order: PurchaseOrder): Row[] {
       sellingPriceAtPurchase: it.expectedSellingPrice
         ? Number(it.expectedSellingPrice)
         : undefined,
+      discountType: 'percentage',
+      discountValue: Math.round(itemDiscountRate * 100 * 100) / 100,
       notes: '',
       variantId,
       trackBatch: variant?.trackBatch,
@@ -225,6 +240,11 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
   const [walletSelectOpen, setWalletSelectOpen] = useState(false)
   const [paidAmount, setPaidAmount] = useState<number>(0)
   const [notes, setNotes] = useState<string>('')
+  // Overall receipt-level discount — defaults to the order's own overall discount
+  // *rate* prorated against however much of the order this receipt actually covers,
+  // same idea as each row's per-line discount default above.
+  const [discountType, setDiscountType] = useState<DiscountType>('percentage')
+  const [discountValue, setDiscountValue] = useState<number>(0)
 
   const branchPrintDetails = useMemo(
     () => ({
@@ -279,6 +299,11 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     setWalletType('')
     setPaidAmount(0)
     setNotes('')
+    const orderSubtotal = Number(order.subtotal || 0)
+    const orderDiscountAmount = Number(order.discount || 0)
+    const overallDiscountRate = orderSubtotal > 0 ? orderDiscountAmount / orderSubtotal : 0
+    setDiscountType('percentage')
+    setDiscountValue(Math.round(overallDiscountRate * 100 * 100) / 100)
   }, [order])
 
   const receivableIndexes = useMemo(
@@ -286,14 +311,30 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     [rows],
   )
 
-  const total = useMemo(
+  const itemDiscountTotal = useMemo(
     () =>
-      rows.reduce(
-        (s, r) => s + Number(r.receivedQuantity || 0) * Number(r.priceAtPurchase || 0),
-        0,
-      ),
+      rows.reduce((s, r) => {
+        const gross = Number(r.receivedQuantity || 0) * Number(r.priceAtPurchase || 0)
+        return s + computeDiscountAmount(gross, r.discountType, r.discountValue)
+      }, 0),
     [rows],
   )
+
+  const subtotal = useMemo(
+    () =>
+      rows.reduce((s, r) => {
+        const gross = Number(r.receivedQuantity || 0) * Number(r.priceAtPurchase || 0)
+        return s + (gross - computeDiscountAmount(gross, r.discountType, r.discountValue))
+      }, 0),
+    [rows],
+  )
+
+  const discountAmount = useMemo(
+    () => computeDiscountAmount(subtotal, discountType, discountValue),
+    [subtotal, discountType, discountValue],
+  )
+
+  const total = Math.max(0, subtotal - discountAmount)
 
   const selectedWallet = useMemo(
     () => wallets.find((wallet) => wallet.type === walletType),
@@ -448,6 +489,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
             : undefined,
           unit: r.unit,
           conversionFactor: r.conversionFactor,
+          discountType: r.discountType || 'fixed',
+          discountValue: Number(r.discountValue || 0),
           notes: r.notes,
           batchNumber: r.batchNumber || undefined,
           expiryDate: r.expiryDate || undefined,
@@ -456,6 +499,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
         paymentType,
         walletType: paymentType === 'Wallet' ? walletType.trim() : undefined,
         paidAmount: Number(paidAmount || 0),
+        discountType,
+        discountValue: Number(discountValue || 0),
         notes,
       }).unwrap()
       toast.success(`Goods received against ${order.orderNumber}`)
@@ -493,6 +538,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     walletType,
     receivedAt,
     paidAmount,
+    discountType,
+    discountValue,
     notes,
     receive,
     onReceived,
@@ -655,7 +702,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
           <div className='space-y-2'>
             {rows.map((r, idx) => {
-              const lineTotal = Number(r.receivedQuantity || 0) * Number(r.priceAtPurchase || 0)
+              const lineGross = Number(r.receivedQuantity || 0) * Number(r.priceAtPurchase || 0)
+              const lineDiscountAmount = computeDiscountAmount(lineGross, r.discountType, r.discountValue)
+              const lineTotal = lineGross - lineDiscountAmount
               const fullyReceivedAlready = r.remaining <= 0
 
               return (
@@ -755,8 +804,39 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                             onEnterAdvance(e, () => focusField(sellInputRefs.current[idx]))
                           }
                           onFocus={(e) => e.target.select()}
+                          className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
+                        />
+                      </div>
+
+                      <span className='text-xs text-muted-foreground'>−</span>
+
+                      <div className='flex items-center overflow-hidden rounded-md border bg-background' title='Discount — defaults to the order line rate, editable'>
+                        <Input
+                          type='text'
+                          inputMode='decimal'
+                          showVoiceInput={false}
+                          value={(r.discountValue || 0) > 0 ? r.discountValue : ''}
+                          onChange={(e) =>
+                            updateRow(idx, {
+                              discountValue: Math.max(0, parseFloat(e.target.value) || 0),
+                            })
+                          }
+                          onFocus={(e) => e.target.select()}
+                          placeholder='0'
                           className='h-7 w-14 border-0 text-sm font-semibold focus-visible:ring-0'
                         />
+                        <button
+                          type='button'
+                          onClick={() =>
+                            updateRow(idx, {
+                              discountType: r.discountType === 'percentage' ? 'fixed' : 'percentage',
+                            })
+                          }
+                          title='Click to switch between Rs and % discount'
+                          className='flex h-7 items-center border-l bg-muted px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+                        >
+                          {r.discountType === 'percentage' ? '%' : 'Rs'}
+                        </button>
                       </div>
 
                       <span className='text-xs text-muted-foreground'>→</span>
@@ -784,13 +864,16 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                           onKeyDown={(e) => onEnterAdvance(e, () => focusNextReceivableQty(idx))}
                           onFocus={(e) => e.target.select()}
                           placeholder='0'
-                          className='h-7 w-14 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
+                          className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
                         />
                       </div>
 
-                      <p className='ml-auto shrink-0 text-sm font-bold tabular-nums'>
-                        Rs{lineTotal.toFixed(2)}
-                      </p>
+                      <div className='ml-auto flex shrink-0 flex-col items-end gap-0'>
+                        {lineDiscountAmount > 0 && (
+                          <span className='text-[10px] leading-none text-muted-foreground line-through'>Rs{lineGross.toFixed(2)}</span>
+                        )}
+                        <p className='text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(2)}</p>
+                      </div>
                     </div>
                   ) : null}
                   {!fullyReceivedAlready && (
@@ -832,6 +915,46 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
               />
             </div>
             <div className='space-y-1.5 rounded-md border bg-muted/40 p-3'>
+              <div className='flex justify-between text-sm'>
+                <span className='text-muted-foreground'>Subtotal</span>
+                <span className='font-medium tabular-nums'>Rs {formatMoney(subtotal)}</span>
+              </div>
+              {itemDiscountTotal > 0 && (
+                <div className='flex justify-between text-sm text-green-600'>
+                  <span>Item discounts</span>
+                  <span className='tabular-nums'>-Rs {formatMoney(itemDiscountTotal)}</span>
+                </div>
+              )}
+              <div className='flex items-center justify-between gap-2 text-sm'>
+                <span className='text-muted-foreground'>Discount</span>
+                <div className='flex items-center overflow-hidden rounded-md border bg-background'>
+                  <Input
+                    type='text'
+                    inputMode='decimal'
+                    showVoiceInput={false}
+                    value={(discountValue || 0) > 0 ? discountValue : ''}
+                    onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
+                    onFocus={(e) => e.target.select()}
+                    placeholder='0'
+                    className='h-7 w-16 border-0 text-right text-sm font-medium focus-visible:ring-0'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setDiscountType((prev) => (prev === 'percentage' ? 'fixed' : 'percentage'))}
+                    title='Click to switch between Rs and % discount'
+                    className='flex h-7 items-center border-l bg-muted px-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+                  >
+                    {discountType === 'percentage' ? '%' : 'Rs'}
+                  </button>
+                </div>
+              </div>
+              {discountAmount > 0 && (
+                <div className='flex justify-between text-sm text-green-600'>
+                  <span>Discount applied</span>
+                  <span className='tabular-nums'>-Rs {formatMoney(discountAmount)}</span>
+                </div>
+              )}
+              <Separator />
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Receipt total</span>
                 <span className='font-medium tabular-nums'>Rs {formatMoney(total)}</span>

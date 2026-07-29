@@ -44,11 +44,29 @@ function resolvePurchasePrintLanguage(
 const resolveUnitPrice = (item: any): number =>
   Number(item?.priceAtPurchase ?? item?.purchasePrice ?? item?.unitPrice ?? 0)
 
+/** Rs value of a line's discount — the resolved backend value when present (saved
+ * purchases), or derived from type/value against the gross line amount otherwise
+ * (printing immediately after save, before the item carries a resolved amount). */
+const resolveItemDiscountAmount = (item: any): number => {
+  if (item?.discountAmount !== undefined && item?.discountAmount !== null) {
+    return Number(item.discountAmount) || 0
+  }
+  const value = Number(item?.discountValue || 0)
+  if (value <= 0) return 0
+  const gross = Number(item?.quantity || 0) * resolveUnitPrice(item)
+  const raw = item?.discountType === 'percentage' ? (gross * value) / 100 : value
+  return Math.min(gross, Math.max(0, raw))
+}
+
 const resolveLineTotal = (item: any): number => {
   const explicitTotal = Number(item?.total ?? item?.subtotal)
   if (!Number.isNaN(explicitTotal) && explicitTotal > 0) return explicitTotal
-  return Number(item?.quantity || 0) * resolveUnitPrice(item)
+  const gross = Number(item?.quantity || 0) * resolveUnitPrice(item)
+  return gross - resolveItemDiscountAmount(item)
 }
+
+/** Rs value of the overall invoice-level discount (applied on top of item discounts). */
+const resolveOverallDiscount = (purchase: any): number => Number(purchase?.discount || 0)
 
 const resolvePaymentType = (purchase: any): string => {
   if (purchase?.paymentType) return purchase.paymentType
@@ -79,6 +97,8 @@ export function generatePurchaseInvoiceHTML(
   const paidAmount = resolvePaidAmount(purchase)
   const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
   const paymentType = resolvePaymentType(purchase)
+  const itemsSubtotal = items.reduce((sum: number, item: any) => sum + resolveLineTotal(item), 0)
+  const overallDiscount = resolveOverallDiscount(purchase)
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
@@ -191,16 +211,17 @@ export function generatePurchaseInvoiceHTML(
       <tbody>
         ${itemsHTML}
         <tr class="total-row-table">
-          <td colspan="2">${labels.total}:</td>
+          <td colspan="2">${labels.subtotal}:</td>
           <td></td>
           <td>${items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0)}</td>
-          <td>${totalAmount.toFixed(2)}</td>
+          <td>${itemsSubtotal.toFixed(2)}</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <div class="totals-section">
+    ${overallDiscount > 0 ? `<div class="total-row"><span>${labels.discount}:</span><span>-${formatCurrency(overallDiscount)}</span></div>` : ''}
     <div class="total-row total-final"><span>${labels.total}:</span><span>${formatCurrency(totalAmount)}</span></div>
   </div>
 
@@ -251,6 +272,8 @@ export function generatePurchaseInvoiceA4HTML(
   const paidAmount = resolvePaidAmount(purchase)
   const balance = Number(purchase?.balance ?? totalAmount - paidAmount)
   const paymentType = resolvePaymentType(purchase)
+  const itemsSubtotal = items.reduce((sum: number, item: any) => sum + resolveLineTotal(item), 0)
+  const overallDiscount = resolveOverallDiscount(purchase)
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
@@ -386,7 +409,8 @@ export function generatePurchaseInvoiceA4HTML(
 
   <div class="totals-wrapper">
     <table class="totals-table">
-      <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${formatCurrency(totalAmount)}</td></tr>
+      <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${formatCurrency(itemsSubtotal)}</td></tr>
+      ${overallDiscount > 0 ? `<tr><td class="total-label">${labels.discount}:</td><td class="total-amount">-${formatCurrency(overallDiscount)}</td></tr>` : ''}
       <tr class="final-total"><td class="total-label">${labels.total}:</td><td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(totalAmount)}</td></tr>
     </table>
   </div>

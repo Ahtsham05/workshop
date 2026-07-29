@@ -39,7 +39,13 @@ const PurchaseSchema = new mongoose.Schema({
       },
       priceAtPurchase: { type: Number, required: true }, // Purchase price of the product
       sellingPriceAtPurchase: { type: Number, min: 0 }, // Selling price set at purchase time
-      total: { type: Number, required: true }, // quantity * priceAtPurchase
+      // Line-level discount (e.g. supplier discounts one product 10% on this invoice).
+      // discountAmount is the resolved Rs value; total is already net of it
+      // (quantity * priceAtPurchase - discountAmount), same as before this field existed.
+      discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+      discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
+      discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
+      total: { type: Number, required: true }, // (quantity * priceAtPurchase) - discountAmount
       imeis: [{ type: String, trim: true }], // IMEI/serial numbers received for this line item, when product.trackImei is true
       // Real (non-default) variant this line item is for, when the product hasVariants.
       // Optional and additive — legacy items with no variantId keep going through the
@@ -52,6 +58,12 @@ const PurchaseSchema = new mongoose.Schema({
     },
   ],
   purchaseDate: { type: Date, default: Date.now },
+  // Overall invoice-level discount (e.g. supplier gives 5% or a flat Rs off the whole
+  // bill), applied on top of any per-item discounts. discount is the resolved Rs value;
+  // totalAmount is already net of it, same as before this field existed.
+  discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+  discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
+  discount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for the whole purchase
   totalAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase
   balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount)

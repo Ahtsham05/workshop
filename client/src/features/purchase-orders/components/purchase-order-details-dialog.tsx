@@ -68,7 +68,9 @@ function getReceiptInvoiceMeta(rcpt: any) {
 
   const totalAmount = (rcpt?.items || []).reduce(
     (sum: number, line: any) =>
-      sum + Number(line.receivedQuantity || 0) * Number(line.priceAtPurchase || 0),
+      sum +
+      Number(line.receivedQuantity || 0) * Number(line.priceAtPurchase || 0) -
+      Number(line.discountAmount || 0),
     0,
   )
   return {
@@ -268,6 +270,8 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                           const ordered = Number(item.quantity || 0)
                           const rec = Number(item.receivedQuantity || 0)
                           const remaining = Math.max(0, ordered - rec)
+                          const itemDiscountAmount = Number(item.discountAmount || 0)
+                          const itemGross = ordered * Number(item.expectedPrice || 0)
 
                           return (
                             <tr
@@ -299,7 +303,17 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                 Rs {formatMoney(item.expectedPrice || 0)}
                               </td>
                               <td className='px-4 py-3 text-right tabular-nums font-semibold'>
+                                {itemDiscountAmount > 0 && (
+                                  <div className='text-xs font-normal text-muted-foreground line-through'>
+                                    Rs {formatMoney(itemGross)}
+                                  </div>
+                                )}
                                 Rs {formatMoney(item.total || 0)}
+                                {itemDiscountAmount > 0 && (
+                                  <div className='text-xs font-normal text-green-600'>
+                                    -Rs {formatMoney(itemDiscountAmount)}
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           )
@@ -428,9 +442,11 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                               (orderItem as any)?.productName ||
                               (typeof line.product === 'object' ? line.product?.name : '') ||
                               'Unknown'
-                            const lineTotal =
+                            const lineDiscount = Number(line.discountAmount || 0)
+                            const lineGross =
                               Number(line.receivedQuantity || 0) *
                               Number(line.priceAtPurchase || 0)
+                            const lineTotal = lineGross - lineDiscount
                             return (
                               <div
                                 key={lineIdx}
@@ -443,7 +459,12 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                 <span className='shrink-0 tabular-nums text-muted-foreground'>
                                   @ Rs {formatMoney(line.priceAtPurchase || 0)}
                                 </span>
-                                <span className='shrink-0 tabular-nums font-medium'>
+                                <span className='shrink-0 text-right tabular-nums font-medium'>
+                                  {lineDiscount > 0 && (
+                                    <span className='block text-xs font-normal text-green-600'>
+                                      -Rs {formatMoney(lineDiscount)}
+                                    </span>
+                                  )}
                                   Rs {formatMoney(lineTotal)}
                                 </span>
                               </div>

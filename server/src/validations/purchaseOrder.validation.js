@@ -12,6 +12,9 @@ const itemSchema = Joi.object().keys({
   conversionFactor: Joi.number().positive().optional(),
   expectedPrice: Joi.number().min(0).required(),
   expectedSellingPrice: Joi.number().min(0).optional(),
+  discountType: Joi.string().valid('fixed', 'percentage').optional(),
+  discountValue: Joi.number().min(0).optional(),
+  discountAmount: Joi.number().min(0).optional(),
   total: Joi.number().min(0).required(),
   notes: Joi.string().allow('').optional(),
 });
@@ -24,6 +27,8 @@ const createPurchaseOrder = {
     orderDate: Joi.date().optional(),
     expectedDeliveryDate: Joi.date().optional().allow(null, ''),
     subtotal: Joi.number().min(0).required(),
+    discountType: Joi.string().valid('fixed', 'percentage').optional(),
+    discountValue: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
     tax: Joi.number().min(0).optional(),
     shippingCost: Joi.number().min(0).optional(),
@@ -45,6 +50,8 @@ const updatePurchaseOrder = {
       orderDate: Joi.date().optional(),
       expectedDeliveryDate: Joi.date().optional().allow(null, ''),
       subtotal: Joi.number().min(0).optional(),
+      discountType: Joi.string().valid('fixed', 'percentage').optional(),
+      discountValue: Joi.number().min(0).optional(),
       discount: Joi.number().min(0).optional(),
       tax: Joi.number().min(0).optional(),
       shippingCost: Joi.number().min(0).optional(),
@@ -111,6 +118,11 @@ const receiveItems = {
       otherwise: Joi.allow('').optional(),
     }),
     paidAmount: Joi.number().min(0).optional(),
+    // Overall discount override for the Purchase this receipt produces — omitted means
+    // auto-prorate the order's own overall discount rate, see receiveItems in
+    // purchaseOrder.service.js.
+    discountType: Joi.string().valid('fixed', 'percentage').optional(),
+    discountValue: Joi.number().min(0).optional(),
     items: Joi.array()
       .items(
         Joi.object().keys({
@@ -121,6 +133,10 @@ const receiveItems = {
           sellingPriceAtPurchase: Joi.number().min(0).optional(),
           unit: Joi.string().allow('').optional(),
           conversionFactor: Joi.number().positive().optional(),
+          // Per-line discount override — omitted means auto-prorate the order line's
+          // own discount rate against however much is actually received.
+          discountType: Joi.string().valid('fixed', 'percentage').optional(),
+          discountValue: Joi.number().min(0).optional(),
           notes: Joi.string().allow('').optional(),
           batchNumber: Joi.string().trim().allow('').optional(),
           expiryDate: Joi.date().optional(),

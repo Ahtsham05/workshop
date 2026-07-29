@@ -30,7 +30,14 @@ const PurchaseOrderItemSchema = new mongoose.Schema(
     conversionFactor: { type: Number, default: 1, min: 0.000001 },
     expectedPrice: { type: Number, required: true, min: 0 }, // expected per-unit purchase price
     expectedSellingPrice: { type: Number, min: 0 }, // optional — what we plan to retail at
-    total: { type: Number, required: true, min: 0 }, // expectedPrice * quantity
+    // Line-level discount (e.g. supplier discounts one product on this order). Mirrors
+    // Purchase's item discount fields exactly — see purchase.model.js — so a receipt's
+    // discount rate can be carried straight across into the Purchase it produces.
+    // discountAmount is the resolved Rs value; total is already net of it.
+    discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+    discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
+    discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
+    total: { type: Number, required: true, min: 0 }, // (expectedPrice * quantity) - discountAmount
     notes: { type: String, trim: true },
   },
   { _id: true }
@@ -51,6 +58,12 @@ const PurchaseOrderReceiptSchema = new mongoose.Schema(
         sellingPriceAtPurchase: { type: Number, min: 0 },
         unit: { type: String },
         conversionFactor: { type: Number, default: 1, min: 0.000001 },
+        // Snapshot of the discount actually applied to the Purchase line this receipt
+        // produced — carried over from the order line's discount rate, see
+        // purchaseOrder.service.js's receiveItems.
+        discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+        discountValue: { type: Number, default: 0, min: 0 },
+        discountAmount: { type: Number, default: 0, min: 0 },
         notes: { type: String, trim: true },
         // Set only when the variant tracks batch/expiry — creates a real Batch on
         // receipt, mirroring Purchase's createPurchase, see
@@ -88,8 +101,13 @@ const PurchaseOrderSchema = new mongoose.Schema(
     orderDate: { type: Date, default: Date.now, required: true },
     expectedDeliveryDate: { type: Date },
 
-    subtotal: { type: Number, required: true, default: 0 },
-    discount: { type: Number, default: 0, min: 0 },
+    subtotal: { type: Number, required: true, default: 0 }, // sum of item totals, i.e. already net of item-level discounts
+    // Overall order-level discount (e.g. supplier gives 5% or a flat Rs off the whole
+    // order), applied on top of any per-item discounts. Mirrors Purchase's overall
+    // discount fields exactly — see purchase.model.js. discount is the resolved Rs value.
+    discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+    discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
+    discount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for the whole order
     tax: { type: Number, default: 0, min: 0 },
     shippingCost: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, required: true, default: 0 }, // subtotal - discount + tax + shippingCost

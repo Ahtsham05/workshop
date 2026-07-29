@@ -4,6 +4,7 @@ const { PurchaseOrder } = require('../models');
 const ApiError = require('../utils/ApiError');
 const purchaseService = require('./purchase.service');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
+const { computeDiscountAmount } = require('../utils/discount');
 
 const POPULATE_PATHS = [
   { path: 'supplier' },
@@ -108,17 +109,34 @@ const generateOrderNumber = async (organizationId) => {
   return `PO-${Date.now()}`;
 };
 
-const calculateTotals = (body) => {
-  const items = Array.isArray(body.items) ? body.items : [];
-  const subtotal = items.reduce(
-    (sum, item) => sum + Number(item.quantity || 0) * Number(item.expectedPrice || 0),
-    0
-  );
-  const discount = Number(body.discount || 0);
+/**
+ * Normalizes order items (resolving each line's discountAmount + net total) and the
+ * overall order totals (subtotal, resolved discount, totalAmount) from raw input.
+ * This is the source of truth for what gets persisted — mirrors the Purchase
+ * invoice's discount model exactly (see purchase.model.js's item/overall discount
+ * fields) but is recomputed server-side rather than trusted from the client, same as
+ * PurchaseOrder has always recalculated its own totals.
+ */
+const resolveOrderTotals = (body) => {
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  const items = rawItems.map((item) => {
+    const gross = Number(item.quantity || 0) * Number(item.expectedPrice || 0);
+    const discountAmount = computeDiscountAmount(gross, item.discountType, item.discountValue);
+    return {
+      ...item,
+      discountType: item.discountType || 'fixed',
+      discountValue: Number(item.discountValue || 0),
+      discountAmount,
+      total: gross - discountAmount,
+    };
+  });
+
+  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const discount = computeDiscountAmount(subtotal, body.discountType, body.discountValue);
   const tax = Number(body.tax || 0);
   const shippingCost = Number(body.shippingCost || 0);
   const totalAmount = Math.max(0, subtotal - discount + tax + shippingCost);
-  return { subtotal, totalAmount };
+  return { items, subtotal, discount, totalAmount };
 };
 
 /**
@@ -127,12 +145,11 @@ const calculateTotals = (body) => {
 const createPurchaseOrder = async (body) => {
   await ensurePurchaseOrderIndexes();
 
-  const totals = calculateTotals(body);
+  const totals = resolveOrderTotals(body);
 
-  const items = (body.items || []).map((item) => ({
+  const items = totals.items.map((item) => ({
     ...item,
     receivedQuantity: 0,
-    total: Number(item.total ?? Number(item.quantity || 0) * Number(item.expectedPrice || 0)),
   }));
 
   const { orderNumber: _ignoredOrderNumber, ...orderBody } = body;
@@ -145,6 +162,9 @@ const createPurchaseOrder = async (body) => {
         items,
         orderNumber,
         subtotal: totals.subtotal,
+        discountType: body.discountType || 'fixed',
+        discountValue: Number(body.discountValue || 0),
+        discount: totals.discount,
         totalAmount: totals.totalAmount,
         status: body.status || 'draft',
       });
@@ -232,24 +252,36 @@ const updatePurchaseOrderById = async (orderId, updateBody) => {
     }
   }
 
-  if (updateBody.items) {
-    const totals = calculateTotals(updateBody);
-    updateBody.subtotal = totals.subtotal;
-    updateBody.totalAmount = totals.totalAmount;
-    updateBody.items = updateBody.items.map((item) => {
-      // Match by (product, variantId) — two different variants of the same product
-      // are different lines and must not be confused with each other.
-      const existing = order.items.find(
-        (it) =>
-          String(it.product) === String(item.product) &&
-          String(it.variantId || '') === String(item.variantId || '')
-      );
-      return {
-        ...item,
-        receivedQuantity: existing ? existing.receivedQuantity : 0,
-        total: Number(item.total ?? Number(item.quantity || 0) * Number(item.expectedPrice || 0)),
-      };
+  // Recompute whenever items or anything discount/tax/shipping-related changed — a
+  // discount-only edit (no item changes) must still re-resolve totalAmount, not just
+  // a full item-list save.
+  const totalsInputFields = ['items', 'discountType', 'discountValue', 'tax', 'shippingCost'];
+  if (totalsInputFields.some((key) => Object.prototype.hasOwnProperty.call(updateBody, key))) {
+    const totals = resolveOrderTotals({
+      items: updateBody.items || order.items,
+      discountType: updateBody.discountType ?? order.discountType,
+      discountValue: updateBody.discountValue ?? order.discountValue,
+      tax: updateBody.tax ?? order.tax,
+      shippingCost: updateBody.shippingCost ?? order.shippingCost,
     });
+    updateBody.subtotal = totals.subtotal;
+    updateBody.discount = totals.discount;
+    updateBody.totalAmount = totals.totalAmount;
+    if (updateBody.items) {
+      updateBody.items = totals.items.map((item) => {
+        // Match by (product, variantId) — two different variants of the same product
+        // are different lines and must not be confused with each other.
+        const existing = order.items.find(
+          (it) =>
+            String(it.product) === String(item.product) &&
+            String(it.variantId || '') === String(item.variantId || '')
+        );
+        return {
+          ...item,
+          receivedQuantity: existing ? existing.receivedQuantity : 0,
+        };
+      });
+    }
   }
 
   Object.assign(order, updateBody);
@@ -385,6 +417,27 @@ const receiveItems = async (orderId, body, ctx) => {
       );
     }
 
+    const receivingGross = Number(receiving) * Number(incoming.priceAtPurchase || 0);
+
+    // Carry the order line's own discount rate across into this receipt — a receipt
+    // can be a partial quantity and/or at a different actual price than expectedPrice,
+    // so we prorate by *rate*, not by copying the order line's flat discountAmount.
+    // An explicit override on the incoming line (discountValue present) wins instead.
+    let itemDiscountType = incoming.discountType;
+    let itemDiscountValue = incoming.discountValue;
+    let itemDiscountAmount;
+    if (itemDiscountValue !== undefined && itemDiscountValue !== null) {
+      itemDiscountType = itemDiscountType || 'fixed';
+      itemDiscountAmount = computeDiscountAmount(receivingGross, itemDiscountType, itemDiscountValue);
+    } else {
+      const orderedGross = Number(orderLine.quantity || 0) * Number(orderLine.expectedPrice || 0);
+      const orderLineDiscountAmount = Number(orderLine.discountAmount || 0);
+      const itemDiscountRate = orderedGross > 0 ? orderLineDiscountAmount / orderedGross : 0;
+      itemDiscountType = 'percentage';
+      itemDiscountValue = itemDiscountRate * 100;
+      itemDiscountAmount = computeDiscountAmount(receivingGross, itemDiscountType, itemDiscountValue);
+    }
+
     purchaseItems.push({
       product: incoming.product,
       variantId: incoming.variantId,
@@ -395,7 +448,10 @@ const receiveItems = async (orderId, body, ctx) => {
       sellingPriceAtPurchase: incoming.sellingPriceAtPurchase
         ? Number(incoming.sellingPriceAtPurchase)
         : undefined,
-      total: Number(receiving) * Number(incoming.priceAtPurchase || 0),
+      discountType: itemDiscountType,
+      discountValue: itemDiscountValue,
+      discountAmount: itemDiscountAmount,
+      total: receivingGross - itemDiscountAmount,
       // Pass through to purchase.service.js's createPurchase, which already creates a
       // real Batch for batch/expiry-tracked variants — see
       // docs/architecture/universal-product-migration.md.
@@ -404,7 +460,27 @@ const receiveItems = async (orderId, body, ctx) => {
     });
   }
 
-  const purchaseTotal = purchaseItems.reduce((sum, it) => sum + Number(it.total || 0), 0);
+  const purchaseSubtotal = purchaseItems.reduce((sum, it) => sum + Number(it.total || 0), 0);
+
+  // Carry the order's overall discount rate across the same way — prorated against
+  // this receipt's own subtotal rather than the full order's, since a receipt may
+  // only cover part of the order. An explicit override on the receipt body wins.
+  let overallDiscountType = body.discountType;
+  let overallDiscountValue = body.discountValue;
+  let overallDiscountAmount;
+  if (overallDiscountValue !== undefined && overallDiscountValue !== null) {
+    overallDiscountType = overallDiscountType || 'fixed';
+    overallDiscountAmount = computeDiscountAmount(purchaseSubtotal, overallDiscountType, overallDiscountValue);
+  } else {
+    const orderSubtotal = Number(order.subtotal || 0);
+    const orderDiscountAmount = Number(order.discount || 0);
+    const overallDiscountRate = orderSubtotal > 0 ? orderDiscountAmount / orderSubtotal : 0;
+    overallDiscountType = 'percentage';
+    overallDiscountValue = overallDiscountRate * 100;
+    overallDiscountAmount = computeDiscountAmount(purchaseSubtotal, overallDiscountType, overallDiscountValue);
+  }
+
+  const purchaseTotal = purchaseSubtotal - overallDiscountAmount;
   const paidAmount = Number(body.paidAmount || 0);
   const paymentType = body.paymentType || 'Cash';
   const walletType = body.walletType;
@@ -420,6 +496,9 @@ const receiveItems = async (orderId, body, ctx) => {
     invoiceNumber,
     items: purchaseItems,
     purchaseDate: body.receivedAt ? new Date(body.receivedAt) : new Date(),
+    discountType: overallDiscountType,
+    discountValue: overallDiscountValue,
+    discount: overallDiscountAmount,
     totalAmount: purchaseTotal,
     paidAmount,
     balance: Math.max(0, purchaseTotal - paidAmount),
@@ -448,20 +527,28 @@ const receiveItems = async (orderId, body, ctx) => {
     purchaseInvoiceNumber: purchase.invoiceNumber,
     receivedAt: purchaseBody.purchaseDate,
     receivedBy: ctx.userId,
-    items: incomingItems.map((it) => ({
-      product: it.product,
-      variantId: it.variantId,
-      receivedQuantity: Number(it.receivedQuantity || 0),
-      priceAtPurchase: Number(it.priceAtPurchase || 0),
-      sellingPriceAtPurchase: it.sellingPriceAtPurchase
-        ? Number(it.sellingPriceAtPurchase)
-        : undefined,
-      unit: it.unit,
-      conversionFactor: it.conversionFactor || 1,
-      notes: it.notes,
-      batchNumber: it.batchNumber,
-      expiryDate: it.expiryDate,
-    })),
+    // Zipped 1:1 with incomingItems — purchaseItems carries the resolved discount
+    // (prorated or overridden) that incomingItems alone doesn't have.
+    items: incomingItems.map((it, idx) => {
+      const resolved = purchaseItems[idx];
+      return {
+        product: it.product,
+        variantId: it.variantId,
+        receivedQuantity: Number(it.receivedQuantity || 0),
+        priceAtPurchase: Number(it.priceAtPurchase || 0),
+        sellingPriceAtPurchase: it.sellingPriceAtPurchase
+          ? Number(it.sellingPriceAtPurchase)
+          : undefined,
+        unit: it.unit,
+        conversionFactor: it.conversionFactor || 1,
+        discountType: resolved?.discountType,
+        discountValue: resolved?.discountValue,
+        discountAmount: resolved?.discountAmount,
+        notes: it.notes,
+        batchNumber: it.batchNumber,
+        expiryDate: it.expiryDate,
+      };
+    }),
     notes: body.notes,
   });
 

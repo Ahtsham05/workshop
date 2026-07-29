@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Check,
   ChevronDown,
   ClipboardList,
@@ -23,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { BilingualName } from '@/components/bilingual-name'
 import { Separator } from '@/components/ui/separator'
 import {
   Popover,
@@ -46,8 +48,9 @@ import {
   type PurchaseOrder,
 } from '@/stores/purchaseOrder.api'
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
+import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
-import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { getDisplayStock } from '@/lib/product-stock-display'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
@@ -57,6 +60,10 @@ import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/store
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
 const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = []
+// Cap the product dropdown's rendered rows — matches Invoice/Purchase Invoice's
+// identical cap (see invoice-panel.tsx / purchase-panel.tsx) so a large catalog
+// doesn't render hundreds of DOM rows per keystroke.
+const MAX_VISIBLE_DROPDOWN_RESULTS = 50
 
 export interface OrderItem {
   product: Product
@@ -70,6 +77,12 @@ export interface OrderItem {
   unit?: string
   expectedPrice: number
   expectedSellingPrice?: number
+  // Line-level discount (e.g. supplier discounts this one product on the order).
+  // Applied on top of quantity * expectedPrice; discountValue is the raw entered
+  // number (Rs or %), resolved via computeDiscountAmount(). Mirrors Purchase
+  // Invoice's per-item discount exactly, see purchase-panel.tsx.
+  discountType?: DiscountType
+  discountValue?: number
   isManualEntry?: boolean
 }
 
@@ -88,7 +101,9 @@ export interface PurchaseOrderDraft {
   expectedDeliveryDate: string
   notes: string
   termsAndConditions: string
-  discount: number
+  // Overall order-level discount, applied on top of any per-item discounts.
+  discountType: DiscountType
+  discountValue: number
   tax: number
   shippingCost: number
 }
@@ -123,7 +138,8 @@ function buildInitialDraft(
       expectedDeliveryDate: '',
       notes: '',
       termsAndConditions: '',
-      discount: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       tax: 0,
       shippingCost: 0,
     }
@@ -175,6 +191,8 @@ function buildInitialDraft(
       unit: it.unit || 'pcs',
       expectedPrice: Number(it.expectedPrice || 0),
       expectedSellingPrice: it.expectedSellingPrice ? Number(it.expectedSellingPrice) : undefined,
+      discountType: (it.discountType as DiscountType) || 'fixed',
+      discountValue: Number(it.discountValue || 0),
       isManualEntry: false,
     }
   })
@@ -190,7 +208,8 @@ function buildInitialDraft(
       : '',
     notes: editing.notes || '',
     termsAndConditions: editing.termsAndConditions || '',
-    discount: Number(editing.discount || 0),
+    discountType: (editing.discountType as DiscountType) || 'fixed',
+    discountValue: Number(editing.discountValue || 0),
     tax: Number(editing.tax || 0),
     shippingCost: Number(editing.shippingCost || 0),
   }
@@ -231,6 +250,31 @@ export default function PurchaseOrderPanel({
   const [productSelectOpen, setProductSelectOpen] = useState('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Raw text the user is currently typing into a decimal field (cost/discount/sell/
+  // tax/shipping), keyed by a field id — e.g. "3:expectedPrice". A controlled input
+  // whose value is re-derived from a *number* on every keystroke strips a trailing "."
+  // the instant it's typed (parseFloat("40.") === 40), so "40.5" can never be typed.
+  // Keeping the exact typed string here until blur fixes that while still committing
+  // a parsed number to state on every change so totals stay live. Mirrors
+  // PurchasePanel's identical numericDrafts.
+  const [numericDrafts, setNumericDrafts] = useState<Record<string, string>>({})
+  const DECIMAL_INPUT_PATTERN = /^\d*\.?\d*$/
+  const getNumericDraftValue = (key: string, committedValue: number): string =>
+    numericDrafts[key] ?? (committedValue > 0 ? String(committedValue) : '')
+  const handleNumericDraftChange = (key: string, raw: string, commit: (parsed: number) => void) => {
+    if (raw !== '' && !DECIMAL_INPUT_PATTERN.test(raw)) return
+    setNumericDrafts((prev) => ({ ...prev, [key]: raw }))
+    commit(parseFloat(raw) || 0)
+  }
+  const clearNumericDraft = (key: string) => {
+    setNumericDrafts((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const costInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -283,6 +327,9 @@ export default function PurchaseOrderPanel({
   const filteredCatalogItems = purchasableCatalog.filter((p) =>
     matchesBilingualSearch(productSearchQuery, p.name, p.nameUrdu, p.barcode, p.brand?.name),
   )
+  // Capped slice actually rendered — matches Invoice/Purchase Invoice's identical
+  // visible/filtered split, so a large catalog doesn't render hundreds of DOM rows.
+  const visibleCatalogItems = filteredCatalogItems.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS)
 
   const getProductId = (item: OrderItem) =>
     item.product.id || (item.product as { _id?: string })._id || ''
@@ -291,13 +338,21 @@ export default function PurchaseOrderPanel({
   // product are different lines and must not be confused with each other.
   const rowKey = (productId: string, variantId?: string) => `${productId}::${variantId || ''}`
 
-  const subtotal = draft.items.reduce(
+  // Gross line amounts, minus any per-item discounts, gives the Subtotal; the overall
+  // order-level discount is then applied on top of that, before tax/shipping.
+  const grossSubtotal = draft.items.reduce(
     (sum, item) => sum + item.quantity * (item.expectedPrice || 0),
     0,
   )
+  const itemDiscountTotal = draft.items.reduce((sum, item) => {
+    const gross = item.quantity * (item.expectedPrice || 0)
+    return sum + computeDiscountAmount(gross, item.discountType, item.discountValue)
+  }, 0)
+  const subtotal = grossSubtotal - itemDiscountTotal
+  const discountAmount = computeDiscountAmount(subtotal, draft.discountType, draft.discountValue)
   const totalAmount = Math.max(
     0,
-    subtotal - draft.discount + draft.tax + draft.shippingCost,
+    subtotal - discountAmount + draft.tax + draft.shippingCost,
   )
 
   const addProductToOrder = useCallback((product: Product, quantity = 1, variantId?: string) => {
@@ -466,6 +521,65 @@ export default function PurchaseOrderPanel({
     }))
   }, [])
 
+  // Update per-item discount (type and/or raw value) — supplier discounting one
+  // specific product line, on top of any overall order-level discount.
+  const updateItemDiscount = useCallback(
+    (productId: string, patch: { type?: DiscountType; value?: number }, variantId?: string) => {
+      setDraft((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          getProductId(item) === productId && (item.variantId || undefined) === (variantId || undefined)
+            ? {
+                ...item,
+                discountType: patch.type ?? item.discountType ?? 'fixed',
+                discountValue: patch.value ?? item.discountValue ?? 0,
+              }
+            : item,
+        ),
+      }))
+    },
+    [],
+  )
+
+  // Flip every discount field (each line item's + the overall one) to the other unit
+  // in one click — re-deriving each raw value so the actual Rs discounted stays the
+  // same, it's just entered/displayed in the new unit. Mirrors Purchase Invoice's
+  // identical toggle, see purchase-panel.tsx's toggleAllDiscountTypes.
+  const toggleAllDiscountTypes = useCallback(() => {
+    setDraft((prev) => {
+      const targetType: DiscountType = prev.discountType === 'percentage' ? 'fixed' : 'percentage'
+
+      const items = prev.items.map((item) => {
+        const gross = item.quantity * (item.expectedPrice || 0)
+        const currentAmount = computeDiscountAmount(gross, item.discountType, item.discountValue)
+        const newValue = targetType === 'percentage'
+          ? (gross > 0 ? (currentAmount / gross) * 100 : 0)
+          : currentAmount
+        return {
+          ...item,
+          discountType: targetType,
+          discountValue: Math.round(newValue * 100) / 100,
+        }
+      })
+
+      const newSubtotal = items.reduce((sum, item) => {
+        const gross = item.quantity * (item.expectedPrice || 0)
+        return sum + (gross - computeDiscountAmount(gross, item.discountType, item.discountValue))
+      }, 0)
+      const currentOverallAmount = computeDiscountAmount(newSubtotal, prev.discountType, prev.discountValue)
+      const newOverallValue = targetType === 'percentage'
+        ? (newSubtotal > 0 ? (currentOverallAmount / newSubtotal) * 100 : 0)
+        : currentOverallAmount
+
+      return {
+        ...prev,
+        items,
+        discountType: targetType,
+        discountValue: Math.round(newOverallValue * 100) / 100,
+      }
+    })
+  }, [])
+
   const removeItem = useCallback((productId: string, variantId?: string) => {
     setDraft((prev) => {
       const next = prev.items.filter(
@@ -490,26 +604,35 @@ export default function PurchaseOrderPanel({
         : undefined,
       notes: draft.notes,
       termsAndConditions: draft.termsAndConditions,
-      discount: Number(draft.discount || 0),
+      discountType: draft.discountType || 'fixed',
+      discountValue: Number(draft.discountValue || 0),
+      discount: discountAmount,
       tax: Number(draft.tax || 0),
       shippingCost: Number(draft.shippingCost || 0),
       subtotal,
       totalAmount,
       status,
-      items: validItems.map((item) => ({
-        product: getProductId(item),
-        variantId: item.variantId,
-        productName: item.product.name,
-        productNameUrdu: item.product.nameUrdu,
-        quantity: Number(item.quantity),
-        unit: item.unit || item.product.unit || 'pcs',
-        expectedPrice: Number(item.expectedPrice || 0),
-        expectedSellingPrice:
-          item.expectedSellingPrice && item.expectedSellingPrice > 0
-            ? Number(item.expectedSellingPrice)
-            : undefined,
-        total: Number(item.quantity) * Number(item.expectedPrice || 0),
-      })),
+      items: validItems.map((item) => {
+        const gross = Number(item.quantity) * Number(item.expectedPrice || 0)
+        const itemDiscountAmount = computeDiscountAmount(gross, item.discountType, item.discountValue)
+        return {
+          product: getProductId(item),
+          variantId: item.variantId,
+          productName: item.product.name,
+          productNameUrdu: item.product.nameUrdu,
+          quantity: Number(item.quantity),
+          unit: item.unit || item.product.unit || 'pcs',
+          expectedPrice: Number(item.expectedPrice || 0),
+          expectedSellingPrice:
+            item.expectedSellingPrice && item.expectedSellingPrice > 0
+              ? Number(item.expectedSellingPrice)
+              : undefined,
+          discountType: item.discountType || 'fixed',
+          discountValue: Number(item.discountValue || 0),
+          discountAmount: itemDiscountAmount,
+          total: gross - itemDiscountAmount,
+        }
+      }),
     }
   }
 
@@ -684,7 +807,7 @@ export default function PurchaseOrderPanel({
                   <ChevronDown className='h-4 w-4 opacity-50 shrink-0' />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className='w-[400px] p-0' align='start'>
+              <PopoverContent className='w-[calc(100vw-2rem)] max-w-[400px] p-0' align='start'>
                 <Command shouldFilter={false}>
                   <div className='relative'>
                     <CommandInput
@@ -766,12 +889,29 @@ export default function PurchaseOrderPanel({
 
       <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:self-stretch')}>
         <CardHeader className={cn('pb-3', !showProductCatalog && 'py-3')}>
-          <div className='flex items-center justify-between'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
             <CardTitle className={cn('text-base')}>Order items ({draft.items.length})</CardTitle>
-            <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
-              <Plus className='h-4 w-4' />
-              Add item
-            </Button>
+            <div className='flex flex-wrap items-center gap-2'>
+              {draft.items.length > 0 && (
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  onClick={toggleAllDiscountTypes}
+                  className='flex items-center gap-1'
+                  title='Switch every discount (all items + overall) to this unit at once'
+                >
+                  <ArrowLeftRight className='h-4 w-4' />
+                  <span className='hidden sm:inline'>Switch All Discounts to</span>
+                  <span className='sm:hidden'>Switch to</span>
+                  {' '}{draft.discountType === 'percentage' ? 'Rs' : '%'}
+                </Button>
+              )}
+              <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
+                <Plus className='h-4 w-4' />
+                Add item
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}>
@@ -813,7 +953,7 @@ export default function PurchaseOrderPanel({
                               Select product *
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className='w-[400px] p-0' align='start'>
+                          <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
                             <Command shouldFilter={false}>
                               <div className='relative'>
                                 <CommandInput
@@ -828,7 +968,7 @@ export default function PurchaseOrderPanel({
                                   />
                                 </div>
                               </div>
-                              <CommandList className='max-h-64 overflow-y-auto'>
+                              <CommandList className='max-h-[300px] overflow-y-auto'>
                                 {productsLoading && filteredCatalogItems.length === 0 ? (
                                   <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
                                     <Loader2 className='h-6 w-6 animate-spin' />
@@ -840,24 +980,64 @@ export default function PurchaseOrderPanel({
                                   </p>
                                 ) : (
                                   <CommandGroup>
-                                    {filteredCatalogItems.map((catalogItem) => (
+                                    {visibleCatalogItems.map((catalogItem) => (
                                       <CommandItem
                                         key={catalogItem.id}
-                                        value={catalogItem.id}
+                                        value={`${catalogItem.id}-${catalogItem.name}`}
                                         onSelect={() => handleCatalogItemSelect(index, catalogItem)}
                                         className='flex cursor-pointer items-center gap-3 p-3'
                                       >
+                                        {catalogItem.image?.url ? (
+                                          <img
+                                            src={catalogItem.image.url}
+                                            alt={catalogItem.name}
+                                            className='h-8 w-8 shrink-0 rounded-lg object-cover'
+                                          />
+                                        ) : (
+                                          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+                                            <Package className='h-4 w-4 text-muted-foreground' />
+                                          </div>
+                                        )}
                                         <div className='min-w-0 flex-1'>
-                                          <p className='truncate text-sm font-medium'>{catalogItem.name}</p>
-                                          <p className='text-xs text-muted-foreground'>
-                                            Cost Rs{catalogItem.cost} · Stock {catalogItem.stockQuantity}
-                                          </p>
+                                          <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+                                            <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
+                                            {catalogItem.nameUrdu?.trim() ? (
+                                              <span
+                                                dir='rtl'
+                                                className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
+                                              >
+                                                {catalogItem.nameUrdu.trim()}
+                                              </span>
+                                            ) : null}
+                                            {catalogItem.brand?.name && (
+                                              <Badge variant='secondary' className='shrink-0 px-1.5 py-0 text-[10px]'>
+                                                {catalogItem.brand.name}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                                            {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
+                                            <span className='text-amber-600'>Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
+                                            <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
+                                              Stock: {catalogItem.stockQuantity}
+                                            </span>
+                                            {catalogItem.trackBatch && (
+                                              <span className='text-blue-600'>
+                                                {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       </CommandItem>
                                     ))}
                                   </CommandGroup>
                                 )}
                               </CommandList>
+                              {filteredCatalogItems.length > visibleCatalogItems.length ? (
+                                <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
+                                  Showing {visibleCatalogItems.length} of {filteredCatalogItems.length} — keep typing to narrow
+                                </div>
+                              ) : null}
                             </Command>
                           </PopoverContent>
                         </Popover>
@@ -893,6 +1073,12 @@ export default function PurchaseOrderPanel({
                 </Button>
               )
 
+              // Line-level discount (supplier discounting this one product) — net is
+              // what actually feeds the order subtotal.
+              const itemGross = item.quantity * item.expectedPrice
+              const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
+              const itemNet = itemGross - itemDiscountAmount
+
               return (
                 <div
                   key={`${rk}-${index}`}
@@ -905,14 +1091,42 @@ export default function PurchaseOrderPanel({
                     <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'mt-0.5 h-10 w-10')}>
                       <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                     </div>
-                    <div className='min-w-0 flex-1'>
-                      <p className='truncate text-sm font-semibold'>{item.product.name}</p>
-                      {!compact && (
-                        <p className='mt-0.5 text-xs text-muted-foreground'>
-                          {item.unit || item.product.unit || 'pcs'} · Stock{' '}
-                          {getDisplayStock(item.product)}
-                        </p>
-                      )}
+                    {/* min-w-[110px] (instead of min-w-0) in compact mode — without a floor,
+                        flex-1 lets this shrink to near-nothing once the qty/cost/discount/
+                        sell/total controls (siblings on the same flex-wrap line) claim their
+                        fixed widths, truncating the name to 2-3 characters. The floor forces
+                        those controls to wrap to their own line instead once space is tight. */}
+                    <div className={cn('flex-1', compact ? 'min-w-[110px]' : 'min-w-0')}>
+                      <BilingualName
+                        primary={item.product.name}
+                        secondary={item.product.nameUrdu}
+                        primaryClassName='font-semibold text-sm'
+                        truncate={compact}
+                      />
+                      <div className='mt-0.5 flex flex-wrap items-center gap-2'>
+                        {!compact && (
+                          <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
+                        )}
+                        {(() => {
+                          const stock = getDisplayStock(item.product)
+                          return (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+                              stock <= 0 ? 'bg-red-100 text-red-700' :
+                              stock <= 5 ? 'bg-red-50 text-red-500' :
+                              stock <= 20 ? 'bg-amber-50 text-amber-600' :
+                              'bg-green-50 text-green-700'
+                            }`}>
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                stock <= 0 ? 'bg-red-500' :
+                                stock <= 5 ? 'bg-red-400' :
+                                stock <= 20 ? 'bg-amber-400' :
+                                'bg-green-500'
+                              }`} />
+                              {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
+                            </span>
+                          )
+                        })()}
+                      </div>
                     </div>
                     {!compact && deleteButton}
                   </div>
@@ -942,7 +1156,7 @@ export default function PurchaseOrderPanel({
                             onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
                           }
                           onFocus={(e) => e.target.select()}
-                          className='h-7 w-20 border-0 text-center text-sm font-semibold focus-visible:ring-0'
+                          className='h-7 w-14 border-0 text-center text-sm font-semibold focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
                         />
                         <Button
                           type='button'
@@ -957,7 +1171,7 @@ export default function PurchaseOrderPanel({
                     </div>
                     <span className='text-sm text-muted-foreground/60'>×</span>
                     <div className='flex flex-col gap-0.5 shrink-0'>
-                      <span className='text-[10px] leading-none text-muted-foreground'>Cost</span>
+                      <span className='text-[10px] leading-none text-muted-foreground'>Purchase Price</span>
                       <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                         <span className='flex h-7 items-center border-r bg-muted px-2 text-xs'>Rs</span>
                         <Input
@@ -967,19 +1181,62 @@ export default function PurchaseOrderPanel({
                           type='text'
                           inputMode='decimal'
                           showVoiceInput={false}
-                          value={item.expectedPrice > 0 ? item.expectedPrice : ''}
+                          value={getNumericDraftValue(`${rk}:expectedPrice`, item.expectedPrice)}
                           onChange={(e) =>
-                            updateExpectedPrice(productId, parseFloat(e.target.value) || 0, item.variantId)
+                            handleNumericDraftChange(`${rk}:expectedPrice`, e.target.value, (parsed) =>
+                              updateExpectedPrice(productId, parsed, item.variantId),
+                            )
                           }
                           onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
                           onFocus={(e) => e.target.select()}
-                          className='h-7 w-16 border-0 text-sm font-semibold focus-visible:ring-0'
+                          onBlur={() => clearNumericDraft(`${rk}:expectedPrice`)}
+                          className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
                         />
                       </div>
                     </div>
+
+                    {/* − separator */}
+                    <span className='text-sm text-muted-foreground/60'>−</span>
+
+                    {/* Item Discount Input */}
+                    <div className='flex flex-col gap-0.5 shrink-0'>
+                      <span className='text-[10px] leading-none text-muted-foreground'>Discount</span>
+                      <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                        <Input
+                          type='text'
+                          inputMode='decimal'
+                          showVoiceInput={false}
+                          value={getNumericDraftValue(`${rk}:itemDiscount`, item.discountValue || 0)}
+                          onChange={(e) =>
+                            handleNumericDraftChange(`${rk}:itemDiscount`, e.target.value, (parsed) =>
+                              updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
+                            )
+                          }
+                          onFocus={(e) => e.target.select()}
+                          onBlur={() => clearNumericDraft(`${rk}:itemDiscount`)}
+                          placeholder='0'
+                          className='h-7 w-14 border-0 text-sm font-semibold focus-visible:ring-0'
+                        />
+                        <button
+                          type='button'
+                          onClick={() =>
+                            updateItemDiscount(
+                              productId,
+                              { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' },
+                              item.variantId,
+                            )
+                          }
+                          title='Click to switch between Rs and % discount'
+                          className='flex h-7 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+                        >
+                          {item.discountType === 'percentage' ? '%' : 'Rs'}
+                        </button>
+                      </div>
+                    </div>
+
                     <span className='text-sm text-muted-foreground/60'>→</span>
                     <div className='flex flex-col gap-0.5 shrink-0'>
-                      <span className='text-[10px] font-medium leading-none text-blue-500'>Sell</span>
+                      <span className='text-[10px] font-medium leading-none text-blue-500'>Sale Price</span>
                       <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
                         <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs text-blue-600'>
                           Rs
@@ -988,22 +1245,30 @@ export default function PurchaseOrderPanel({
                           type='text'
                           inputMode='decimal'
                           showVoiceInput={false}
-                          value={(item.expectedSellingPrice ?? 0) > 0 ? item.expectedSellingPrice : ''}
+                          value={getNumericDraftValue(`${rk}:expectedSellingPrice`, item.expectedSellingPrice ?? 0)}
                           onChange={(e) =>
-                            updateSellingPrice(productId, parseFloat(e.target.value) || 0, item.variantId)
+                            handleNumericDraftChange(`${rk}:expectedSellingPrice`, e.target.value, (parsed) =>
+                              updateSellingPrice(productId, parsed, item.variantId),
+                            )
                           }
                           onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
                           onFocus={(e) => e.target.select()}
+                          onBlur={() => clearNumericDraft(`${rk}:expectedSellingPrice`)}
                           placeholder='0'
-                          className='h-7 w-16 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
+                          className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
                         />
                       </div>
                     </div>
-                    <div className='ml-auto flex items-center gap-1.5 shrink-0'>
-                      <span className='text-sm text-muted-foreground/60'>=</span>
-                      <p className='text-sm font-bold tabular-nums'>
-                        Rs{(item.quantity * item.expectedPrice).toFixed(2)}
-                      </p>
+                    <div className='ml-auto flex flex-col items-end gap-0 shrink-0'>
+                      {itemDiscountAmount > 0 && (
+                        <span className='text-[10px] leading-none text-muted-foreground line-through'>Rs{itemGross.toFixed(2)}</span>
+                      )}
+                      <div className='flex items-center gap-1.5'>
+                        <span className='text-sm text-muted-foreground/60'>=</span>
+                        <p className='text-sm font-bold tabular-nums'>
+                          Rs{itemNet.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                   </div>
                   {compact && deleteButton}
@@ -1032,39 +1297,86 @@ export default function PurchaseOrderPanel({
           <div className='space-y-2'>
             <div className='flex justify-between text-sm'>
               <span className='text-muted-foreground'>Subtotal</span>
-              <span className='font-medium tabular-nums'>Rs{subtotal.toFixed(2)}</span>
+              <span className='font-medium tabular-nums'>Rs{grossSubtotal.toFixed(2)}</span>
             </div>
+            {itemDiscountTotal > 0 && (
+              <div className='flex justify-between text-sm text-green-600'>
+                <span>Item Discounts</span>
+                <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
+              </div>
+            )}
             <div className='flex items-center justify-between gap-2 text-sm'>
               <span className='text-muted-foreground'>Discount</span>
-              <Input
-                type='number'
-                min={0}
-                value={draft.discount}
-                onChange={(e) =>
-                  setDraft((p) => ({ ...p, discount: Number(e.target.value || 0) }))
-                }
-                className='h-8 w-28 text-right'
-              />
+              <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                <Input
+                  type='text'
+                  inputMode='decimal'
+                  showVoiceInput={false}
+                  value={getNumericDraftValue('overallDiscount', draft.discountValue || 0)}
+                  onChange={(e) =>
+                    handleNumericDraftChange('overallDiscount', e.target.value, (parsed) =>
+                      setDraft((p) => ({ ...p, discountValue: Math.max(0, parsed) })),
+                    )
+                  }
+                  onFocus={(e) => e.target.select()}
+                  onBlur={() => clearNumericDraft('overallDiscount')}
+                  placeholder='0'
+                  className='h-8 w-20 border-0 text-right focus-visible:ring-0'
+                />
+                <button
+                  type='button'
+                  onClick={() =>
+                    setDraft((p) => ({
+                      ...p,
+                      discountType: p.discountType === 'percentage' ? 'fixed' : 'percentage',
+                    }))
+                  }
+                  title='Click to switch between Rs and % discount'
+                  className='flex h-8 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+                >
+                  {draft.discountType === 'percentage' ? '%' : 'Rs'}
+                </button>
+              </div>
             </div>
+            {discountAmount > 0 && (
+              <div className='flex justify-between text-sm text-green-600'>
+                <span>Discount Applied</span>
+                <span className='tabular-nums'>-Rs{discountAmount.toFixed(2)}</span>
+              </div>
+            )}
             <div className='flex items-center justify-between gap-2 text-sm'>
               <span className='text-muted-foreground'>Tax</span>
               <Input
-                type='number'
-                min={0}
-                value={draft.tax}
-                onChange={(e) => setDraft((p) => ({ ...p, tax: Number(e.target.value || 0) }))}
+                type='text'
+                inputMode='decimal'
+                showVoiceInput={false}
+                value={getNumericDraftValue('tax', draft.tax || 0)}
+                onChange={(e) =>
+                  handleNumericDraftChange('tax', e.target.value, (parsed) =>
+                    setDraft((p) => ({ ...p, tax: Math.max(0, parsed) })),
+                  )
+                }
+                onFocus={(e) => e.target.select()}
+                onBlur={() => clearNumericDraft('tax')}
+                placeholder='0'
                 className='h-8 w-28 text-right'
               />
             </div>
             <div className='flex items-center justify-between gap-2 text-sm'>
               <span className='text-muted-foreground'>Shipping</span>
               <Input
-                type='number'
-                min={0}
-                value={draft.shippingCost}
+                type='text'
+                inputMode='decimal'
+                showVoiceInput={false}
+                value={getNumericDraftValue('shippingCost', draft.shippingCost || 0)}
                 onChange={(e) =>
-                  setDraft((p) => ({ ...p, shippingCost: Number(e.target.value || 0) }))
+                  handleNumericDraftChange('shippingCost', e.target.value, (parsed) =>
+                    setDraft((p) => ({ ...p, shippingCost: Math.max(0, parsed) })),
+                  )
                 }
+                onFocus={(e) => e.target.select()}
+                onBlur={() => clearNumericDraft('shippingCost')}
+                placeholder='0'
                 className='h-8 w-28 text-right'
               />
             </div>
@@ -1073,6 +1385,12 @@ export default function PurchaseOrderPanel({
               <span>Total</span>
               <span className='text-primary tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
             </div>
+            {(itemDiscountTotal + discountAmount) > 0 && (
+              <div className='flex justify-between text-xs font-medium text-green-600'>
+                <span>You Saved</span>
+                <span className='tabular-nums'>Rs{(itemDiscountTotal + discountAmount).toFixed(2)}</span>
+              </div>
+            )}
           </div>
           {/* Save buttons — compact mode (catalog hidden): the sticky bar below and the
               header row above already cover these actions, so this duplicate is hidden. */}
@@ -1104,7 +1422,7 @@ export default function PurchaseOrderPanel({
               </span>
               <span className='text-lg font-bold tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
             </div>
-            <div className='flex items-center gap-2'>
+            <div className='flex flex-wrap items-center gap-2'>
               <Button
                 type='button'
                 variant='outline'

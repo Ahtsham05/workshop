@@ -3,6 +3,7 @@ import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
+import type { DiscountType } from '@/features/purchase-invoice/utils/discount'
 
 // Receiving items creates a real Purchase (and batches) behind the scenes — refresh
 // the product catalog's stock+batch chips and the per-variant batch list, which live
@@ -57,6 +58,9 @@ export interface PurchaseOrderItem {
   conversionFactor?: number
   expectedPrice: number
   expectedSellingPrice?: number
+  discountType?: DiscountType
+  discountValue?: number
+  discountAmount?: number
   total: number
   notes?: string
 }
@@ -69,6 +73,9 @@ export interface PurchaseOrderReceiptItem {
   sellingPriceAtPurchase?: number
   unit?: string
   conversionFactor?: number
+  discountType?: DiscountType
+  discountValue?: number
+  discountAmount?: number
   notes?: string
   batchNumber?: string
   expiryDate?: string
@@ -96,6 +103,8 @@ export interface PurchaseOrder {
   orderDate: string
   expectedDeliveryDate?: string
   subtotal: number
+  discountType?: DiscountType
+  discountValue?: number
   discount?: number
   tax?: number
   shippingCost?: number
@@ -224,6 +233,8 @@ export const purchaseOrderApi = createApi({
           sellingPriceAtPurchase?: number
           unit?: string
           conversionFactor?: number
+          discountType?: DiscountType
+          discountValue?: number
           notes?: string
           batchNumber?: string
           expiryDate?: string
@@ -233,6 +244,8 @@ export const purchaseOrderApi = createApi({
         paidAmount?: number
         paymentType?: string
         walletType?: string
+        discountType?: DiscountType
+        discountValue?: number
       }
     >({
       query: ({ id, ...body }) => ({

@@ -567,15 +567,17 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
               
               // Get price with multiple fallbacks
               const price = item.priceAtPurchase || item.price || item.unitPrice || item?.product?.cost || 0
-              const total = item.total || (item.quantity * price) || 0
-              
+              const gross = (item.quantity || 0) * price
+              const discountAmount = Number(item.discountAmount || 0)
+              const total = item.total || (gross - discountAmount) || 0
+
               return (
                 <TableRow key={index}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {(item.product?.image || item.image) && (
-                        <img 
-                          src={(item.product?.image?.url || item.image?.url || item.product?.image || item.image)} 
+                        <img
+                          src={(item.product?.image?.url || item.image?.url || item.product?.image || item.image)}
                           alt={productName}
                           className="w-8 h-8 rounded object-cover"
                         />
@@ -597,7 +599,15 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                   </TableCell>
                   <TableCell>{item.quantity || 0} {item.unit || 'pcs'}</TableCell>
                   <TableCell>Rs{Number(price).toFixed(2)}</TableCell>
-                  <TableCell>Rs{Number(total).toFixed(2)}</TableCell>
+                  <TableCell>
+                    {discountAmount > 0 && (
+                      <div className="text-xs text-muted-foreground line-through">Rs{gross.toFixed(2)}</div>
+                    )}
+                    Rs{Number(total).toFixed(2)}
+                    {discountAmount > 0 && (
+                      <div className="text-xs text-green-600">-Rs{discountAmount.toFixed(2)}</div>
+                    )}
+                  </TableCell>
                 </TableRow>
               )
             })}
@@ -611,6 +621,20 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
           <Label>{t('Total Items')}</Label>
           <p className="text-lg font-bold">{purchase.items?.length || 0}</p>
         </div>
+        {Number(purchase.discount || 0) > 0 && (
+          <>
+            <div>
+              <Label>{t('Subtotal')}</Label>
+              <p className="text-lg font-bold">
+                Rs{(Number(purchase.totalAmount || 0) + Number(purchase.discount || 0)).toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <Label>{t('Discount')}</Label>
+              <p className="text-lg font-bold text-green-600">-Rs{Number(purchase.discount || 0).toFixed(2)}</p>
+            </div>
+          </>
+        )}
         <div>
           <Label>{t('Total Amount')}</Label>
           <p className="text-lg font-bold text-green-600">Rs{purchase.totalAmount?.toFixed(2) || '0.00'}</p>
