@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -89,6 +90,13 @@ interface PurchasePanelProps {
   products: any[]
   productsLoading?: boolean
   setProducts?: React.Dispatch<React.SetStateAction<any[]>>
+  /** When false (catalog hidden), the panel switches to a dense two-column "fast
+   * purchasing" layout — single-row items and a sticky save bar — matching InvoicePanel. */
+  showProductCatalog?: boolean
+  /** Fast-purchasing mode only: DOM node (owned by the page, outside the cards' scroll
+   * region) to portal the save/print bar into, so it's always visible without scrolling.
+   * Falls back to an inline sticky bar until this is available. */
+  stickyActionsContainer?: HTMLElement | null
 }
 
 export default function PurchasePanel({
@@ -105,6 +113,8 @@ export default function PurchasePanel({
   editingPurchase,
   products,
   setProducts,
+  showProductCatalog = true,
+  stickyActionsContainer = null,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
@@ -780,9 +790,15 @@ export default function PurchasePanel({
   )
 
   return (
-    <div className="space-y-4">
-      {/* Supplier Selection Card */}
-      <Card>
+    <div
+      className={cn(
+        !showProductCatalog
+          ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
+          : 'space-y-4',
+      )}
+    >
+      {/* Supplier Selection Card — left column (compact mode) */}
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-1')}>
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="flex items-center gap-2">
@@ -1065,11 +1081,12 @@ export default function PurchasePanel({
         </CardContent>
       </Card>
 
-      {/* Items List Card */}
-      <Card>
-        <CardHeader>
+      {/* Items List Card — right column (compact mode): spans both left rows so it runs
+          the full height alongside the details+totals stack. */}
+      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-stretch')}>
+        <CardHeader className={cn(!showProductCatalog && 'py-3')}>
           <div className='flex items-center justify-between'>
-            <CardTitle>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
+            <CardTitle className={cn(!showProductCatalog && 'text-base')}>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
             <div className="flex items-center gap-2">
               {canCreateProduct ? (
                 <Button
@@ -1099,8 +1116,8 @@ export default function PurchasePanel({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
-          <div ref={itemsScrollRef} className="space-y-2">
+        <CardContent className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}>
+          <div ref={itemsScrollRef} className={cn('space-y-2', !showProductCatalog && 'space-y-1.5')}>
             {purchase.items.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 {t('No items added yet')}
@@ -1108,14 +1125,15 @@ export default function PurchasePanel({
             ) : (
               purchase.items.map((item: PurchaseItem, index: number) => {
                 const productId = item.product.id || (item.product as any)._id;
-                
+                const compact = !showProductCatalog
+
                 // Show product selector for manual entries
                 if (item.isManualEntry && !productId) {
                   return (
                     <div key={`manual-${index}`} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
-                      <div className='flex items-center gap-3 p-3'>
-                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0'>
-                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                      <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
+                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10')}>
+                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                         </div>
                         <div className='flex-1 min-w-0'>
                           <Popover
@@ -1239,29 +1257,46 @@ export default function PurchasePanel({
                   )
                 }
 
+                const deleteButton = (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                    onClick={() => removeFromPurchase(productId, item.variantId)}
+                  >
+                    <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+                  </Button>
+                )
+
                 return (
                   <div key={`${productId}-${index}`} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
+                    {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
+                        flex-wrap line — name flexes in the middle, qty/price/subtotal/delete
+                        pack to the end — instead of stacking, so each item takes ~half the height. */}
+                    <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
                     {/* Row 1: Image + Info + Delete */}
-                    <div className='flex items-start gap-3 p-3'>
+                    <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
                       {item.product.image?.url ? (
                         <img
                           src={item.product.image.url}
                           alt={item.product.name}
-                          className='w-10 h-10 object-cover rounded-lg flex-shrink-0 mt-0.5'
+                          className={cn('object-cover rounded-lg flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}
                         />
                       ) : (
-                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5'>
-                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}>
+                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                         </div>
                       )}
 
                       <div className='flex-1 min-w-0'>
                         <p className='font-semibold text-sm truncate'>{item.product.name}</p>
-                        <div className='flex items-center gap-2 mt-0.5 flex-wrap'>
-                          {item.product.barcode && (
+                        <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', compact && 'flex-nowrap')}>
+                          {!compact && item.product.barcode && (
                             <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
                           )}
-                          <span className='text-xs text-muted-foreground'>Rs{item.purchasePrice} · {item.unit || item.product.unit || 'pcs'}</span>
+                          {!compact && (
+                            <span className='text-xs text-muted-foreground'>Rs{item.purchasePrice} · {item.unit || item.product.unit || 'pcs'}</span>
+                          )}
                           {item.product.stockQuantity !== undefined && (
                             <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
                               item.product.stockQuantity <= 0 ? 'bg-red-100 text-red-700' :
@@ -1281,20 +1316,13 @@ export default function PurchasePanel({
                         </div>
                       </div>
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
-                        onClick={() => removeFromPurchase(productId, item.variantId)}
-                      >
-                        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
-                      </Button>
+                      {!compact && deleteButton}
                     </div>
 
                     {/* Row 2: Controls */}
-                    <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                    <div className={cn(compact ? 'contents' : 'flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5')}>
                       {/* Quantity Stepper */}
-                      <div className='flex items-center gap-1.5'>
+                      <div className='flex items-center gap-1.5 shrink-0'>
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                           <Button
                             size="sm"
@@ -1327,7 +1355,7 @@ export default function PurchasePanel({
                       </div>
 
                       {showUnitConversions && (
-                        <div className='flex flex-col gap-1 min-w-[80px]'>
+                        <div className='flex flex-col gap-1 min-w-[80px] shrink-0'>
                           <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
                           <Select
                             value={item.unit || item.product.unit || 'pcs'}
@@ -1423,10 +1451,12 @@ export default function PurchasePanel({
                       </div>
 
                       {/* = subtotal */}
-                      <div className='flex items-center gap-1.5 ml-auto'>
+                      <div className='flex items-center gap-1.5 ml-auto shrink-0'>
                         <span className='text-muted-foreground/60 text-sm select-none'>=</span>
                         <p className='font-bold text-sm'>Rs{(item.quantity * item.purchasePrice).toFixed(2)}</p>
                       </div>
+                    </div>
+                    {compact && deleteButton}
                     </div>
 
                     {/* Row 3: IMEI/serial numbers (only for products that require per-unit tracking) */}
@@ -1507,8 +1537,8 @@ export default function PurchasePanel({
         </CardContent>
       </Card>
 
-      {/* Totals and Actions Card */}
-      <Card>
+      {/* Totals and Actions Card — left column (compact mode), below the details card */}
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
         <CardContent className="p-4 space-y-4">
           {/* Notes */}
           <div>
@@ -1614,9 +1644,11 @@ export default function PurchasePanel({
             </div>
           </div>
 
-          {/* Save Buttons */}
+          {/* Save Buttons — compact mode (catalog hidden): the sticky bar below is the
+              buttons row, these full-size duplicates would just repeat it right above. */}
+          {showProductCatalog && (
           <div className="grid grid-cols-1 gap-3">
-            <Button 
+            <Button
               onClick={() => handleSavePurchase('none')}
               className="w-full"
               size="lg"
@@ -1658,8 +1690,63 @@ export default function PurchasePanel({
               }
             />
           </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Fast-purchasing buttons bar — catalog hidden means the panel is a two-column
+          layout (details+totals on the left, items on the right); the primary actions are
+          always reachable without scrolling. Portaled into a footer slot the page keeps
+          outside the cards' scroll region — see InvoicePanel's identical bar for why. */}
+      {!showProductCatalog && (() => {
+        const bar = (
+          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+            <div className='flex items-baseline gap-2 pl-1'>
+              <span className='text-xs text-muted-foreground'>
+                {purchase.items.filter((i) => (i.product.id || (i.product as any)._id) && i.product.name).length} {t('Purchase Items')}
+              </span>
+              <span className='text-lg font-bold tabular-nums'>Rs{totals.total.toFixed(2)}</span>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                onClick={() => handleSavePurchase('none')}
+                size='sm'
+                variant='outline'
+                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
+                className='gap-1.5'
+              >
+                {isLoading && savingType === 'none' ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <Save className='h-4 w-4' />
+                )}
+                {isEditing ? t('Update Purchase') : t('Save Purchase')}
+              </Button>
+              <PrintFormatButton
+                onPrint={(paperSize) => handleSavePurchase(paperSize)}
+                defaultPaperSize={defaultPaperSize}
+                size='sm'
+                variant='default'
+                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
+                mainButtonContent={
+                  isLoading && savingType !== 'none' ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    <>
+                      <Printer className='h-4 w-4' />
+                      <span className='ml-1.5'>{t('Save & Print Receipt')}</span>
+                    </>
+                  )
+                }
+              />
+            </div>
+          </div>
+        )
+        return stickyActionsContainer
+          ? createPortal(bar, stickyActionsContainer)
+          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
+      })()}
 
       <PurchaseAiScanDialog
         open={aiScanOpen}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import {
@@ -204,6 +205,13 @@ interface Props {
   onRegisterAddProduct?: (fn: (product: Product, quantity?: number, variantId?: string) => void) => void
   /** Auto-select this supplier (e.g. the AI-recommended supplier) once suppliers load. */
   prefillSupplierId?: string
+  /** When false (catalog hidden), the panel switches to a dense two-column "fast
+   * ordering" layout — single-row items and a sticky save bar — matching InvoicePanel. */
+  showProductCatalog?: boolean
+  /** Fast-ordering mode only: DOM node (owned by the page, outside the cards' scroll
+   * region) to portal the save/print bar into, so it's always visible without scrolling.
+   * Falls back to an inline sticky bar until this is available. */
+  stickyActionsContainer?: HTMLElement | null
 }
 
 export default function PurchaseOrderPanel({
@@ -213,6 +221,8 @@ export default function PurchaseOrderPanel({
   productsLoading = false,
   onRegisterAddProduct,
   prefillSupplierId,
+  showProductCatalog = true,
+  stickyActionsContainer = null,
 }: Props) {
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
   const [draft, setDraft] = useState<PurchaseOrderDraft>(() => buildInitialDraft(editing, purchasableCatalog))
@@ -592,8 +602,14 @@ export default function PurchaseOrderPanel({
   const supplierId = draft.supplier._id
 
   return (
-    <div className='space-y-4'>
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+    <div
+      className={cn(
+        !showProductCatalog
+          ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
+          : 'space-y-4',
+      )}
+    >
+      <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', !showProductCatalog && 'lg:col-start-1 lg:col-span-2 lg:row-start-1')}>
         <div className='flex items-center gap-3'>
           <Button variant='ghost' size='sm' onClick={onBack}>
             <ArrowLeft className='h-4 w-4' />
@@ -620,7 +636,7 @@ export default function PurchaseOrderPanel({
         </div>
       </div>
 
-      <Card>
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
         <CardHeader className='pb-3'>
           <CardTitle className='text-base'>Order details</CardTitle>
         </CardHeader>
@@ -748,20 +764,27 @@ export default function PurchaseOrderPanel({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className='pb-3'>
+      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:self-stretch')}>
+        <CardHeader className={cn('pb-3', !showProductCatalog && 'py-3')}>
           <div className='flex items-center justify-between'>
-            <CardTitle className='text-base'>Order items ({draft.items.length})</CardTitle>
+            <CardTitle className={cn('text-base')}>Order items ({draft.items.length})</CardTitle>
             <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
               <Plus className='h-4 w-4' />
               Add item
             </Button>
           </div>
         </CardHeader>
-        <CardContent className='p-4'>
-          <div ref={itemsScrollRef} className='max-h-[420px] space-y-2 overflow-y-auto pr-1'>
+        <CardContent className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}>
+          <div
+            ref={itemsScrollRef}
+            className={cn(
+              'space-y-2 overflow-y-auto pr-1',
+              showProductCatalog ? 'max-h-[420px]' : 'space-y-1.5',
+            )}
+          >
             {draft.items.map((item, index) => {
               const productId = getProductId(item)
+              const compact = !showProductCatalog
 
               if (item.isManualEntry && !productId) {
                 return (
@@ -769,9 +792,9 @@ export default function PurchaseOrderPanel({
                     key={`manual-${index}`}
                     className='overflow-hidden rounded-xl border bg-card shadow-sm'
                   >
-                    <div className='flex items-center gap-3 p-3'>
-                      <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted'>
-                        <Package className='h-5 w-5 text-muted-foreground/50' />
+                    <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
+                      <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+                        <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                       </div>
                       <div className='min-w-0 flex-1'>
                         <Popover
@@ -859,34 +882,42 @@ export default function PurchaseOrderPanel({
               }
 
               const rk = rowKey(productId, item.variantId)
+              const deleteButton = (
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  className='h-7 w-7 shrink-0 p-0'
+                  onClick={() => removeItem(productId, item.variantId)}
+                >
+                  <Trash2 className='h-3.5 w-3.5 text-red-400' />
+                </Button>
+              )
 
               return (
                 <div
                   key={`${rk}-${index}`}
                   className='overflow-hidden rounded-xl border bg-card shadow-sm'
                 >
-                  <div className='flex items-start gap-3 p-3'>
-                    <div className='mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted'>
-                      <Package className='h-5 w-5 text-muted-foreground/50' />
+                  {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
+                      flex-wrap line, same trick as InvoicePanel's compact item rows. */}
+                  <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
+                  <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
+                    <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'mt-0.5 h-10 w-10')}>
+                      <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                     </div>
                     <div className='min-w-0 flex-1'>
                       <p className='truncate text-sm font-semibold'>{item.product.name}</p>
-                      <p className='mt-0.5 text-xs text-muted-foreground'>
-                        {item.unit || item.product.unit || 'pcs'} · Stock{' '}
-                        {getDisplayStock(item.product)}
-                      </p>
+                      {!compact && (
+                        <p className='mt-0.5 text-xs text-muted-foreground'>
+                          {item.unit || item.product.unit || 'pcs'} · Stock{' '}
+                          {getDisplayStock(item.product)}
+                        </p>
+                      )}
                     </div>
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      className='h-7 w-7 shrink-0 p-0'
-                      onClick={() => removeItem(productId, item.variantId)}
-                    >
-                      <Trash2 className='h-3.5 w-3.5 text-red-400' />
-                    </Button>
+                    {!compact && deleteButton}
                   </div>
-                  <div className='flex flex-wrap items-center gap-3 border-t bg-muted/20 px-3 py-2.5'>
-                    <div className='flex items-center gap-1.5'>
+                  <div className={cn(compact ? 'contents' : 'flex flex-wrap items-center gap-3 border-t bg-muted/20 px-3 py-2.5')}>
+                    <div className='flex items-center gap-1.5 shrink-0'>
                       <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                         <Button
                           type='button'
@@ -925,7 +956,7 @@ export default function PurchaseOrderPanel({
                       </div>
                     </div>
                     <span className='text-sm text-muted-foreground/60'>×</span>
-                    <div className='flex flex-col gap-0.5'>
+                    <div className='flex flex-col gap-0.5 shrink-0'>
                       <span className='text-[10px] leading-none text-muted-foreground'>Cost</span>
                       <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                         <span className='flex h-7 items-center border-r bg-muted px-2 text-xs'>Rs</span>
@@ -947,7 +978,7 @@ export default function PurchaseOrderPanel({
                       </div>
                     </div>
                     <span className='text-sm text-muted-foreground/60'>→</span>
-                    <div className='flex flex-col gap-0.5'>
+                    <div className='flex flex-col gap-0.5 shrink-0'>
                       <span className='text-[10px] font-medium leading-none text-blue-500'>Sell</span>
                       <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
                         <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs text-blue-600'>
@@ -968,12 +999,14 @@ export default function PurchaseOrderPanel({
                         />
                       </div>
                     </div>
-                    <div className='ml-auto flex items-center gap-1.5'>
+                    <div className='ml-auto flex items-center gap-1.5 shrink-0'>
                       <span className='text-sm text-muted-foreground/60'>=</span>
                       <p className='text-sm font-bold tabular-nums'>
                         Rs{(item.quantity * item.expectedPrice).toFixed(2)}
                       </p>
                     </div>
+                  </div>
+                  {compact && deleteButton}
                   </div>
                 </div>
               )
@@ -982,7 +1015,7 @@ export default function PurchaseOrderPanel({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-3')}>
         <CardContent className='space-y-4 p-4'>
           <div>
             <Label htmlFor='po-notes'>Notes</Label>
@@ -1041,6 +1074,9 @@ export default function PurchaseOrderPanel({
               <span className='text-primary tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
             </div>
           </div>
+          {/* Save buttons — compact mode (catalog hidden): the sticky bar below and the
+              header row above already cover these actions, so this duplicate is hidden. */}
+          {showProductCatalog && (
           <div className='flex flex-wrap gap-2 pt-2'>
             <Button variant='outline' disabled={saving} onClick={() => handleSave('draft')}>
               <Save className='mr-2 h-4 w-4' />
@@ -1051,8 +1087,46 @@ export default function PurchaseOrderPanel({
               Save &amp; send (Ctrl+S)
             </Button>
           </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Fast-ordering buttons bar — catalog hidden means the panel is a two-column
+          layout (details+totals on the left, items on the right); the primary actions are
+          always reachable without scrolling. Portaled into a footer slot the page keeps
+          outside the cards' scroll region — see PurchasePanel's identical bar for why. */}
+      {!showProductCatalog && (() => {
+        const bar = (
+          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+            <div className='flex items-baseline gap-2 pl-1'>
+              <span className='text-xs text-muted-foreground'>
+                {draft.items.filter((i) => getProductId(i) && i.product.name).length} items
+              </span>
+              <span className='text-lg font-bold tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={saving}
+                onClick={() => handleSave('draft')}
+                className='gap-1.5'
+              >
+                <Save className='h-4 w-4' />
+                Save draft
+              </Button>
+              <Button type='button' size='sm' disabled={saving} onClick={() => handleSave('sent')} className='gap-1.5'>
+                <Send className='h-4 w-4' />
+                {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
+              </Button>
+            </div>
+          </div>
+        )
+        return stickyActionsContainer
+          ? createPortal(bar, stickyActionsContainer)
+          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
+      })()}
     </div>
   )
 }

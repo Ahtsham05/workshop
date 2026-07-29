@@ -5,6 +5,7 @@ import { Columns2, LayoutGrid } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useSidebar } from '@/components/ui/sidebar'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import type { AppDispatch } from '@/stores/store'
@@ -41,6 +42,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   const dispatch = useDispatch<AppDispatch>()
   const addProductRef = useRef<(product: Product, quantity?: number, variantId?: string) => void>(() => {})
   const prefillAppliedRef = useRef(false)
+  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar()
 
   const [products, setProducts] = useState<Product[]>([])
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([])
@@ -48,6 +50,9 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   const [showImages, setShowImages] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowCatalog)
+  // Fast-ordering mode's save/print bar is portaled here — a footer slot the page keeps
+  // outside the cards' scroll region, see PurchaseOrderPanel's sticky bar for why.
+  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null)
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -253,12 +258,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
           showProductCatalog ? 'grid-cols-1 gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
         )}
       >
-        <div
-          className={cn(
-            'min-w-0 pb-6',
-            !showProductCatalog && 'mx-auto w-full max-w-2xl sm:max-w-3xl 2xl:max-w-4xl',
-          )}
-        >
+        <div className='min-w-0 pb-6'>
           <PurchaseOrderPanel
             onBack={onBack}
             onSaved={onSaved}
@@ -269,6 +269,8 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
             onRegisterAddProduct={(fn) => {
               addProductRef.current = fn
             }}
+            showProductCatalog={showProductCatalog}
+            stickyActionsContainer={stickyFooterSlot}
           />
         </div>
 
@@ -287,6 +289,23 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
           </div>
         ) : null}
       </div>
+
+      {/* Footer slot for PurchaseOrderPanel's save bar (portaled in) — `position: fixed`
+          to the viewport: this page scrolls as a whole, so a sticky bar only shows once
+          you've scrolled far enough for it. Inset from the left by the sidebar's actual
+          current width so it never overlaps it, and follows collapse/expand. */}
+      {!showProductCatalog && (
+        <div
+          ref={setStickyFooterSlot}
+          className={cn(
+            'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
+            !sidebarIsMobile &&
+              (sidebarState === 'collapsed'
+                ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
+                : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
+          )}
+        />
+      )}
     </div>
   )
 }

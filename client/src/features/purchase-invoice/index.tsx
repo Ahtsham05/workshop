@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sheet';
 import { Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSidebar } from '@/components/ui/sidebar';
 import { normalizeSuppliersList } from './utils/catalog-helpers';
 import {
   clearPurchaseWorkspace,
@@ -163,10 +164,15 @@ const PurchaseInvoicePage = () => {
   // See docs/architecture/universal-product-migration.md.
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery();
   
+  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar();
+
   // UI state
   const [showImages, setShowImages] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog);
+  // Fast-purchasing mode's save/print bar is portaled here — a footer slot the page keeps
+  // outside the cards' scroll region, see PurchasePanel's sticky bar for why.
+  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null);
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -1008,14 +1014,10 @@ const PurchaseInvoicePage = () => {
               showProductCatalog ? 'grid-cols-1 gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
             )}
           >
-          {/* Left Column - Purchase Panel */}
-          <div
-            className={cn(
-              'min-w-0 space-y-4 pb-6',
-              !showProductCatalog &&
-                'mx-auto w-full max-w-2xl sm:max-w-3xl 2xl:max-w-4xl',
-            )}
-          >
+          {/* Left Column - Purchase Panel — full width when catalog hidden: PurchasePanel
+              itself splits into a details+totals / items two-column layout ("fast
+              purchasing" mode) so hiding the catalog actually reclaims the freed-up width. */}
+          <div className="min-w-0 space-y-4 pb-6">
             <PurchasePanel
               purchase={purchase}
               setPurchase={setPurchase}
@@ -1031,6 +1033,8 @@ const PurchaseInvoicePage = () => {
               products={products}
               productsLoading={loading}
               setProducts={setProducts}
+              showProductCatalog={showProductCatalog}
+              stickyActionsContainer={stickyFooterSlot}
             />
           </div>
 
@@ -1050,6 +1054,25 @@ const PurchaseInvoicePage = () => {
           </div>
           )}
           </div>
+
+          {/* Footer slot for PurchasePanel's save/print bar (portaled in) — `position:
+              fixed` to the viewport, not `sticky`: this page scrolls as a whole rather
+              than containing scroll within `Main`, so a sticky bar only becomes visible
+              once you've scrolled far enough for it. Fixed makes it behave like a bottom
+              toolbar, visible immediately. Inset from the left by the sidebar's actual
+              current width so it never overlaps it, and follows collapse/expand. */}
+          {!showProductCatalog && (
+            <div
+              ref={setStickyFooterSlot}
+              className={cn(
+                'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
+                !sidebarIsMobile &&
+                  (sidebarState === 'collapsed'
+                    ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
+                    : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
+              )}
+            />
+          )}
         </div>
       ) : null}
     </div>
