@@ -142,18 +142,28 @@ export function useFilteredNavGroups(): NavGroup[] {
       return checkItemPermission(item.permission)
     }
 
+    // The IMEI tracking page also handles plain serial-number tracking (see
+    // route-permissions.ts) — orgs that aren't mobile shops never use IMEIs, so the
+    // nav label shouldn't mention them.
+    const applyDynamicTitle = (item: any) => {
+      if (item.url === '/mobile-shop/imei-tracking' && userBusinessType !== 'mobile_shop') {
+        return { ...item, title: 'Serial Number Tracking' }
+      }
+      return item
+    }
+
     const filteredNavGroups = sidebarData.navGroups
       .map((group) => ({
         ...group,
         items: group.items
           .map((item: any) => {
             if (!item.items) {
-              return item
+              return applyDynamicTitle(item)
             }
 
             return {
               ...item,
-              items: item.items.filter((nestedItem: any) => canAccessItem(nestedItem)),
+              items: item.items.filter((nestedItem: any) => canAccessItem(nestedItem)).map(applyDynamicTitle),
             }
           })
           .filter((item: any) => {

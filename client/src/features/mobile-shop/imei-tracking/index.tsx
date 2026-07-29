@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
@@ -26,6 +27,9 @@ import { MobilePageShell } from '@/features/mobile-shop/components/mobile-page-s
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { cn } from '@/lib/utils'
+import { isMobileShopBusiness } from '@/lib/business-types'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { RootState } from '@/stores/store'
 import {
   useGetImeisQuery,
   useGetImeiByIdQuery,
@@ -63,6 +67,16 @@ const typeConfig: Record<'imei' | 'serial', { label: string; color: string }> = 
 }
 
 export default function ImeiTrackingPage() {
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  // IMEI is a mobile-phone concept — orgs that aren't mobile shops only ever have
+  // serial-tracked records, so keep the page's wording to "serial number" for them.
+  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
+  const numberLabel = isMobileShop ? 'IMEI or serial number' : 'serial number'
+  const recordNoun = isMobileShop ? 'IMEI' : 'serial number'
+  const itemNoun = isMobileShop ? 'device' : 'item'
+  const itemNounCap = isMobileShop ? 'Device' : 'Item'
+
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 400)
   const [activeTab, setActiveTab] = useState<'all' | ImeiStatus>('all')
@@ -113,7 +127,7 @@ export default function ImeiTrackingPage() {
         status: lostStolenTarget.status,
         reason: lostStolenReason.trim() || undefined,
       }).unwrap()
-      toast.success(`Device marked as ${lostStolenTarget.status}`)
+      toast.success(`${itemNounCap} marked as ${lostStolenTarget.status}`)
       setLostStolenTarget(null)
       setLostStolenReason('')
     } catch (err) {
@@ -123,7 +137,10 @@ export default function ImeiTrackingPage() {
   }
 
   return (
-    <MobilePageShell title='IMEI / Serial Tracking' description='Search any IMEI or serial number, track its full history, warranty status, and report lost/stolen devices'>
+    <MobilePageShell
+      title={isMobileShop ? 'IMEI / Serial Tracking' : 'Serial Number Tracking'}
+      description={`Search any ${numberLabel}, track its full history, warranty status, and report lost/stolen items`}
+    >
 
       {/* ── Stats ── */}
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6'>
@@ -189,12 +206,12 @@ export default function ImeiTrackingPage() {
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='flex items-center gap-2'>
-            <ShieldCheck className='h-5 w-5 text-primary' /> IMEI Records
+            <ShieldCheck className='h-5 w-5 text-primary' /> {isMobileShop ? 'IMEI Records' : 'Serial Number Records'}
           </CardTitle>
           <div className='relative mt-3'>
             <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
             <Input
-              placeholder='Search by IMEI, brand, model, customer name/phone/CNIC...'
+              placeholder={`Search by ${numberLabel}, brand, model, customer name/phone/CNIC...`}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               className='pl-9'
@@ -218,13 +235,15 @@ export default function ImeiTrackingPage() {
               <TabsTrigger value='scrapped'>Scrapped</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Tabs value={typeFilter} onValueChange={(v) => { setTypeFilter(v as TypeFilter); setPage(1) }} className='mb-4'>
-            <TabsList className='h-auto gap-1'>
-              <TabsTrigger value='all'>All Types</TabsTrigger>
-              <TabsTrigger value='imei'>IMEI</TabsTrigger>
-              <TabsTrigger value='serial'>Serial Number</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {isMobileShop && (
+            <Tabs value={typeFilter} onValueChange={(v) => { setTypeFilter(v as TypeFilter); setPage(1) }} className='mb-4'>
+              <TabsList className='h-auto gap-1'>
+                <TabsTrigger value='all'>All Types</TabsTrigger>
+                <TabsTrigger value='imei'>IMEI</TabsTrigger>
+                <TabsTrigger value='serial'>Serial Number</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
 
           {isListLoading ? (
             <div className='space-y-3'>
@@ -233,7 +252,7 @@ export default function ImeiTrackingPage() {
           ) : records.length === 0 ? (
             <div className='flex flex-col items-center justify-center py-16 text-muted-foreground'>
               <ShieldCheck className='h-12 w-12 mb-3 opacity-30' />
-              <p className='text-base font-medium'>No IMEI records found</p>
+              <p className='text-base font-medium'>No {recordNoun} records found</p>
               <p className='text-sm'>Try a different search or filter</p>
             </div>
           ) : (
@@ -243,7 +262,7 @@ export default function ImeiTrackingPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Number</TableHead>
-                      <TableHead>Type</TableHead>
+                      {isMobileShop && <TableHead>Type</TableHead>}
                       <TableHead>Product</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Customer</TableHead>
@@ -255,9 +274,11 @@ export default function ImeiTrackingPage() {
                     {records.map((record) => (
                       <TableRow key={record.id} className='cursor-pointer hover:bg-muted/30' onClick={() => setDetailId(record.id)}>
                         <TableCell className='font-mono text-xs'>{record.imei}</TableCell>
-                        <TableCell>
-                          <Badge className={`text-xs ${typeConfig[record.type ?? 'imei'].color}`}>{typeConfig[record.type ?? 'imei'].label}</Badge>
-                        </TableCell>
+                        {isMobileShop && (
+                          <TableCell>
+                            <Badge className={`text-xs ${typeConfig[record.type ?? 'imei'].color}`}>{typeConfig[record.type ?? 'imei'].label}</Badge>
+                          </TableCell>
+                        )}
                         <TableCell className='text-sm'>
                           <div className='font-medium'>{record.productName || '—'}</div>
                           <div className='text-xs text-muted-foreground'>{[record.brand, record.model, record.color].filter(Boolean).join(' · ')}</div>
@@ -306,7 +327,9 @@ export default function ImeiTrackingPage() {
               <DialogHeader>
                 <DialogTitle className='flex items-center gap-2 font-mono'>
                   <Smartphone className='h-5 w-5 text-primary' /> {detailRecord.imei}
-                  <Badge className={`text-xs font-sans ${typeConfig[detailRecord.type ?? 'imei'].color}`}>{typeConfig[detailRecord.type ?? 'imei'].label}</Badge>
+                  {isMobileShop && (
+                    <Badge className={`text-xs font-sans ${typeConfig[detailRecord.type ?? 'imei'].color}`}>{typeConfig[detailRecord.type ?? 'imei'].label}</Badge>
+                  )}
                   <Badge className={`text-xs font-sans ${statusConfig[detailRecord.status].color}`}>{statusConfig[detailRecord.status].label}</Badge>
                 </DialogTitle>
               </DialogHeader>
@@ -392,9 +415,9 @@ export default function ImeiTrackingPage() {
       <AlertDialog open={!!lostStolenTarget} onOpenChange={(open) => { if (!open) { setLostStolenTarget(null); setLostStolenReason('') } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Mark device as {lostStolenTarget?.status}?</AlertDialogTitle>
+            <AlertDialogTitle>Mark {itemNoun} as {lostStolenTarget?.status}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will record the device as {lostStolenTarget?.status} and add it to the {lostStolenTarget?.status} history. This action is logged and cannot be silently undone.
+              This will record the {itemNoun} as {lostStolenTarget?.status} and add it to the {lostStolenTarget?.status} history. This action is logged and cannot be silently undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className='space-y-1'>
