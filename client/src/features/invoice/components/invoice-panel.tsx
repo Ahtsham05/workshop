@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase } from 'lucide-react'
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { Invoice, InvoiceItem, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
@@ -201,6 +202,13 @@ interface InvoicePanelProps {
   editingInvoice?: any
   /** Matches Product Catalog "Cost" toggle — when true, purchase cost is readable in the product picker */
   showProductCost?: boolean
+  /** When false (catalog hidden), the panel switches to a dense "fast invoicing" layout —
+   * single-row items and a sticky save bar — to fit more lines on screen. */
+  showProductCatalog?: boolean
+  /** Fast-invoicing mode only: DOM node (owned by the page, sitting outside the cards'
+   * scroll region) to portal the save/print bar into, so it's always visible without
+   * scrolling. Falls back to an inline sticky bar until this is available. */
+  stickyActionsContainer?: HTMLElement | null
 }
 
 export function InvoicePanel({
@@ -224,6 +232,8 @@ export function InvoicePanel({
   isEditing = false,
   editingInvoice,
   showProductCost = false,
+  showProductCatalog = true,
+  stickyActionsContainer = null,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const dispatch = useDispatch<AppDispatch>()
@@ -1427,12 +1437,22 @@ export function InvoicePanel({
   // }
 
   return (
-    <div className='space-y-4'>
-      {/* Keyboard Language Override 
+    <div
+      className={cn(
+        !showProductCatalog
+          ? // `minmax(0,1fr)`, not a bare `1fr` — a bare `1fr` track's minimum is its
+            // content's natural (unwrapped) size, so one long product name would force
+            // this whole column — and the page — wider instead of letting the name
+            // column's flex-1/min-w-0/truncate chain actually clip it.
+            'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
+          : 'space-y-4',
+      )}
+    >
+      {/* Keyboard Language Override
       <KeyboardLanguageOverride />*/}
-      
-      {/* Customer and Type Selection */}
-      <Card>
+
+      {/* Customer and Type Selection — left column (compact mode) */}
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-1')}>
         <CardHeader>
           <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
             <CardTitle className='flex items-center gap-2'>
@@ -1478,7 +1498,11 @@ export function InvoicePanel({
             </div>
           )}
           
-          <div className='grid gap-4 grid-cols-1 sm:grid-cols-2'>
+          {/* `sm:` is a viewport breakpoint, not a container one — in compact mode this
+              card sits in a narrow ~320-420px left column even on a wide screen, so
+              forcing 2 columns here (based on viewport width) crammed Customer and
+              Invoice Type into half that space. Stack them when the catalog is hidden. */}
+          <div className={cn('grid gap-4 grid-cols-1', showProductCatalog && 'sm:grid-cols-2')}>
             <div>
               <Label htmlFor="customer" className='mb-2'>
                 {t('customer')} <span className="text-red-500">*</span>
@@ -1846,11 +1870,12 @@ export function InvoicePanel({
         </CardContent>
       </Card>
 
-      {/* Invoice Items */}
-      <Card>
-        <CardHeader>
+      {/* Invoice Items — right column (compact mode): spans both left rows so it runs
+          the full height alongside the details+totals stack, with room to breathe. */}
+      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-stretch')}>
+        <CardHeader className={cn(!showProductCatalog && 'py-3')}>
           <div className='flex items-center justify-between'>
-            <CardTitle>{t('invoice_items')} ({invoice.items.length})</CardTitle>
+            <CardTitle className={cn(!showProductCatalog && 'text-base')}>{t('invoice_items')} ({invoice.items.length})</CardTitle>
             <div className="flex items-center gap-2">
               {canCreateProduct ? (
                 <Button
@@ -1881,8 +1906,13 @@ export function InvoicePanel({
             </div>
           </div>
         </CardHeader>
-        <CardContent className='p-4'>
-          <div ref={itemsScrollRef} className='space-y-2'>
+        <CardContent
+          className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}
+        >
+          <div
+            ref={itemsScrollRef}
+            className={cn('space-y-2', !showProductCatalog && 'space-y-1.5')}
+          >
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
@@ -1897,23 +1927,43 @@ export function InvoicePanel({
                   ? sellableCatalog.find(c => c.variantId === item.variantId)
                   : undefined
                 const remainingStock = item.variantId ? catalogEntry?.stockQuantity : currentProduct?.stockQuantity
+                // Compact "fast invoicing" mode (catalog hidden): the whole item row
+                // folds onto one line — name flexes to fill the middle, qty/price/subtotal
+                // and delete sit fixed-width at the end — instead of stacking name above
+                // the qty/price controls, roughly halving each row's height so more items
+                // fit on screen without scrolling.
+                const compact = !showProductCatalog
+                const deleteButton = (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeFromInvoice(item.id)}
+                    className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                  >
+                    <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+                  </Button>
+                )
                 return (
                   <div key={item.id} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
+                    {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
+                        flex-wrap line — name flexes in the middle, qty/price/subtotal/delete
+                        pack to the end — instead of stacking, so each item takes ~half the height. */}
+                    <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
                     {/* Row 1: Image + Name/Selector + Delete */}
-                    <div className='flex items-start gap-3 p-3'>
+                    <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
                       {item.image?.url ? (
                         <img
                           src={item.image.url}
                           alt={item.name}
-                          className='w-10 h-10 object-cover rounded-lg flex-shrink-0 mt-0.5'
+                          className={cn('object-cover rounded-lg flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}
                         />
                       ) : (
-                        <div className='w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5'>
-                          <Package className='h-5 w-5 text-muted-foreground/50' />
+                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}>
+                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                         </div>
                       )}
 
-                      <div className='flex-1 min-w-0'>
+                      <div className='min-w-0 flex-1'>
                         {item.isManualEntry ? (
                           <div className='space-y-1'>
                             <Popover
@@ -2086,9 +2136,16 @@ export function InvoicePanel({
                           </div>
                         ) : (
                           <div className='min-w-0 flex-1'>
-                            <BilingualName primary={item.name} secondary={item.nameUrdu} primaryClassName='font-semibold text-sm' />
-                            <div className='flex items-center gap-2 mt-0.5 flex-wrap'>
-                              <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
+                            <BilingualName
+                              primary={item.name}
+                              secondary={item.nameUrdu}
+                              primaryClassName='font-semibold text-sm'
+                              truncate={compact}
+                            />
+                            <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', compact && 'flex-nowrap')}>
+                              {!compact && (
+                                <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
+                              )}
                               {remainingStock !== undefined && (
                                 <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
                                   remainingStock <= 0 ? 'bg-red-100 text-red-700' :
@@ -2136,21 +2193,14 @@ export function InvoicePanel({
                         )}
                       </div>
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeFromInvoice(item.id)}
-                        className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
-                      >
-                        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
-                      </Button>
+                      {!compact && deleteButton}
                     </div>
 
                     {/* Row 2: Controls — only when a product is selected */}
                     {(item.productId && item.name) && (
-                      <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                      <div className={cn(compact ? 'contents' : 'flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5')}>
                         {/* Quantity Stepper */}
-                        <div className='flex items-center gap-1.5'>
+                        <div className='flex items-center gap-1.5 shrink-0'>
                           <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
                             <Button
                               size="sm"
@@ -2186,7 +2236,7 @@ export function InvoicePanel({
                         </div>
 
                         {showUnitConversions && (
-                          <div className='flex flex-col gap-1 min-w-[80px]'>
+                          <div className='flex flex-col gap-1 min-w-[80px] shrink-0'>
                             <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
                             <Select
                               value={item.unit || 'pcs'}
@@ -2284,8 +2334,8 @@ export function InvoicePanel({
                         )}
 
                         {/* Price Input */}
-                        <span className='text-muted-foreground/60 text-sm select-none'>×</span>
-                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                        <span className='text-muted-foreground/60 text-sm select-none shrink-0'>×</span>
+                        <div className='flex items-center rounded-lg border bg-background overflow-hidden shrink-0'>
                           <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
                           <Input
                             ref={(el) => { priceInputRefs.current[item.id] = el }}
@@ -2359,12 +2409,15 @@ export function InvoicePanel({
                               }
                             }}
                             onFocus={(e) => e.target.select()}
-                            className='h-7 w-16 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            className={cn(
+                              'h-7 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]',
+                              compact ? 'w-24' : 'w-16',
+                            )}
                           />
                         </div>
 
                         {/* Subtotal */}
-                        <div className='flex items-center gap-1.5 ml-auto'>
+                        <div className='flex items-center gap-1.5 ml-auto shrink-0'>
                           <span className='text-muted-foreground/60 text-sm select-none'>=</span>
                           <div className='text-right'>
                             <p className='font-bold text-sm'>Rs{item.subtotal}</p>
@@ -2375,6 +2428,8 @@ export function InvoicePanel({
                         </div>
                       </div>
                     )}
+                    {compact && deleteButton}
+                    </div>
                     {(() => {
                       const product = products.find((p: any) => (p._id || p.id) === item.productId)
                       if (!product?.trackImei && !product?.trackSerial) return null
@@ -2401,8 +2456,8 @@ export function InvoicePanel({
         </CardContent>
       </Card>
 
-      {/* Totals and Payment */}
-      <Card>
+      {/* Totals and Payment — left column (compact mode), below the details card */}
+      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
         <CardContent className='p-4 space-y-4'>
           {/* Discount Control */}
           <div>
@@ -2640,51 +2695,57 @@ export function InvoicePanel({
           )}
 
           <div className='grid grid-cols-1 gap-3'>
-            <Button 
-              onClick={() => handleSaveInvoice('none')}
-              className='w-full'
-              size="lg"
-              disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-              variant="outline"
-            >
-              {savingType === 'none' ? (
-                <>
-                  <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                  {t('saving')}...
-                </>
-              ) : (
-                <>
-                  <Save className='h-4 w-4 mr-2' />
-                  {isEditing ? t('update_invoice') : t('save_invoice')} (Ctrl+D)
-                </>
-              )}
-            </Button>
+            {/* Compact mode (catalog hidden): the sticky bar below is the buttons row —
+                these full-size duplicates would just repeat it right above. */}
+            {showProductCatalog && (
+              <>
+                <Button
+                  onClick={() => handleSaveInvoice('none')}
+                  className='w-full'
+                  size="lg"
+                  disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                  variant="outline"
+                >
+                  {savingType === 'none' ? (
+                    <>
+                      <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                      {t('saving')}...
+                    </>
+                  ) : (
+                    <>
+                      <Save className='h-4 w-4 mr-2' />
+                      {isEditing ? t('update_invoice') : t('save_invoice')} (Ctrl+D)
+                    </>
+                  )}
+                </Button>
 
-            <PrintFormatButton
-              onPrint={(paperSize) => handleSaveInvoice(paperSize)}
-              defaultPaperSize={defaultPaperSize}
-              allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-              size="lg"
-              variant="default"
-              fullWidth
-              disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-              mainButtonContent={
-                savingType !== null && savingType !== 'none' ? (
-                  <>
-                    <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                    {t('saving')}...
-                  </>
-                ) : (
-                  <>
-                    <Printer className='h-4 w-4 mr-2' />
-                    {isEditing
-                      ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
-                      : `${t('save_and_print_receipt')} (Ctrl+Enter)`
-                    }
-                  </>
-                )
-              }
-            />
+                <PrintFormatButton
+                  onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                  defaultPaperSize={defaultPaperSize}
+                  allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+                  size="lg"
+                  variant="default"
+                  fullWidth
+                  disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                  mainButtonContent={
+                    savingType !== null && savingType !== 'none' ? (
+                      <>
+                        <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                        {t('saving')}...
+                      </>
+                    ) : (
+                      <>
+                        <Printer className='h-4 w-4 mr-2' />
+                        {isEditing
+                          ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
+                          : `${t('save_and_print_receipt')} (Ctrl+Enter)`
+                        }
+                      </>
+                    )
+                  }
+                />
+              </>
+            )}
 
             {/* Send After Save selector */}
             <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
@@ -2766,6 +2827,66 @@ export function InvoicePanel({
           </div>
         </CardContent>
       </Card>
+
+      {/* Fast-invoicing buttons bar — catalog hidden means the panel is a two-column
+          layout (details+totals on the left, items on the right); the primary actions are
+          always reachable without scrolling, same idea as the Fast Billing checkout panel.
+          The full Save/Print controls in the totals card above still work as usual.
+          Portaled into a footer slot the page keeps outside the cards' scroll region — a
+          plain `position: sticky` bar only shows once you've scrolled far enough for it,
+          which isn't "always visible" when the cards column alone is taller than the
+          viewport. Falls back to rendering inline (with its own sticky positioning) until
+          that slot exists. */}
+      {!showProductCatalog && (() => {
+        const bar = (
+          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+            <div className='flex items-baseline gap-2 pl-1'>
+              <span className='text-xs text-muted-foreground'>
+                {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}
+              </span>
+              <span className='text-lg font-bold tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                onClick={() => handleSaveInvoice('none')}
+                size='sm'
+                variant='outline'
+                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                className='gap-1.5'
+              >
+                {savingType === 'none' ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <Save className='h-4 w-4' />
+                )}
+                {isEditing ? t('update_invoice') : t('save_invoice')}
+              </Button>
+              <PrintFormatButton
+                onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                defaultPaperSize={defaultPaperSize}
+                allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+                size='sm'
+                variant='default'
+                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                mainButtonContent={
+                  savingType !== null && savingType !== 'none' ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    <>
+                      <Printer className='h-4 w-4' />
+                      <span className='ml-1.5'>{isEditing ? t('update_and_print_receipt') : t('save_and_print_receipt')}</span>
+                    </>
+                  )
+                }
+              />
+            </div>
+          </div>
+        )
+        return stickyActionsContainer
+          ? createPortal(bar, stickyActionsContainer)
+          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
+      })()}
 
       <EntityQuickCreateDialogs
         state={quickCreate}

@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sheet'
 import { Clock, Columns2, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSidebar } from '@/components/ui/sidebar'
 import {
   clearSaleWorkspace,
   saveSaleWorkspace,
@@ -192,6 +193,7 @@ export interface Category {
 export default function InvoicePage() {
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
+  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar()
   const dispatch = useDispatch<AppDispatch>()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const search = useSearch({ from: '/_authenticated/invoice/' })
@@ -248,6 +250,12 @@ export default function InvoicePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [taxRate, setTaxRate] = useState(0) // Configurable tax rate
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog)
+  // Fast-invoicing mode (catalog hidden): DOM node for the always-visible footer bar,
+  // rendered by InvoicePanel via a portal so the buttons live outside the scrollable
+  // cards region below — a plain `position: sticky` bar only appears once you scroll
+  // far enough for it, which isn't "always visible" when the cards column alone is
+  // already taller than the viewport.
+  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null)
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -1449,9 +1457,20 @@ export default function InvoicePage() {
         )}
       >
         <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
-          <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+          <div
+            className={cn(
+              'flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between',
+            )}
+          >
             <p className='order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1'>
               {t('autosave_hint')}
+              <span className='mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1'>
+                <kbd className='rounded border bg-background px-1 font-mono'>Ctrl+D</kbd>
+                {t('save_invoice')}
+                <span className='text-muted-foreground/50'>·</span>
+                <kbd className='rounded border bg-background px-1 font-mono'>Ctrl+Enter</kbd>
+                {t('save_and_print_receipt')}
+              </span>
             </p>
             <div className='flex flex-wrap justify-end gap-2 order-1 sm:order-2'>
               <Button
@@ -1571,14 +1590,11 @@ export default function InvoicePage() {
             showProductCatalog ? 'gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
           )}
         >
-          {/* Invoice panel — centered readable width when catalog hidden (matches modern SaaS checkout) */}
-          <div
-            className={cn(
-              'min-w-0 space-y-4 pb-6',
-              !showProductCatalog &&
-                'mx-auto w-full max-w-2xl sm:max-w-3xl 2xl:max-w-4xl',
-            )}
-          >
+          {/* Invoice panel — full width when catalog hidden: InvoicePanel itself splits
+              into a details+totals / items two-column layout ("fast invoicing" mode) so
+              hiding the catalog actually reclaims the freed-up width instead of just
+              centering a narrower column. */}
+          <div className='min-w-0 space-y-4 pb-6'>
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}
@@ -1600,6 +1616,8 @@ export default function InvoicePage() {
               isEditing={currentView === 'edit'}
               editingInvoice={editingInvoice}
               showProductCost={showProductCost}
+              showProductCatalog={showProductCatalog}
+              stickyActionsContainer={stickyFooterSlot}
             />
           </div>
 
@@ -1626,6 +1644,26 @@ export default function InvoicePage() {
           </div>
           )}
         </div>
+
+        {/* Footer slot for InvoicePanel's save/print bar (portaled in) — `position: fixed`
+            to the viewport, not `sticky`: this page (like every page here) scrolls as a
+            whole rather than containing scroll within `Main`, so a sticky bar only becomes
+            visible once you've scrolled far enough for it. Fixed makes it behave like a
+            bottom toolbar, visible immediately and never scrolling away. Inset from the
+            left by the sidebar's actual current width (it's a peer, not a sibling we can
+            just flex next to) so it never overlaps it, and follows collapse/expand. */}
+        {!showProductCatalog && (
+          <div
+            ref={setStickyFooterSlot}
+            className={cn(
+              'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
+              !sidebarIsMobile &&
+                (sidebarState === 'collapsed'
+                  ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
+                  : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
+            )}
+          />
+        )}
         </div>
       </div>
     </div>
