@@ -55,12 +55,19 @@ function warrantyBadge(record: ImeiRecord) {
 }
 
 type QuickFilter = 'lost_stolen' | 'warranty_expiring' | null
+type TypeFilter = 'all' | 'imei' | 'serial'
+
+const typeConfig: Record<'imei' | 'serial', { label: string; color: string }> = {
+  imei: { label: 'IMEI', color: 'bg-indigo-100 text-indigo-700' },
+  serial: { label: 'Serial', color: 'bg-teal-100 text-teal-700' },
+}
 
 export default function ImeiTrackingPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 400)
   const [activeTab, setActiveTab] = useState<'all' | ImeiStatus>('all')
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null)
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [page, setPage] = useState(1)
   const [limit] = useState(15)
 
@@ -83,6 +90,7 @@ export default function ImeiTrackingPage() {
   const { data: listData, isLoading: isListLoading } = useGetImeisQuery({
     search: debouncedSearch || undefined,
     status: quickFilter === 'lost_stolen' ? 'lost,stolen' : activeTab !== 'all' ? activeTab : undefined,
+    type: typeFilter !== 'all' ? typeFilter : undefined,
     warrantyStatus: quickFilter === 'warranty_expiring' ? 'expiring_soon' : undefined,
     page,
     limit,
@@ -115,7 +123,7 @@ export default function ImeiTrackingPage() {
   }
 
   return (
-    <MobilePageShell title='IMEI Tracking' description='Search any IMEI, track its full history, warranty status, and report lost/stolen devices'>
+    <MobilePageShell title='IMEI / Serial Tracking' description='Search any IMEI or serial number, track its full history, warranty status, and report lost/stolen devices'>
 
       {/* ── Stats ── */}
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6'>
@@ -199,7 +207,7 @@ export default function ImeiTrackingPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={quickFilter ? '' : activeTab} onValueChange={(v) => goToTab(v as 'all' | ImeiStatus)} className='mb-4'>
+          <Tabs value={quickFilter ? '' : activeTab} onValueChange={(v) => goToTab(v as 'all' | ImeiStatus)} className='mb-3'>
             <TabsList className='flex-wrap h-auto gap-1'>
               <TabsTrigger value='all'>All</TabsTrigger>
               <TabsTrigger value='in_stock'>In Stock</TabsTrigger>
@@ -208,6 +216,13 @@ export default function ImeiTrackingPage() {
               <TabsTrigger value='lost'>Lost</TabsTrigger>
               <TabsTrigger value='stolen'>Stolen</TabsTrigger>
               <TabsTrigger value='scrapped'>Scrapped</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Tabs value={typeFilter} onValueChange={(v) => { setTypeFilter(v as TypeFilter); setPage(1) }} className='mb-4'>
+            <TabsList className='h-auto gap-1'>
+              <TabsTrigger value='all'>All Types</TabsTrigger>
+              <TabsTrigger value='imei'>IMEI</TabsTrigger>
+              <TabsTrigger value='serial'>Serial Number</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -227,7 +242,8 @@ export default function ImeiTrackingPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>IMEI</TableHead>
+                      <TableHead>Number</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Product</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Customer</TableHead>
@@ -239,6 +255,9 @@ export default function ImeiTrackingPage() {
                     {records.map((record) => (
                       <TableRow key={record.id} className='cursor-pointer hover:bg-muted/30' onClick={() => setDetailId(record.id)}>
                         <TableCell className='font-mono text-xs'>{record.imei}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${typeConfig[record.type ?? 'imei'].color}`}>{typeConfig[record.type ?? 'imei'].label}</Badge>
+                        </TableCell>
                         <TableCell className='text-sm'>
                           <div className='font-medium'>{record.productName || '—'}</div>
                           <div className='text-xs text-muted-foreground'>{[record.brand, record.model, record.color].filter(Boolean).join(' · ')}</div>
@@ -287,6 +306,7 @@ export default function ImeiTrackingPage() {
               <DialogHeader>
                 <DialogTitle className='flex items-center gap-2 font-mono'>
                   <Smartphone className='h-5 w-5 text-primary' /> {detailRecord.imei}
+                  <Badge className={`text-xs font-sans ${typeConfig[detailRecord.type ?? 'imei'].color}`}>{typeConfig[detailRecord.type ?? 'imei'].label}</Badge>
                   <Badge className={`text-xs font-sans ${statusConfig[detailRecord.status].color}`}>{statusConfig[detailRecord.status].label}</Badge>
                 </DialogTitle>
               </DialogHeader>

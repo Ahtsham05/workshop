@@ -5,7 +5,7 @@ const { imeiService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const getImeis = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['productId', 'status']);
+  const filter = pick(req.query, ['productId', 'status', 'type']);
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'warrantyStatus']);
   const result = await imeiService.queryImeis(filter, options);

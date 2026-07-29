@@ -50,6 +50,7 @@ export interface PurchaseCatalogItem {
   image?: { url: string; publicId: string }
   unit?: string
   trackImei?: boolean
+  trackSerial?: boolean
   brand?: { _id: string; name: string; logo?: { url: string; publicId: string } } | null
   category?: string
   categories?: { _id: string; name: string; image?: { url: string; publicId: string } }[]

@@ -60,7 +60,7 @@ import MobileCameraScanner from '@/components/mobile-camera-scanner'
 import ImageUpload from '@/components/image-upload'
 import { Camera } from 'lucide-react'
 import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
-import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { EntityFormSection } from '@/components/entity-form-section'
@@ -83,6 +83,7 @@ const formSchema = z.object({
   barcode: z.string().optional(),
   hasVariants: z.boolean().optional(),
   trackImei: z.boolean().optional(),
+  trackSerial: z.boolean().optional(),
   trackBatch: z.boolean().optional(),
   trackExpiry: z.boolean().optional(),
   // Opening-batch identity, only used the first time trackBatch/trackExpiry is turned
@@ -125,6 +126,9 @@ const formSchema = z.object({
   if (!data.cost || data.cost < 1) {
     ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Purchase price is required.' })
   }
+  if (data.trackImei && data.trackSerial) {
+    ctx.addIssue({ code: 'custom', path: ['trackSerial'], message: 'A product tracks either IMEI or Serial Number, not both.' })
+  }
 })
 
 type productForm = z.infer<typeof formSchema>
@@ -157,6 +161,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showConversionRules = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  // IMEI tracking only makes sense for mobile phones — restrict it to mobile shop orgs.
+  // Serial number tracking (TVs, laptops, appliances) applies to every business type.
+  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
   
   // Refetch categories when dialog opens (in case new ones were added)
   useEffect(() => {
@@ -177,6 +184,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         barcode: currentRow?.barcode || '',
         hasVariants: currentRow?.hasVariants || false,
         trackImei: currentRow?.trackImei || false,
+        trackSerial: currentRow?.trackSerial || false,
         trackBatch: currentRow?.trackBatch || false,
         trackExpiry: currentRow?.trackExpiry || false,
         batchNumber: '',
@@ -199,6 +207,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         barcode: '',
         hasVariants: false,
         trackImei: false,
+        trackSerial: false,
         trackBatch: false,
         trackExpiry: false,
         batchNumber: '',
@@ -227,6 +236,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         barcode: currentRow.barcode || '',
         hasVariants: currentRow.hasVariants || false,
         trackImei: currentRow.trackImei || false,
+        trackSerial: currentRow.trackSerial || false,
         trackBatch: currentRow.trackBatch || false,
         trackExpiry: currentRow.trackExpiry || false,
         batchNumber: '',
@@ -250,6 +260,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         barcode: '',
         hasVariants: false,
         trackImei: false,
+        trackSerial: false,
         trackBatch: false,
         trackExpiry: false,
         batchNumber: '',
@@ -360,10 +371,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   }
 
   const onSubmit = async (values: productForm) => {
-    if (!isEdit && values.trackImei) {
+    if (!isEdit && (values.trackImei || values.trackSerial)) {
+      const label = values.trackSerial ? 'serial' : 'IMEI'
       const imeiCount = (values.imeis || []).length
       if (imeiCount !== values.stockQuantity) {
-        toast.error(`Enter ${values.stockQuantity} IMEI number(s) — ${imeiCount} entered`)
+        toast.error(`Enter ${values.stockQuantity} ${label} number(s) — ${imeiCount} entered`)
         return
       }
     }
@@ -1116,28 +1128,64 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='trackImei'
-                render={({ field }) => (
-                  <FormItem className='gap-1.5'>
-                    <FormLabel>Track IMEI</FormLabel>
-                    <FormControl>
-                      <div className='flex items-center gap-2'>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                        <span className='text-sm text-muted-foreground'>
-                          Track an IMEI/serial number for each unit of this product (mobile phones)
-                        </span>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              <div className='grid gap-2'>
+                {isMobileShop && (
+                  <FormField
+                    control={form.control}
+                    name='trackImei'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>Track IMEI</FormLabel>
+                        <FormControl>
+                          <div className='flex items-center gap-2'>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked)
+                                if (checked) form.setValue('trackSerial', false)
+                              }}
+                            />
+                            <span className='text-sm text-muted-foreground'>
+                              Track an IMEI number for each unit of this product (mobile phones)
+                            </span>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
-              {form.watch('trackImei') && (
+                <FormField
+                  control={form.control}
+                  name='trackSerial'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>Track Serial Number</FormLabel>
+                      <FormControl>
+                        <div className='flex items-center gap-2'>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked)
+                              if (checked) form.setValue('trackImei', false)
+                            }}
+                          />
+                          <span className='text-sm text-muted-foreground'>
+                            Track a serial number for each unit of this product (TVs, laptops, appliances, etc.)
+                          </span>
+                        </div>
+                      </FormControl>
+                      {isMobileShop && (
+                        <p className='text-xs text-muted-foreground'>
+                          A product tracks one or the other, never both — pick IMEI for phones, Serial Number for everything else that's individually serialized.
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              {(form.watch('trackImei') || form.watch('trackSerial')) && (
                 <FormField
                   control={form.control}
                   name='warrantyMonths'
@@ -1156,20 +1204,22 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         />
                       </FormControl>
                       <p className='text-xs text-muted-foreground'>
-                        Applied automatically to every IMEI sold for this product. Set 0 for no warranty.
+                        Applied automatically to every unit sold for this product. Set 0 for no warranty.
                       </p>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               )}
-              {form.watch('trackImei') && (form.watch('stockQuantity') > 0 || isEdit) && (
+              {(form.watch('trackImei') || form.watch('trackSerial')) && (form.watch('stockQuantity') > 0 || isEdit) && (
                 <FormField
                   control={form.control}
                   name='imeis'
                   render={({ field }) => {
                     const imeis = field.value || []
                     const stockQuantity = form.watch('stockQuantity')
+                    const isSerial = form.watch('trackSerial')
+                    const label = isSerial ? 'serial number' : 'IMEI'
                     const addImei = () => {
                       const cleaned = imeiDraft.trim()
                       if (!cleaned || imeis.includes(cleaned)) return
@@ -1178,7 +1228,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     }
                     return (
                       <FormItem className='gap-1.5'>
-                        <FormLabel>IMEI Numbers</FormLabel>
+                        <FormLabel>{isSerial ? 'Serial Numbers' : 'IMEI Numbers'}</FormLabel>
                         <FormControl>
                           <div className='space-y-2'>
                             <span className='text-xs font-medium text-amber-700'>
@@ -1188,7 +1238,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             </span>
                             <div className='flex items-center gap-2'>
                               <Input
-                                placeholder='Scan or type IMEI, press Enter'
+                                placeholder={`Scan or type ${label}, press Enter`}
                                 value={imeiDraft}
                                 showVoiceInput={false}
                                 onChange={(e) => setImeiDraft(e.target.value)}

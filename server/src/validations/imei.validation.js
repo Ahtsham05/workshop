@@ -18,6 +18,7 @@ const getImeis = {
   query: Joi.object().keys({
     productId: Joi.string().custom(objectId),
     status: statusOrCsv,
+    type: Joi.string().valid('imei', 'serial'),
     warrantyStatus: Joi.string().valid('expiring_soon'),
     search: Joi.string().trim().allow(''),
     sortBy: Joi.string(),

@@ -62,7 +62,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/mobile-shop/services', businessTypes: ['mobile_shop'], anyPermission: ['viewServices'] },
   { prefix: '/mobile-shop/bill-payments', businessTypes: ['mobile_shop'], anyPermission: ['viewBillPayments'] },
   { prefix: '/mobile-shop/installments', businessTypes: ['mobile_shop'], anyPermission: ['viewInstallments'] },
-  { prefix: '/mobile-shop/imei-tracking', businessTypes: ['mobile_shop'], anyPermission: ['viewImeiTracking'] },
+  // Serial number tracking applies to every business type; IMEI-specific tracking is
+  // mobile_shop-only (enforced when enabling it on a product), but this same page shows
+  // both — so it's open to all business types except ones with no serialized inventory.
+  { prefix: '/mobile-shop/imei-tracking', excludeBusinessTypes: ['school', 'restaurant'], anyPermission: ['viewImeiTracking'] },
   { prefix: '/mobile-shop/cash-book', anyPermission: ['viewCashBook'] },
   { prefix: '/cash-book', anyPermission: ['viewCashBook'] },
 

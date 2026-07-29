@@ -69,8 +69,9 @@ const ProductSchema = new mongoose.Schema({
             },
         },
     ],
-    trackImei: { type: Boolean, default: false }, // Track IMEI/serial number per unit (e.g. mobile phones)
-    warrantyMonths: { type: Number, default: 0 }, // Warranty length applied to IMEI units sold for this product
+    trackImei: { type: Boolean, default: false }, // Track an IMEI (+ optional imei2) per unit — mobile phones
+    trackSerial: { type: Boolean, default: false }, // Track a serial number per unit — other serialized goods (TVs, laptops, appliances). Mutually exclusive with trackImei; both are enforced/consumed via the shared Imei collection/service.
+    warrantyMonths: { type: Number, default: 0 }, // Warranty length applied to IMEI/serial units sold for this product
     sku: { type: String },  // SKU for inventory management
     category: { type: String }, // Keep for backward compatibility
     categories: [{ // New multi-category support

@@ -47,6 +47,7 @@ const syncImeisForPurchaseItem = async ({
   productId,
   productName,
   imeis = [],
+  type = 'imei',
   purchasePrice,
   supplierId,
   supplierName,
@@ -77,9 +78,10 @@ const syncImeisForPurchaseItem = async ({
     status: { $in: ['in_stock', 'sold'] },
   });
   if (duplicates.length > 0) {
+    const label = type === 'serial' ? 'Serial number' : 'IMEI';
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      `IMEI already exists in inventory: ${duplicates.map((d) => d.imei).join(', ')}`,
+      `${label} already exists in inventory: ${duplicates.map((d) => d.imei).join(', ')}`,
     );
   }
 
@@ -88,6 +90,7 @@ const syncImeisForPurchaseItem = async ({
       organizationId,
       branchId,
       imei,
+      type,
       productId,
       productName,
       purchaseId: purchaseId || null,
@@ -136,7 +139,7 @@ const validateImeisAvailable = async ({ items, organizationId, branchId }) => {
     const foundSet = new Set(found.map((d) => normalizeImei(d.imei)));
     const missing = numbers.filter((num) => !foundSet.has(num));
     if (missing.length > 0) {
-      throw new ApiError(httpStatus.BAD_REQUEST, `IMEI not available in stock: ${missing.join(', ')}`);
+      throw new ApiError(httpStatus.BAD_REQUEST, `IMEI/Serial number not available in stock: ${missing.join(', ')}`);
     }
   }
 };

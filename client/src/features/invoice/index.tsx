@@ -163,6 +163,7 @@ export interface Product {
   description?: string
   nameUrdu?: string
   trackImei?: boolean
+  trackSerial?: boolean
   hasVariants?: boolean
   // Set server-side only for hasVariants products — price/cost/stockQuantity above stay
   // at their legacy fallback (often 0) once a product has variants, see
@@ -622,6 +623,7 @@ export default function InvoicePage() {
         barcode: item.barcode,
         unit: item.unit,
         trackImei: item.trackImei,
+        trackSerial: item.trackSerial,
         hasVariants: item.type === 'variant',
         brandId: item.brand,
         price: item.price,

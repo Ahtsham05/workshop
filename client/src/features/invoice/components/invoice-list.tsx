@@ -1075,7 +1075,7 @@ function InvoiceDetails({
                       <div>
                         <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
                         {item.imeis && item.imeis.length > 0 && (
-                          <p className='text-xs text-muted-foreground'>IMEI: {item.imeis.join(', ')}</p>
+                          <p className='text-xs text-muted-foreground'>IMEI/Serial: {item.imeis.join(', ')}</p>
                         )}
                       </div>
                     </div>

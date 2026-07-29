@@ -15,6 +15,16 @@ const imeiSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Which per-unit identifier this record represents. 'imei' = mobile phones (supports a
+    // second dual-SIM slot via imei2); 'serial' = any other serialized product (single number).
+    // Both share this same collection/lifecycle (status, warranty, history) — only the label
+    // and whether imei2 is meaningful differ.
+    type: {
+      type: String,
+      enum: ['imei', 'serial'],
+      default: 'imei',
+      index: true,
+    },
     imei: {
       type: String,
       trim: true,

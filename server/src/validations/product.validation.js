@@ -8,6 +8,15 @@ const unitConversionSchema = Joi.object().keys({
   isActive: Joi.boolean().optional(),
 });
 
+// A product tracks per-unit identifiers one way or the other, never both — one physical unit
+// has one identifying number in this system (an IMEI for phones, a serial number otherwise).
+const noBothImeiAndSerial = (value, helpers) => {
+  if (value.trackImei && value.trackSerial) {
+    return helpers.message('trackImei and trackSerial cannot both be enabled on the same product');
+  }
+  return value;
+};
+
 const createProduct = {
   body: Joi.object().keys({
     name: Joi.string().required(),
@@ -31,6 +40,7 @@ const createProduct = {
     description: Joi.string().allow('').optional(),
     barcode: Joi.string().allow('').optional(),
     trackImei: Joi.boolean().optional(),
+    trackSerial: Joi.boolean().optional(),
     warrantyMonths: Joi.number().integer().min(0).optional(),
     imeis: Joi.array().items(Joi.string().trim()).optional(),
     image: Joi.object().keys({
@@ -45,7 +55,7 @@ const createProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
-  }),
+  }).custom(noBothImeiAndSerial),
 };
 
 const fetchImageFromSearch = {
@@ -86,6 +96,7 @@ const updateProduct = {
     description: Joi.string().allow(''),
     barcode: Joi.string().allow(''),
     trackImei: Joi.boolean().optional(),
+    trackSerial: Joi.boolean().optional(),
     warrantyMonths: Joi.number().integer().min(0).optional(),
     imeis: Joi.array().items(Joi.string().trim()).optional(),
     cost: Joi.number(),
@@ -115,7 +126,7 @@ const updateProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
-  }),
+  }).custom(noBothImeiAndSerial),
 };
 
 const deleteProduct = {

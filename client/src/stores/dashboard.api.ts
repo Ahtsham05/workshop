@@ -176,6 +176,7 @@ export interface BrandProductData {
   profit: number
   productCount: number
   hasImeiProducts: boolean
+  hasSerialProducts?: boolean
   margin: number
 }
 
@@ -193,6 +194,7 @@ export interface ProductDetail {
   cost: number
   profit: number
   trackImei: boolean
+  trackSerial?: boolean
 }
 
 export const dashboardApi = createApi({

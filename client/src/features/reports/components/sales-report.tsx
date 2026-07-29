@@ -424,7 +424,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               {reportEntityName(language, row.productName, row.productNameUrdu)}
                               {row.imeis && row.imeis.length > 0 && (
                                 <div className='text-xs font-normal text-muted-foreground'>
-                                  IMEI: {row.imeis.join(', ')}
+                                  IMEI/Serial: {row.imeis.join(', ')}
                                 </div>
                               )}
                             </TableCell>
@@ -589,7 +589,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 </LongText>
                                 {item.imeis && item.imeis.length > 0 && (
                                   <span className='block text-xs text-muted-foreground'>
-                                    IMEI: {item.imeis.join(', ')}
+                                    IMEI/Serial: {item.imeis.join(', ')}
                                   </span>
                                 )}
                                 {(item.variantLabel || item.batchNumber || item.expiryDate) && (
@@ -722,7 +722,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             </LongText>
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
-                                IMEI: {item.imeis.join(', ')}
+                                IMEI/Serial: {item.imeis.join(', ')}
                               </div>
                             )}
                             {(item.variantLabel || item.batchNumber || item.expiryDate) && (

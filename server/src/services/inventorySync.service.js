@@ -43,7 +43,7 @@ const getOrCreateDefaultVariant = async (productId) => {
     price: product.price,
     cost: product.cost,
     unit: product.unit,
-    trackSerial: !!product.trackImei,
+    trackSerial: !!(product.trackImei || product.trackSerial),
     isActive: true,
   });
 };

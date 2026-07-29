@@ -52,6 +52,7 @@ export interface PermissionGroupDef {
 
 export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'] },
+  { id: 'imei_tracking', label: 'IMEI / Serial Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   { id: 'invoices', label: 'Invoices', permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'] },
   { id: 'purchases', label: 'Purchases', permissions: ['viewPurchases', 'createPurchases', 'editPurchases', 'deletePurchases'] },
   { id: 'purchase_orders', label: 'Purchase Orders', permissions: ['viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders', 'deletePurchaseOrders', 'receivePurchaseOrders'] },
@@ -72,7 +73,6 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'services', label: 'Mobile Shop — Services', permissions: ['viewServices', 'manageServices'] },
   { id: 'bill_payments', label: 'Mobile Shop — Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
   { id: 'installments', label: 'Mobile Shop — Installments', permissions: ['viewInstallments', 'manageInstallments'] },
-  { id: 'imei_tracking', label: 'Mobile Shop — IMEI Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   {
     id: 'reports',
     label: 'Reports',
@@ -105,11 +105,11 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 
 export const PERMISSION_TAB_GROUPS = {
   business: [
-    'products', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
+    'products', 'imei_tracking', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'accounts_system',
   ],
   mobile_shop: [
-    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'imei_tracking',
+    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments',
   ],
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',

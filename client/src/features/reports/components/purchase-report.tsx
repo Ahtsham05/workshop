@@ -586,7 +586,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                                   </LongText>
                                   {item.imeis && item.imeis.length > 0 && (
                                     <span className='block text-xs text-muted-foreground'>
-                                      IMEI: {item.imeis.join(', ')}
+                                      IMEI/Serial: {item.imeis.join(', ')}
                                     </span>
                                   )}
                                   {(item.variantLabel || item.batchNumber || item.expiryDate) && (
@@ -724,7 +724,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                             </LongText>
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
-                                IMEI: {item.imeis.join(', ')}
+                                IMEI/Serial: {item.imeis.join(', ')}
                               </div>
                             )}
                             {(item.variantLabel || item.batchNumber || item.expiryDate) && (

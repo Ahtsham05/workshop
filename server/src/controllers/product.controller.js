@@ -31,7 +31,7 @@ const createProduct = catchAsync(async (req, res) => {
   }
   
   try {
-    const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id });
+    const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id, businessType: req.user.businessType });
     await auditLogService.recordAuditLog({
       req,
       action: 'create',
@@ -108,7 +108,7 @@ const updateProduct = catchAsync(async (req, res) => {
   try {
     const before = await productService.getProductById(req.params.productId);
     const beforeSnapshot = before ? before.toObject() : null;
-    const product = await productService.updateProductById(req.params.productId, productData);
+    const product = await productService.updateProductById(req.params.productId, { ...productData, businessType: req.user.businessType });
     await auditLogService.recordAuditLog({
       req,
       action: 'update',

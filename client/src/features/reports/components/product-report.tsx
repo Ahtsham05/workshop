@@ -655,7 +655,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               </div>
                             </TableCell>
                             <TableCell className='text-center'>
-                              {item.trackImei && (
+                              {(item.trackImei || item.trackSerial) && (
                                 <Badge variant='secondary' className='text-[10px] px-1 py-0'>
                                   <Smartphone className='h-2.5 w-2.5' />
                                 </Badge>
@@ -779,7 +779,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               </div>
                             </TableCell>
                             <TableCell className='text-center'>
-                              {item.trackImei && (
+                              {(item.trackImei || item.trackSerial) && (
                                 <Badge variant='secondary' className='text-[10px] px-1 py-0'>
                                   <Smartphone className='h-2.5 w-2.5' />
                                 </Badge>

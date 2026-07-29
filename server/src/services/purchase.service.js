@@ -283,13 +283,14 @@ const createPurchase = async (purchaseBody) => {
         createdBy: purchase.createdBy,
       });
 
-      // Track per-unit IMEI/serial numbers for products that require it (mobile phones)
-      if (product.trackImei && item.imeis && item.imeis.length > 0) {
+      // Track per-unit IMEI/serial numbers for products that require it (mobile phones / serialized goods)
+      if ((product.trackImei || product.trackSerial) && item.imeis && item.imeis.length > 0) {
         await imeiService.syncImeisForPurchaseItem({
           purchaseId: purchase._id,
           productId: product._id,
           productName: product.name,
           imeis: item.imeis,
+          type: product.trackSerial ? 'serial' : 'imei',
           purchasePrice: item.priceAtPurchase,
           supplierId: purchase.supplier || null,
           supplierName: supplierDoc?.name || '',
@@ -497,12 +498,13 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           createdBy: purchase.createdBy,
         });
 
-        if (product.trackImei) {
+        if (product.trackImei || product.trackSerial) {
           await imeiService.syncImeisForPurchaseItem({
             purchaseId: purchase._id,
             productId: product._id,
             productName: product.name,
             imeis: updatedItem.imeis || [],
+            type: product.trackSerial ? 'serial' : 'imei',
             purchasePrice: updatedItem.priceAtPurchase,
             supplierId: supplierIdForUpdate || null,
             supplierName: supplierDocForUpdate?.name || '',
@@ -577,12 +579,13 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           createdBy: purchase.createdBy,
         });
 
-        if (product.trackImei && updatedItem.imeis && updatedItem.imeis.length > 0) {
+        if ((product.trackImei || product.trackSerial) && updatedItem.imeis && updatedItem.imeis.length > 0) {
           await imeiService.syncImeisForPurchaseItem({
             purchaseId: purchase._id,
             productId: product._id,
             productName: product.name,
             imeis: updatedItem.imeis,
+            type: product.trackSerial ? 'serial' : 'imei',
             purchasePrice: updatedItem.priceAtPurchase,
             supplierId: supplierIdForUpdate || null,
             supplierName: supplierDocForUpdate?.name || '',
@@ -648,7 +651,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           createdBy: purchase.createdBy,
         });
 
-        if (product.trackImei) {
+        if (product.trackImei || product.trackSerial) {
           await imeiService.syncImeisForPurchaseItem({
             purchaseId: purchase._id,
             productId: product._id,

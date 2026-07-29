@@ -131,6 +131,13 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {
+          title: 'IMEI / Serial Tracking',
+          url: '/mobile-shop/imei-tracking',
+          icon: ShieldCheck,
+          permission: 'viewImeiTracking',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
           title: 'Purchase Orders',
           url: '/purchase-orders',
           icon: ClipboardList,
@@ -897,14 +904,6 @@ export const sidebarData: SidebarData = {
           permission: 'viewInstallments',
           businessTypes: ['mobile_shop'],
         },
-        {
-          title: 'IMEI Tracking',
-          url: '/mobile-shop/imei-tracking',
-          icon: ShieldCheck,
-          permission: 'viewImeiTracking',
-          businessTypes: ['mobile_shop'],
-        },
-
       ],
     },
     {

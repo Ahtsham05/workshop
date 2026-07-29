@@ -20,6 +20,7 @@ type ProductReportProps = {
     category?: string
     brand?: string
     trackImei: boolean
+    trackSerial?: boolean
     stockQuantity: number
     totalQuantity: number
     totalRevenue: number
@@ -52,8 +53,8 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
   const formatCurrency = (value: number) => `Rs ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
 
   // Separate products by type
-  const imeiProducts = products.filter(p => p.trackImei)
-  const regularProducts = products.filter(p => !p.trackImei)
+  const trackedProducts = products.filter(p => p.trackImei || p.trackSerial)
+  const regularProducts = products.filter(p => !p.trackImei && !p.trackSerial)
 
   const renderProductTable = (productList: typeof products, showImeiColumn: boolean = false) => (
     <Table>
@@ -64,7 +65,7 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
             <TableHead className='text-center'>
               <div className='flex items-center justify-center gap-1'>
                 <Smartphone className='h-3 w-3' />
-                {t('IMEI')}
+                {t('Tracking')}
               </div>
             </TableHead>
           )}
@@ -99,10 +100,10 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
               </TableCell>
               {showImeiColumn && (
                 <TableCell className='text-center'>
-                  {product.trackImei && (
+                  {(product.trackImei || product.trackSerial) && (
                     <Badge variant='secondary' className='text-xs'>
                       <Smartphone className='h-3 w-3 mr-1' />
-                      {t('Tracked')}
+                      {product.trackSerial ? t('Serial') : t('IMEI')}
                     </Badge>
                   )}
                 </TableCell>
@@ -189,7 +190,7 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
             </TabsTrigger>
             <TabsTrigger value='imei'>
               <Smartphone className='h-4 w-4 mr-2' />
-              {t('IMEI Products')} ({imeiProducts.length})
+              {t('Tracked Products')} ({trackedProducts.length})
             </TabsTrigger>
             <TabsTrigger value='regular'>
               <Package className='h-4 w-4 mr-2' />
@@ -205,18 +206,18 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
           
           <TabsContent value='imei' className='mt-4'>
             <div className='rounded-md border'>
-              {renderProductTable(imeiProducts, false)}
+              {renderProductTable(trackedProducts, true)}
             </div>
-            {imeiProducts.length > 0 && (
+            {trackedProducts.length > 0 && (
               <div className='mt-4 p-4 bg-blue-50 rounded-md'>
                 <div className='flex items-start gap-2'>
                   <Smartphone className='h-5 w-5 text-blue-600 mt-0.5' />
                   <div className='flex-1'>
                     <p className='text-sm font-medium text-blue-900'>
-                      {t('IMEI Tracked Products')}
+                      {t('IMEI / Serial Tracked Products')}
                     </p>
                     <p className='text-xs text-blue-700 mt-1'>
-                      {t('These products have individual IMEI/serial number tracking for warranty and inventory management.')}
+                      {t('These products have individual IMEI or serial number tracking for warranty and inventory management.')}
                     </p>
                   </div>
                 </div>

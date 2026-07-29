@@ -10,6 +10,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'],
   },
   {
+    id: 'imei_tracking',
+    label: 'IMEI / Serial Tracking',
+    permissions: ['viewImeiTracking', 'manageImeiTracking'],
+  },
+  {
     id: 'invoices',
     label: 'Invoices',
     permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'],
@@ -114,11 +119,6 @@ const PERMISSION_GROUPS = [
     id: 'installments',
     label: 'Mobile Shop — Installments',
     permissions: ['viewInstallments', 'manageInstallments'],
-  },
-  {
-    id: 'imei_tracking',
-    label: 'Mobile Shop — IMEI Tracking',
-    permissions: ['viewImeiTracking', 'manageImeiTracking'],
   },
   {
     id: 'reports',
@@ -229,6 +229,7 @@ const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissio
 const PERMISSION_TAB_GROUPS = {
   business: [
     'products',
+    'imei_tracking',
     'invoices',
     'purchases',
     'purchase_orders',
@@ -251,7 +252,6 @@ const PERMISSION_TAB_GROUPS = {
     'services',
     'bill_payments',
     'installments',
-    'imei_tracking',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],

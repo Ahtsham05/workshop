@@ -168,7 +168,7 @@ function formatPrintItemCell(
   const text = lang === 'ur' ? item.nameUrdu?.trim() || item.name : item.name
   let html = escapeHtml(text)
   if (item.imeis && item.imeis.length > 0) {
-    html += `<br><span style="font-size:10px;color:#666;">IMEI: ${item.imeis.map((n) => escapeHtml(n)).join(', ')}</span>`
+    html += `<br><span style="font-size:10px;color:#666;">IMEI/Serial: ${item.imeis.map((n) => escapeHtml(n)).join(', ')}</span>`
   }
   return html
 }

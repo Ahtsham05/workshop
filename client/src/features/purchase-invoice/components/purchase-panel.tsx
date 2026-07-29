@@ -426,6 +426,7 @@ export default function PurchasePanel({
         unit: catalogItem.unit,
         hasVariants: catalogItem.type === 'variant',
         trackImei: catalogItem.trackImei,
+        trackSerial: catalogItem.trackSerial,
         price: catalogItem.price,
         cost: catalogItem.cost,
         stockQuantity: catalogItem.stockQuantity,
@@ -588,13 +589,14 @@ export default function PurchasePanel({
         return
       }
 
-      // IMEI-tracked products must have exactly one IMEI per unit purchased
+      // IMEI/serial-tracked products must have exactly one number entered per unit purchased
       for (const item of validItems) {
-        if (!item.product.trackImei) continue
+        if (!item.product.trackImei && !item.product.trackSerial) continue
+        const label = item.product.trackSerial ? 'serial' : 'IMEI'
         const imeiCount = (item.imeis || []).filter((n) => n.trim()).length
         if (imeiCount !== item.quantity) {
           toast.error(
-            `${item.product.name}: enter ${item.quantity} IMEI number(s) — ${imeiCount} entered`,
+            `${item.product.name}: enter ${item.quantity} ${label} number(s) — ${imeiCount} entered`,
           )
           return
         }
@@ -642,7 +644,7 @@ export default function PurchasePanel({
             priceAtPurchase: item.purchasePrice,
             sellingPriceAtPurchase: item.sellingPrice || 0,
             total: item.quantity * item.purchasePrice,
-            imeis: item.product.trackImei ? (item.imeis || []) : undefined,
+            imeis: (item.product.trackImei || item.product.trackSerial) ? (item.imeis || []) : undefined,
             variantId: item.variantId || undefined,
             batchNumber: item.variantId ? (item.batchNumber || undefined) : undefined,
             expiryDate: item.variantId ? (item.expiryDate || undefined) : undefined,
@@ -1427,17 +1429,17 @@ export default function PurchasePanel({
                       </div>
                     </div>
 
-                    {/* Row 3: IMEI numbers (only for products that require IMEI tracking) */}
-                    {item.product.trackImei && (
+                    {/* Row 3: IMEI/serial numbers (only for products that require per-unit tracking) */}
+                    {(item.product.trackImei || item.product.trackSerial) && (
                       <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
                         <div className='flex items-center justify-between'>
                           <span className='text-xs font-medium text-amber-700'>
-                            IMEI Numbers ({(item.imeis || []).length}/{item.quantity})
+                            {item.product.trackSerial ? 'Serial Numbers' : 'IMEI Numbers'} ({(item.imeis || []).length}/{item.quantity})
                           </span>
                         </div>
                         <div className='flex items-center gap-2'>
                           <Input
-                            placeholder='Scan or type IMEI, press Enter'
+                            placeholder={`Scan or type ${item.product.trackSerial ? 'serial number' : 'IMEI'}, press Enter`}
                             value={imeiDraftByProduct[productId] || ''}
                             showVoiceInput={false}
                             onChange={(e) =>

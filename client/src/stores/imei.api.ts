@@ -11,8 +11,11 @@ export interface ImeiHistoryEntry {
   byUserName?: string
 }
 
+export type ImeiRecordType = 'imei' | 'serial'
+
 export interface ImeiRecord {
   id: string
+  type?: ImeiRecordType
   imei: string
   imei2?: string
   productId: string
@@ -67,6 +70,7 @@ export interface GetImeisParams {
   search?: string
   /** Single status, or comma-separated list (e.g. 'lost,stolen') */
   status?: ImeiStatus | string
+  type?: ImeiRecordType
   warrantyStatus?: 'expiring_soon'
   productId?: string
   page?: number

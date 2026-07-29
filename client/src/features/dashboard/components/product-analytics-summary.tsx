@@ -47,7 +47,7 @@ export function ProductAnalyticsSummary({ dateRange }: Props) {
   const totalCategoryRevenue = categories?.reduce((sum, cat) => sum + cat.totalRevenue, 0) || 0
   const totalBrandRevenue = brands?.reduce((sum, brand) => sum + brand.totalRevenue, 0) || 0
   const totalCategoryProfit = categories?.reduce((sum, cat) => sum + cat.profit, 0) || 0
-  const imeiProductBrands = brands?.filter(b => b.hasImeiProducts).length || 0
+  const imeiProductBrands = brands?.filter(b => b.hasImeiProducts || b.hasSerialProducts).length || 0
 
   const topCategory = categories?.[0]
   const topBrand = brands?.[0]
@@ -128,10 +128,10 @@ export function ProductAnalyticsSummary({ dateRange }: Props) {
               <span className='text-2xl font-bold text-indigo-900'>{imeiProductBrands}</span>
             </div>
             <p className='text-sm font-medium text-indigo-900 mb-1'>
-              {t('IMEI Brands')}
+              {t('Tracked Brands')}
             </p>
             <p className='text-xs text-indigo-600'>
-              {t('Brands with IMEI tracking')}
+              {t('Brands with IMEI/Serial tracking')}
             </p>
             <p className='text-xs text-muted-foreground mt-2'>
               {t('Individual serial tracking')}

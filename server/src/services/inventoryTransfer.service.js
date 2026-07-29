@@ -116,7 +116,7 @@ const resolveSource = async ({ organizationId, fromBranchId, fromProductId, from
   const fromProduct = await Product.findOne({ _id: fromProductId, organizationId, branchId: fromBranchId });
   if (!fromProduct) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in the source branch');
 
-  if (fromProduct.trackImei) {
+  if (fromProduct.trackImei || fromProduct.trackSerial) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       'IMEI/serial-tracked products cannot be bulk-transferred. Adjust stock per unit instead.'

@@ -92,6 +92,12 @@ export function BrandProducts({ dateRange }: Props) {
                             {t('IMEI')}
                           </Badge>
                         )}
+                        {brand.hasSerialProducts && (
+                          <Badge variant='secondary' className='text-xs'>
+                            <Smartphone className='h-3 w-3 mr-1' />
+                            {t('Serial')}
+                          </Badge>
+                        )}
                       </div>
                       <div className='grid grid-cols-2 gap-2 text-xs text-muted-foreground'>
                         <div>

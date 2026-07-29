@@ -61,7 +61,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
   const [reason, setReason] = useState('')
 
   // Transferable: in stock, and not IMEI/serial-tracked (those move per-unit, not bulk).
-  const transferableCatalog = useMemo(() => catalog.filter((c) => !c.trackImei && c.stockQuantity > 0), [catalog])
+  const transferableCatalog = useMemo(() => catalog.filter((c) => !c.trackImei && !c.trackSerial && c.stockQuantity > 0), [catalog])
   const filteredCatalog = useMemo(
     () => transferableCatalog.filter((c) => matchesBilingualSearch(searchQuery, c.name, c.nameUrdu, c.barcode, c.brand?.name)),
     [transferableCatalog, searchQuery]

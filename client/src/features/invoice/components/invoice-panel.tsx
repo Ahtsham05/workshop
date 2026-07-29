@@ -96,17 +96,19 @@ import { QuotationConvertDialog } from './quotation-convert-dialog'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
-/** Picks IMEI/serial numbers to sell from in-stock inventory, for products with trackImei enabled. */
+/** Picks IMEI/serial numbers to sell from in-stock inventory, for products with trackImei/trackSerial enabled. */
 function ImeiPicker({
   productId,
   quantity,
   selected,
   onChange,
+  isSerial = false,
 }: {
   productId: string
   quantity: number
   selected: string[]
   onChange: (next: string[]) => void
+  isSerial?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -119,18 +121,19 @@ function ImeiPicker({
     { skip: !productId },
   )
   const remaining = available.filter((d) => !selected.includes(d.imei))
+  const label = isSerial ? 'Serial Number' : 'IMEI'
 
   return (
     <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
       <div className='flex items-center justify-between'>
         <span className='text-xs font-medium text-amber-700'>
-          IMEI Numbers ({selected.length}/{quantity})
+          {label} Numbers ({selected.length}/{quantity})
         </span>
       </div>
       <div className='relative'>
         <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground' />
         <Input
-          placeholder='Search in-stock IMEI…'
+          placeholder={`Search in-stock ${label.toLowerCase()}…`}
           value={search}
           showVoiceInput={false}
           onChange={(e) => setSearch(e.target.value)}
@@ -154,7 +157,7 @@ function ImeiPicker({
           ))}
         </div>
       ) : (
-        <p className='text-xs text-muted-foreground'>No in-stock IMEI found{debounced ? ' for this search' : ''}.</p>
+        <p className='text-xs text-muted-foreground'>No in-stock {label.toLowerCase()} found{debounced ? ' for this search' : ''}.</p>
       )}
       {selected.length > 0 && (
         <div className='flex flex-wrap gap-1.5'>
@@ -770,6 +773,7 @@ export function InvoicePanel({
         unit: catalogItem.unit,
         hasVariants: catalogItem.type === 'variant',
         trackImei: catalogItem.trackImei,
+        trackSerial: catalogItem.trackSerial,
         trackBatch: catalogItem.trackBatch,
         trackExpiry: catalogItem.trackExpiry,
         knownBatches: catalogItem.batches,
@@ -929,6 +933,7 @@ export function InvoicePanel({
               image: entity.image,
               unit: entity.unit,
               trackImei: entity.trackImei,
+              trackSerial: entity.trackSerial,
               brand: entity.brand ?? null,
               categories: entity.categories ?? [],
               price: entity.price,
@@ -1033,13 +1038,14 @@ export function InvoicePanel({
         return
       }
 
-      // IMEI-tracked products must have exactly one IMEI selected per unit sold
+      // IMEI/serial-tracked products must have exactly one number selected per unit sold
       for (const item of validItems) {
         const product = products.find((p: any) => (p._id || p.id) === item.productId)
-        if (!product?.trackImei) continue
+        if (!product?.trackImei && !product?.trackSerial) continue
+        const label = product?.trackSerial ? 'serial' : 'IMEI'
         const imeiCount = (item.imeis || []).length
         if (imeiCount !== item.quantity) {
-          toast.error(`${item.name}: select ${item.quantity} IMEI number(s) — ${imeiCount} selected`)
+          toast.error(`${item.name}: select ${item.quantity} ${label} number(s) — ${imeiCount} selected`)
           return
         }
       }
@@ -2371,12 +2377,13 @@ export function InvoicePanel({
                     )}
                     {(() => {
                       const product = products.find((p: any) => (p._id || p.id) === item.productId)
-                      if (!product?.trackImei) return null
+                      if (!product?.trackImei && !product?.trackSerial) return null
                       return (
                         <ImeiPicker
                           productId={item.productId}
                           quantity={item.quantity}
                           selected={item.imeis || []}
+                          isSerial={!!product?.trackSerial}
                           onChange={(next) => {
                             setInvoice((prev) => ({
                               ...prev,

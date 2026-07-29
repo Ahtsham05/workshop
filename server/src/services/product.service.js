@@ -1,9 +1,28 @@
 const httpStatus = require('http-status');
-const { Product, ProductVariant, Inventory, Batch } = require('../models');
+const { Product, ProductVariant, Inventory, Batch, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
 const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
+const { normalizeBusinessType } = require('../config/businessTypes');
+
+/**
+ * IMEI tracking only makes sense for mobile phones, so it's restricted to mobile_shop
+ * organizations — serial number tracking (the generalized alternative) has no such
+ * restriction and works for every business type. Mirrors the businessType resolution
+ * in middlewares/checkBusinessType.js: prefer the value already on the request, and
+ * only fall back to an Organization lookup when it's missing.
+ */
+const assertImeiAllowedForBusinessType = async ({ organizationId, businessType }) => {
+  let resolved = normalizeBusinessType(businessType);
+  if ((!resolved || resolved === 'other') && organizationId) {
+    const organization = await Organization.findById(organizationId).select('businessType').lean();
+    if (organization) resolved = normalizeBusinessType(organization.businessType);
+  }
+  if (resolved !== 'mobile_shop') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'IMEI tracking is only available for mobile shop businesses. Use Serial Number tracking instead.');
+  }
+};
 
 /**
  * Turns on/off batch and/or expiry tracking for a simple (non-variant) product by
@@ -110,18 +129,23 @@ const attachVariantAggregates = async (products) => {
  */
 const createProduct = async (productBody) => {
   // trackBatch/trackExpiry aren't Product fields — they're proxied onto the product's
-  // hidden default ProductVariant, see syncDefaultVariantTracking.
-  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, ...productFields } = productBody;
+  // hidden default ProductVariant, see syncDefaultVariantTracking. businessType isn't a
+  // Product field either — it's only passed through to gate trackImei below.
+  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, businessType, ...productFields } = productBody;
   if (productFields.brandId === '') productFields.brandId = null; // ObjectId ref can't cast ''
+  if (productFields.trackImei) {
+    await assertImeiAllowedForBusinessType({ organizationId: productFields.organizationId, businessType });
+  }
   const product = new Product(productFields); // Create a new instance of the Product model
   await product.save(); // Save the product instance
 
-  if (product.trackImei && imeis && imeis.length > 0) {
+  if ((product.trackImei || product.trackSerial) && imeis && imeis.length > 0) {
     await imeiService.syncImeisForPurchaseItem({
       purchaseId: null,
       productId: product._id,
       productName: product.name,
       imeis,
+      type: product.trackSerial ? 'serial' : 'imei',
       purchasePrice: product.cost,
       organizationId: product.organizationId,
       branchId: product.branchId,
@@ -194,9 +218,13 @@ const updateProductById = async (productId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
   // trackBatch/trackExpiry aren't Product fields — they're proxied onto the product's
-  // hidden default ProductVariant, see syncDefaultVariantTracking.
-  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, ...updateFields } = updateBody;
+  // hidden default ProductVariant, see syncDefaultVariantTracking. businessType isn't a
+  // Product field either — it's only passed through to gate trackImei below.
+  const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, businessType, ...updateFields } = updateBody;
   if (updateFields.brandId === '') updateFields.brandId = null; // ObjectId ref can't cast ''
+  if (updateFields.trackImei) {
+    await assertImeiAllowedForBusinessType({ organizationId: product.organizationId, businessType });
+  }
   const nameChanged = Object.prototype.hasOwnProperty.call(updateFields, 'name') && updateFields.name !== product.name;
   Object.assign(product, updateFields);
   await product.save();
@@ -208,12 +236,13 @@ const updateProductById = async (productId, updateBody) => {
     await imeiService.renameProductOnImeis({ productId: product._id, productName: product.name });
   }
 
-  if (product.trackImei && imeis) {
+  if ((product.trackImei || product.trackSerial) && imeis) {
     await imeiService.syncImeisForPurchaseItem({
       purchaseId: null,
       productId: product._id,
       productName: product.name,
       imeis,
+      type: product.trackSerial ? 'serial' : 'imei',
       purchasePrice: product.cost,
       organizationId: product.organizationId,
       branchId: product.branchId,
@@ -324,6 +353,7 @@ const getPurchasableCatalog = async (filter = {}) => {
         image: product.image,
         unit: product.unit,
         trackImei: product.trackImei,
+        trackSerial: product.trackSerial,
         brand: toBrand(product),
         category: product.category,
         categories: product.categories,

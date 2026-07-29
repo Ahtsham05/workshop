@@ -874,6 +874,7 @@ const getProductsByBrand = catchAsync(async (req, res) => {
         totalCost: { $sum: { $multiply: ['$items.quantity', '$product.cost'] } },
         productCount: { $addToSet: '$items.productId' },
         hasImeiProducts: { $max: '$product.trackImei' },
+        hasSerialProducts: { $max: '$product.trackSerial' },
       }
     },
     {
@@ -895,6 +896,7 @@ const getProductsByBrand = catchAsync(async (req, res) => {
         profit: 1,
         productCount: 1,
         hasImeiProducts: 1,
+        hasSerialProducts: 1,
         margin: {
           $cond: {
             if: { $gt: ['$totalRevenue', 0] },
@@ -1018,6 +1020,7 @@ const getCategoryProducts = catchAsync(async (req, res) => {
         cost: '$itemCost',
         profit: { $subtract: ['$items.subtotal', '$itemCost'] },
         trackImei: '$product.trackImei',
+        trackSerial: '$product.trackSerial',
       }
     },
     { $sort: { invoiceDate: -1 } }
@@ -1135,6 +1138,7 @@ const getBrandProducts = catchAsync(async (req, res) => {
         cost: '$itemCost',
         profit: { $subtract: ['$items.subtotal', '$itemCost'] },
         trackImei: '$product.trackImei',
+        trackSerial: '$product.trackSerial',
       }
     },
     { $sort: { invoiceDate: -1 } }
