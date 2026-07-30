@@ -1615,10 +1615,14 @@ function IncomeStatementReport() {
 }
 
 function CashFlowStatement() {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const { data, isLoading } = useGetCashFlowStatementQuery({ ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) });
+  const now = new Date();
+  const fy = getCurrentFinancialYear();
+  const [startDate, setStartDate] = useState(`${fy.split('-')[0]}-07-01`);
+  const [endDate, setEndDate] = useState(now.toISOString().split('T')[0]);
+  const { data, isLoading } = useGetCashFlowStatementQuery({ startDate, endDate });
   const cf = data?.data;
+
+  const chartData = cf ? [...cf.operating, ...cf.financing].map((r: any) => ({ label: r.label, inflow: r.inflow, outflow: r.outflow })) : [];
 
   return (
     <div className="space-y-4">
@@ -1626,6 +1630,24 @@ function CashFlowStatement() {
         <Input type="date" className="w-40" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <span className="text-sm text-muted-foreground">to</span>
         <Input type="date" className="w-40" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        <div className="flex-1" />
+        {cf && (
+          <Button variant="outline" size="sm" onClick={() =>
+            exportToPDF('Cash Flow Statement', ['Activity', 'Inflow', 'Outflow', 'Net'], [
+              ['Cash Flow from Operating Activities', '', '', ''],
+              ...cf.operating.map((r: any) => [r.label, r.inflow?.toFixed(0), r.outflow?.toFixed(0), r.net?.toFixed(0)]),
+              ['Net Cash from Operating Activities', '', '', cf.totals.operatingNet?.toFixed(0)],
+              ...(cf.financing.length > 0 ? [
+                ['Cash Flow from Financing Activities', '', '', ''],
+                ...cf.financing.map((r: any) => [r.label, r.inflow?.toFixed(0), r.outflow?.toFixed(0), r.net?.toFixed(0)]),
+                ['Net Cash from Financing Activities', '', '', cf.totals.financingNet?.toFixed(0)],
+              ] : []),
+              ['Net Increase/(Decrease) in Cash', '', '', cf.totals.netCashFlow?.toFixed(0)],
+              ['Cash at Beginning of Period', '', '', cf.beginningCash?.toFixed(0)],
+              ['Cash at End of Period', '', '', cf.endingCash?.toFixed(0)],
+            ], 'cash-flow-statement')
+          }><Download className="h-4 w-4 mr-1" />PDF</Button>
+        )}
       </div>
 
       {isLoading ? <LoadingState /> : cf ? (
@@ -1634,33 +1656,120 @@ function CashFlowStatement() {
           <div className="grid grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-4 pb-3 text-center">
-                <p className="text-xs text-muted-foreground">Total Inflow</p>
-                <p className="text-xl font-bold text-green-600">{fmt(cf.totalInflow)}</p>
+                <p className="text-xs text-muted-foreground">Cash at Beginning</p>
+                <p className="text-xl font-bold">{fmt(cf.beginningCash)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-3 text-center">
-                <p className="text-xs text-muted-foreground">Total Outflow</p>
-                <p className="text-xl font-bold text-red-600">{fmt(cf.totalOutflow)}</p>
+                <p className="text-xs text-muted-foreground">Net Change in Cash</p>
+                <p className={`text-xl font-bold ${cf.totals.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(cf.totals.netCashFlow)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-3 text-center">
-                <p className="text-xs text-muted-foreground">Net Cash Flow</p>
-                <p className={`text-xl font-bold ${cf.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(cf.netCashFlow)}</p>
+                <p className="text-xs text-muted-foreground">Cash at End</p>
+                <p className="text-xl font-bold text-blue-600">{fmt(cf.endingCash)}</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* By entry type */}
-          {cf.byType && cf.byType.length > 0 && (
+          {/* Operating Activities */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-green-600">Cash Flow from Operating Activities</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Activity</TableHead>
+                    <TableHead className="text-right">Inflow</TableHead>
+                    <TableHead className="text-right">Outflow</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cf.operating.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No operating cash activity in this period.</TableCell></TableRow>
+                  ) : cf.operating.map((r: any) => (
+                    <TableRow key={r.type}>
+                      <TableCell className="text-sm">{r.label} <span className="text-xs text-muted-foreground">({r.count})</span></TableCell>
+                      <TableCell className="text-right text-sm text-green-600">{r.inflow > 0 ? fmt(r.inflow) : '-'}</TableCell>
+                      <TableCell className="text-right text-sm text-red-600">{r.outflow > 0 ? fmt(r.outflow) : '-'}</TableCell>
+                      <TableCell className={`text-right text-sm font-medium ${r.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(r.net)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-bold bg-muted/50">
+                    <TableCell>Net Cash from Operating Activities</TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell className={`text-right ${cf.totals.operatingNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(cf.totals.operatingNet)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Financing Activities — only shown when there's activity to report */}
+          {cf.financing.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base">Cash Flow by Type</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-purple-600">Cash Flow from Financing Activities</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Activity</TableHead>
+                      <TableHead className="text-right">Inflow</TableHead>
+                      <TableHead className="text-right">Outflow</TableHead>
+                      <TableHead className="text-right">Net</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cf.financing.map((r: any) => (
+                      <TableRow key={r.type}>
+                        <TableCell className="text-sm">{r.label} <span className="text-xs text-muted-foreground">({r.count})</span></TableCell>
+                        <TableCell className="text-right text-sm text-green-600">{r.inflow > 0 ? fmt(r.inflow) : '-'}</TableCell>
+                        <TableCell className="text-right text-sm text-red-600">{r.outflow > 0 ? fmt(r.outflow) : '-'}</TableCell>
+                        <TableCell className={`text-right text-sm font-medium ${r.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(r.net)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="font-bold bg-muted/50">
+                      <TableCell>Net Cash from Financing Activities</TableCell>
+                      <TableCell />
+                      <TableCell />
+                      <TableCell className={`text-right ${cf.totals.financingNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(cf.totals.financingNet)}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reconciliation */}
+          <Card className="border-2">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-center gap-4 text-sm font-medium flex-wrap">
+                <div>Beginning Cash: <span>{fmt(cf.beginningCash)}</span></div>
+                <span>+</span>
+                <div>Net Change: <span className={cf.totals.netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}>{fmt(cf.totals.netCashFlow)}</span></div>
+                <span>=</span>
+                <div>Ending Cash: <span className="text-blue-600">{fmt(cf.endingCash)}</span></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* By activity chart */}
+          {chartData.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Cash Flow by Activity</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={cf.byType}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData} margin={{ bottom: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="_id" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" interval={0} height={60} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: number) => fmt(v)} />
                     <Legend />

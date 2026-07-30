@@ -1065,61 +1065,126 @@ const getIncomeStatement = async (scope, startDate, endDate) => {
     totalRevenue,
     totalExpenses,
     netIncome: totalRevenue - totalExpenses,
-    netIncomePercentage: totalRevenue > 0 ? ((totalRevenue - totalExpenses) / totalRevenue * 100).toFixed(1) : 0,
+    netIncomePercentage: totalRevenue > 0 ? ((totalRevenue - totalExpenses) / totalRevenue) * 100 : 0,
   };
 };
 
+// Entry types that represent a real cash inflow/outflow to/from the business,
+// as opposed to money merely moving between the org's own cash/bank accounts.
+const CASH_FLOW_FINANCING_TYPES = new Set(['OPENING', 'ADJUSTMENT']);
+
+function humanizeEntryType(type) {
+  return type
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
- * Cash Flow Statement — track cash in/out from bank & cash accounts.
+ * Cash Flow Statement — reconciles Beginning + Net Change = Ending cash balance,
+ * with activity broken into Operating and Financing sections (like a standard
+ * Statement of Cash Flows). TRANSFER entries move money between the org's own
+ * cash/bank accounts and always net to zero across the combined cash pool, so
+ * they're excluded rather than inflating gross inflow/outflow.
  */
 const getCashFlowStatement = async (scope, startDate, endDate) => {
-  // Get all cash/bank account heads
   const bankAccounts = await BankAccount.find({ ...getTenantFilter(scope), isActive: true }).lean();
-  const cashAccountIds = bankAccounts.map((b) => b.accountHeadId);
+  const cashAccountIds = bankAccounts.map((b) => new mongoose.Types.ObjectId(b.accountHeadId));
 
-  if (cashAccountIds.length === 0) return { inflows: [], outflows: [], netCashFlow: 0 };
+  const fy = getFinancialYear(new Date());
+  const [fyStart] = getFinancialYearDates(fy);
+  const rangeStart = startDate ? new Date(startDate) : fyStart;
+  const rangeEnd = endDate ? new Date(endDate) : new Date();
+  rangeEnd.setHours(23, 59, 59, 999);
 
-  const match = {
-    ...aggFilter(scope),
-    status: 'posted',
-    'lines.accountId': { $in: cashAccountIds.map((id) => new mongoose.Types.ObjectId(id)) },
+  const empty = {
+    period: { startDate: rangeStart, endDate: rangeEnd },
+    operating: [],
+    financing: [],
+    totals: { operatingNet: 0, financingNet: 0, totalInflow: 0, totalOutflow: 0, netCashFlow: 0 },
+    beginningCash: 0,
+    endingCash: 0,
   };
-  if (startDate || endDate) {
-    match.date = {};
-    if (startDate) match.date.$gte = new Date(startDate);
-    if (endDate) match.date.$lte = new Date(endDate);
-  }
+  if (cashAccountIds.length === 0) return empty;
 
-  const entries = await JournalEntry.aggregate([
-    { $match: match },
-    { $unwind: '$lines' },
-    {
-      $match: {
-        'lines.accountId': { $in: cashAccountIds.map((id) => new mongoose.Types.ObjectId(id)) },
+  // Cumulative (debit - credit) for the org's cash/bank accounts, dated strictly
+  // before `cutoff` — cash/bank are debit-normal (ASSET) accounts.
+  const cashBalanceBefore = async (cutoff) => {
+    const result = await JournalEntry.aggregate([
+      {
+        $match: {
+          ...aggFilter(scope),
+          status: 'posted',
+          date: { $lt: cutoff },
+          'lines.accountId': { $in: cashAccountIds },
+        },
       },
-    },
-    {
-      $group: {
-        _id: '$entryType',
-        totalInflow: { $sum: '$lines.debit' },
-        totalOutflow: { $sum: '$lines.credit' },
-        count: { $sum: 1 },
+      { $unwind: '$lines' },
+      { $match: { 'lines.accountId': { $in: cashAccountIds } } },
+      { $group: { _id: null, totalDebit: { $sum: '$lines.debit' }, totalCredit: { $sum: '$lines.credit' } } },
+    ]);
+    const r = result[0] || { totalDebit: 0, totalCredit: 0 };
+    return r.totalDebit - r.totalCredit;
+  };
+
+  const [entries, beginningCash] = await Promise.all([
+    JournalEntry.aggregate([
+      {
+        $match: {
+          ...aggFilter(scope),
+          status: 'posted',
+          entryType: { $ne: 'TRANSFER' },
+          date: { $gte: rangeStart, $lte: rangeEnd },
+          'lines.accountId': { $in: cashAccountIds },
+        },
       },
-    },
+      { $unwind: '$lines' },
+      { $match: { 'lines.accountId': { $in: cashAccountIds } } },
+      {
+        $group: {
+          _id: '$entryType',
+          inflow: { $sum: '$lines.debit' },
+          outflow: { $sum: '$lines.credit' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    cashBalanceBefore(rangeStart),
   ]);
 
-  const totalInflow = entries.reduce((s, e) => s + e.totalInflow, 0);
-  const totalOutflow = entries.reduce((s, e) => s + e.totalOutflow, 0);
+  const rows = entries.map((e) => ({
+    type: e._id,
+    label: humanizeEntryType(e._id),
+    inflow: e.inflow,
+    outflow: e.outflow,
+    net: e.inflow - e.outflow,
+    count: e.count,
+  }));
+
+  const operating = rows.filter((r) => !CASH_FLOW_FINANCING_TYPES.has(r.type));
+  const financing = rows.filter((r) => CASH_FLOW_FINANCING_TYPES.has(r.type));
+  const sumNet = (list) => list.reduce((s, r) => s + r.net, 0);
+  const operatingNet = sumNet(operating);
+  const financingNet = sumNet(financing);
+  const netCashFlow = operatingNet + financingNet;
 
   return {
-    byType: entries.map((e) => ({
-      type: e._id,
-      inflow: e.totalInflow,
-      outflow: e.totalOutflow,
-      net: e.totalInflow - e.totalOutflow,
-      count: e.count,
-    })),
-    totals: { totalInflow, totalOutflow, netCashFlow: totalInflow - totalOutflow },
+    period: { startDate: rangeStart, endDate: rangeEnd },
+    operating,
+    financing,
+    totals: {
+      operatingNet,
+      financingNet,
+      totalInflow: rows.reduce((s, r) => s + r.inflow, 0),
+      totalOutflow: rows.reduce((s, r) => s + r.outflow, 0),
+      netCashFlow,
+    },
+    beginningCash,
+    // Provably equal to a direct as-of-rangeEnd balance query: TRANSFER entries
+    // are debit on one of our cash accounts and credit on another, so their net
+    // contribution across the combined cash pool is always zero.
+    endingCash: beginningCash + netCashFlow,
   };
 };
 
