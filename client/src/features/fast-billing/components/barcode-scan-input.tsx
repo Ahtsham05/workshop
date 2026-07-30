@@ -7,6 +7,7 @@ import { parseQuantityPrefix } from '../utils/quantity-prefix'
 
 export type BarcodeScanInputHandle = {
   focus: () => void
+  setValue: (v: string) => void
 }
 
 type Props = {
@@ -18,7 +19,7 @@ type Props = {
   className?: string
 }
 
-const MAX_SUGGESTIONS = 8
+const MAX_SUGGESTIONS = 50
 
 /** Always-focused scan/search combobox: type to live-filter, arrow keys + Enter to pick — no mouse required. */
 export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(function BarcodeScanInput(
@@ -32,9 +33,14 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
   // barcode+Enter in one burst (Enter must stay instant-add, never open the qty dialog).
   const [hasNavigated, setHasNavigated] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([])
 
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
+    setValue: (v: string) => {
+      setValue(v)
+      inputRef.current?.focus()
+    },
   }))
 
   useEffect(() => {
@@ -51,23 +57,31 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
 
   const { rest: query } = useMemo(() => parseQuantityPrefix(value), [value])
 
-  const suggestions = useMemo(() => {
+  const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return catalog
-      .filter(
-        (p) =>
-          p.name?.toLowerCase().includes(q) ||
-          p.nameUrdu?.toLowerCase().includes(q) ||
-          p.barcode?.toLowerCase().includes(q),
-      )
-      .slice(0, MAX_SUGGESTIONS)
+    return catalog.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(q) ||
+        p.nameUrdu?.toLowerCase().includes(q) ||
+        p.barcode?.toLowerCase().includes(q),
+    )
   }, [catalog, query])
+
+  const suggestions = useMemo(() => matches.slice(0, MAX_SUGGESTIONS), [matches])
 
   useEffect(() => {
     setHighlighted(0)
     setHasNavigated(false)
   }, [suggestions.length, query])
+
+  // Keep the highlighted row in view as arrow keys move it past the visible
+  // window — mouse hover also sets `highlighted`, so this only fires for
+  // actual keyboard navigation, never yanking scroll position under the cursor.
+  useEffect(() => {
+    if (!hasNavigated) return
+    itemRefs.current[highlighted]?.scrollIntoView({ block: 'nearest' })
+  }, [highlighted, hasNavigated])
 
   const clear = () => {
     setValue('')
@@ -131,23 +145,26 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
       />
 
       {suggestions.length > 0 && (
-        <div className='absolute inset-x-0 top-[calc(100%+4px)] z-20 overflow-hidden rounded-lg border border-border/70 bg-popover shadow-xl'>
-          <ul>
+        <div className='absolute inset-x-0 top-[calc(100%+4px)] z-20 overflow-hidden rounded-xl border border-border/70 bg-popover shadow-xl'>
+          <ul className='max-h-[min(28rem,60vh)] overflow-y-auto p-1'>
             {suggestions.map((item, idx) => {
               const active = hasNavigated && idx === highlighted
               const disabled = item.stockQuantity <= 0
               return (
                 <li
                   key={item.id}
+                  ref={(el) => {
+                    itemRefs.current[idx] = el
+                  }}
                   onMouseEnter={() => setHighlighted(idx)}
                   onClick={() => !disabled && selectSuggestion(item)}
                   className={cn(
-                    'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors',
-                    active && 'bg-primary/10',
+                    'flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors',
+                    active && 'bg-accent',
                     disabled && 'cursor-not-allowed opacity-50',
                   )}
                 >
-                  <div className='flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted'>
+                  <div className='flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted'>
                     {item.image?.url ? (
                       <img src={item.image.url} alt='' className='h-full w-full object-cover' />
                     ) : (
@@ -155,16 +172,35 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
                     )}
                   </div>
                   <div className='min-w-0 flex-1'>
-                    <p className='truncate font-medium leading-tight'>{item.name}</p>
-                    <p className='truncate text-xs text-muted-foreground'>
-                      {item.barcode || item.unit || '—'} · Stock {item.stockQuantity}
-                    </p>
+                    <p className='truncate text-sm font-medium leading-tight'>{item.name}</p>
+                    <div className='mt-0.5 flex items-center gap-2 text-xs text-muted-foreground'>
+                      <span>Rs{item.price.toFixed(0)}</span>
+                      <span
+                        className={cn(
+                          'font-medium',
+                          item.stockQuantity <= 0
+                            ? 'text-red-600'
+                            : item.stockQuantity <= 5
+                              ? 'text-red-500'
+                              : item.stockQuantity <= 20
+                                ? 'text-amber-500'
+                                : 'text-green-600',
+                        )}
+                      >
+                        {item.stockQuantity <= 0 ? 'Out of stock' : `Stock: ${item.stockQuantity}`}
+                      </span>
+                      {item.barcode && <span className='truncate'>· {item.barcode}</span>}
+                    </div>
                   </div>
-                  <span className='shrink-0 text-sm font-semibold tabular-nums'>Rs{item.price.toFixed(0)}</span>
                 </li>
               )
             })}
           </ul>
+          {matches.length > suggestions.length && (
+            <div className='border-t border-border/60 px-3 py-2 text-center text-xs text-muted-foreground'>
+              Showing {suggestions.length} of {matches.length} — keep typing to narrow
+            </div>
+          )}
           <div className='border-t border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground'>
             <kbd className='rounded border bg-background px-1'>↑↓</kbd> navigate ·{' '}
             <kbd className='rounded border bg-background px-1'>Enter</kbd> select

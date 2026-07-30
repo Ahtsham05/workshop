@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +47,7 @@ import {
   FileCheck,
   Columns2,
   Loader2,
+  Zap,
 } from 'lucide-react'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -509,6 +511,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <Button variant="outline" className="whitespace-nowrap" asChild>
+            <Link to="/fast-billing">
+              <Zap className="h-4 w-4 mr-2" />
+              Fast Billing
+            </Link>
+          </Button>
           <Button variant="outline" className="whitespace-nowrap" onClick={onConvertPending}>
             <Clock className="h-4 w-4 mr-2" />
             {t('convert_pending_invoices')}

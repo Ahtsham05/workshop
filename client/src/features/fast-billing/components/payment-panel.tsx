@@ -2,15 +2,29 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Banknote, Check, ChevronsUpDown, CreditCard, Receipt, User, UserRound, Zap } from 'lucide-react'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { Banknote, Check, ChevronsUpDown, CreditCard, Receipt, User, Wallet, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
+import { selectOnFocus } from '../utils/select-on-focus'
 import type { PaymentMethod } from '../types'
 import type { FastBillCustomer } from '../utils/build-invoice-payload'
 
-type CustomerRow = { _id?: string; id?: string; name: string; phone?: string }
+type CustomerRow = {
+  _id?: string
+  id?: string
+  name: string
+  phone?: string
+  picture?: { url?: string | null; publicId?: string | null } | null
+}
 
 function unwrapCustomers(data: unknown): CustomerRow[] {
   if (Array.isArray(data)) return data as CustomerRow[]
@@ -21,6 +35,21 @@ function unwrapCustomers(data: unknown): CustomerRow[] {
 }
 
 const CASH_QUICK_AMOUNTS = [50, 100, 500, 1000]
+
+const PAYMENT_METHOD_STYLES: Record<PaymentMethod, { active: string; badge: string }> = {
+  cash: {
+    active: 'border-emerald-600 bg-emerald-600 text-white shadow-emerald-600/30 hover:bg-emerald-500',
+    badge: 'bg-emerald-500',
+  },
+  card: {
+    active: 'border-sky-600 bg-sky-600 text-white shadow-sky-600/30 hover:bg-sky-500',
+    badge: 'bg-sky-500',
+  },
+  credit: {
+    active: 'border-violet-600 bg-violet-600 text-white shadow-violet-600/30 hover:bg-violet-500',
+    badge: 'bg-violet-500',
+  },
+}
 
 type Props = {
   subtotal: number
@@ -38,6 +67,12 @@ type Props = {
   itemCount: number
   onCharge: () => void
   charging: boolean
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className='text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground/80'>{children}</p>
+  )
 }
 
 export function PaymentPanel({
@@ -74,152 +109,215 @@ export function PaymentPanel({
   const canCharge = itemCount > 0 && !charging && (paymentMethod !== 'credit' || !!customer)
 
   return (
-    <div className='flex flex-col gap-2.5'>
-      <div className='flex items-center gap-2'>
-        <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button variant='outline' role='combobox' className='h-8 flex-1 justify-between font-normal'>
-              <span className='flex items-center gap-2 truncate'>
-                {customer ? <User className='h-3.5 w-3.5' /> : <UserRound className='h-3.5 w-3.5' />}
-                <span className='truncate text-xs'>{customer ? customer.name : walkInCustomerName || 'Walk-in Customer'}</span>
-              </span>
-              <ChevronsUpDown className='h-3.5 w-3.5 shrink-0 opacity-50' />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className='w-[--radix-popover-trigger-width] p-2' align='start'>
-            <Input
-              placeholder='Search customer by name/phone…'
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              className='mb-2 h-8'
-              autoFocus
-            />
-            <ScrollArea className='h-56'>
-              <button
-                type='button'
-                onClick={() => {
-                  onCustomerChange(null)
-                  setCustomerPickerOpen(false)
-                }}
-                className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted'
+    <div className='flex flex-col gap-3.5'>
+      <div className='space-y-1.5'>
+        <SectionLabel>Customer</SectionLabel>
+        <div className='flex items-center gap-2'>
+          <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant='outline'
+                role='combobox'
+                className='h-10 flex-1 justify-between border-border/80 bg-background font-normal shadow-sm'
               >
-                <Badge variant='secondary'>Walk-in Customer</Badge>
-              </button>
-              {filteredCustomers.map((c) => {
-                const id = c._id || c.id || ''
-                return (
-                  <button
-                    key={id}
-                    type='button'
-                    onClick={() => {
-                      onCustomerChange({ id, name: c.name })
-                      setCustomerPickerOpen(false)
-                    }}
-                    className='flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted'
+                <span className='flex min-w-0 items-center gap-2'>
+                  {customer ? (
+                    <ContactPhotoCell picture={undefined} name={customer.name} className='h-6 w-6 shrink-0' />
+                  ) : (
+                    <span className='flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted'>
+                      <User className='h-3.5 w-3.5 text-muted-foreground' />
+                    </span>
+                  )}
+                  <span className='truncate text-sm font-medium'>
+                    {customer ? customer.name : walkInCustomerName || 'Walk-in Customer'}
+                  </span>
+                </span>
+                <ChevronsUpDown className='h-3.5 w-3.5 shrink-0 opacity-50' />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className='w-[--radix-popover-trigger-width] p-0' align='start'>
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder='Search customer by name or phone…'
+                  value={customerSearch}
+                  onValueChange={setCustomerSearch}
+                />
+                <CommandList className='max-h-64'>
+                  <CommandGroup>
+                    <CommandItem
+                      onSelect={() => {
+                        onCustomerChange(null)
+                        setCustomerPickerOpen(false)
+                        setCustomerSearch('')
+                      }}
+                      className='cursor-pointer gap-2 py-2'
+                    >
+                      <span className='flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted'>
+                        <User className='h-3.5 w-3.5 text-muted-foreground' />
+                      </span>
+                      <span className='flex-1 font-medium'>Walk-in Customer</span>
+                      {!customer && <Check className='h-4 w-4 shrink-0 text-primary' />}
+                    </CommandItem>
+                  </CommandGroup>
+                  {filteredCustomers.length === 0 ? (
+                    <CommandEmpty>No customers found</CommandEmpty>
+                  ) : (
+                    <CommandGroup heading='Customers'>
+                      {filteredCustomers.map((c) => {
+                        const id = c._id || c.id || ''
+                        const isSelected = customer?.id === id
+                        return (
+                          <CommandItem
+                            key={id}
+                            value={`${c.name} ${c.phone ?? ''} ${id}`}
+                            onSelect={() => {
+                              onCustomerChange({ id, name: c.name })
+                              setCustomerPickerOpen(false)
+                              setCustomerSearch('')
+                            }}
+                            className='cursor-pointer gap-2.5 py-2'
+                          >
+                            <ContactPhotoCell picture={c.picture} name={c.name || ''} className='h-7 w-7 shrink-0' />
+                            <span className='flex min-w-0 flex-1 flex-col gap-0'>
+                              <span className='truncate text-sm font-medium leading-tight'>{c.name}</span>
+                              {c.phone && (
+                                <span className='truncate text-xs text-muted-foreground leading-tight'>{c.phone}</span>
+                              )}
+                            </span>
+                            {isSelected && <Check className='h-4 w-4 shrink-0 text-primary' />}
+                          </CommandItem>
+                        )
+                      })}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {!customer && (
+            <Input
+              placeholder='Walk-in name (optional)'
+              value={walkInCustomerName}
+              onChange={(e) => onWalkInCustomerNameChange(e.target.value)}
+              onFocus={selectOnFocus}
+              className='h-10 w-36 text-xs shadow-sm'
+            />
+          )}
+        </div>
+      </div>
+
+      <div className='space-y-1.5 border-t border-border/60 pt-3'>
+        <SectionLabel>Payment Method</SectionLabel>
+        <div className='grid grid-cols-3 gap-1.5'>
+          {(
+            [
+              { key: 'cash' as const, label: 'Cash', icon: Banknote },
+              { key: 'card' as const, label: 'Card', icon: CreditCard },
+              { key: 'credit' as const, label: 'Credit', icon: Receipt },
+            ]
+          ).map(({ key, label, icon: Icon }) => {
+            const active = paymentMethod === key
+            const disabled = key === 'credit' && !customer
+            const style = PAYMENT_METHOD_STYLES[key]
+            return (
+              <Button
+                key={key}
+                type='button'
+                variant='outline'
+                disabled={disabled}
+                title={disabled ? 'Select a registered customer for credit' : undefined}
+                className={cn(
+                  'relative h-9 gap-1.5 border-border/80 text-xs font-medium shadow-sm',
+                  active && cn(style.active, 'shadow-md'),
+                )}
+                onClick={() => onPaymentMethodChange(key)}
+              >
+                {active && (
+                  <span
+                    className={cn(
+                      'absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-white shadow-sm',
+                      style.badge,
+                    )}
                   >
-                    <span className='truncate font-medium'>{c.name}</span>
-                    {c.phone && <span className='text-xs text-muted-foreground'>{c.phone}</span>}
-                  </button>
-                )
-              })}
-            </ScrollArea>
-          </PopoverContent>
-        </Popover>
-        {!customer && (
-          <Input
-            placeholder='Walk-in name (optional)'
-            value={walkInCustomerName}
-            onChange={(e) => onWalkInCustomerNameChange(e.target.value)}
-            className='h-8 w-36 text-xs'
-          />
+                    <Check className='h-2 w-2' strokeWidth={3} />
+                  </span>
+                )}
+                <Icon className='h-3.5 w-3.5' />
+                {label}
+              </Button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className='space-y-1.5 border-t border-border/60 pt-3'>
+        <div className='flex items-center justify-between'>
+          <SectionLabel>Amount</SectionLabel>
+          <span className='text-xs text-muted-foreground'>
+            Subtotal <span className='font-medium text-foreground'>Rs{subtotal.toFixed(0)}</span>
+          </span>
+        </div>
+        <div className='flex items-center justify-between gap-2'>
+          <div className='flex items-center gap-1.5 text-xs'>
+            <span className='text-muted-foreground'>Discount</span>
+            <Input
+              type='number'
+              value={discount}
+              onChange={(e) => onDiscountChange(Math.max(0, Number(e.target.value) || 0))}
+              onFocus={selectOnFocus}
+              className='h-7 w-16 px-1 text-right text-xs shadow-sm'
+            />
+          </div>
+        </div>
+
+        {paymentMethod !== 'credit' && (
+          <div className='flex flex-wrap items-center gap-1.5'>
+            <Input
+              type='number'
+              value={paidAmount}
+              onChange={(e) => onPaidAmountChange(Math.max(0, Number(e.target.value) || 0))}
+              onFocus={selectOnFocus}
+              className='h-8 w-24 text-xs font-medium shadow-sm'
+            />
+            <Button
+              type='button'
+              size='sm'
+              className='h-8 bg-teal-600 px-2 text-xs text-white hover:bg-teal-500'
+              onClick={() => onPaidAmountChange(total)}
+            >
+              Exact
+            </Button>
+            {CASH_QUICK_AMOUNTS.map((amt) => (
+              <Button
+                key={amt}
+                type='button'
+                size='sm'
+                variant='outline'
+                className='h-8 border-amber-200 px-2 text-xs text-amber-700 shadow-sm hover:bg-amber-50 hover:text-amber-800 dark:border-amber-900 dark:text-amber-400 dark:hover:bg-amber-950'
+                onClick={() => onPaidAmountChange(paidAmount + amt)}
+              >
+                +{amt}
+              </Button>
+            ))}
+            {changeDue > 0 && (
+              <span className='ml-auto inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
+                <Wallet className='h-3 w-3' />
+                Change Rs{changeDue.toFixed(0)}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
-      <div className='grid grid-cols-3 gap-1.5'>
-        {(
-          [
-            { key: 'cash' as const, label: 'Cash', icon: Banknote },
-            { key: 'card' as const, label: 'Card', icon: CreditCard },
-            { key: 'credit' as const, label: 'Credit', icon: Receipt },
-          ]
-        ).map(({ key, label, icon: Icon }) => {
-          const active = paymentMethod === key
-          const disabled = key === 'credit' && !customer
-          return (
-            <Button
-              key={key}
-              type='button'
-              variant={active ? 'default' : 'outline'}
-              disabled={disabled}
-              title={disabled ? 'Select a registered customer for credit' : undefined}
-              className={cn('relative h-9 gap-1.5 text-xs font-medium', active && 'shadow-md')}
-              onClick={() => onPaymentMethodChange(key)}
-            >
-              {active && (
-                <span className='absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm'>
-                  <Check className='h-2 w-2' strokeWidth={3} />
-                </span>
-              )}
-              <Icon className='h-3.5 w-3.5' />
-              {label}
-            </Button>
-          )
-        })}
-      </div>
-
-      <div className='flex items-center justify-between gap-2 text-xs'>
-        <span className='text-muted-foreground'>Subtotal Rs{subtotal.toFixed(0)}</span>
-        <div className='flex items-center gap-1.5'>
-          <span className='text-muted-foreground'>Discount</span>
-          <Input
-            type='number'
-            value={discount}
-            onChange={(e) => onDiscountChange(Math.max(0, Number(e.target.value) || 0))}
-            className='h-6 w-16 px-1 text-right text-xs'
-          />
-        </div>
-      </div>
-
-      {paymentMethod !== 'credit' && (
-        <div className='flex flex-wrap items-center gap-1.5'>
-          <Input
-            type='number'
-            value={paidAmount}
-            onChange={(e) => onPaidAmountChange(Math.max(0, Number(e.target.value) || 0))}
-            className='h-7 w-24 text-xs font-medium'
-          />
-          <Button type='button' size='sm' variant='secondary' className='h-7 px-2 text-xs' onClick={() => onPaidAmountChange(total)}>
-            Exact
-          </Button>
-          {CASH_QUICK_AMOUNTS.map((amt) => (
-            <Button
-              key={amt}
-              type='button'
-              size='sm'
-              variant='outline'
-              className='h-7 px-2 text-xs'
-              onClick={() => onPaidAmountChange(paidAmount + amt)}
-            >
-              +{amt}
-            </Button>
-          ))}
-          {changeDue > 0 && (
-            <span className='ml-auto text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
-              Change Rs{changeDue.toFixed(0)}
-            </span>
-          )}
-        </div>
-      )}
-
-      <div className='flex items-center gap-2'>
-        <div className='flex flex-1 items-center justify-between rounded-lg bg-primary/10 px-3 py-2'>
-          <span className='text-xs font-medium text-muted-foreground'>Total</span>
-          <span className='text-lg font-bold tabular-nums text-primary'>Rs{total.toFixed(2)}</span>
+      <div className='flex items-center gap-2 border-t border-border/60 pt-3'>
+        <div className='flex flex-1 flex-col justify-center rounded-lg border border-primary/15 bg-primary/10 px-3 py-2'>
+          <span className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground'>Total</span>
+          <span className='text-lg font-bold leading-tight tabular-nums text-primary'>Rs{total.toFixed(2)}</span>
         </div>
         <Button
           type='button'
           size='lg'
-          className='h-12 flex-[2] gap-2 text-base font-bold shadow-lg'
+          className='h-[3.25rem] flex-[2] gap-2 text-base font-bold shadow-lg'
           disabled={!canCharge}
           onClick={onCharge}
         >

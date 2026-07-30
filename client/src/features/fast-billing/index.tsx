@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
+import { Link } from '@tanstack/react-router'
 import type { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
-import { Layers, Package, Trash2, Zap } from 'lucide-react'
+import { History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -22,7 +23,6 @@ import {
   type FastBillHeldRecord,
 } from '@/lib/pos-hold-storage'
 import { BarcodeScanInput, type BarcodeScanInputHandle } from './components/barcode-scan-input'
-import { ProductQuickGrid } from './components/product-quick-grid'
 import { CartPanel } from './components/cart-panel'
 import { PaymentPanel } from './components/payment-panel'
 import { HeldCartsSheet } from './components/held-carts-sheet'
@@ -51,7 +51,6 @@ export default function FastBillingPage() {
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   const [cart, setCart] = useState<CartLine[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
   const [customer, setCustomer] = useState<FastBillCustomer>(null)
   const [walkInCustomerName, setWalkInCustomerName] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -139,17 +138,19 @@ export default function FastBillingPage() {
 
   const closeAddDialog = useCallback(() => {
     setDialogItem(null)
-    scanInputRef.current?.focus()
   }, [])
 
   const confirmAddDialog = useCallback(
     (item: PurchaseCatalogItem, quantity: number, unitPrice: number) => {
       addToCart(item, quantity, unitPrice)
       setDialogItem(null)
-      scanInputRef.current?.focus()
     },
     [addToCart],
   )
+
+  const focusScanInput = useCallback(() => {
+    scanInputRef.current?.focus()
+  }, [])
 
   const handleScanSubmit = useCallback(
     (rawValue: string) => {
@@ -168,7 +169,7 @@ export default function FastBillingPage() {
         return
       }
       if (nameMatches.length > 1) {
-        setSearchTerm(rest)
+        scanInputRef.current?.setValue(rest)
         toast.message(`${nameMatches.length} products match "${rest}" — pick one below`)
         return
       }
@@ -344,9 +345,9 @@ export default function FastBillingPage() {
 
   return (
     <div className='flex flex-col'>
-      <div className='mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-primary/15 via-primary/5 to-transparent px-4 py-3'>
+      <div className='mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-violet-500/15 via-indigo-500/10 to-transparent px-4 py-3'>
         <div className='flex items-center gap-2.5'>
-          <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm'>
+          <span className='flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm shadow-indigo-600/30'>
             <Zap className='h-5 w-5' />
           </span>
           <div>
@@ -359,11 +360,17 @@ export default function FastBillingPage() {
         </div>
         <div className='flex items-center gap-2'>
           {cart.length > 0 && (
-            <div className='mr-1 hidden items-baseline gap-1.5 rounded-lg border border-primary/20 bg-background/80 px-3 py-1.5 shadow-sm sm:flex'>
+            <div className='mr-1 hidden items-baseline gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/40 sm:flex'>
               <span className='text-xs text-muted-foreground'>{cart.length} items</span>
-              <span className='text-base font-bold tabular-nums text-primary'>Rs{total.toFixed(0)}</span>
+              <span className='text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>Rs{total.toFixed(0)}</span>
             </div>
           )}
+          <Button variant='outline' size='sm' asChild>
+            <Link to='/invoice' search={{ view: 'list' }}>
+              <History className='mr-1.5 h-3.5 w-3.5' />
+              Invoice History
+            </Link>
+          </Button>
           <Button type='button' variant='outline' size='sm' onClick={() => setHeldOpen(true)} title='Alt+L'>
             <Layers className='mr-1.5 h-3.5 w-3.5' />
             Held {held.length > 0 && `(${held.length})`}
@@ -425,17 +432,18 @@ export default function FastBillingPage() {
               ))}
             </div>
           )}
-          <ProductQuickGrid
-            products={catalog}
-            searchTerm={searchTerm}
-            onSearchTermChange={setSearchTerm}
-            onRequestAdd={openAddDialog}
-          />
-        </div>
-
-        <div className='flex flex-col gap-3 xl:col-span-5'>
-          <div className='flex max-h-[min(420px,calc(100vh-460px))] min-h-[140px] flex-col rounded-xl border border-border/60 bg-card p-3 shadow-md'>
-            <h2 className='mb-2 shrink-0 text-sm font-semibold tracking-tight'>Cart ({cart.length})</h2>
+          <div className='flex h-[min(680px,calc(100vh-330px))] flex-col rounded-xl border border-border/60 bg-card p-3 shadow-md'>
+            <div className='mb-2 flex shrink-0 items-center justify-between border-b border-border/60 pb-2'>
+              <h2 className='flex items-center gap-1.5 text-sm font-semibold tracking-tight'>
+                <ShoppingCart className='h-4 w-4 text-sky-600 dark:text-sky-400' />
+                Cart <span className='text-muted-foreground'>({cart.length})</span>
+              </h2>
+              {cart.length > 0 && (
+                <span className='text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>
+                  Rs{subtotal.toFixed(0)}
+                </span>
+              )}
+            </div>
             <CartPanel
               cart={cart}
               onQuantityChange={updateQuantity}
@@ -444,8 +452,14 @@ export default function FastBillingPage() {
               highlightKey={lastAddedKey}
             />
           </div>
+        </div>
 
-          <div className='sticky bottom-3 z-10 rounded-xl border border-border/60 bg-card p-3 shadow-xl'>
+        <div className='flex flex-col gap-3 xl:col-span-5'>
+          <div className='sticky top-3 rounded-xl border border-border/60 bg-card p-3 shadow-xl'>
+            <h2 className='mb-2.5 flex items-center gap-1.5 border-b border-border/60 pb-2 text-sm font-semibold tracking-tight'>
+              <Receipt className='h-4 w-4 text-violet-600 dark:text-violet-400' />
+              Checkout
+            </h2>
             <PaymentPanel
               subtotal={subtotal}
               discount={discount}
@@ -468,7 +482,12 @@ export default function FastBillingPage() {
       </div>
 
       <HeldCartsSheet open={heldOpen} onOpenChange={setHeldOpen} held={held} onResume={resumeHeld} onDelete={deleteHeld} />
-      <AddToCartDialog item={dialogItem} onClose={closeAddDialog} onConfirm={confirmAddDialog} />
+      <AddToCartDialog
+        item={dialogItem}
+        onClose={closeAddDialog}
+        onConfirm={confirmAddDialog}
+        onAfterClose={focusScanInput}
+      />
     </div>
   )
 }

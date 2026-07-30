@@ -48,6 +48,9 @@ export function buildInvoicePayload({
     profit: round2((line.unitPrice - line.cost) * line.quantity),
   }))
 
+  const totalProfit = round2(items.reduce((sum, item) => sum + item.profit, 0))
+  const totalCost = round2(items.reduce((sum, item) => sum + item.cost * item.quantity, 0))
+
   return {
     items,
     customerId: customer ? customer.id : 'walk-in',
@@ -59,6 +62,8 @@ export function buildInvoicePayload({
     tax: 0,
     discount,
     total,
+    totalProfit,
+    totalCost,
     paidAmount: paymentMethod === 'credit' ? paidAmount : total,
     language: 'en',
   }

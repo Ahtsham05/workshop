@@ -28,9 +28,9 @@ export function Search({ className = '', placeholder }: Props) {
     >
       <IconSearch
         aria-hidden='true'
-        className='sm:absolute sm:top-1/2 sm:left-1.5 sm:-translate-y-1/2'
+        className='h-4 w-4 sm:absolute sm:top-1/2 sm:left-2 sm:-translate-y-1/2'
       />
-      <span className='ml-3 hidden sm:inline'>{searchPlaceholder}</span>
+      <span className='hidden sm:ml-6 sm:inline'>{searchPlaceholder}</span>
       <kbd className='bg-muted pointer-events-none absolute top-[0.3rem] right-[0.3rem] hidden h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none sm:flex'>
         <span className='text-xs'>⌘</span>K
       </kbd>

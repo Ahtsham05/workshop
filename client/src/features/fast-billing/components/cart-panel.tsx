@@ -1,8 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Minus, Plus, ShoppingCart, X, Package } from 'lucide-react'
+import { Minus, Plus, ShoppingCart, Trash2, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { selectOnFocus } from '../utils/select-on-focus'
+import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import type { CartLine } from '../types'
 
 type Props = {
@@ -12,6 +14,9 @@ type Props = {
   onRemove: (key: string) => void
   highlightKey?: string | null
 }
+
+const noSpinner =
+  '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
 export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, highlightKey }: Props) {
   if (cart.length === 0) {
@@ -28,53 +33,49 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, hig
       <ul className='space-y-2'>
         {cart.map((line) => {
           const lineTotal = Math.round(line.unitPrice * line.quantity * 100) / 100
-          const overStock = line.quantity > line.stockQuantity
+          const remaining = line.stockQuantity - line.quantity
           const justAdded = highlightKey === line.key
           return (
             <li
               key={line.key}
               className={cn(
-                'rounded-lg border p-2.5 shadow-sm transition-colors duration-500',
-                justAdded ? 'border-primary/50 bg-primary/5' : 'border-border/70 bg-card',
+                'flex flex-wrap items-center gap-2 overflow-hidden rounded-xl border bg-card p-2 shadow-sm transition-colors duration-500',
+                justAdded ? 'border-primary/50 bg-primary/5' : 'border-border',
               )}
             >
-              <div className='flex items-start gap-2.5'>
-                <div className='flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted'>
-                  {line.image?.url ? (
-                    <img src={line.image.url} alt='' className='h-full w-full object-cover' />
-                  ) : (
-                    <Package className='h-4.5 w-4.5 text-muted-foreground/50' />
-                  )}
+              {line.image?.url ? (
+                <img src={line.image.url} alt='' className='h-10 w-10 shrink-0 rounded-lg object-cover' />
+              ) : (
+                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted'>
+                  <Package className='h-5 w-5 text-muted-foreground/50' />
                 </div>
+              )}
 
-                <div className='min-w-0 flex-1'>
-                  <p className='truncate text-sm font-semibold leading-tight'>{line.name}</p>
-                  <div className='mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground'>
-                    {line.unit && <span>{line.unit}</span>}
-                    {overStock && <span className='font-medium text-destructive'>· only {line.stockQuantity} in stock</span>}
-                  </div>
+              <div className='min-w-[110px] flex-1'>
+                <p className='truncate text-sm font-semibold leading-tight'>{line.name}</p>
+                <div className='mt-1 flex flex-wrap items-center gap-1.5'>
+                  <span className='text-xs text-muted-foreground'>
+                    Rs{line.unitPrice} · {line.unit || 'pcs'}
+                  </span>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium',
+                      stockBadgeClasses(remaining),
+                    )}
+                  >
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', stockDotClasses(remaining))} />
+                    {stockLabel(remaining)}
+                  </span>
                 </div>
-
-                <span className='shrink-0 text-base font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
-
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon'
-                  className='-mr-1 -mt-1 h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive'
-                  onClick={() => onRemove(line.key)}
-                >
-                  <X className='h-3.5 w-3.5' />
-                </Button>
               </div>
 
-              <div className='mt-2 flex items-center justify-between gap-2 border-t border-border/50 pt-2 pl-[50px]'>
-                <div className='flex items-center gap-1'>
+              <div className='flex shrink-0 items-center gap-1.5'>
+                <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                   <Button
                     type='button'
-                    variant='outline'
-                    size='icon'
-                    className='h-7 w-7'
+                    size='sm'
+                    variant='ghost'
+                    className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:bg-muted hover:text-foreground'
                     onClick={() => onQuantityChange(line.key, Math.max(1, line.quantity - 1))}
                   >
                     <Minus className='h-3.5 w-3.5' />
@@ -83,28 +84,53 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, hig
                     type='number'
                     value={line.quantity}
                     onChange={(e) => onQuantityChange(line.key, Math.max(1, Number(e.target.value) || 1))}
-                    className='h-7 w-12 px-1 text-center text-xs font-medium'
+                    onFocus={selectOnFocus}
+                    className={cn(
+                      'h-7 w-12 rounded-none border-0 text-center text-xs font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
+                      noSpinner,
+                    )}
                   />
                   <Button
                     type='button'
-                    variant='outline'
-                    size='icon'
-                    className='h-7 w-7'
+                    size='sm'
+                    variant='ghost'
+                    className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:bg-muted hover:text-foreground'
                     onClick={() => onQuantityChange(line.key, line.quantity + 1)}
                   >
                     <Plus className='h-3.5 w-3.5' />
                   </Button>
                 </div>
 
-                <div className='flex items-center gap-1.5'>
-                  <span className='text-xs text-muted-foreground'>@ Rs</span>
+                <span className='select-none text-sm text-muted-foreground/60'>×</span>
+
+                <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                  <span className='flex h-7 select-none items-center border-r bg-muted px-2 text-xs font-medium text-muted-foreground'>
+                    Rs
+                  </span>
                   <Input
                     type='number'
                     value={line.unitPrice}
                     onChange={(e) => onPriceChange(line.key, Math.max(0, Number(e.target.value) || 0))}
-                    className='h-7 w-20 px-1.5 text-right text-xs font-medium'
+                    onFocus={selectOnFocus}
+                    className={cn(
+                      'h-7 w-16 rounded-none border-0 text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
+                      noSpinner,
+                    )}
                   />
                 </div>
+
+                <span className='select-none text-sm text-muted-foreground/60'>=</span>
+                <span className='w-16 shrink-0 text-right text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
+
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='ghost'
+                  className='h-7 w-7 shrink-0 p-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                  onClick={() => onRemove(line.key)}
+                >
+                  <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+                </Button>
               </div>
             </li>
           )
