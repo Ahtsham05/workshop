@@ -320,6 +320,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           unit: item.unit,
           unitPrice: item.unitPrice,
           subtotal: item.subtotal,
+          discountAmount: item.discountAmount,
           imeis: item.imeis,
         })),
         customerId: invoice.customerId,
@@ -1092,7 +1093,24 @@ function InvoiceDetails({
                     {item.quantity} {item.unit || 'pcs'}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
-                  <TableCell className="whitespace-nowrap text-right">Rs{((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-right">
+                    {(() => {
+                      const gross = (item.quantity || 0) * (item.unitPrice || 0)
+                      const discountAmount = Number(item.discountAmount || 0)
+                      const net = item.subtotal ?? (gross - discountAmount)
+                      return (
+                        <>
+                          {discountAmount > 0 && (
+                            <div className="text-xs text-muted-foreground line-through">Rs{gross.toFixed(2)}</div>
+                          )}
+                          Rs{Number(net).toFixed(2)}
+                          {discountAmount > 0 && (
+                            <div className="text-xs text-green-600">-Rs{discountAmount.toFixed(2)}</div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </TableCell>
                 </TableRow>
                 )
               })}
@@ -1111,6 +1129,15 @@ function InvoiceDetails({
           <Label className="text-xs">{t('tax')}</Label>
           <p className="font-bold">Rs{invoice.tax?.toFixed(2) || '0.00'}</p>
         </div>
+        {(() => {
+          const itemDiscountTotal = (invoice.items || []).reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0)
+          return itemDiscountTotal > 0 ? (
+            <div>
+              <Label className="text-xs">{t('Item Discounts')}</Label>
+              <p className="font-bold text-green-600">-Rs{itemDiscountTotal.toFixed(2)}</p>
+            </div>
+          ) : null
+        })()}
         <div>
           <Label className="text-xs">{t('discount')}</Label>
           <p className="font-bold text-red-600">-Rs{invoice.discount?.toFixed(2) || '0.00'}</p>

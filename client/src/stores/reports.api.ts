@@ -59,6 +59,9 @@ export interface SalesInvoiceItem {
   quantity: number
   unitPrice: number
   subtotal: number
+  // Resolved Rs discount already netted into `subtotal` above, when this line had a
+  // per-item discount applied. See client/src/lib/discount.ts.
+  discountAmount?: number
   imeis?: string[]
   variantId?: string | null
   variantLabel?: string | null
@@ -72,6 +75,9 @@ export interface SalesInvoiceDetail {
   invoiceDate: string
   type: string
   status: string
+  subtotal: number
+  // Overall invoice-level discount (resolved Rs), on top of any per-item discounts.
+  discount: number
   total: number
   paidAmount: number
   balance: number
@@ -145,6 +151,8 @@ export interface ProductReportData {
   totalQuantitySold: number
   totalRevenue: number
   totalProfit: number
+  // Sum of per-item discountAmount already netted into totalRevenue/avgSellingPrice.
+  totalDiscount?: number
   avgSellingPrice: number
   currentStock: number
   minStockLevel: number

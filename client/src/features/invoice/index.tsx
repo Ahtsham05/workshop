@@ -43,6 +43,7 @@ import {
 } from '@/lib/pos-hold-storage'
 import { applySaleDraftStock, revertSaleDraftStock } from '@/lib/pos-hold-stock'
 import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
+import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -72,6 +73,12 @@ export interface InvoiceItem {
   cost: number
   subtotal: number
   profit: number
+  // Line-level discount (e.g. a customer discount on this one product), applied on top
+  // of quantity * unitPrice; subtotal/profit above are already net of it. Mirrors
+  // purchase-invoice's PurchaseItem discount fields.
+  discountType?: DiscountType
+  discountValue?: number
+  discountAmount?: number
   isManualEntry?: boolean
   imeis?: string[]
   // Real (non-default) variant this line item is for, when product.hasVariants —
@@ -112,6 +119,10 @@ export interface Invoice {
   status?: 'draft' | 'finalized' | 'paid' | 'cancelled' | 'refunded'
   subtotal: number
   tax: number
+  // Overall invoice-level discount, applied on top of any per-item discounts. `discount`
+  // is the resolved Rs value; discountType/discountValue is the raw entered unit + number.
+  discountType?: DiscountType
+  discountValue?: number
   discount: number
   total: number
   totalProfit: number
@@ -214,6 +225,8 @@ export default function InvoicePage() {
     type: search.customerId?.trim() ? 'credit' : 'cash',
     subtotal: 0,
     tax: 0,
+    discountType: 'fixed',
+    discountValue: 0,
     discount: 0,
     total: 0,
     totalProfit: 0,
@@ -327,6 +340,8 @@ export default function InvoicePage() {
       type: 'cash',
       subtotal: 0,
       tax: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       discount: 0,
       total: 0,
       totalProfit: 0,
@@ -667,17 +682,28 @@ export default function InvoicePage() {
     })
   }, [preferredLanguage])
 
-  // Calculate invoice totals
-  const calculateTotals = useCallback((items: InvoiceItem[], discountAmount: number = 0, deliveryCharge: number = 0, serviceCharge: number = 0) => {
+  // Calculate invoice totals. `items[].subtotal/profit` are already net of any per-item
+  // discount (see applyLineDiscount) — the overall discountType/discountValue is then
+  // resolved against that net subtotal, on top of item discounts. Mirrors
+  // purchase-invoice's calculateTotals.
+  const calculateTotals = useCallback((
+    items: InvoiceItem[],
+    discountType: DiscountType = 'fixed',
+    discountValue: number = 0,
+    deliveryCharge: number = 0,
+    serviceCharge: number = 0,
+  ) => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
     const totalProfit = items.reduce((sum, item) => sum + item.profit, 0)
     const totalCost = items.reduce((sum, item) => sum + (item.cost * (item.stockQuantity || item.quantity)), 0)
-    const discountedSubtotal = subtotal - discountAmount
+    const itemDiscountTotal = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+    const discount = computeDiscountAmount(subtotal, discountType, discountValue)
+    const discountedSubtotal = subtotal - discount
     const taxableAmount = discountedSubtotal + deliveryCharge + serviceCharge
     const tax = taxableAmount * (taxRate / 100)
     const total = taxableAmount + tax
-    
-    return { subtotal, tax, total, totalProfit, totalCost, discountedSubtotal, taxableAmount }
+
+    return { subtotal, tax, total, totalProfit, totalCost, discount, itemDiscountTotal, discountedSubtotal, taxableAmount }
   }, [taxRate])
 
   // Add product to invoice
@@ -802,13 +828,17 @@ export default function InvoicePage() {
           }
           
           console.log('PARTIAL ADD: Adding', actualQuantityAdded, 'units')
-          
+
+          // Re-apply the existing line's discount (if any) to the recalculated gross —
+          // increasing quantity must not silently drop a discount already set on this line.
+          const partialNet = applyLineDiscount(partialLine, existingItem.discountType, existingItem.discountValue)
           newItems = [...invoice.items]
           newItems[existingItemIndex] = {
             ...existingItem,
             quantity: finalQuantity,
-            subtotal: partialLine.subtotal,
-            profit: partialLine.profit,
+            subtotal: partialNet.subtotal,
+            profit: partialNet.profit,
+            discountAmount: partialNet.discountAmount,
             stockQuantity: partialLine.stockQuantity,
             conversionFactor: partialLine.conversionFactor
           }
@@ -816,16 +846,19 @@ export default function InvoicePage() {
       } else {
         // Stock is sufficient
         actualQuantityAdded = quantity
-        
+
         console.log('FULL ADD: Adding', actualQuantityAdded, 'units')
         console.log('Updating existing item:', existingItem.name, 'New quantity:', newQuantity)
-        
+
+        // Same re-apply-existing-discount reasoning as the partial-add branch above.
+        const fullNet = applyLineDiscount(recalculatedLine, existingItem.discountType, existingItem.discountValue)
         newItems = [...invoice.items]
         newItems[existingItemIndex] = {
           ...existingItem,
           quantity: newQuantity,
-          subtotal: recalculatedLine.subtotal,
-          profit: recalculatedLine.profit,
+          subtotal: fullNet.subtotal,
+          profit: fullNet.profit,
+          discountAmount: fullNet.discountAmount,
           stockQuantity: recalculatedLine.stockQuantity,
           conversionFactor: recalculatedLine.conversionFactor
         }
@@ -928,13 +961,14 @@ export default function InvoicePage() {
     
     console.log('=== ADD TO INVOICE DEBUG END ===')
     
-    const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+    const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
     
     setInvoice(prev => ({
       ...prev,
       items: newItems,
       subtotal: totals.subtotal,
       tax: totals.tax,
+      discount: totals.discount,
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
@@ -951,7 +985,7 @@ export default function InvoicePage() {
     const removedItem = invoice.items.find(item => item.id === itemId)
     
     const newItems = invoice.items.filter(item => item.id !== itemId)
-    const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+    const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
     
     // Restore stock when item is removed — skipped for variant items, since `products`
     // only ever holds the legacy/parent product (the catalog reflects real stock after
@@ -971,6 +1005,7 @@ export default function InvoicePage() {
       items: newItems,
       subtotal: totals.subtotal,
       tax: totals.tax,
+      discount: totals.discount,
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
@@ -1012,22 +1047,31 @@ export default function InvoicePage() {
         }
       }
 
-      const newItems = invoice.items.map(item => item.id === itemId
-        ? {
-            ...item,
-            quantity: newQuantity,
-            stockQuantity: newQuantity,
-            subtotal: newQuantity * item.unitPrice,
-            profit: (newQuantity * item.unitPrice) - (newQuantity * item.cost),
-          }
-        : item)
+      const newItems = invoice.items.map(item => {
+        if (item.id !== itemId) return item
+        const gross = newQuantity * item.unitPrice
+        const net = applyLineDiscount(
+          { subtotal: gross, profit: gross - (newQuantity * item.cost) },
+          item.discountType,
+          item.discountValue,
+        )
+        return {
+          ...item,
+          quantity: newQuantity,
+          stockQuantity: newQuantity,
+          subtotal: net.subtotal,
+          profit: net.profit,
+          discountAmount: net.discountAmount,
+        }
+      })
 
-      const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+      const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
       setInvoice(prev => ({
         ...prev,
         items: newItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        discount: totals.discount,
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
@@ -1115,11 +1159,13 @@ export default function InvoicePage() {
         if (!lineValues) {
           return item
         }
+        const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
         return {
           ...item,
           quantity: newQuantity,
-          subtotal: lineValues.subtotal,
-          profit: lineValues.profit,
+          subtotal: net.subtotal,
+          profit: net.profit,
+          discountAmount: net.discountAmount,
           stockQuantity: lineValues.stockQuantity,
           conversionFactor: lineValues.conversionFactor
         }
@@ -1127,13 +1173,14 @@ export default function InvoicePage() {
       return item
     })
     
-    const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+    const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
     
     setInvoice(prev => ({
       ...prev,
       items: newItems,
       subtotal: totals.subtotal,
       tax: totals.tax,
+      discount: totals.discount,
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
@@ -1156,8 +1203,8 @@ export default function InvoicePage() {
 
   // Update invoice type
   const updateInvoiceType = useCallback((type: 'cash' | 'credit' | 'pending' | 'quotation') => {
-    const totals = calculateTotals(invoice.items, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-    
+    const totals = calculateTotals(invoice.items, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+
     setInvoice(prev => ({
       ...prev,
       type,
@@ -1166,22 +1213,58 @@ export default function InvoicePage() {
     }))
   }, [invoice, calculateTotals])
 
-  // Update discount
-  const updateDiscount = useCallback((discountAmount: number) => {
-    const totals = calculateTotals(invoice.items, discountAmount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-    
-    setInvoice(prev => ({
-      ...prev,
-      discount: discountAmount,
-      subtotal: totals.subtotal,
-      tax: totals.tax,
-      total: totals.total,
-      totalProfit: totals.totalProfit,
-      totalCost: totals.totalCost,
-      paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-      balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
-    }))
-  }, [invoice, calculateTotals])
+  // Update the overall (whole-invoice) discount's type and/or raw value — applied on top
+  // of any per-item discounts. Mirrors purchase-invoice's inline discount toggle.
+  const updateDiscount = useCallback((patch: { type?: DiscountType; value?: number }) => {
+    setInvoice(prev => {
+      const discountType = patch.type ?? prev.discountType ?? 'fixed'
+      const discountValue = patch.value ?? prev.discountValue ?? 0
+      const totals = calculateTotals(prev.items, discountType, discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      return {
+        ...prev,
+        discountType,
+        discountValue,
+        discount: totals.discount,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
+        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+      }
+    })
+  }, [calculateTotals])
+
+  // Update one line item's discount (type and/or raw value) — a customer discount on
+  // that specific product, on top of any overall invoice-level discount. Mirrors
+  // purchase-invoice's updateItemDiscount.
+  const updateItemDiscount = useCallback((itemId: string, patch: { type?: DiscountType; value?: number }) => {
+    setInvoice(prev => {
+      const newItems = prev.items.map(item => {
+        if (item.id !== itemId) return item
+        const discountType = patch.type ?? item.discountType ?? 'fixed'
+        const discountValue = patch.value ?? item.discountValue ?? 0
+        const gross = item.quantity * item.unitPrice
+        const totalCost = (item.stockQuantity || item.quantity) * item.cost
+        const net = applyLineDiscount({ subtotal: gross, profit: gross - totalCost }, discountType, discountValue)
+        return { ...item, discountType, discountValue, discountAmount: net.discountAmount, subtotal: net.subtotal, profit: net.profit }
+      })
+      const totals = calculateTotals(newItems, prev.discountType, prev.discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      return {
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
+        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+      }
+    })
+  }, [calculateTotals])
 
   const handleCreateNew = () => {
     if (!hasExplicitPermission('createInvoices')) {
@@ -1228,6 +1311,8 @@ export default function InvoicePage() {
       type: 'cash',
       subtotal: 0,
       tax: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       discount: 0,
       total: 0,
       totalProfit: 0,
@@ -1316,6 +1401,8 @@ export default function InvoicePage() {
       type: invoiceData.type || 'cash',
       subtotal: invoiceData.subtotal || 0,
       tax: invoiceData.tax || 0,
+      discountType: invoiceData.discountType || 'fixed',
+      discountValue: invoiceData.discountValue || 0,
       discount: invoiceData.discount || 0,
       total: invoiceData.total || 0,
       totalProfit: invoiceData.totalProfit || 0,
@@ -1395,6 +1482,8 @@ export default function InvoicePage() {
       type: 'cash',
       subtotal: 0,
       tax: 0,
+      discountType: 'fixed',
+      discountValue: 0,
       discount: 0,
       total: 0,
       totalProfit: 0,
@@ -1602,6 +1691,7 @@ export default function InvoicePage() {
               removeFromInvoice={removeFromInvoice}
               updateInvoiceType={updateInvoiceType}
               updateDiscount={updateDiscount}
+              updateItemDiscount={updateItemDiscount}
               taxRate={taxRate}
               setTaxRate={setTaxRate}
               customers={customers}

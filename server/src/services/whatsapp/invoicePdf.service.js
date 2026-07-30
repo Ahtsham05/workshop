@@ -44,15 +44,21 @@ function formatMoney(value) {
 
 function buildInvoiceHtml(invoice, customer, organization) {
   const itemRows = (invoice.items || [])
-    .map(
-      (item) => `
+    .map((item) => {
+      const gross = item.quantity * item.unitPrice;
+      const discountAmount = Number(item.discountAmount || 0);
+      const net = item.subtotal ?? gross;
+      return `
       <tr>
         <td>${escapeHtml(item.name || item.productName || '')}</td>
         <td style="text-align:center">${escapeHtml(item.quantity)}</td>
         <td style="text-align:right">${formatMoney(item.unitPrice)}</td>
-        <td style="text-align:right">${formatMoney(item.subtotal ?? item.quantity * item.unitPrice)}</td>
-      </tr>`,
-    )
+        <td style="text-align:right">
+          ${discountAmount > 0 ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${formatMoney(gross)}</div>` : ''}
+          ${formatMoney(net)}
+        </td>
+      </tr>`;
+    })
     .join('');
 
   return `<!DOCTYPE html>

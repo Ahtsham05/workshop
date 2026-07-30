@@ -15,3 +15,21 @@ export function computeDiscountAmount(
   const raw = discountType === 'percentage' ? (base * value) / 100 : value
   return Math.min(base, raw)
 }
+
+/**
+ * Applies an item's discount (type + raw value) to its gross line result (subtotal/profit
+ * from calculateInvoiceLineValues), returning the net subtotal/profit that actually get
+ * stored on the invoice item — profit drops by exactly the discount since cost is unaffected.
+ */
+export function applyLineDiscount(
+  line: { subtotal: number; profit: number },
+  discountType: DiscountType | undefined,
+  discountValue: number | undefined,
+): { subtotal: number; profit: number; discountAmount: number } {
+  const discountAmount = computeDiscountAmount(line.subtotal, discountType, discountValue)
+  return {
+    subtotal: line.subtotal - discountAmount,
+    profit: line.profit - discountAmount,
+    discountAmount,
+  }
+}

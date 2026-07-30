@@ -284,7 +284,14 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                           <LongText className={reportEntityNameClass(language, label)}>{label}</LongText>
                         </TableCell>
                         <TableCell className='text-right'>{product.totalQuantitySold} {product.unit || 'pcs'}</TableCell>
-                        <TableCell className='text-right'>{formatCurrency(product.totalRevenue)}</TableCell>
+                        <TableCell className='text-right'>
+                          {formatCurrency(product.totalRevenue)}
+                          {(product.totalDiscount || 0) > 0 && (
+                            <div className='text-xs font-normal text-green-600'>
+                              -{formatCurrency(product.totalDiscount || 0)} {t('discount')}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>
                         <TableCell className='text-right'>
                           <Badge variant={product.currentStock === 0 ? 'destructive' : product.currentStock <= 10 ? 'secondary' : 'default'}>

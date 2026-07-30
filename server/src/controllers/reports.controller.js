@@ -183,6 +183,8 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
         invoiceDate: 1,
         type: 1,
         status: 1,
+        subtotal: 1,
+        discount: { $ifNull: ['$discount', 0] },
         total: 1,
         paidAmount: 1,
         balance: 1,
@@ -204,6 +206,7 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
               quantity: '$$item.quantity',
               unitPrice: '$$item.unitPrice',
               subtotal: '$$item.subtotal',
+              discountAmount: { $ifNull: ['$$item.discountAmount', 0] },
               imeis: { $ifNull: ['$$item.imeis', []] },
               variantId: { $ifNull: ['$$item.variantId', null] },
               batchNumber: { $ifNull: ['$$item.batchNumber', null] },
@@ -559,7 +562,18 @@ const getProductReport = catchAsync(async (req, res) => {
         totalQuantitySold: { $sum: '$items.quantity' },
         totalRevenue: { $sum: { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] } },
         totalProfit: { $sum: { $ifNull: ['$items.profit', 0] } },
-        avgSellingPrice: { $avg: { $ifNull: ['$items.price', '$items.unitPrice'] } },
+        totalDiscount: { $sum: { $ifNull: ['$items.discountAmount', 0] } },
+        // Net of any per-item discount — divides the same net line total used for
+        // totalRevenue above by quantity, not the raw listed unitPrice, so a discounted
+        // line doesn't inflate "average selling price".
+        avgSellingPrice: {
+          $avg: {
+            $divide: [
+              { $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }] },
+              { $cond: [{ $gt: ['$items.quantity', 0] }, '$items.quantity', 1] },
+            ],
+          },
+        },
         currentStock: { $first: '$product.stockQuantity' },
         minStockLevel: { $first: '$product.minStockLevel' },
         unit: { $first: '$product.unit' },

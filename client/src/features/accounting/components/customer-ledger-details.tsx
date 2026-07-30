@@ -186,6 +186,9 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
           <p className="font-medium text-lg">Rs{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
+          {Number(invoiceData.discount || 0) > 0 && (
+            <p className="text-xs text-green-600">-Rs{formatCurrency(invoiceData.discount)} {t('discount')}</p>
+          )}
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Status')}</p>
@@ -224,7 +227,17 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
                   <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
                   <TableCell>{item.quantity || 0}</TableCell>
                   <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
-                  <TableCell className="text-right">Rs{formatCurrency(item.subtotal || item.total)}</TableCell>
+                  <TableCell className="text-right">
+                    {Number(item.discountAmount || 0) > 0 && (
+                      <div className="text-xs text-muted-foreground line-through">
+                        Rs{formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
+                      </div>
+                    )}
+                    Rs{formatCurrency(item.subtotal || item.total)}
+                    {Number(item.discountAmount || 0) > 0 && (
+                      <div className="text-xs text-green-600">-Rs{formatCurrency(item.discountAmount)}</div>
+                    )}
+                  </TableCell>
                 </TableRow>
                 )
               })
@@ -1248,6 +1261,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           unit: item.unit,
           unitPrice: item.unitPrice,
           subtotal: item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+          discountAmount: item.discountAmount,
         })),
         customerId: invoice.customerId,
         customerName,
@@ -1342,6 +1356,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               unit: item.unit,
               unitPrice: Number(item.unitPrice) || 0,
               subtotal: Number(item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
+              discountAmount: Number(item.discountAmount || 0),
             }))
           : undefined;
 

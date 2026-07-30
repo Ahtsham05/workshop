@@ -30,7 +30,10 @@ export interface PrintInvoiceData {
     quantity: number
     unit?: string
     unitPrice: number
+    // Net of any per-item discount (see applyLineDiscount) — the gross line amount is
+    // quantity * unitPrice, shown struck-through above this when discountAmount > 0.
     subtotal: number
+    discountAmount?: number
     imeis?: string[]
   }>
   customerId?: string | { name: string; id: string; _id?: string }
@@ -217,6 +220,7 @@ export const generateInvoiceHTML = (
     companyPhone,
   } = data
 
+  const itemDiscountTotal = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
   const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = receiptLabels[language]
@@ -679,7 +683,10 @@ export const generateInvoiceHTML = (
           <td>${formatPrintItemCell(item, language)}</td>
           <td>${item.unitPrice.toFixed(2)}</td>
           <td>${item.quantity}</td>
-          <td>${item.subtotal.toFixed(2)}</td>
+          <td>
+            ${item.discountAmount ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${(item.quantity * item.unitPrice).toFixed(2)}</div>` : ''}
+            ${item.subtotal.toFixed(2)}
+          </td>
         </tr>
         `).join('')}
         <tr class="total-row-table">
@@ -693,7 +700,7 @@ export const generateInvoiceHTML = (
   </div>
   
   ${(() => {
-    const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
+    const hasExtraCharges = itemDiscountTotal > 0 || discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
     if (isQuoteStyleTotals(type)) {
       if (hasExtraCharges) {
         return `
@@ -702,6 +709,7 @@ export const generateInvoiceHTML = (
       <span>${urduTexts.subtotal}:</span>
       <span>${formatCurrency(subtotal)}</span>
     </div>
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${formatCurrency(itemDiscountTotal)}</span></div>` : ''}
     ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
@@ -723,6 +731,7 @@ export const generateInvoiceHTML = (
     if (hasExtraCharges) {
       return `
   <div class="totals-section">
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${formatCurrency(itemDiscountTotal)}</span></div>` : ''}
     ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
@@ -826,6 +835,7 @@ export const generateA4InvoiceHTML = (
     companyPhone,
   } = data
 
+  const itemDiscountTotal = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
   const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = a4Labels[language]
@@ -943,7 +953,7 @@ export const generateA4InvoiceHTML = (
   </div>
 `
 
-  const hasExtraCharges = discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
+  const hasExtraCharges = itemDiscountTotal > 0 || discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
   const showItemizedTotalsTable = isQuoteStyleTotals(type) || hasExtraCharges
 
   const itemizedTotalsTable = showItemizedTotalsTable
@@ -954,6 +964,12 @@ export const generateA4InvoiceHTML = (
       <tr>
         <td class="total-label">${urduTexts.subtotal}:</td>
         <td class="total-amount">${formatCurrency(subtotal)}</td>
+      </tr>
+      ` : ''}
+      ${itemDiscountTotal > 0 ? `
+      <tr>
+        <td class="total-label">${urduTexts.item_discounts}:</td>
+        <td class="total-amount">-${formatCurrency(itemDiscountTotal)}</td>
       </tr>
       ` : ''}
       ${discount > 0 ? `
@@ -1071,7 +1087,10 @@ ${itemizedTotalsTable}
           <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
           <td class="text-center"><strong>${item.quantity}</strong></td>
           <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
-          <td class="text-right"><strong>${formatCurrency(item.subtotal)}</strong></td>
+          <td class="text-right">
+            ${item.discountAmount ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${formatCurrency(item.quantity * item.unitPrice)}</div>` : ''}
+            <strong>${formatCurrency(item.subtotal)}</strong>
+          </td>
         </tr>`
               })
               .join('')

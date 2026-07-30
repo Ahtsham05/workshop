@@ -62,6 +62,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         quantity: number
         unitPrice: number
         subtotal: number
+        discountAmount?: number
         imeis?: string[]
         variantLabel?: string | null
         batchNumber?: string | null
@@ -78,6 +79,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            discountAmount: item.discountAmount,
             imeis: item.imeis,
             variantLabel: item.variantLabel,
             batchNumber: item.batchNumber,
@@ -131,6 +133,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   Type:           idx === 0 ? inv.type : '',
                   Status:         idx === 0 ? inv.status : '',
                   'Invoice Total': idx === 0 ? inv.total : '',
+                  'Invoice Discount': idx === 0 ? (inv.discount || 0) : '',
                   'Paid Amount':  idx === 0 ? inv.paidAmount : '',
                   Balance:        idx === 0 ? inv.balance : '',
                   Product:        reportEntityName(language, item.name, item.nameUrdu),
@@ -139,6 +142,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   Expiry:         item.expiryDate ? format(new Date(item.expiryDate), 'yyyy-MM-dd') : '',
                   Qty:            item.quantity,
                   'Unit Sale Price':   item.unitPrice,
+                  'Item Discount': item.discountAmount || 0,
                   Subtotal:       item.subtotal,
                 })
               })
@@ -152,6 +156,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               Type:           '',
               Status:         '',
               'Invoice Total': detailData.summary.totalSales,
+              'Invoice Discount': '',
               'Paid Amount':  '',
               Balance:        '',
               Product:        '',
@@ -160,6 +165,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               Expiry:         '',
               Qty:            detailData.summary.totalItems,
               'Unit Sale Price':   '',
+              'Item Discount': '',
               Subtotal:       detailData.summary.totalSales,
             })
             const detailSheet = XLSX.utils.json_to_sheet(rows)
@@ -440,7 +446,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               {formatCurrency(row.unitPrice)}
                             </TableCell>
                             <TableCell className='text-right font-semibold'>
+                              {(row.discountAmount || 0) > 0 && (
+                                <div className='text-xs font-normal text-muted-foreground line-through'>
+                                  {formatCurrency(row.quantity * row.unitPrice)}
+                                </div>
+                              )}
                               {formatCurrency(row.subtotal)}
+                              {(row.discountAmount || 0) > 0 && (
+                                <div className='text-xs font-normal text-green-600'>
+                                  -{formatCurrency(row.discountAmount || 0)}
+                                </div>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -612,7 +628,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               </TableCell>
                               {/* Total — subtotal only */}
                               <TableCell className='text-right font-medium py-2'>
+                                {(item.discountAmount || 0) > 0 && (
+                                  <div className='text-xs font-normal text-muted-foreground line-through'>
+                                    {formatCurrency(item.quantity * item.unitPrice)}
+                                  </div>
+                                )}
                                 {formatCurrency(item.subtotal)}
+                                {(item.discountAmount || 0) > 0 && (
+                                  <div className='text-xs font-normal text-green-600'>
+                                    -{formatCurrency(item.discountAmount || 0)}
+                                  </div>
+                                )}
                               </TableCell>
                               {/* Paid — empty */}
                               <TableCell />
@@ -735,7 +761,19 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                           </TableCell>
                           <TableCell className='text-right'>{item.quantity}</TableCell>
                           <TableCell className='text-right'>{formatCurrency(item.unitPrice)}</TableCell>
-                          <TableCell className='text-right font-semibold'>{formatCurrency(item.subtotal)}</TableCell>
+                          <TableCell className='text-right font-semibold'>
+                            {(item.discountAmount || 0) > 0 && (
+                              <div className='text-xs font-normal text-muted-foreground line-through'>
+                                {formatCurrency(item.quantity * item.unitPrice)}
+                              </div>
+                            )}
+                            {formatCurrency(item.subtotal)}
+                            {(item.discountAmount || 0) > 0 && (
+                              <div className='text-xs font-normal text-green-600'>
+                                -{formatCurrency(item.discountAmount || 0)}
+                              </div>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -753,6 +791,28 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 </div>
 
                 <Separator />
+
+                {(() => {
+                  const itemDiscountTotal = viewInvoice.items.reduce((s, i) => s + (i.discountAmount || 0), 0)
+                  const totalSaved = itemDiscountTotal + (viewInvoice.discount || 0)
+                  if (totalSaved <= 0) return null
+                  return (
+                    <div className='grid grid-cols-2 gap-4 text-sm'>
+                      {itemDiscountTotal > 0 && (
+                        <div className='rounded-lg border p-3 text-center'>
+                          <p className='text-muted-foreground text-xs mb-1'>Item Discounts</p>
+                          <p className='text-lg font-bold text-green-600'>-{formatCurrency(itemDiscountTotal)}</p>
+                        </div>
+                      )}
+                      {(viewInvoice.discount || 0) > 0 && (
+                        <div className='rounded-lg border p-3 text-center'>
+                          <p className='text-muted-foreground text-xs mb-1'>Invoice Discount</p>
+                          <p className='text-lg font-bold text-green-600'>-{formatCurrency(viewInvoice.discount)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Payment summary */}
                 <div className='grid grid-cols-3 gap-4 text-sm'>

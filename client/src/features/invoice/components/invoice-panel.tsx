@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase } from 'lucide-react'
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
@@ -68,6 +68,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
+import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { afterPaint, focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
 import { useSync } from '@/lib/sync/use-sync'
 import { buildOfflineInvoicePayload } from '@/lib/sync/offline-invoice'
@@ -186,7 +187,8 @@ interface InvoicePanelProps {
   updateQuantity: (itemId: string, newQuantity: number) => void
   removeFromInvoice: (itemId: string) => void
   updateInvoiceType: (type: 'cash' | 'credit' | 'pending' | 'quotation') => void
-  updateDiscount: (discountAmount: number) => void
+  updateDiscount: (patch: { type?: DiscountType; value?: number }) => void
+  updateItemDiscount: (itemId: string, patch: { type?: DiscountType; value?: number }) => void
   taxRate: number
   setTaxRate: (rate: number) => void
   customers: any[]
@@ -195,7 +197,7 @@ interface InvoicePanelProps {
   productsLoading?: boolean
   products: any[]
   setProducts: React.Dispatch<React.SetStateAction<any[]>>
-  calculateTotals?: (items: any[], discountAmount?: number, deliveryCharge?: number, serviceCharge?: number) => any
+  calculateTotals?: (items: any[], discountType?: DiscountType, discountValue?: number, deliveryCharge?: number, serviceCharge?: number) => any
   onBackToList?: () => void
   onSaveSuccess?: () => void
   isEditing?: boolean
@@ -218,6 +220,7 @@ export function InvoicePanel({
   removeFromInvoice,
   updateInvoiceType,
   updateDiscount,
+  updateItemDiscount,
   taxRate,
   // setTaxRate,
   customers,
@@ -256,7 +259,6 @@ export function InvoicePanel({
       ),
     [wallets, t],
   )
-  const [discountInput, setDiscountInput] = useState(invoice.discount?.toString() || '0')
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
@@ -346,7 +348,8 @@ export function InvoicePanel({
           nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          subtotal: item.quantity * item.unitPrice,
+          subtotal: item.subtotal,
+          discountAmount: item.discountAmount,
           imeis: item.imeis,
         })),
         customerId: invoiceData.customerId,
@@ -434,7 +437,8 @@ export function InvoicePanel({
           nameUrdu: item.nameUrdu,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          subtotal: item.quantity * item.unitPrice,
+          subtotal: item.subtotal,
+          discountAmount: item.discountAmount,
           imeis: item.imeis,
         })),
         customerId: invoiceData.customerId,
@@ -519,7 +523,6 @@ export function InvoicePanel({
   // Initialize form values when in edit mode
   useEffect(() => {
     if (isEditing && editingInvoice) {
-      // setDiscountInput(editingInvoice.discount?.toString() || '0')
       setPaidAmountInput(editingInvoice.paidAmount?.toString() || '0')
       
       // Set the invoice type and status independently
@@ -679,6 +682,14 @@ export function InvoicePanel({
       return
     }
     
+    // Preserve any discount already set on this row (e.g. entered before a product was
+    // picked) by re-applying it to the newly resolved gross line.
+    const selectionNet = applyLineDiscount(
+      { subtotal: lineValues.subtotal, profit: lineValues.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * lineValues.stockQuantity) },
+      currentItem.discountType,
+      currentItem.discountValue,
+    )
+
     const newItems = sourceItems.map(item =>
       item.id === itemId
         ? {
@@ -697,8 +708,9 @@ export function InvoicePanel({
             // Use the auto-selected batch's actual cost when known — different batches
             // can have been bought at different prices.
             cost: defaultBatch?.costPerUnit ?? product.cost,
-            subtotal: lineValues.subtotal,
-            profit: lineValues.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * lineValues.stockQuantity),
+            subtotal: selectionNet.subtotal,
+            profit: selectionNet.profit,
+            discountAmount: selectionNet.discountAmount,
             isManualEntry: false
           }
         : item
@@ -720,12 +732,13 @@ export function InvoicePanel({
     
     if (calculateTotals) {
       // Use parent's calculateTotals function
-      const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+      const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
       setInvoice(prev => ({
         ...prev,
         items: newItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        discount: totals.discount,
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
@@ -764,7 +777,7 @@ export function InvoicePanel({
         qtyInput.select()
       }
     })
-  }, [invoice.items, invoice.discount, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
+  }, [invoice.items, invoice.discount, invoice.discountType, invoice.discountValue, invoice.deliveryCharge, invoice.serviceCharge, invoice.paidAmount, taxRate, calculateTotals, setInvoice, products, setProducts])
 
   // Selecting a flat catalog row (product or real variant) — builds the product-shaped
   // object handleProductSelect expects, using the *variant's* real price/cost/stock
@@ -821,23 +834,26 @@ export function InvoicePanel({
           conversionFactor: item.conversionFactor,
         })
         if (!lineValues) return { ...item, batchId, batchNumber, cost, profit: item.subtotal - (cost * item.quantity) }
+        const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
         return {
           ...item,
           batchId,
           batchNumber,
           cost,
           unitPrice,
-          subtotal: lineValues.subtotal,
-          profit: lineValues.profit,
+          subtotal: net.subtotal,
+          profit: net.profit,
+          discountAmount: net.discountAmount,
         }
       })
       if (!calculateTotals) return { ...prev, items: newItems }
-      const totals = calculateTotals(newItems, prev.discount, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      const totals = calculateTotals(newItems, prev.discountType, prev.discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
       return {
         ...prev,
         items: newItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        discount: totals.discount,
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
@@ -990,10 +1006,65 @@ export function InvoicePanel({
   )
 
   const handleDiscountChange = useCallback((value: string) => {
-    setDiscountInput(value)
-    const discountAmount = parseFloat(value) || 0
-    updateDiscount(discountAmount)
+    updateDiscount({ value: Math.max(0, parseFloat(value) || 0) })
   }, [updateDiscount])
+
+  // Flip both the overall discount and every line item's discount to the other unit in
+  // one click — re-deriving each raw value so the actual Rs discounted stays the same,
+  // it's just entered/displayed in the new unit. Mirrors purchase-invoice's
+  // toggleAllDiscountTypes (see purchase-panel.tsx).
+  const toggleAllDiscountTypes = useCallback(() => {
+    setInvoice((prev) => {
+      const targetType: DiscountType = prev.discountType === 'percentage' ? 'fixed' : 'percentage'
+
+      const items = prev.items.map((item) => {
+        const gross = item.quantity * item.unitPrice
+        const currentAmount = computeDiscountAmount(gross, item.discountType, item.discountValue)
+        const newValue = targetType === 'percentage'
+          ? (gross > 0 ? (currentAmount / gross) * 100 : 0)
+          : currentAmount
+        const roundedValue = Math.round(newValue * 100) / 100
+        const totalCost = (item.stockQuantity || item.quantity) * item.cost
+        const net = applyLineDiscount({ subtotal: gross, profit: gross - totalCost }, targetType, roundedValue)
+        return {
+          ...item,
+          discountType: targetType,
+          discountValue: roundedValue,
+          discountAmount: net.discountAmount,
+          subtotal: net.subtotal,
+          profit: net.profit,
+        }
+      })
+
+      const netSubtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
+      const currentOverallAmount = computeDiscountAmount(netSubtotal, prev.discountType, prev.discountValue)
+      const newOverallValue = targetType === 'percentage'
+        ? (netSubtotal > 0 ? (currentOverallAmount / netSubtotal) * 100 : 0)
+        : currentOverallAmount
+      const roundedOverallValue = Math.round(newOverallValue * 100) / 100
+
+      const totals = calculateTotals
+        ? calculateTotals(items, targetType, roundedOverallValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+        : null
+
+      return {
+        ...prev,
+        items,
+        discountType: targetType,
+        discountValue: roundedOverallValue,
+        ...(totals && {
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          discount: totals.discount,
+          total: totals.total,
+          totalProfit: totals.totalProfit,
+          totalCost: totals.totalCost,
+          paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
+          balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+        }),
+      }
+    })
+  }, [setInvoice, calculateTotals])
 
   const handlePaidAmountChange = useCallback((value: string) => {
     setPaidAmountInput(value)
@@ -1077,6 +1148,9 @@ export function InvoicePanel({
           cost: item.cost,
           subtotal: item.subtotal,
           profit: item.profit,
+          discountType: item.discountType || 'fixed',
+          discountValue: item.discountValue || 0,
+          discountAmount: item.discountAmount || 0,
           isManualEntry: item.isManualEntry || false,
           imeis: item.imeis || [],
         })),
@@ -1086,6 +1160,8 @@ export function InvoicePanel({
         type: invoice.type,
         subtotal: invoice.subtotal,
         tax: invoice.tax,
+        discountType: invoice.discountType || 'fixed',
+        discountValue: invoice.discountValue || 0,
         discount: invoice.discount,
         total: invoice.total,
         totalProfit: invoice.totalProfit,
@@ -1341,7 +1417,8 @@ export function InvoicePanel({
                 nameUrdu: item.nameUrdu,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
-                subtotal: item.quantity * item.unitPrice,
+                subtotal: item.subtotal,
+                discountAmount: item.discountAmount,
                 imeis: item.imeis,
               })),
               customerId: savedInvoicePayload.customerId,
@@ -1876,7 +1953,22 @@ export function InvoicePanel({
         <CardHeader className={cn(!showProductCatalog && 'py-3')}>
           <div className='flex items-center justify-between'>
             <CardTitle className={cn(!showProductCatalog && 'text-base')}>{t('invoice_items')} ({invoice.items.length})</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {invoice.items.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleAllDiscountTypes}
+                  className="flex items-center gap-1"
+                  title="Switch every discount (all items + overall) to this unit at once"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('Switch All Discounts to')}</span>
+                  <span className="sm:hidden">{t('Switch to')}</span>
+                  {' '}{invoice.discountType === 'percentage' ? 'Rs' : '%'}
+                </Button>
+              )}
               {canCreateProduct ? (
                 <Button
                   size="sm"
@@ -2287,6 +2379,7 @@ export function InvoicePanel({
                                   ))
                                 }
 
+                                const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
                                 const newItems = invoice.items.map((invoiceItem) =>
                                   invoiceItem.id === item.id
                                     ? {
@@ -2295,19 +2388,21 @@ export function InvoicePanel({
                                         conversionFactor: lineValues.conversionFactor,
                                         stockQuantity: lineValues.stockQuantity,
                                         unitPrice: adjustedUnitPrice,
-                                        subtotal: lineValues.subtotal,
-                                        profit: lineValues.profit,
+                                        subtotal: net.subtotal,
+                                        profit: net.profit,
+                                        discountAmount: net.discountAmount,
                                       }
                                     : invoiceItem
                                 )
 
                                 if (calculateTotals) {
-                                  const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                                  const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
                                   setInvoice((prev) => ({
                                     ...prev,
                                     items: newItems,
                                     subtotal: totals.subtotal,
                                     tax: totals.tax,
+                                    discount: totals.discount,
                                     total: totals.total,
                                     totalProfit: totals.totalProfit,
                                     totalCost: totals.totalCost,
@@ -2363,11 +2458,13 @@ export function InvoicePanel({
                                         return i
                                       }
 
+                                      const net = applyLineDiscount(lineValues, i.discountType, i.discountValue)
                                       return {
                                         ...i,
                                         unitPrice: newPrice,
-                                        subtotal: lineValues.subtotal,
-                                        profit: lineValues.profit,
+                                        subtotal: net.subtotal,
+                                        profit: net.profit,
+                                        discountAmount: net.discountAmount,
                                         stockQuantity: lineValues.stockQuantity,
                                         conversionFactor: lineValues.conversionFactor,
                                       }
@@ -2376,12 +2473,13 @@ export function InvoicePanel({
                               )
 
                               if (calculateTotals) {
-                                const totals = calculateTotals(newItems, invoice.discount, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+                                const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
                                 setInvoice(prev => ({
                                   ...prev,
                                   items: newItems,
                                   subtotal: totals.subtotal,
                                   tax: totals.tax,
+                                  discount: totals.discount,
                                   total: totals.total,
                                   totalProfit: totals.totalProfit,
                                   totalCost: totals.totalCost,
@@ -2416,13 +2514,42 @@ export function InvoicePanel({
                           />
                         </div>
 
+                        {/* Item Discount Input */}
+                        <span className='text-muted-foreground/60 text-sm select-none shrink-0'>−</span>
+                        <div className='flex flex-col gap-0.5 shrink-0'>
+                          <span className='text-[10px] text-muted-foreground leading-none'>{t('discount')}</span>
+                          <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              showVoiceInput={false}
+                              value={item.discountValue || ''}
+                              onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              onFocus={(e) => e.target.select()}
+                              placeholder='0'
+                              className='h-7 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
+                              title='Click to switch between Rs and % discount'
+                              className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                            >
+                              {item.discountType === 'percentage' ? '%' : 'Rs'}
+                            </button>
+                          </div>
+                        </div>
+
                         {/* Subtotal */}
                         <div className='flex items-center gap-1.5 ml-auto shrink-0'>
                           <span className='text-muted-foreground/60 text-sm select-none'>=</span>
                           <div className='text-right'>
-                            <p className='font-bold text-sm'>Rs{item.subtotal}</p>
+                            {(item.discountAmount || 0) > 0 && (
+                              <p className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</p>
+                            )}
+                            <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
                             {showProfitDetails && (
-                              <p className='text-xs text-green-600'>+Rs{item.profit}</p>
+                              <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
                             )}
                           </div>
                         </div>
@@ -2460,16 +2587,29 @@ export function InvoicePanel({
       <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
         <CardContent className='p-4 space-y-4'>
           {/* Discount Control */}
-          <div>
-            <Label htmlFor="discount">{t('discount')} (Rs)</Label>
-            <Input
-              type="text"
-              inputMode="decimal"
-              showVoiceInput={false}
-              value={discountInput}
-              onChange={(e) => handleDiscountChange(e.target.value)}
-              placeholder="0.00"
-            />
+          <div className='flex items-center justify-between gap-6'>
+            <Label htmlFor="discount" className='whitespace-nowrap text-muted-foreground'>{t('discount')}:</Label>
+            <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+              <Input
+                id="discount"
+                type="text"
+                inputMode="decimal"
+                showVoiceInput={false}
+                value={invoice.discountValue || ''}
+                onChange={(e) => handleDiscountChange(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                placeholder="0"
+                className='h-8 w-20 text-sm font-semibold border-0 rounded-none text-right focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+              />
+              <button
+                type="button"
+                onClick={() => updateDiscount({ type: invoice.discountType === 'percentage' ? 'fixed' : 'percentage' })}
+                title='Click to switch between Rs and % discount'
+                className='px-2 h-8 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+              >
+                {invoice.discountType === 'percentage' ? '%' : 'Rs'}
+              </button>
+            </div>
           </div>
 
           <Separator />
@@ -2480,6 +2620,15 @@ export function InvoicePanel({
               <span className='text-muted-foreground'>{t('subtotal')}:</span>
               <span className='tabular-nums font-medium'>Rs{invoice.subtotal.toFixed(2)}</span>
             </div>
+            {(() => {
+              const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+              return itemDiscountTotal > 0 ? (
+                <div className='flex justify-between gap-6 text-sm text-green-600'>
+                  <span>{t('Item Discounts')}:</span>
+                  <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
+                </div>
+              ) : null
+            })()}
             {invoice.discount > 0 && (
               <div className='flex justify-between gap-6 text-red-600'>
                 <span>{t('discount')}:</span>
@@ -2499,6 +2648,16 @@ export function InvoicePanel({
               <span>{t('total')}:</span>
               <span className='tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
             </div>
+            {(() => {
+              const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+              const totalSaved = itemDiscountTotal + invoice.discount
+              return totalSaved > 0 ? (
+                <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
+                  <span>{t('You Saved')}:</span>
+                  <span className='tabular-nums'>Rs{totalSaved.toFixed(2)}</span>
+                </div>
+              ) : null
+            })()}
             
             {/* Profit Display */}
             {/* <div className='flex justify-between items-center'> */}

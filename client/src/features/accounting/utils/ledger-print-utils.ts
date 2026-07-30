@@ -10,7 +10,10 @@ export interface LedgerStatementItem {
   quantity: number
   unit?: string
   unitPrice: number
+  // Net of any per-item discount — the gross (quantity * unitPrice) is shown
+  // struck-through above this when discountAmount > 0.
   subtotal: number
+  discountAmount?: number
 }
 
 export interface LedgerStatementRow {
@@ -223,7 +226,10 @@ export function generateCustomerLedgerStatementHTML(
           <td class="text-left">${escapeHtml(itemName)}</td>
           <td class="text-center">${item.quantity}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</td>
           <td class="text-right">${formatCurrency(item.unitPrice)}</td>
-          <td class="text-right">${formatCurrency(item.subtotal)}</td>
+          <td class="text-right">
+            ${item.discountAmount ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${formatCurrency(item.quantity * item.unitPrice)}</div>` : ''}
+            ${formatCurrency(item.subtotal)}
+          </td>
         </tr>`)
     })
   })
