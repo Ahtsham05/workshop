@@ -850,6 +850,135 @@ const getCustomerReport = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send({ data: customerData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
+/* ── Customer Aging (Accounts Receivable) ─────────────────────────────────────
+ * Buckets every currently-outstanding credit/pending invoice by how overdue it
+ * is against `asOfDate`. Invoices with no `dueDate` are treated as due on their
+ * `invoiceDate` (age from day 1) — the conservative "no terms specified" default. */
+const getCustomerAgingReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const asOfDate = parseDateBoundary(req.query.asOfDate, true) || new Date();
+
+  const baseMatch = {
+    ...scope,
+    type: { $in: ['credit', 'pending'] },
+    balance: { $gt: 0 },
+    status: { $ne: 'cancelled' },
+  };
+
+  const customerGroupExpr = {
+    $cond: [
+      {
+        $and: [
+          { $ne: ['$customerId', null] },
+          { $ne: [{ $type: '$customerId' }, 'missing'] },
+        ],
+      },
+      { $concat: ['id:', { $toString: '$customerId' }] },
+      { $concat: ['walkin:', { $ifNull: ['$walkInCustomerName', 'Walk-in Customer'] }] },
+    ],
+  };
+
+  const bucketExpr = {
+    $switch: {
+      branches: [
+        { case: { $lte: ['$daysOverdue', 0] }, then: 'current' },
+        { case: { $lte: ['$daysOverdue', 30] }, then: 'days1to30' },
+        { case: { $lte: ['$daysOverdue', 60] }, then: 'days31to60' },
+        { case: { $lte: ['$daysOverdue', 90] }, then: 'days61to90' },
+      ],
+      default: 'days90plus',
+    },
+  };
+
+  const bucketSum = (bucket) => ({ $sum: { $cond: [{ $eq: ['$bucket', bucket] }, '$balance', 0] } });
+
+  const customerData = await Invoice.aggregate([
+    { $match: baseMatch },
+    { $addFields: { effectiveDueDate: { $ifNull: ['$dueDate', '$invoiceDate'] } } },
+    {
+      $addFields: {
+        daysOverdue: {
+          $floor: { $divide: [{ $subtract: [asOfDate, '$effectiveDueDate'] }, 1000 * 60 * 60 * 24] },
+        },
+      },
+    },
+    { $addFields: { bucket: bucketExpr } },
+    {
+      $lookup: {
+        from: 'customers',
+        let: { cid: '$customerId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$cid', null] },
+                  { $eq: [{ $toString: '$_id' }, { $toString: '$$cid' }] },
+                ],
+              },
+            },
+          },
+        ],
+        as: 'customer',
+      },
+    },
+    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: customerGroupExpr,
+        customerId: { $first: '$customerId' },
+        customerName: { $first: { $ifNull: ['$customer.name', '$walkInCustomerName', 'Walk-in Customer'] } },
+        customerNameUrdu: { $first: { $ifNull: ['$customer.nameUrdu', ''] } },
+        phone: { $first: '$customer.phone' },
+        whatsapp: { $first: '$customer.whatsapp' },
+        email: { $first: '$customer.email' },
+        current: bucketSum('current'),
+        days1to30: bucketSum('days1to30'),
+        days31to60: bucketSum('days31to60'),
+        days61to90: bucketSum('days61to90'),
+        days90plus: bucketSum('days90plus'),
+        totalOutstanding: { $sum: '$balance' },
+        invoiceCount: { $sum: 1 },
+        maxDaysOverdue: { $max: '$daysOverdue' },
+        invoices: {
+          $push: {
+            _id: '$_id',
+            invoiceNumber: '$invoiceNumber',
+            invoiceDate: '$invoiceDate',
+            dueDate: '$effectiveDueDate',
+            total: '$total',
+            paidAmount: '$paidAmount',
+            balance: '$balance',
+            daysOverdue: '$daysOverdue',
+            bucket: '$bucket',
+          },
+        },
+      },
+    },
+    { $sort: { totalOutstanding: -1 } },
+  ]);
+
+  const summary = customerData.reduce(
+    (acc, row) => {
+      acc.current += row.current;
+      acc.days1to30 += row.days1to30;
+      acc.days31to60 += row.days31to60;
+      acc.days61to90 += row.days61to90;
+      acc.days90plus += row.days90plus;
+      acc.totalOutstanding += row.totalOutstanding;
+      acc.totalCustomers += 1;
+      if (row.totalOutstanding - row.current > 0) acc.customersOverdue += 1;
+      return acc;
+    },
+    {
+      current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0,
+      totalOutstanding: 0, totalCustomers: 0, customersOverdue: 0,
+    }
+  );
+
+  res.status(httpStatus.OK).send({ data: customerData, summary, asOfDate });
+});
+
 /* ── Suppliers ─────────────────────────────────────────────────────────────── */
 const getSupplierReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
@@ -905,6 +1034,104 @@ const getSupplierReport = catchAsync(async (req, res) => {
   ]);
 
   res.status(httpStatus.OK).send({ data: supplierData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+});
+
+/* ── Supplier Aging (Accounts Payable) ────────────────────────────────────────
+ * Mirrors getCustomerAgingReport, adapted for Purchase's shape: `supplier` is
+ * always a real ObjectId (no walk-in equivalent, so no synthetic group key is
+ * needed), there's no `dueDate` field at all (aging always runs off
+ * `purchaseDate`), and `status` is an unused boolean rather than a string enum
+ * — "still owed" is `paymentType !== 'Cash'` with a positive `balance`. */
+const getSupplierAgingReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const asOfDate = parseDateBoundary(req.query.asOfDate, true) || new Date();
+
+  const baseMatch = {
+    ...scope,
+    paymentType: { $ne: 'Cash' },
+    balance: { $gt: 0 },
+  };
+
+  const bucketExpr = {
+    $switch: {
+      branches: [
+        { case: { $lte: ['$daysOverdue', 0] }, then: 'current' },
+        { case: { $lte: ['$daysOverdue', 30] }, then: 'days1to30' },
+        { case: { $lte: ['$daysOverdue', 60] }, then: 'days31to60' },
+        { case: { $lte: ['$daysOverdue', 90] }, then: 'days61to90' },
+      ],
+      default: 'days90plus',
+    },
+  };
+
+  const bucketSum = (bucket) => ({ $sum: { $cond: [{ $eq: ['$bucket', bucket] }, '$balance', 0] } });
+
+  const supplierData = await Purchase.aggregate([
+    { $match: baseMatch },
+    { $addFields: { effectiveDueDate: { $ifNull: ['$dueDate', '$purchaseDate'] } } },
+    {
+      $addFields: {
+        daysOverdue: {
+          $floor: { $divide: [{ $subtract: [asOfDate, '$effectiveDueDate'] }, 1000 * 60 * 60 * 24] },
+        },
+      },
+    },
+    { $addFields: { bucket: bucketExpr } },
+    { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: 'supplierDoc' } },
+    { $unwind: { path: '$supplierDoc', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: '$supplier',
+        supplierName: { $first: { $ifNull: ['$supplierDoc.name', 'Unknown Supplier'] } },
+        supplierNameUrdu: { $first: { $ifNull: ['$supplierDoc.nameUrdu', ''] } },
+        phone: { $first: '$supplierDoc.phone' },
+        whatsapp: { $first: '$supplierDoc.whatsapp' },
+        email: { $first: '$supplierDoc.email' },
+        current: bucketSum('current'),
+        days1to30: bucketSum('days1to30'),
+        days31to60: bucketSum('days31to60'),
+        days61to90: bucketSum('days61to90'),
+        days90plus: bucketSum('days90plus'),
+        totalOutstanding: { $sum: '$balance' },
+        purchaseCount: { $sum: 1 },
+        maxDaysOverdue: { $max: '$daysOverdue' },
+        purchases: {
+          $push: {
+            _id: '$_id',
+            invoiceNumber: '$invoiceNumber',
+            purchaseDate: '$purchaseDate',
+            dueDate: '$effectiveDueDate',
+            totalAmount: '$totalAmount',
+            paidAmount: '$paidAmount',
+            balance: '$balance',
+            daysOverdue: '$daysOverdue',
+            bucket: '$bucket',
+          },
+        },
+      },
+    },
+    { $sort: { totalOutstanding: -1 } },
+  ]);
+
+  const summary = supplierData.reduce(
+    (acc, row) => {
+      acc.current += row.current;
+      acc.days1to30 += row.days1to30;
+      acc.days31to60 += row.days31to60;
+      acc.days61to90 += row.days61to90;
+      acc.days90plus += row.days90plus;
+      acc.totalOutstanding += row.totalOutstanding;
+      acc.totalSuppliers += 1;
+      if (row.totalOutstanding - row.current > 0) acc.suppliersOverdue += 1;
+      return acc;
+    },
+    {
+      current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0,
+      totalOutstanding: 0, totalSuppliers: 0, suppliersOverdue: 0,
+    }
+  );
+
+  res.status(httpStatus.OK).send({ data: supplierData, summary, asOfDate });
 });
 
 /* ── Expenses ──────────────────────────────────────────────────────────────── */
@@ -3568,7 +3795,7 @@ module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
-  getCustomerReport, getSupplierReport, getExpenseReport,
+  getCustomerReport, getCustomerAgingReport, getSupplierReport, getSupplierAgingReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
   getBatchExpiryReport, getStockAdjustmentReport,
   getSalesReturnsReport, getPurchaseReturnsReport,

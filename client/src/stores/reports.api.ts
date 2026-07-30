@@ -175,6 +175,89 @@ export interface CustomerReportData {
   firstPurchase: string
 }
 
+export interface AgingReportInvoice {
+  _id: string
+  invoiceNumber: string
+  invoiceDate: string
+  dueDate: string
+  total: number
+  paidAmount: number
+  balance: number
+  daysOverdue: number
+  bucket: 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
+}
+
+export interface AgingReportCustomer {
+  _id: string
+  customerId?: string | null
+  customerName: string
+  customerNameUrdu?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  current: number
+  days1to30: number
+  days31to60: number
+  days61to90: number
+  days90plus: number
+  totalOutstanding: number
+  invoiceCount: number
+  maxDaysOverdue: number
+  invoices: AgingReportInvoice[]
+}
+
+export interface AgingReportSummary {
+  current: number
+  days1to30: number
+  days31to60: number
+  days61to90: number
+  days90plus: number
+  totalOutstanding: number
+  totalCustomers: number
+  customersOverdue: number
+}
+
+export interface SupplierAgingPurchase {
+  _id: string
+  invoiceNumber: string
+  purchaseDate: string
+  dueDate: string
+  totalAmount: number
+  paidAmount: number
+  balance: number
+  daysOverdue: number
+  bucket: 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
+}
+
+export interface SupplierAgingData {
+  _id: string
+  supplierName: string
+  supplierNameUrdu?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  current: number
+  days1to30: number
+  days31to60: number
+  days61to90: number
+  days90plus: number
+  totalOutstanding: number
+  purchaseCount: number
+  maxDaysOverdue: number
+  purchases: SupplierAgingPurchase[]
+}
+
+export interface SupplierAgingSummary {
+  current: number
+  days1to30: number
+  days31to60: number
+  days61to90: number
+  days90plus: number
+  totalOutstanding: number
+  totalSuppliers: number
+  suppliersOverdue: number
+}
+
 export interface SupplierReportData {
   _id: string
   supplierName: string
@@ -887,7 +970,7 @@ export interface WalletWiseReport {
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -987,6 +1070,18 @@ export const reportsApi = createApi({
       },
       providesTags: ['CustomerReport'],
     }),
+    getCustomerAgingReport: builder.query<{
+      data: AgingReportCustomer[]
+      summary: AgingReportSummary
+      asOfDate: string
+    }, { asOfDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.asOfDate) searchParams.set('asOfDate', params.asOfDate)
+        return `/aging?${searchParams.toString()}`
+      },
+      providesTags: ['AgingReport'],
+    }),
     getSupplierReport: builder.query<{
       data: SupplierReportData[]
       summary: any
@@ -999,6 +1094,18 @@ export const reportsApi = createApi({
         return `/suppliers?${searchParams.toString()}`
       },
       providesTags: ['SupplierReport'],
+    }),
+    getSupplierAgingReport: builder.query<{
+      data: SupplierAgingData[]
+      summary: SupplierAgingSummary
+      asOfDate: string
+    }, { asOfDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.asOfDate) searchParams.set('asOfDate', params.asOfDate)
+        return `/suppliers/aging?${searchParams.toString()}`
+      },
+      providesTags: ['SupplierAgingReport'],
     }),
     getExpenseReport: builder.query<{
       data: ExpenseReportData[]
@@ -1226,7 +1333,9 @@ export const {
   useGetProductReportQuery,
   useGetProductDetailReportQuery,
   useGetCustomerReportQuery,
+  useGetCustomerAgingReportQuery,
   useGetSupplierReportQuery,
+  useGetSupplierAgingReportQuery,
   useGetExpenseReportQuery,
   useLazyGetExpenseReportQuery,
   useGetProfitLossReportQuery,

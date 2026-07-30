@@ -20,7 +20,11 @@ router.route('/products/:productId').get(auth('viewReports'), reportsController.
 
 router.route('/customers').get(auth('viewReports'), reportsController.getCustomerReport);
 
+router.route('/aging').get(auth('viewReports'), reportsController.getCustomerAgingReport);
+
 router.route('/suppliers').get(auth('viewReports'), reportsController.getSupplierReport);
+
+router.route('/suppliers/aging').get(auth('viewReports'), reportsController.getSupplierAgingReport);
 
 router.route('/expenses').get(auth('viewReports'), reportsController.getExpenseReport);
 

@@ -21,6 +21,8 @@ import { SalesReport } from './components/sales-report'
 import { PurchaseReport } from './components/purchase-report'
 import { ProductReport } from './components/product-report'
 import { CustomerReport } from './components/customer-report'
+import { AgingReport } from './components/aging-report'
+import { SupplierAgingReport } from './components/supplier-aging-report'
 import { SupplierReport } from './components/supplier-report'
 import { ExpenseReport } from './components/expense-report'
 import { ProfitLossReport } from './components/profit-loss-report'
@@ -242,7 +244,9 @@ export default function ReportsPage() {
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
             <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
             <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('customers')}</TabsTrigger>
+            <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging Report')}</TabsTrigger>
             <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
+            <TabsTrigger value='supplier-aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Supplier Aging')}</TabsTrigger>
             <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
             <TabsTrigger value='inventory' className='text-xs sm:text-sm px-2 sm:px-3'>{t('inventory')}</TabsTrigger>
             <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
@@ -313,8 +317,16 @@ export default function ReportsPage() {
           <CustomerReport ref={activeTab === 'customers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
+        <TabsContent value='aging' className='mt-6'>
+          <AgingReport ref={activeTab === 'aging' ? exportRef : null} />
+        </TabsContent>
+
         <TabsContent value='suppliers' className='mt-6'>
           <SupplierReport ref={activeTab === 'suppliers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+        </TabsContent>
+
+        <TabsContent value='supplier-aging' className='mt-6'>
+          <SupplierAgingReport ref={activeTab === 'supplier-aging' ? exportRef : null} />
         </TabsContent>
 
         <TabsContent value='expenses' className='mt-6'>

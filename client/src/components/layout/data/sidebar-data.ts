@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -963,7 +963,9 @@ export const sidebarData: SidebarData = {
             { title: 'Purchases Report', url: '/reports?tab=purchases' as never, icon: Receipt },
             { title: 'Products Report', url: '/reports?tab=products' as never, icon: IconCategory },
             { title: 'Customers Report', url: '/reports?tab=customers' as never, icon: IconUsers },
+            { title: 'Customer Aging Report', url: '/reports?tab=aging' as never, icon: AlarmClock },
             { title: 'Suppliers Report', url: '/reports?tab=suppliers' as never, icon: IconBuilding },
+            { title: 'Supplier Aging Report', url: '/reports?tab=supplier-aging' as never, icon: AlarmClock },
             { title: 'Expenses Report', url: '/reports?tab=expenses' as never, icon: IconCash },
             { title: 'Inventory Report', url: '/reports?tab=inventory' as never, icon: IconPackages },
             { title: 'Batch & Expiry Report', url: '/reports?tab=batch-expiry' as never, icon: IconClock },
