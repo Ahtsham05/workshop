@@ -526,6 +526,7 @@ export default function FastBillingPage() {
               onItemDiscountChange={updateItemDiscount}
               onRemove={removeLine}
               highlightKey={lastAddedKey}
+              customer={customer}
             />
           </div>
         </div>

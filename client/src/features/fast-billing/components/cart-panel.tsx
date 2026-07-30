@@ -1,12 +1,15 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Minus, Plus, ShoppingCart, Trash2, Package } from 'lucide-react'
+import { Minus, Plus, ShoppingCart, Trash2, Package, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { selectOnFocus } from '../utils/select-on-focus'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import type { CartLine } from '../types'
+import type { FastBillCustomer } from '../utils/build-invoice-payload'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
+import { ProductHistoryDialog } from '@/features/invoice/components/product-history-dialog'
 
 type Props = {
   cart: CartLine[]
@@ -15,12 +18,20 @@ type Props = {
   onItemDiscountChange: (key: string, patch: { type?: DiscountType; value?: number }) => void
   onRemove: (key: string) => void
   highlightKey?: string | null
+  customer?: FastBillCustomer
 }
 
 const noSpinner =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
-export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscountChange, onRemove, highlightKey }: Props) {
+export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscountChange, onRemove, highlightKey, customer }: Props) {
+  const [historyDialog, setHistoryDialog] = useState<{
+    open: boolean
+    productId: string
+    productName: string
+    currentPrice: number
+  }>({ open: false, productId: '', productName: '', currentPrice: 0 })
+
   if (cart.length === 0) {
     return (
       <div className='flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center text-muted-foreground'>
@@ -157,6 +168,26 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscoun
                   <span className='text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
                 </div>
 
+                {customer?.id && (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='ghost'
+                    title='View past purchases of this product by this customer'
+                    className='h-7 w-7 shrink-0 p-0 text-blue-500 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30'
+                    onClick={() =>
+                      setHistoryDialog({
+                        open: true,
+                        productId: line.productId,
+                        productName: line.name,
+                        currentPrice: line.unitPrice,
+                      })
+                    }
+                  >
+                    <History className='h-3.5 w-3.5' />
+                  </Button>
+                )}
+
                 <Button
                   type='button'
                   size='sm'
@@ -171,6 +202,18 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscoun
           )
         })}
       </ul>
+
+      {customer?.id && (
+        <ProductHistoryDialog
+          open={historyDialog.open}
+          onOpenChange={(open) => setHistoryDialog((prev) => ({ ...prev, open }))}
+          customerId={customer.id}
+          productId={historyDialog.productId}
+          productName={historyDialog.productName}
+          customerName={customer.name}
+          currentPrice={historyDialog.currentPrice}
+        />
+      )}
     </ScrollArea>
   )
 }
