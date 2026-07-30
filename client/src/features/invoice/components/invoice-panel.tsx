@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase, History } from 'lucide-react'
 import { useGetAvailableImeisQuery } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
@@ -94,6 +94,7 @@ import {
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
+import { ProductHistoryDialog } from './product-history-dialog'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -335,6 +336,12 @@ export function InvoicePanel({
 
   const [printReceiptInUrdu, setPrintReceiptInUrdu] = useState(() => getInvoicePrintInUrdu())
   const [showConvertDialog, setShowConvertDialog] = useState(false)
+  const [historyDialog, setHistoryDialog] = useState<{
+    open: boolean
+    productId: string
+    productName: string
+    currentPrice: number
+  }>({ open: false, productId: '', productName: '', currentPrice: 0 })
   // Print functionality using utility
   const printInvoice = useCallback(async (invoiceData: any, thermalSize: 'thermal80' | 'thermal58' = 'thermal80') => {
     try {
@@ -2035,6 +2042,26 @@ export function InvoicePanel({
                     <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
                   </Button>
                 )
+                // Past sales of this exact product to this exact customer — only
+                // meaningful once both a real product and a real (non walk-in) customer
+                // are on the invoice.
+                const canShowHistory = !!item.productId && !!invoice.customerId && invoice.customerId !== 'walk-in'
+                const historyButton = canShowHistory ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setHistoryDialog({
+                      open: true,
+                      productId: item.productId,
+                      productName: item.name,
+                      currentPrice: item.unitPrice,
+                    })}
+                    title={t('view_history')}
+                    className='h-7 w-7 p-0 flex-shrink-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                  >
+                    <History className='h-3.5 w-3.5' />
+                  </Button>
+                ) : null
                 return (
                   <div key={item.id} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
                     {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
@@ -2285,6 +2312,7 @@ export function InvoicePanel({
                         )}
                       </div>
 
+                      {!compact && historyButton}
                       {!compact && deleteButton}
                     </div>
 
@@ -2555,6 +2583,7 @@ export function InvoicePanel({
                         </div>
                       </div>
                     )}
+                    {compact && historyButton}
                     {compact && deleteButton}
                     </div>
                     {(() => {
@@ -3065,6 +3094,18 @@ export function InvoicePanel({
           onBackToList?.()
         }}
       />
+
+      {invoice.customerId && invoice.customerId !== 'walk-in' && (
+        <ProductHistoryDialog
+          open={historyDialog.open}
+          onOpenChange={(open) => setHistoryDialog((prev) => ({ ...prev, open }))}
+          customerId={invoice.customerId}
+          productId={historyDialog.productId}
+          productName={historyDialog.productName}
+          customerName={invoice.customerName || ''}
+          currentPrice={historyDialog.currentPrice}
+        />
+      )}
 
     </div>
   )
