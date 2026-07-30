@@ -79,7 +79,12 @@ export default function Dashboard() {
   const showMobileCards = isMobileShopBusiness(businessType)
   const showCashBookFeatures = isCashBookBusiness(businessType)
   const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t)
-  const netProfitAfterExpense = (stats?.totalProfit || 0) - (stats?.totalExpenses || 0)
+  // Only paid expenses reduce profit — an unpaid (e.g. pending recurring) expense
+  // hasn't left the bank yet. Falls back to totalExpenses for older API responses
+  // that don't yet split paid vs pending.
+  const totalPaidExpenses = stats?.totalPaidExpenses ?? stats?.totalExpenses ?? 0
+  const totalPendingExpenses = stats?.totalPendingExpenses ?? 0
+  const netProfitAfterExpense = (stats?.totalProfit || 0) - totalPaidExpenses
   const inventorySaleCost = (stats?.totalSales || 0) - (stats?.salesProfit || 0)
   const simSaleCost = (stats?.totalSimSale || 0) - (stats?.totalSimSaleProfit || 0)
   const repairCost = (stats?.totalRepairIncome || 0) - (stats?.totalRepairProfit || 0)
@@ -463,7 +468,11 @@ export default function Dashboard() {
             value={stats?.totalExpenses || 0}
             icon={<Receipt className='h-4 w-4' />}
             valuePrefix='Rs '
-            description={t('Operating expenses in selected period')}
+            description={
+              totalPendingExpenses > 0
+                ? `${t('Paid')}: Rs ${totalPaidExpenses.toLocaleString()} · ${t('Pending')}: Rs ${totalPendingExpenses.toLocaleString()}`
+                : t('Operating expenses in selected period')
+            }
             isLoading={statsLoading}
             tone='rose'
             link={{ to: '/accounting', search: { tab: 'expenses' } }}

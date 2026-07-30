@@ -56,7 +56,12 @@ export interface DashboardStats {
   totalProfit: number
   grossProfit?: number
   salesProfit?: number
+  // All expenses in the period, including unpaid auto-generated recurring cycles.
   totalExpenses?: number
+  // Only expenses actually paid — what Net Profit After Expense deducts.
+  totalPaidExpenses?: number
+  // totalExpenses - totalPaidExpenses — unpaid/pending (mostly recurring) expenses.
+  totalPendingExpenses?: number
   roi?: number
   totalInvestment?: number
   totalLoadSoldProfit?: number

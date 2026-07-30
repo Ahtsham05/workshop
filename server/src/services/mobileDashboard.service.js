@@ -127,10 +127,11 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     LoadTransaction.find(datedTxMatch).select('amount profit paymentMethod walletType'),
     LoadPurchase.find(datedTxMatch).select('amount profit paymentMethod walletType'),
     RepairJob.find(datedTxMatch).select('charges cost paymentMethod status'),
+    // Unfiltered by isPaid — includes unpaid auto-generated recurring cycles, so
+    // totalExpenses (below) reflects the full obligation, not just what's been paid.
     Expense.find({
       organizationId,
       ...(branchId ? { branchId } : {}),
-      isPaid: { $ne: false },
       ...(startDate || endDate
         ? {
             date: {
@@ -139,7 +140,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
             },
           }
         : {}),
-    }).select('amount paymentMethod'),
+    }).select('amount paymentMethod isPaid'),
     Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance'),
     BillPayment.find({
       ...billBaseMatch,
@@ -246,6 +247,14 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   );
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  // Only expenses actually paid (excludes unpaid auto-generated recurring cycles) — this,
+  // not the all-inclusive totalExpenses above, is what reduces profit/investment: money
+  // not yet paid out hasn't left the bank.
+  const totalPaidExpenses = expenses.reduce(
+    (sum, expense) => (expense.isPaid !== false ? sum + Number(expense.amount || 0) : sum),
+    0,
+  );
+  const totalPendingExpenses = totalExpenses - totalPaidExpenses;
   const salesReturnsImpact = salesReturns.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
   const inventoryValue = inventoryAgg[0]?.total || 0;
 
@@ -262,8 +271,8 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
 
   // Total profit = sum of all profit sources shown on dashboard cards
   const totalProfit = grossProfit;
-  const netProfit = grossProfit - totalExpenses - salesReturnsImpact;
-  const totalInvestment = inventoryValue + walletBalances.total + totalExpenses;
+  const netProfit = grossProfit - totalPaidExpenses - salesReturnsImpact;
+  const totalInvestment = inventoryValue + walletBalances.total + totalPaidExpenses;
   const roi = totalInvestment > 0 ? parseFloat(((totalProfit / totalInvestment) * 100).toFixed(2)) : 0;
 
   // Count due-today and overdue (Pakistan calendar day)
@@ -313,6 +322,8 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     totalProfit,
     netProfit,
     totalExpenses,
+    totalPaidExpenses,
+    totalPendingExpenses,
     salesReturnsImpact,
     roi,
     totalInvestment,

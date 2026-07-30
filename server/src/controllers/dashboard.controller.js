@@ -137,13 +137,26 @@ const getDashboardStats = catchAsync(async (req, res) => {
       { $match: { ...aggScopeEarly, ...purchaseDateFilter } },
       { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
     ]),
+    // Unfiltered by isPaid — this now covers every expense in the period, including
+    // unpaid auto-generated recurring cycles, so "Total Expenses" reflects the full
+    // obligation. totalPaidExpenses (the old, isPaid-only figure) is what Net Profit
+    // After Expense and totalInvestment below actually deduct/count — an unpaid expense
+    // hasn't left the bank yet, so it must not reduce profit or count as invested.
     Expense.aggregate([
-      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate), isPaid: { $ne: false } } },
-      { $group: { _id: null, totalExpenses: { $sum: '$amount' } } },
+      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate) } },
+      {
+        $group: {
+          _id: null,
+          totalExpenses: { $sum: '$amount' },
+          totalPaidExpenses: { $sum: { $cond: [{ $ne: ['$isPaid', false] }, '$amount', 0] } },
+        },
+      },
     ]),
   ]);
   const totalPurchases = purchasesAgg[0]?.totalPurchases || 0;
   const totalExpenses = expensesAgg[0]?.totalExpenses || 0;
+  const totalPaidExpenses = expensesAgg[0]?.totalPaidExpenses || 0;
+  const totalPendingExpenses = totalExpenses - totalPaidExpenses;
 
   let mobileSummary = {
     totalLoadSold: 0,
@@ -154,8 +167,10 @@ const getDashboardStats = catchAsync(async (req, res) => {
     grossProfit: salesProfit,
     totalProfit: salesProfit,
     totalExpenses,
+    totalPaidExpenses,
+    totalPendingExpenses,
     roi: 0,
-    totalInvestment: totalInventoryValue + totalExpenses,
+    totalInvestment: totalInventoryValue + totalPaidExpenses,
     cashInHand: 0,
     jazzcashBalance: 0,
     easypaisaBalance: 0,
