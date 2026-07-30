@@ -2,6 +2,7 @@ import type { PrintInvoiceData } from '@/features/invoice/utils/print-utils'
 import type { CartLine, PaymentMethod } from '../types'
 import { computeCartSubtotal } from './build-invoice-payload'
 import type { FastBillCustomer } from './build-invoice-payload'
+import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
 type BuildReceiptArgs = {
   invoiceNumber: string
@@ -9,7 +10,8 @@ type BuildReceiptArgs = {
   customer: FastBillCustomer
   walkInCustomerName: string
   paymentMethod: PaymentMethod
-  discount: number
+  discountType: DiscountType
+  discountValue: number
   paidAmount: number
 }
 
@@ -19,24 +21,31 @@ export function buildReceiptData({
   customer,
   walkInCustomerName,
   paymentMethod,
-  discount,
+  discountType,
+  discountValue,
   paidAmount,
 }: BuildReceiptArgs): PrintInvoiceData {
   const subtotal = computeCartSubtotal(cart)
+  const discount = computeDiscountAmount(subtotal, discountType, discountValue)
   const total = Math.max(0, subtotal - discount)
   const isCredit = paymentMethod === 'credit'
   const paid = isCredit ? paidAmount : total
 
   return {
     invoiceNumber,
-    items: cart.map((line) => ({
-      name: line.name,
-      nameUrdu: line.nameUrdu,
-      quantity: line.quantity,
-      unit: line.unit,
-      unitPrice: line.unitPrice,
-      subtotal: Math.round(line.unitPrice * line.quantity * 100) / 100,
-    })),
+    items: cart.map((line) => {
+      const gross = Math.round(line.unitPrice * line.quantity * 100) / 100
+      const discountAmount = computeDiscountAmount(gross, line.discountType, line.discountValue)
+      return {
+        name: line.name,
+        nameUrdu: line.nameUrdu,
+        quantity: line.quantity,
+        unit: line.unit,
+        unitPrice: line.unitPrice,
+        subtotal: Math.round((gross - discountAmount) * 100) / 100,
+        discountAmount,
+      }
+    }),
     customerName: customer ? customer.name : walkInCustomerName || 'Walk-in Customer',
     walkInCustomerName: customer ? undefined : walkInCustomerName || 'Walk-in Customer',
     type: isCredit ? 'credit' : 'cash',

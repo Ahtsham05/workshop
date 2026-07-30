@@ -17,6 +17,7 @@ import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { selectOnFocus } from '../utils/select-on-focus'
 import type { PaymentMethod } from '../types'
 import type { FastBillCustomer } from '../utils/build-invoice-payload'
+import type { DiscountType } from '@/lib/discount'
 
 type CustomerRow = {
   _id?: string
@@ -53,8 +54,11 @@ const PAYMENT_METHOD_STYLES: Record<PaymentMethod, { active: string; badge: stri
 
 type Props = {
   subtotal: number
+  itemDiscountTotal: number
+  discountType: DiscountType
+  discountValue: number
+  onDiscountChange: (patch: { type?: DiscountType; value?: number }) => void
   discount: number
-  onDiscountChange: (v: number) => void
   total: number
   paymentMethod: PaymentMethod
   onPaymentMethodChange: (m: PaymentMethod) => void
@@ -77,8 +81,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function PaymentPanel({
   subtotal,
-  discount,
+  itemDiscountTotal,
+  discountType,
+  discountValue,
   onDiscountChange,
+  discount,
   total,
   paymentMethod,
   onPaymentMethodChange,
@@ -257,17 +264,37 @@ export function PaymentPanel({
             Subtotal <span className='font-medium text-foreground'>Rs{subtotal.toFixed(0)}</span>
           </span>
         </div>
+        {itemDiscountTotal > 0 && (
+          <div className='flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400'>
+            <span>Item Discounts</span>
+            <span className='font-medium'>-Rs{itemDiscountTotal.toFixed(0)}</span>
+          </div>
+        )}
         <div className='flex items-center justify-between gap-2'>
           <div className='flex items-center gap-1.5 text-xs'>
             <span className='text-muted-foreground'>Discount</span>
-            <Input
-              type='number'
-              value={discount}
-              onChange={(e) => onDiscountChange(Math.max(0, Number(e.target.value) || 0))}
-              onFocus={selectOnFocus}
-              className='h-7 w-16 px-1 text-right text-xs shadow-sm'
-            />
+            <div className='flex items-center overflow-hidden rounded-lg border bg-background shadow-sm'>
+              <Input
+                type='number'
+                value={discountValue || ''}
+                placeholder='0'
+                onChange={(e) => onDiscountChange({ value: Math.max(0, Number(e.target.value) || 0) })}
+                onFocus={selectOnFocus}
+                className='h-7 w-16 rounded-none border-0 px-1 text-right text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0'
+              />
+              <button
+                type='button'
+                onClick={() => onDiscountChange({ type: discountType === 'percentage' ? 'fixed' : 'percentage' })}
+                title='Click to switch between Rs and % discount'
+                className='flex h-7 select-none items-center border-l bg-muted px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground'
+              >
+                {discountType === 'percentage' ? '%' : 'Rs'}
+              </button>
+            </div>
           </div>
+          {discount > 0 && (
+            <span className='text-xs font-medium text-emerald-600 dark:text-emerald-400'>-Rs{discount.toFixed(0)}</span>
+          )}
         </div>
 
         {paymentMethod !== 'credit' && (

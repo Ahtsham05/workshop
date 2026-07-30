@@ -148,7 +148,8 @@ export type FastBillWorkspaceSnapshot = {
   customerId: string | null
   customerName: string
   paymentMethod: string
-  discount: number
+  discountType: string
+  discountValue: number
   paidAmount: number
   updatedAt: number
 }

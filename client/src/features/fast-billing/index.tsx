@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux'
 import { Link } from '@tanstack/react-router'
 import type { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
-import { History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
+import { ArrowLeftRight, History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -28,10 +28,11 @@ import { PaymentPanel } from './components/payment-panel'
 import { HeldCartsSheet } from './components/held-carts-sheet'
 import { AddToCartDialog } from './components/add-to-cart-dialog'
 import { playBeep } from './utils/beep'
-import { buildInvoicePayload, computeCartSubtotal, type FastBillCustomer } from './utils/build-invoice-payload'
+import { buildInvoicePayload, computeCartSubtotal, computeCartItemDiscountTotal, type FastBillCustomer } from './utils/build-invoice-payload'
 import { buildReceiptData } from './utils/build-receipt-data'
 import { catalogItemToCartLine, cartLineKey, type CartLine, type PaymentMethod } from './types'
 import { parseQuantityPrefix } from './utils/quantity-prefix'
+import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
 const MAX_RECENT_ITEMS = 10
 
@@ -54,7 +55,8 @@ export default function FastBillingPage() {
   const [customer, setCustomer] = useState<FastBillCustomer>(null)
   const [walkInCustomerName, setWalkInCustomerName] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
-  const [discount, setDiscount] = useState(0)
+  const [discountType, setDiscountType] = useState<DiscountType>('fixed')
+  const [discountValue, setDiscountValue] = useState(0)
   const [paidAmount, setPaidAmount] = useState(0)
   const [heldOpen, setHeldOpen] = useState(false)
   const [held, setHeld] = useState<FastBillHeldRecord[]>([])
@@ -71,7 +73,8 @@ export default function FastBillingPage() {
       setCart((ws.cart as unknown as CartLine[]) || [])
       setCustomer(ws.customerId ? { id: ws.customerId, name: ws.customerName } : null)
       setPaymentMethod((ws.paymentMethod as PaymentMethod) || 'cash')
-      setDiscount(ws.discount || 0)
+      setDiscountType((ws.discountType as DiscountType) || 'fixed')
+      setDiscountValue(ws.discountValue || 0)
       setPaidAmount(ws.paidAmount || 0)
     }
     setHeld(listFastBillHeld())
@@ -83,12 +86,15 @@ export default function FastBillingPage() {
       customerId: customer?.id ?? null,
       customerName: customer?.name ?? '',
       paymentMethod,
-      discount,
+      discountType,
+      discountValue,
       paidAmount,
     })
-  }, [cart, customer, paymentMethod, discount, paidAmount])
+  }, [cart, customer, paymentMethod, discountType, discountValue, paidAmount])
 
   const subtotal = computeCartSubtotal(cart)
+  const itemDiscountTotal = computeCartItemDiscountTotal(cart)
+  const discount = computeDiscountAmount(subtotal, discountType, discountValue)
   const total = Math.max(0, subtotal - discount)
 
   useEffect(() => {
@@ -187,6 +193,55 @@ export default function FastBillingPage() {
     setCart((prev) => prev.map((l) => (l.key === key ? { ...l, unitPrice } : l)))
   }, [])
 
+  // Update one line's discount (type and/or raw value) — a customer discount on that
+  // specific product, on top of any overall-sale discount. Mirrors invoice/purchase-invoice's
+  // updateItemDiscount.
+  const updateItemDiscount = useCallback((key: string, patch: { type?: DiscountType; value?: number }) => {
+    setCart((prev) =>
+      prev.map((l) =>
+        l.key === key
+          ? {
+              ...l,
+              discountType: patch.type ?? l.discountType ?? 'fixed',
+              discountValue: patch.value ?? l.discountValue ?? 0,
+            }
+          : l,
+      ),
+    )
+  }, [])
+
+  // Flip both the overall discount and every line item's discount to the other unit in
+  // one click — re-deriving each raw value so the actual Rs discounted stays the same,
+  // it's just entered/displayed in the new unit. Mirrors invoice/purchase-invoice's
+  // toggleAllDiscountTypes.
+  const toggleAllDiscountTypes = useCallback(() => {
+    setDiscountType((prevType) => {
+      const targetType: DiscountType = prevType === 'percentage' ? 'fixed' : 'percentage'
+
+      setCart((prev) =>
+        prev.map((line) => {
+          const gross = line.unitPrice * line.quantity
+          const currentAmount = computeDiscountAmount(gross, line.discountType, line.discountValue)
+          const newValue = targetType === 'percentage'
+            ? (gross > 0 ? (currentAmount / gross) * 100 : 0)
+            : currentAmount
+          return { ...line, discountType: targetType, discountValue: Math.round(newValue * 100) / 100 }
+        }),
+      )
+
+      setDiscountValue((prevValue) => {
+        const netSubtotal = computeCartSubtotal(cart)
+        const currentOverallAmount = computeDiscountAmount(netSubtotal, prevType, prevValue)
+        const newOverallValue = targetType === 'percentage'
+          ? (netSubtotal > 0 ? (currentOverallAmount / netSubtotal) * 100 : 0)
+          : currentOverallAmount
+        return Math.round(newOverallValue * 100) / 100
+      })
+
+      return targetType
+    })
+  }, [cart])
+
   const removeLine = useCallback((key: string) => {
     setCart((prev) => prev.filter((l) => l.key !== key))
   }, [])
@@ -196,7 +251,8 @@ export default function FastBillingPage() {
     setCustomer(null)
     setWalkInCustomerName('')
     setPaymentMethod('cash')
-    setDiscount(0)
+    setDiscountType('fixed')
+    setDiscountValue(0)
     setPaidAmount(0)
     clearFastBillWorkspace()
     scanInputRef.current?.focus()
@@ -216,20 +272,22 @@ export default function FastBillingPage() {
         customerId: customer?.id ?? null,
         customerName: customer?.name ?? '',
         paymentMethod,
-        discount,
+        discountType,
+        discountValue,
         paidAmount,
       },
     })
     setHeld(listFastBillHeld())
     resetSale()
     toast.success('Cart held')
-  }, [cart, customer, walkInCustomerName, paymentMethod, discount, paidAmount, resetSale])
+  }, [cart, customer, walkInCustomerName, paymentMethod, discountType, discountValue, paidAmount, resetSale])
 
   const resumeHeld = useCallback((record: FastBillHeldRecord) => {
     setCart((record.snapshot.cart as unknown as CartLine[]) || [])
     setCustomer(record.snapshot.customerId ? { id: record.snapshot.customerId, name: record.snapshot.customerName } : null)
     setPaymentMethod((record.snapshot.paymentMethod as PaymentMethod) || 'cash')
-    setDiscount(record.snapshot.discount || 0)
+    setDiscountType((record.snapshot.discountType as DiscountType) || 'fixed')
+    setDiscountValue(record.snapshot.discountValue || 0)
     setPaidAmount(record.snapshot.paidAmount || 0)
     removeFastBillHeld(record.id)
     setHeld(listFastBillHeld())
@@ -245,7 +303,7 @@ export default function FastBillingPage() {
   const handleCharge = useCallback(async () => {
     if (cart.length === 0) return
     try {
-      const payload = buildInvoicePayload({ cart, customer, walkInCustomerName, paymentMethod, discount, paidAmount })
+      const payload = buildInvoicePayload({ cart, customer, walkInCustomerName, paymentMethod, discountType, discountValue, paidAmount })
       const result = await createInvoice(payload).unwrap()
       playBeep('success')
       toast.success(`Invoice ${result.invoiceNumber} created`)
@@ -256,7 +314,8 @@ export default function FastBillingPage() {
         customer,
         walkInCustomerName,
         paymentMethod,
-        discount,
+        discountType,
+        discountValue,
         paidAmount,
       })
       receiptData.printInUrdu = getInvoicePrintInUrdu()
@@ -289,7 +348,8 @@ export default function FastBillingPage() {
     customer,
     walkInCustomerName,
     paymentMethod,
-    discount,
+    discountType,
+    discountValue,
     paidAmount,
     createInvoice,
     resetSale,
@@ -438,16 +498,32 @@ export default function FastBillingPage() {
                 <ShoppingCart className='h-4 w-4 text-sky-600 dark:text-sky-400' />
                 Cart <span className='text-muted-foreground'>({cart.length})</span>
               </h2>
-              {cart.length > 0 && (
-                <span className='text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>
-                  Rs{subtotal.toFixed(0)}
-                </span>
-              )}
+              <div className='flex items-center gap-2'>
+                {cart.length > 0 && (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    className='h-7 gap-1 px-2 text-xs'
+                    onClick={toggleAllDiscountTypes}
+                    title='Switch every discount (all items + overall) to this unit at once'
+                  >
+                    <ArrowLeftRight className='h-3 w-3' />
+                    {discountType === 'percentage' ? 'Rs' : '%'}
+                  </Button>
+                )}
+                {cart.length > 0 && (
+                  <span className='text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>
+                    Rs{subtotal.toFixed(0)}
+                  </span>
+                )}
+              </div>
             </div>
             <CartPanel
               cart={cart}
               onQuantityChange={updateQuantity}
               onPriceChange={updatePrice}
+              onItemDiscountChange={updateItemDiscount}
               onRemove={removeLine}
               highlightKey={lastAddedKey}
             />
@@ -462,8 +538,14 @@ export default function FastBillingPage() {
             </h2>
             <PaymentPanel
               subtotal={subtotal}
+              itemDiscountTotal={itemDiscountTotal}
+              discountType={discountType}
+              discountValue={discountValue}
+              onDiscountChange={(patch) => {
+                if (patch.type !== undefined) setDiscountType(patch.type)
+                if (patch.value !== undefined) setDiscountValue(patch.value)
+              }}
               discount={discount}
-              onDiscountChange={setDiscount}
               total={total}
               paymentMethod={paymentMethod}
               onPaymentMethodChange={setPaymentMethod}

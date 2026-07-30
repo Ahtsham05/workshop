@@ -1,4 +1,5 @@
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import type { DiscountType } from '@/lib/discount'
 
 export type CartLine = {
   key: string
@@ -13,6 +14,10 @@ export type CartLine = {
   quantity: number
   stockQuantity: number
   image?: { url: string; publicId: string }
+  // Line-level discount (e.g. a customer discount on this one product), applied on top
+  // of quantity * unitPrice. Mirrors invoice/purchase-invoice's item discount fields.
+  discountType?: DiscountType
+  discountValue?: number
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'credit'

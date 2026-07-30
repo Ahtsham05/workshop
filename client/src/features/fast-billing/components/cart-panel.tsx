@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils'
 import { selectOnFocus } from '../utils/select-on-focus'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
 import type { CartLine } from '../types'
+import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
 type Props = {
   cart: CartLine[]
   onQuantityChange: (key: string, quantity: number) => void
   onPriceChange: (key: string, unitPrice: number) => void
+  onItemDiscountChange: (key: string, patch: { type?: DiscountType; value?: number }) => void
   onRemove: (key: string) => void
   highlightKey?: string | null
 }
@@ -18,7 +20,7 @@ type Props = {
 const noSpinner =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
-export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, highlightKey }: Props) {
+export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscountChange, onRemove, highlightKey }: Props) {
   if (cart.length === 0) {
     return (
       <div className='flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center text-muted-foreground'>
@@ -32,7 +34,9 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, hig
     <ScrollArea type='always' className='flex-1 min-h-0 pr-2'>
       <ul className='space-y-2'>
         {cart.map((line) => {
-          const lineTotal = Math.round(line.unitPrice * line.quantity * 100) / 100
+          const gross = Math.round(line.unitPrice * line.quantity * 100) / 100
+          const lineDiscount = computeDiscountAmount(gross, line.discountType, line.discountValue)
+          const lineTotal = Math.round((gross - lineDiscount) * 100) / 100
           const remaining = line.stockQuantity - line.quantity
           const justAdded = highlightKey === line.key
           return (
@@ -119,8 +123,39 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onRemove, hig
                   />
                 </div>
 
+                <span className='select-none text-sm text-muted-foreground/60'>−</span>
+
+                <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                  <Input
+                    type='number'
+                    value={line.discountValue || ''}
+                    placeholder='0'
+                    onChange={(e) => onItemDiscountChange(line.key, { value: Math.max(0, Number(e.target.value) || 0) })}
+                    onFocus={selectOnFocus}
+                    className={cn(
+                      'h-7 w-12 rounded-none border-0 text-center text-xs font-semibold focus-visible:ring-0 focus-visible:ring-offset-0',
+                      noSpinner,
+                    )}
+                  />
+                  <button
+                    type='button'
+                    onClick={() =>
+                      onItemDiscountChange(line.key, { type: line.discountType === 'percentage' ? 'fixed' : 'percentage' })
+                    }
+                    title='Click to switch between Rs and % discount'
+                    className='flex h-7 select-none items-center border-l bg-muted px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground'
+                  >
+                    {line.discountType === 'percentage' ? '%' : 'Rs'}
+                  </button>
+                </div>
+
                 <span className='select-none text-sm text-muted-foreground/60'>=</span>
-                <span className='w-16 shrink-0 text-right text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
+                <div className='w-16 shrink-0 text-right'>
+                  {lineDiscount > 0 && (
+                    <p className='text-[10px] leading-none text-muted-foreground line-through'>Rs{gross.toFixed(0)}</p>
+                  )}
+                  <span className='text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
+                </div>
 
                 <Button
                   type='button'
