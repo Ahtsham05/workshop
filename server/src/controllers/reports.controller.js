@@ -1,8 +1,8 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory } = require('../models');
-const { cashBookService } = require('../services');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment } = require('../models');
+const { cashBookService, stockAdjustmentService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
@@ -1192,6 +1192,65 @@ const getBatchExpiryReport = catchAsync(async (req, res) => {
   };
 
   res.status(httpStatus.OK).send({ data: rows, summary });
+});
+
+/* ── Stock Adjustments (damage / theft / expired / lost / found / correction) ─── */
+const getStockAdjustmentReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { type, productId } = req.query;
+
+  const baseMatch = { ...scope, createdAt: { $gte: start, $lte: end }, status: 'completed' };
+  if (type) baseMatch.type = type;
+  if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+    baseMatch.productId = new mongoose.Types.ObjectId(productId);
+  }
+
+  const [stats, datewise, lineItems] = await Promise.all([
+    stockAdjustmentService.getAdjustmentStats({
+      organizationId: scope.organizationId,
+      branchId: scope.branchId,
+      dateFrom: start,
+      dateTo: end,
+    }),
+    StockAdjustment.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: businessDateGroup('$createdAt'),
+          count: { $sum: 1 },
+          lossValue: { $sum: { $cond: [{ $eq: ['$direction', 'decrease'] }, '$totalValue', 0] } },
+          gainValue: { $sum: { $cond: [{ $eq: ['$direction', 'increase'] }, '$totalValue', 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    StockAdjustment.find(baseMatch).sort({ createdAt: -1 }).limit(500).populate('createdBy', 'name').lean(),
+  ]);
+
+  const formattedLineItems = lineItems.map((adj) => ({
+    id: adj._id,
+    date: adj.createdAt,
+    productName: adj.productName,
+    type: adj.type,
+    direction: adj.direction,
+    quantity: adj.quantity,
+    previousQuantity: adj.previousQuantity,
+    newQuantity: adj.newQuantity,
+    unitCost: adj.unitCost,
+    totalValue: adj.totalValue,
+    reason: adj.reason || '',
+    status: adj.status,
+    createdByName: adj.createdBy?.name || '',
+  }));
+
+  res.status(httpStatus.OK).send({
+    summary: { totalAdjustments: stats.totalAdjustments, totalLossValue: stats.totalLossValue },
+    byType: stats.byType,
+    datewise,
+    lineItems: formattedLineItems,
+    period: { startDate: start, endDate: end },
+  });
 });
 
 /* ── Tax ────────────────────────────────────────────────────────────────────── */
@@ -3497,7 +3556,7 @@ module.exports = {
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getSupplierReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
-  getBatchExpiryReport,
+  getBatchExpiryReport, getStockAdjustmentReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
   getLoadReport, getWalletWiseReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,

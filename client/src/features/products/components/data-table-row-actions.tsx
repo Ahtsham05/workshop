@@ -1,6 +1,8 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
+import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
+import { ClipboardEdit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -23,15 +25,16 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
   const { t } = useLanguage()
   const { hasPermission } = usePermissions()
-  
+  const navigate = useNavigate()
+
   const canEdit = hasPermission('editProducts' as any)
   const canDelete = hasPermission('deleteProducts' as any)
-  
+
   // Don't show actions menu if user has no permissions
   if (!canEdit && !canDelete) {
     return null
   }
-  
+
   return (
     <>
       <DropdownMenu modal={false}>
@@ -55,6 +58,22 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               {t('edit')}
               <DropdownMenuShortcut>
                 <IconEdit size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+          {canEdit && (
+            <DropdownMenuItem
+              onClick={() => {
+                const productId = row.original._id || row.original.id || ''
+                navigate({
+                  to: '/stock-adjustments',
+                  search: { productId, productName: row.original.name },
+                })
+              }}
+            >
+              {t('Adjust Stock')}
+              <DropdownMenuShortcut>
+                <ClipboardEdit size={16} />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}

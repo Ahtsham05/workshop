@@ -36,6 +36,12 @@ const invoiceItemSchema = new mongoose.Schema({
     cost: { type: Number, required: true, min: 0 },
     subtotal: { type: Number, required: true, min: 0 },
     profit: { type: Number, required: true },
+    // Line-level discount (e.g. a customer discount on this one product). discountAmount
+    // is the resolved Rs value; subtotal/profit above are already net of it. Mirrors
+    // purchase.model.js's item discount fields.
+    discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+    discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
+    discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
     isManualEntry: { type: Boolean, default: false },
     imeis: [{ type: String, trim: true }], // IMEI/serial numbers sold for this line item, when product.trackImei is true
     // Real (non-default) variant this line item is for, when the product hasVariants.
@@ -73,6 +79,11 @@ const InvoiceSchema = new mongoose.Schema({
     // Financial calculations
     subtotal: { type: Number, required: true, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
+    // Overall invoice-level discount (e.g. a customer discount on the whole bill),
+    // applied on top of any per-item discounts. discount is the resolved Rs value;
+    // total is already net of it. Mirrors purchase.model.js's overall discount fields.
+    discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
+    discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
     discount: { type: Number, default: 0, min: 0 },
     total: { type: Number, required: true, min: 0 },
     totalProfit: { type: Number, required: true },

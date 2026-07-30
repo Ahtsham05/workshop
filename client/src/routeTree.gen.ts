@@ -16,6 +16,7 @@ import { Route as AuthenticatedIndexImport } from './routes/_authenticated/index
 import { Route as OrderQrTokenImport } from './routes/order.$qrToken'
 import { Route as AuthenticatedVoiceDemoImport } from './routes/_authenticated/voice-demo'
 import { Route as AuthenticatedStockTransferImport } from './routes/_authenticated/stock-transfer'
+import { Route as AuthenticatedStockAdjustmentsImport } from './routes/_authenticated/stock-adjustments'
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authenticated/purchase-suggestions'
@@ -186,6 +187,13 @@ const AuthenticatedStockTransferRoute = AuthenticatedStockTransferImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedStockAdjustmentsRoute =
+  AuthenticatedStockAdjustmentsImport.update({
+    id: '/stock-adjustments',
+    path: '/stock-adjustments',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedSchoolRoute = AuthenticatedSchoolImport.update({
   id: '/school',
@@ -1287,6 +1295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSchoolImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/stock-adjustments': {
+      id: '/_authenticated/stock-adjustments'
+      path: '/stock-adjustments'
+      fullPath: '/stock-adjustments'
+      preLoaderRoute: typeof AuthenticatedStockAdjustmentsImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/stock-transfer': {
       id: '/_authenticated/stock-transfer'
       path: '/stock-transfer'
@@ -2325,6 +2340,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPurchaseSuggestionsRoute: typeof AuthenticatedPurchaseSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
+  AuthenticatedStockAdjustmentsRoute: typeof AuthenticatedStockAdjustmentsRoute
   AuthenticatedStockTransferRoute: typeof AuthenticatedStockTransferRoute
   AuthenticatedVoiceDemoRoute: typeof AuthenticatedVoiceDemoRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -2400,6 +2416,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPurchaseSuggestionsRoute: AuthenticatedPurchaseSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
+  AuthenticatedStockAdjustmentsRoute: AuthenticatedStockAdjustmentsRoute,
   AuthenticatedStockTransferRoute: AuthenticatedStockTransferRoute,
   AuthenticatedVoiceDemoRoute: AuthenticatedVoiceDemoRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -2500,6 +2517,7 @@ export interface FileRoutesByFullPath {
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
+  '/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
   '/stock-transfer': typeof AuthenticatedStockTransferRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
@@ -2642,6 +2660,7 @@ export interface FileRoutesByTo {
   '/insights': typeof AuthenticatedInsightsRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
   '/stock-transfer': typeof AuthenticatedStockTransferRoute
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
@@ -2787,6 +2806,7 @@ export interface FileRoutesById {
   '/_authenticated/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
+  '/_authenticated/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
   '/_authenticated/stock-transfer': typeof AuthenticatedStockTransferRoute
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
@@ -2934,6 +2954,7 @@ export interface FileRouteTypes {
     | '/purchase-suggestions'
     | '/reports'
     | '/school'
+    | '/stock-adjustments'
     | '/stock-transfer'
     | '/voice-demo'
     | '/order/$qrToken'
@@ -3075,6 +3096,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/purchase-suggestions'
     | '/reports'
+    | '/stock-adjustments'
     | '/stock-transfer'
     | '/voice-demo'
     | '/order/$qrToken'
@@ -3218,6 +3240,7 @@ export interface FileRouteTypes {
     | '/_authenticated/purchase-suggestions'
     | '/_authenticated/reports'
     | '/_authenticated/school'
+    | '/_authenticated/stock-adjustments'
     | '/_authenticated/stock-transfer'
     | '/_authenticated/voice-demo'
     | '/order/$qrToken'
@@ -3411,6 +3434,7 @@ export const routeTree = rootRoute
         "/_authenticated/purchase-suggestions",
         "/_authenticated/reports",
         "/_authenticated/school",
+        "/_authenticated/stock-adjustments",
         "/_authenticated/stock-transfer",
         "/_authenticated/voice-demo",
         "/_authenticated/",
@@ -3609,6 +3633,10 @@ export const routeTree = rootRoute
         "/_authenticated/school/fees/transactions/",
         "/_authenticated/school/fees/vouchers/"
       ]
+    },
+    "/_authenticated/stock-adjustments": {
+      "filePath": "_authenticated/stock-adjustments.tsx",
+      "parent": "/_authenticated"
     },
     "/_authenticated/stock-transfer": {
       "filePath": "_authenticated/stock-transfer.tsx",

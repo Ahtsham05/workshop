@@ -3,7 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGetProductDetailReportQuery } from '@/stores/reports.api'
+import { useGetProductDetailReportQuery, useGetStockAdjustmentReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,7 @@ import { getUnitLabel } from '@/lib/units'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import { cn } from '@/lib/utils'
+import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adjustment-type-badge'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -23,6 +24,10 @@ interface ProductDetailDialogProps {
 export function ProductDetailDialog({ productId, startDate, endDate, onClose }: ProductDetailDialogProps) {
   const { t, language } = useLanguage()
   const { data, isLoading } = useGetProductDetailReportQuery(
+    { productId: productId!, startDate, endDate },
+    { skip: !productId }
+  )
+  const { data: adjustmentsData } = useGetStockAdjustmentReportQuery(
     { productId: productId!, startDate, endDate },
     { skip: !productId }
   )
@@ -126,12 +131,15 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
 
             {/* Sales and Purchases Tabs */}
             <Tabs defaultValue='sales'>
-              <TabsList className='grid w-full grid-cols-2'>
+              <TabsList className='grid w-full grid-cols-3'>
                 <TabsTrigger value='sales'>
                   {t('Sale To Customers')} ({data?.sales?.length || 0})
                 </TabsTrigger>
                 <TabsTrigger value='purchases'>
                   {t('Purchase From Suppliers')} ({data?.purchases?.length || 0})
+                </TabsTrigger>
+                <TabsTrigger value='adjustments'>
+                  {t('Stock Adjustments')} ({adjustmentsData?.lineItems?.length || 0})
                 </TabsTrigger>
               </TabsList>
 
@@ -252,6 +260,61 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableRow>
                             <TableCell colSpan={11} className='text-center py-8 text-muted-foreground'>
                               {t('no_purchases_found')}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value='adjustments' className='mt-4'>
+                <div className='border rounded-lg overflow-hidden'>
+                  <div className='overflow-x-auto'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className='min-w-[100px]'>{t('date')}</TableHead>
+                          <TableHead className='min-w-[120px]'>{t('Type')}</TableHead>
+                          <TableHead className='text-right min-w-[80px]'>Qty</TableHead>
+                          <TableHead className='text-right min-w-[120px]'>{t('Stock')}</TableHead>
+                          <TableHead className='text-right min-w-[100px]'>{t('value')}</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('Reason')}</TableHead>
+                          <TableHead className='min-w-[100px]'>{t('By')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {adjustmentsData?.lineItems && adjustmentsData.lineItems.length > 0 ? (
+                          adjustmentsData.lineItems.map((adj) => (
+                            <TableRow key={adj.id}>
+                              <TableCell className='whitespace-nowrap'>{format(new Date(adj.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell>
+                                <AdjustmentTypeBadge type={adj.type} />
+                              </TableCell>
+                              <TableCell
+                                className={cn(
+                                  'text-right font-medium',
+                                  adj.direction === 'increase' ? 'text-emerald-600' : 'text-rose-600'
+                                )}
+                              >
+                                {adj.direction === 'increase' ? '+' : '−'}
+                                {adj.quantity}
+                              </TableCell>
+                              <TableCell className='text-right text-sm text-muted-foreground whitespace-nowrap'>
+                                {adj.previousQuantity} → {adj.newQuantity}
+                              </TableCell>
+                              <TableCell className='text-right'>{adj.totalValue ? formatCurrency(adj.totalValue) : '—'}</TableCell>
+                              <TableCell className='text-sm text-muted-foreground max-w-[200px] truncate' title={adj.reason}>
+                                {adj.reason || '—'}
+                              </TableCell>
+                              <TableCell className='text-sm text-muted-foreground'>{adj.createdByName || '—'}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
+                              {t('No stock adjustments found for the selected period')}
                             </TableCell>
                           </TableRow>
                         )}

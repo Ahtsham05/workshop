@@ -9,6 +9,7 @@ const productAttributeRoute = require('./productAttribute.route');
 const productVariantRoute = require('./productVariant.route');
 const inventoryRoute = require('./inventory.route');
 const inventoryTransferRoute = require('./inventoryTransfer.route');
+const stockAdjustmentRoute = require('./stockAdjustment.route');
 const batchRoute = require('./batch.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
@@ -151,6 +152,10 @@ const defaultRoutes = [
   {
     path: '/inventory-transfers',
     route: inventoryTransferRoute,
+  },
+  {
+    path: '/stock-adjustments',
+    route: stockAdjustmentRoute,
   },
   {
     path: '/batches',

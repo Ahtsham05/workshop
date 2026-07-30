@@ -34,6 +34,8 @@ router.route('/inventory').get(auth('viewReports'), reportsController.getInvento
 
 router.route('/batches').get(auth('viewReports'), reportsController.getBatchExpiryReport);
 
+router.route('/stock-adjustments').get(auth('viewReports'), reportsController.getStockAdjustmentReport);
+
 router.route('/tax').get(auth('viewReports'), reportsController.getTaxReport);
 
 router.route('/sales-returns').get(auth('viewReports'), reportsController.getSalesReturnsReport);

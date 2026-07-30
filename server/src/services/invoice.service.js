@@ -17,6 +17,27 @@ const inventoryService = require('./inventory.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const businessNotifications = require('./whatsapp/businessNotifications.service');
+const { computeDiscountAmount } = require('../utils/discount');
+
+/**
+ * Resolves a raw invoice item's discount fields + net subtotal/profit from its gross
+ * (quantity * unitPrice) and stock-adjusted cost. Server-side resolution (not trusting
+ * a client-sent discountAmount) — same reasoning as purchaseOrder.service.js's
+ * resolveOrderTotals, more robust than purchase.service.js's write-through trust.
+ */
+const resolveInvoiceItemDiscount = (item, grossSubtotal, costBasis) => {
+  const discountType = item.discountType || 'fixed';
+  const discountValue = Number(item.discountValue || 0);
+  const discountAmount = computeDiscountAmount(grossSubtotal, discountType, discountValue);
+  const subtotal = grossSubtotal - discountAmount;
+  return {
+    discountType,
+    discountValue,
+    discountAmount,
+    subtotal,
+    profit: subtotal - costBasis,
+  };
+};
 
 /**
  * Post (or re-post) the double-entry journal entries for an invoice.
@@ -292,25 +313,32 @@ const createInvoice = async (invoiceBody, userId) => {
         }
       }
 
-      validatedItems.push({
-        productId: item.productId,
-        variantId: item.variantId,
-        batchId: item.batchId,
-        batchNumber: item.batchNumber,
-        name: item.name || product.name,
-        nameUrdu: item.nameUrdu || product.nameUrdu || '',
-        image: item.image || product.image,
-        quantity: item.quantity,
-        unit: item.unit || product.unit,
-        conversionFactor: 1,
-        stockQuantity: item.quantity,
-        unitPrice: item.unitPrice,
-        cost: item.cost,
-        subtotal: item.quantity * item.unitPrice,
-        profit: (item.quantity * item.unitPrice) - (item.quantity * item.cost),
-        isManualEntry: item.isManualEntry || false,
-        imeis: item.imeis || [],
-      });
+      {
+        const gross = item.quantity * item.unitPrice;
+        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
+        validatedItems.push({
+          productId: item.productId,
+          variantId: item.variantId,
+          batchId: item.batchId,
+          batchNumber: item.batchNumber,
+          name: item.name || product.name,
+          nameUrdu: item.nameUrdu || product.nameUrdu || '',
+          image: item.image || product.image,
+          quantity: item.quantity,
+          unit: item.unit || product.unit,
+          conversionFactor: 1,
+          stockQuantity: item.quantity,
+          unitPrice: item.unitPrice,
+          cost: item.cost,
+          subtotal: discount.subtotal,
+          profit: discount.profit,
+          discountType: discount.discountType,
+          discountValue: discount.discountValue,
+          discountAmount: discount.discountAmount,
+          isManualEntry: item.isManualEntry || false,
+          imeis: item.imeis || [],
+        });
+      }
       continue;
     }
 
@@ -330,6 +358,9 @@ const createInvoice = async (invoiceBody, userId) => {
     }
 
     // Prepare validated item
+    const itemCost = item.cost || product.cost;
+    const itemGross = item.quantity * item.unitPrice;
+    const itemDiscount = resolveInvoiceItemDiscount(item, itemGross, conversion.stockQuantity * itemCost);
     const validatedItem = {
       productId: item.productId,
       name: item.name || product.name,
@@ -340,9 +371,12 @@ const createInvoice = async (invoiceBody, userId) => {
       conversionFactor: conversion.conversionFactor,
       stockQuantity: conversion.stockQuantity,
       unitPrice: item.unitPrice,
-      cost: item.cost || product.cost,
-      subtotal: item.quantity * item.unitPrice,
-      profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
+      cost: itemCost,
+      subtotal: itemDiscount.subtotal,
+      profit: itemDiscount.profit,
+      discountType: itemDiscount.discountType,
+      discountValue: itemDiscount.discountValue,
+      discountAmount: itemDiscount.discountAmount,
       isManualEntry: item.isManualEntry || false,
       imeis: item.imeis || [],
     };
@@ -359,10 +393,24 @@ const createInvoice = async (invoiceBody, userId) => {
     });
   }
 
+  // Resolve the overall invoice-level discount server-side from discountType/discountValue
+  // against the net-of-item-discount subtotal. Backward-compat fallback: callers that only
+  // send a flat `discount` (e.g. Fast Billing) still resolve to the same amount, since a
+  // 'fixed' discountValue derived from it clamps to the identical Rs figure.
+  const netSubtotalSum = validatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const overallDiscountType = invoiceBody.discountType || 'fixed';
+  const overallDiscountValue = invoiceBody.discountValue !== undefined
+    ? Number(invoiceBody.discountValue)
+    : Number(invoiceBody.discount || 0);
+  const overallDiscount = computeDiscountAmount(netSubtotalSum, overallDiscountType, overallDiscountValue);
+
   // Create invoice
   const invoice = new Invoice({
     ...invoiceBody,
     items: validatedItems,
+    discountType: overallDiscountType,
+    discountValue: overallDiscountValue,
+    discount: overallDiscount,
     createdBy: userId,
     updatedBy: userId
   });
@@ -769,6 +817,8 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
             }
           }
         }
+        const gross = item.quantity * item.unitPrice;
+        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
         validatedItems.push({
           productId: item.productId,
           variantId: item.variantId,
@@ -783,8 +833,11 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           stockQuantity: item.quantity,
           unitPrice: item.unitPrice,
           cost: item.cost,
-          subtotal: item.quantity * item.unitPrice,
-          profit: (item.quantity * item.unitPrice) - (item.quantity * item.cost),
+          subtotal: discount.subtotal,
+          profit: discount.profit,
+          discountType: discount.discountType,
+          discountValue: discount.discountValue,
+          discountAmount: discount.discountAmount,
           isManualEntry: item.isManualEntry || false,
           imeis: item.imeis || [],
         });
@@ -800,6 +853,9 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         );
       }
 
+      const itemCost = item.cost || product.cost;
+      const itemGross = item.quantity * item.unitPrice;
+      const itemDiscount = resolveInvoiceItemDiscount(item, itemGross, conversion.stockQuantity * itemCost);
       const validatedItem = {
         productId: item.productId,
         name: item.name || product.name,
@@ -810,9 +866,12 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         conversionFactor: conversion.conversionFactor,
         stockQuantity: conversion.stockQuantity,
         unitPrice: item.unitPrice,
-        cost: item.cost || product.cost,
-        subtotal: item.quantity * item.unitPrice,
-        profit: (item.quantity * item.unitPrice) - (conversion.stockQuantity * (item.cost || product.cost)),
+        cost: itemCost,
+        subtotal: itemDiscount.subtotal,
+        profit: itemDiscount.profit,
+        discountType: itemDiscount.discountType,
+        discountValue: itemDiscount.discountValue,
+        discountAmount: itemDiscount.discountAmount,
         isManualEntry: item.isManualEntry || false,
         imeis: item.imeis || [],
       };
@@ -883,14 +942,32 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
   console.log('Updating invoice:', invoiceId);
   console.log('Update fields:', Object.keys(updateBody));
-  
+
+  // Resolve the overall discount server-side, same as createInvoice — falls back to the
+  // existing document's values when the update doesn't touch discount, and to the
+  // just-rebuilt items' net subtotal (or the existing stored subtotal when items weren't
+  // touched) as the base it's applied against.
+  const overallDiscountType = updateBody.discountType !== undefined
+    ? updateBody.discountType
+    : (invoice.discountType || 'fixed');
+  const overallDiscountValue = updateBody.discountValue !== undefined
+    ? Number(updateBody.discountValue)
+    : updateBody.discount !== undefined
+      ? Number(updateBody.discount)
+      : Number(invoice.discountValue || 0);
+  const overallNetSubtotal = updateBody.items
+    ? updateBody.items.reduce((sum, item) => sum + item.subtotal, 0)
+    : invoice.subtotal;
+  updateBody.discountType = overallDiscountType;
+  updateBody.discountValue = overallDiscountValue;
+  updateBody.discount = computeDiscountAmount(overallNetSubtotal, overallDiscountType, overallDiscountValue);
+
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
-  
-  // Recalculate totals only if items were updated
-  if (updateBody.items) {
-    invoice.calculateTotals();
-  }
+
+  // Recalculate totals on every update — a discount-only edit (no item changes) must
+  // still re-resolve total/balance, not just item edits.
+  invoice.calculateTotals();
 
   if (invoice.type === 'cash') {
     invoice.paidAmount = invoice.total;

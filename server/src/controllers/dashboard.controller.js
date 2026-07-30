@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory, StockAdjustment } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService, productService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
@@ -614,6 +614,16 @@ const getLowStockProducts = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send(lowStockProducts);
 });
 
+const ADJUSTMENT_TYPE_LABELS = {
+  damage: 'Damage',
+  theft: 'Theft',
+  expired: 'Expired',
+  lost: 'Lost',
+  found: 'Found',
+  correction: 'Stock Correction',
+  other: 'Adjustment',
+};
+
 /**
  * Get recent activities
  * @route GET /v1/dashboard/recent-activities?limit=10
@@ -622,14 +632,15 @@ const getRecentActivities = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
   const { limit = 10 } = req.query;
   const { startDate, endDate } = resolveDashboardDateRange(req.query);
-  const half = Math.max(1, Math.ceil(parseInt(limit, 10) / 2));
+  const numLimit = parseInt(limit, 10);
+  const share = Math.max(1, Math.ceil(numLimit / 3));
 
   const recentInvoices = await Invoice.find({
     ...bf,
     ...buildDateMatch('invoiceDate', startDate, endDate),
   })
     .sort({ createdAt: -1 })
-    .limit(half)
+    .limit(share)
     .select('invoiceNumber total createdAt status walkInCustomerName customerId type paidAmount balance')
     .lean();
 
@@ -654,9 +665,18 @@ const getRecentActivities = catchAsync(async (req, res) => {
     ...buildDateMatch('purchaseDate', startDate, endDate),
   })
     .sort({ createdAt: -1 })
-    .limit(half)
+    .limit(share)
     .select('invoiceNumber totalAmount paidAmount balance paymentType createdAt supplier')
     .populate('supplier', 'name')
+    .lean();
+
+  const recentAdjustments = await StockAdjustment.find({
+    ...bf,
+    ...buildDateMatch('createdAt', startDate, endDate),
+  })
+    .sort({ createdAt: -1 })
+    .limit(share)
+    .select('type direction quantity totalValue productName status createdAt')
     .lean();
 
   // Combine and format activities
@@ -693,10 +713,25 @@ const getRecentActivities = catchAsync(async (req, res) => {
     };
   });
 
+  const adjustmentActivities = recentAdjustments.map((adj) => {
+    const typeLabel = ADJUSTMENT_TYPE_LABELS[adj.type] || 'Adjustment';
+    return {
+      id: adj._id,
+      type: 'stock_adjustment',
+      description: `${typeLabel} — ${adj.productName}`,
+      amount: adj.totalValue,
+      adjustmentType: adj.type,
+      direction: adj.direction,
+      quantity: adj.quantity,
+      timestamp: adj.createdAt,
+      status: adj.status === 'reversed' ? 'Reversed' : typeLabel,
+    };
+  });
+
   // Combine and sort by timestamp
-  const activities = [...invoiceActivities, ...purchaseActivities]
+  const activities = [...invoiceActivities, ...purchaseActivities, ...adjustmentActivities]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, parseInt(limit));
+    .slice(0, numLimit);
 
   res.status(httpStatus.OK).send(activities);
 });

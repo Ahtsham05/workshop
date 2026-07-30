@@ -145,12 +145,16 @@ export interface LowStockProduct {
 
 export interface RecentActivity {
   id: string
-  type: 'invoice' | 'purchase' | 'payment'
+  type: 'invoice' | 'purchase' | 'payment' | 'stock_adjustment'
   description: string
   amount: number
   /** Normalized for invoices (cash = total; credit = amount applied to invoice) */
   paidAmount?: number
   balance?: number
+  /** stock_adjustment only */
+  adjustmentType?: 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'other'
+  direction?: 'increase' | 'decrease'
+  quantity?: number
   timestamp: string
   status: string
 }

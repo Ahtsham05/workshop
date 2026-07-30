@@ -21,6 +21,7 @@ module.exports.companyService = require('./company.service.js');
 module.exports.organizationService = require('./organization.service.js');
 module.exports.branchService = require('./branch.service.js');
 module.exports.inventoryTransferService = require('./inventoryTransfer.service.js');
+module.exports.stockAdjustmentService = require('./stockAdjustment.service.js');
 module.exports.membershipService = require('./membership.service.js');
 module.exports.paymentService = require('./payment.service.js');
 module.exports.cashBookService = require('./cashBook.service.js');

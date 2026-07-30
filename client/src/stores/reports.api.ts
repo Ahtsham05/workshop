@@ -282,6 +282,43 @@ export interface TaxReportData {
   invoiceCount: number
 }
 
+export interface StockAdjustmentTypeStat {
+  count: number
+  quantity: number
+  value: number
+}
+
+export interface StockAdjustmentReportLineItem {
+  id: string
+  date: string
+  productName: string
+  type: 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'other'
+  direction: 'increase' | 'decrease'
+  quantity: number
+  previousQuantity: number
+  newQuantity: number
+  unitCost: number
+  totalValue: number
+  reason?: string
+  status: 'completed' | 'reversed'
+  createdByName?: string
+}
+
+export interface StockAdjustmentReportDatewise {
+  _id: string
+  count: number
+  lossValue: number
+  gainValue: number
+}
+
+export interface StockAdjustmentReport {
+  summary: { totalAdjustments: number; totalLossValue: number }
+  byType: Record<StockAdjustmentReportLineItem['type'], StockAdjustmentTypeStat>
+  datewise: StockAdjustmentReportDatewise[]
+  lineItems: StockAdjustmentReportLineItem[]
+  period: { startDate: string; endDate: string }
+}
+
 export interface ReturnReportItem {
   _id: string
   productName: string
@@ -842,7 +879,7 @@ export interface WalletWiseReport {
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'SupplierReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1016,6 +1053,17 @@ export const reportsApi = createApi({
       },
       providesTags: ['Inventory'],
     }),
+    getStockAdjustmentReport: builder.query<StockAdjustmentReport, { startDate?: string; endDate?: string; type?: string; productId?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.type) searchParams.set('type', params.type)
+        if (params.productId) searchParams.set('productId', params.productId)
+        return `/stock-adjustments?${searchParams.toString()}`
+      },
+      providesTags: ['StockAdjustmentReport'],
+    }),
     getTaxReport: builder.query<{
       data: TaxReportData[]
       summary: any
@@ -1177,6 +1225,7 @@ export const {
   useGetProfitLossFullReportQuery,
   useGetInventoryReportQuery,
   useGetBatchExpiryReportQuery,
+  useGetStockAdjustmentReportQuery,
   useGetTaxReportQuery,
   useGetSalesReturnsReportQuery,
   useGetPurchaseReturnsReportQuery,

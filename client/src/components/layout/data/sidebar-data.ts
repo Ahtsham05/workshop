@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3 } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -127,6 +127,13 @@ export const sidebarData: SidebarData = {
           title: 'Stock Transfer',
           url: '/stock-transfer',
           icon: IconTransfer,
+          permission: 'viewProducts',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'Stock Adjustments',
+          url: '/stock-adjustments',
+          icon: ClipboardEdit,
           permission: 'viewProducts',
           excludeBusinessTypes: ['school', 'restaurant'],
         },
@@ -960,6 +967,7 @@ export const sidebarData: SidebarData = {
             { title: 'Expenses Report', url: '/reports?tab=expenses' as never, icon: IconCash },
             { title: 'Inventory Report', url: '/reports?tab=inventory' as never, icon: IconPackages },
             { title: 'Batch & Expiry Report', url: '/reports?tab=batch-expiry' as never, icon: IconClock },
+            { title: 'Stock Adjustments Report', url: '/reports?tab=stock-adjustments' as never, icon: ClipboardEdit },
             { title: 'Tax Report', url: '/reports?tab=tax' as never, icon: IconClipboardCheck },
             { title: 'Sales Returns Report', url: '/reports?tab=sales-returns' as never, icon: IconRefresh },
             { title: 'Purchase Returns Report', url: '/reports?tab=purchase-returns' as never, icon: IconTransfer },

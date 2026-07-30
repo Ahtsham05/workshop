@@ -41,6 +41,7 @@ import { batchApi } from './batch.api';
 import { brandApi } from './brand.api';
 import { purchaseCatalogApi } from './purchaseCatalog.api';
 import { inventoryTransferApi } from './inventoryTransfer.api';
+import { stockAdjustmentApi } from './stockAdjustment.api';
 import { auditLogApi } from './auditLog.api';
 import { aiAssistantApi } from './aiAssistant.api';
 import { recurringExpenseApi } from './recurringExpense.api';
@@ -90,6 +91,7 @@ export const store = configureStore({
     [brandApi.reducerPath]: brandApi.reducer,
     [purchaseCatalogApi.reducerPath]: purchaseCatalogApi.reducer,
     [inventoryTransferApi.reducerPath]: inventoryTransferApi.reducer,
+    [stockAdjustmentApi.reducerPath]: stockAdjustmentApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
     [aiAssistantApi.reducerPath]: aiAssistantApi.reducer,
     [recurringExpenseApi.reducerPath]: recurringExpenseApi.reducer,
@@ -133,6 +135,7 @@ export const store = configureStore({
       brandApi.middleware,
       purchaseCatalogApi.middleware,
       inventoryTransferApi.middleware,
+      stockAdjustmentApi.middleware,
       auditLogApi.middleware,
       aiAssistantApi.middleware,
       recurringExpenseApi.middleware,

@@ -30,7 +30,7 @@ const InventoryTransactionSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['purchase', 'sale', 'return_in', 'return_out', 'transfer_in', 'transfer_out', 'adjustment', 'expiry_writeoff'],
+        enum: ['purchase', 'sale', 'return_in', 'return_out', 'transfer_in', 'transfer_out', 'adjustment', 'expiry_writeoff', 'damage', 'theft'],
         required: true,
     },
     quantityDelta: { type: Number, required: true }, // signed

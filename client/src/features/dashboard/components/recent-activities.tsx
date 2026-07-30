@@ -4,7 +4,8 @@ import { formatDistanceToNow } from 'date-fns'
 import type { ComponentProps } from 'react'
 import { FileText, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
-import { useGetRecentActivitiesQuery } from '@/stores/dashboard.api'
+import { useGetRecentActivitiesQuery, type RecentActivity } from '@/stores/dashboard.api'
+import { ADJUSTMENT_TYPE_META } from '@/features/stock-adjustments/lib/adjustment-types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import {
@@ -25,14 +26,18 @@ export function RecentActivities({ dateRange }: Props) {
   })
   const loading = isLoading || isFetching
 
-  const getIcon = (type: string) => {
-    switch (type) {
+  const getIcon = (activity: RecentActivity) => {
+    switch (activity.type) {
       case 'invoice':
         return <FileText className='h-4 w-4' />
       case 'purchase':
         return <ShoppingCart className='h-4 w-4' />
       case 'payment':
         return <DollarSign className='h-4 w-4' />
+      case 'stock_adjustment': {
+        const Icon = (activity.adjustmentType && ADJUSTMENT_TYPE_META[activity.adjustmentType]?.icon) || TrendingUp
+        return <Icon className='h-4 w-4' />
+      }
       default:
         return <TrendingUp className='h-4 w-4' />
     }
@@ -125,7 +130,7 @@ export function RecentActivities({ dateRange }: Props) {
                         'bg-primary/10 text-primary',
                     )}
                   >
-                    {getIcon(activity.type)}
+                    {getIcon(activity)}
                   </div>
                   <div>
                     <p className='text-sm font-medium'>{activity.description}</p>
