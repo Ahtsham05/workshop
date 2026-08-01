@@ -419,6 +419,8 @@ export interface StockAdjustmentReportLineItem {
   variantLabel?: string | null
   batchNumber?: string | null
   expiryDate?: string | null
+  // Set only for IMEI/serial-tracked products — the specific units this adjustment moved.
+  imeis?: string[]
 }
 
 export interface StockAdjustmentReportDatewise {

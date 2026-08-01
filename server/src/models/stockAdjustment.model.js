@@ -20,6 +20,10 @@ const StockAdjustmentSchema = new mongoose.Schema(
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
     batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
     productName: { type: String, trim: true },
+    // Set only for IMEI/serial-tracked products — the specific units this adjustment
+    // moved out of stock (see stockAdjustment.service.js#resolveSerializedTarget).
+    // Reversal re-resolves these same units by number rather than requiring a re-pick.
+    imeis: [{ type: String, trim: true }],
 
     type: { type: String, enum: ADJUSTMENT_TYPES, required: true, index: true },
     direction: { type: String, enum: ADJUSTMENT_DIRECTIONS, required: true },

@@ -344,8 +344,15 @@ const createInvoice = async (invoiceBody, userId) => {
       }
 
       {
+        // item.cost is absent when the requesting role can't see purchase cost (it's
+        // stripped from the catalog API — see product.controller.js's
+        // COST_VIEW_PERMISSIONS). Fall back to the picked batch's actual cost, then the
+        // product's, same as the non-variant branch below — never trust a missing/zero
+        // client value as "free".
+        const primaryBatch = allocations.length > 0 ? batchById.get(String(allocations[0].batchId)) : undefined;
+        const itemCost = item.cost ?? primaryBatch?.costPerUnit ?? product.cost ?? 0;
         const gross = item.quantity * item.unitPrice;
-        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
+        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * itemCost);
         // A split keeps the first allocation as the display-only batchId/batchNumber
         // (populate, print, legacy readers) while the real per-batch breakdown lives in
         // batchAllocations — only stored when there genuinely are 2+ batches involved,
@@ -365,7 +372,7 @@ const createInvoice = async (invoiceBody, userId) => {
           conversionFactor: 1,
           stockQuantity: item.quantity,
           unitPrice: item.unitPrice,
-          cost: item.cost,
+          cost: itemCost,
           subtotal: discount.subtotal,
           profit: discount.profit,
           discountType: discount.discountType,
@@ -870,8 +877,16 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
             }
           }
         }
+        // item.cost is absent when the requesting role can't see purchase cost (it's
+        // stripped from the catalog API — see product.controller.js's
+        // COST_VIEW_PERMISSIONS). Fall back to the picked batch's actual cost, then the
+        // product's, same as the non-variant branch below and createInvoice's identical
+        // branch above — never trust a missing/zero client value as "free".
+        const primaryBatchId = allocations.length > 0 ? allocations[0].batchId : undefined;
+        const primaryBatch = primaryBatchId ? await Batch.findById(primaryBatchId).select('costPerUnit').lean() : undefined;
+        const itemCost = item.cost ?? primaryBatch?.costPerUnit ?? product.cost ?? 0;
         const gross = item.quantity * item.unitPrice;
-        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
+        const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * itemCost);
         const isSplit = allocations.length > 1;
         validatedItems.push({
           productId: item.productId,
@@ -887,7 +902,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
           conversionFactor: 1,
           stockQuantity: item.quantity,
           unitPrice: item.unitPrice,
-          cost: item.cost,
+          cost: itemCost,
           subtotal: discount.subtotal,
           profit: discount.profit,
           discountType: discount.discountType,

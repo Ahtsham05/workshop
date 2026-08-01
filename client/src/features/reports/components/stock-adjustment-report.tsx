@@ -63,6 +63,7 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
               Variant: row.variantLabel || '',
               'Batch #': row.batchNumber || '',
               Expiry: row.expiryDate ? format(new Date(row.expiryDate), 'yyyy-MM-dd') : '',
+              'IMEI/Serial': (row.imeis || []).join(', '),
               [t('Direction')]: row.direction,
               Qty: row.quantity,
               [t('Stock')]: `${row.previousQuantity} -> ${row.newQuantity}`,
@@ -198,6 +199,7 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
                     <TableHead>Variant</TableHead>
                     <TableHead>Batch #</TableHead>
                     <TableHead>Expiry</TableHead>
+                    <TableHead>{t('IMEI/Serial')}</TableHead>
                     <TableHead className='text-right'>Qty</TableHead>
                     <TableHead className='text-right'>{t('Stock')}</TableHead>
                     <TableHead className='text-right'>{t('value')}</TableHead>
@@ -219,6 +221,12 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
                       <TableCell className='text-muted-foreground text-sm'>{row.variantLabel || '—'}</TableCell>
                       <TableCell className='font-mono text-xs text-muted-foreground'>{row.batchNumber || '—'}</TableCell>
                       <TableCell>{row.expiryDate ? expiryBadge(row.expiryDate) : '—'}</TableCell>
+                      <TableCell
+                        className='max-w-[160px] truncate font-mono text-xs text-muted-foreground'
+                        title={(row.imeis || []).join(', ')}
+                      >
+                        {row.imeis && row.imeis.length > 0 ? row.imeis.join(', ') : '—'}
+                      </TableCell>
                       <TableCell className={cn('text-right font-medium', row.direction === 'increase' ? 'text-emerald-600' : 'text-rose-600')}>
                         {row.direction === 'increase' ? '+' : '−'}
                         {row.quantity}

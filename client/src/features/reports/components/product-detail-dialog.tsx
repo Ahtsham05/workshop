@@ -333,6 +333,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[100px]'>Variant</TableHead>
                           <TableHead className='min-w-[100px]'>Batch #</TableHead>
                           <TableHead className='min-w-[100px]'>Expiry</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('IMEI/Serial')}</TableHead>
                           <TableHead className='text-right min-w-[80px]'>Qty</TableHead>
                           <TableHead className='text-right min-w-[120px]'>{t('Stock')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('value')}</TableHead>
@@ -351,6 +352,12 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell className='text-muted-foreground text-sm'>{adj.variantLabel || '—'}</TableCell>
                               <TableCell className='font-mono text-xs text-muted-foreground'>{adj.batchNumber || '—'}</TableCell>
                               <TableCell>{adj.expiryDate ? expiryBadge(adj.expiryDate) : '—'}</TableCell>
+                              <TableCell
+                                className='max-w-[180px] truncate font-mono text-xs text-muted-foreground'
+                                title={(adj.imeis || []).join(', ')}
+                              >
+                                {adj.imeis && adj.imeis.length > 0 ? adj.imeis.join(', ') : '—'}
+                              </TableCell>
                               <TableCell
                                 className={cn(
                                   'text-right font-medium',
@@ -372,7 +379,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={10} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={11} className='text-center py-8 text-muted-foreground'>
                               {t('No stock adjustments found for the selected period')}
                             </TableCell>
                           </TableRow>

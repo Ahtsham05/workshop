@@ -44,19 +44,20 @@ function CreateEmployee() {
   };
 
   return (
-    <div className="h-full w-full p-4 space-y-4">
+    <div className="h-full w-full p-4 space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={handleCancel}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{t('Add New Employee')}</h1>
+          <p className="text-muted-foreground">{t('Fill in the details below to add a new team member')}</p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate({ to: '/hr/employees' as any })}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <CardTitle>{t('Add New Employee')}</CardTitle>
-          </div>
+          <CardTitle>{t('Employee Information')}</CardTitle>
         </CardHeader>
         <CardContent>
           <EmployeeForm

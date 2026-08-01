@@ -1654,6 +1654,7 @@ const getStockAdjustmentReport = catchAsync(async (req, res) => {
       : null,
     batchNumber: adj.batchId?.batchNumber || null,
     expiryDate: adj.batchId?.expiryDate || null,
+    imeis: adj.imeis || [],
   }));
 
   res.status(httpStatus.OK).send({

@@ -14,9 +14,17 @@ const invoiceItem = Joi.object({
   conversionFactor: Joi.number().positive().optional(),
   stockQuantity: Joi.number().positive().optional(),
   unitPrice: Joi.number().min(0).required(),
-  cost: Joi.number().min(0).required(),
+  // Optional (and null-tolerant), not required: roles without product/purchase view
+  // access get cost stripped from the catalog API (see product.controller.js's
+  // COST_VIEW_PERMISSIONS), so their client can't compute these — `cost * qty` with a
+  // missing cost is NaN, and JSON.stringify turns a NaN field into `null` (unlike
+  // `undefined`, which just drops the key), so plain .optional() alone won't accept
+  // what the client actually sends. The server always recomputes cost/profit
+  // authoritatively from the product/batch record — see invoice.service.js — so a
+  // client-sent value here is never trusted for the actual calculation anyway.
+  cost: Joi.number().min(0).allow(null).optional(),
   subtotal: Joi.number().min(0).required(),
-  profit: Joi.number().required(),
+  profit: Joi.number().allow(null).optional(),
   discountType: Joi.string().valid('fixed', 'percentage').optional(),
   discountValue: Joi.number().min(0).optional(),
   discountAmount: Joi.number().min(0).optional(),
@@ -56,8 +64,13 @@ const createInvoice = {
     discountValue: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).default(0),
     total: Joi.number().min(0).required(),
-    totalProfit: Joi.number().required(),
-    totalCost: Joi.number().min(0).required(),
+    // Optional and null-tolerant, same reasoning as invoiceItem's cost/profit above:
+    // invoice.calculateTotals() always recomputes these server-side from the validated
+    // items (see invoice.service.js), so a client that can't see cost sends `null`
+    // here (NaN survives JSON.stringify as null, not as a dropped key) rather than a
+    // real number.
+    totalProfit: Joi.number().allow(null).optional(),
+    totalCost: Joi.number().min(0).allow(null).optional(),
     paidAmount: Joi.number().min(0).default(0),
     balance: Joi.number().default(0),
     invoiceDate: Joi.date().optional(),
@@ -129,8 +142,9 @@ const updateInvoice = {
     discountValue: Joi.number().min(0).optional(),
     discount: Joi.number().min(0).optional(),
     total: Joi.number().min(0).optional(),
-    totalProfit: Joi.number().optional(),
-    totalCost: Joi.number().min(0).optional(),
+    // null-tolerant — see createInvoice's identical fields above.
+    totalProfit: Joi.number().allow(null).optional(),
+    totalCost: Joi.number().min(0).allow(null).optional(),
     paidAmount: Joi.number().min(0).optional(),
     balance: Joi.number().optional(),
     invoiceDate: Joi.date().optional(),

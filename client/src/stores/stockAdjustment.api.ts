@@ -31,6 +31,8 @@ export interface StockAdjustment {
   productId: string | { id: string; name: string; image?: { url: string; publicId: string }; barcode?: string }
   variantId?: string
   batchId?: string
+  // Set only for IMEI/serial-tracked products — the specific units this adjustment moved.
+  imeis?: string[]
   productName: string
   type: AdjustmentType
   direction: AdjustmentDirection
@@ -63,7 +65,10 @@ export interface CreateAdjustmentRequest {
   batchId?: string
   type: AdjustmentType
   direction?: AdjustmentDirection
-  quantity: number
+  // Exactly one of quantity (bulk products) or imeis (IMEI/serial-tracked products,
+  // adjusted per-unit) applies — which one is required depends on the product itself.
+  quantity?: number
+  imeis?: string[]
   reason?: string
   notes?: string
 }

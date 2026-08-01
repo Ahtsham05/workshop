@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
-const { Product, ProductVariant, Inventory, Batch, InventoryTransaction, StockAdjustment } = require('../models');
+const { Product, ProductVariant, Inventory, Batch, InventoryTransaction, StockAdjustment, Imei } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
 
 const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
@@ -10,6 +10,20 @@ const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
 // on separately); every other reason rolls up under the existing generic 'adjustment' type.
 const LEDGER_TYPE_BY_ADJUSTMENT_TYPE = { damage: 'damage', theft: 'theft' };
 const ledgerTypeFor = (type) => LEDGER_TYPE_BY_ADJUSTMENT_TYPE[type] || 'adjustment';
+
+// Where a decreased IMEI/serial unit lands, by adjustment reason — mirrors the terminal
+// statuses already used elsewhere (imei.model.js, imei.service.js#markImeiLostOrStolen).
+// Only decrease-direction adjustments are supported for serialized products (see
+// resolveSerializedTarget) — bringing stock back in belongs to Purchase, which captures
+// real cost/warranty/supplier data a bare "Found" adjustment can't.
+const IMEI_STATUS_BY_ADJUSTMENT_TYPE = {
+  damage: 'scrapped',
+  theft: 'stolen',
+  expired: 'scrapped',
+  lost: 'lost',
+  correction: 'scrapped',
+  other: 'scrapped',
+};
 
 /** A fixed-direction reason overrides whatever direction was requested; a flexible type (correction/other) requires the caller to specify one. */
 const resolveDirection = (type, direction) => {
@@ -22,19 +36,57 @@ const resolveDirection = (type, direction) => {
 };
 
 /**
- * Resolves what's being adjusted — a plain product (legacy Product.stockQuantity), a
- * real/tracked variant (Inventory-backed), or a specific batch — and how much is
- * currently on hand. Mirrors inventoryTransfer.service.js#resolveSource.
+ * Resolves the specific in-stock IMEI/serial units named for an IMEI/serial-tracked
+ * product. Only used for decrease-direction adjustments — see IMEI_STATUS_BY_ADJUSTMENT_TYPE.
+ * Mirrors inventoryTransfer.service.js#resolveSerializedSource.
  */
-const resolveTarget = async ({ organizationId, branchId, productId, variantId, batchId }) => {
+const resolveSerializedTarget = async ({ organizationId, branchId, product, variantId, imeis }) => {
+  const numbers = [...new Set((imeis || []).map((n) => String(n).trim()).filter(Boolean))];
+  if (numbers.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Select at least one IMEI/serial number to adjust');
+  }
+
+  const records = await Imei.find({
+    organizationId,
+    branchId,
+    productId: product._id,
+    imei: { $in: numbers },
+    status: 'in_stock',
+  });
+  if (records.length !== numbers.length) {
+    const found = new Set(records.map((r) => r.imei));
+    const missing = numbers.filter((n) => !found.has(n));
+    throw new ApiError(httpStatus.BAD_REQUEST, `Not currently in stock: ${missing.join(', ')}`);
+  }
+
+  // Imei records aren't linked to a variant directly (see imei.model.js) — this is only
+  // needed to route the numeric ledger through Inventory instead of Product.stockQuantity
+  // when the product has real variants, same as the bulk path.
+  const variant = variantId ? await ProductVariant.findOne({ _id: variantId, organizationId }) : null;
+  if (variantId && !variant) throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found');
+
+  return {
+    kind: 'serialized',
+    product,
+    variant,
+    imeiRecords: records,
+    available: records.length,
+    unitCost: variant?.cost ?? product.cost,
+  };
+};
+
+/**
+ * Resolves what's being adjusted — a plain product (legacy Product.stockQuantity), a
+ * real/tracked variant (Inventory-backed), a specific batch, or (for IMEI/serial-tracked
+ * products) a named set of individual units — and how much is currently on hand. Mirrors
+ * inventoryTransfer.service.js#resolveSource.
+ */
+const resolveTarget = async ({ organizationId, branchId, productId, variantId, batchId, imeis }) => {
   const product = await Product.findOne({ _id: productId, organizationId, branchId });
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in this branch');
 
   if (product.trackImei || product.trackSerial) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'IMEI/serial-tracked products cannot be bulk-adjusted. Adjust stock per unit instead.'
-    );
+    return resolveSerializedTarget({ organizationId, branchId, product, variantId, imeis });
   }
 
   if (!variantId) {
@@ -54,9 +106,14 @@ const resolveTarget = async ({ organizationId, branchId, productId, variantId, b
   return { kind: 'variant', product, variant, available: inventory?.quantity || 0, unitCost: variant.cost };
 };
 
-/** Mutates on-hand quantity by `delta` (signed) and returns the resulting balance. */
+/**
+ * Mutates on-hand quantity by `delta` (signed) and returns the resulting balance.
+ * Branches on whether `target` has a real variant, not on `target.kind` — a serialized
+ * target has one (Inventory-backed) exactly when its product hasVariants, same as the
+ * bulk path, so this covers 'product', 'variant', 'batch', and 'serialized' alike.
+ */
 const mutateStock = async (target, delta) => {
-  if (target.kind === 'product') {
+  if (!target.variant) {
     const updated = await Product.findByIdAndUpdate(target.product._id, { $inc: { stockQuantity: delta } }, { new: true });
     return updated.stockQuantity;
   }
@@ -84,9 +141,12 @@ const mutateStock = async (target, delta) => {
   return updatedInventory.quantity;
 };
 
-/** Writes the immutable ledger entry that mirrors a stock mutation just applied by mutateStock. */
+/**
+ * Writes the immutable ledger entry that mirrors a stock mutation just applied by
+ * mutateStock. Same variant-presence branch as mutateStock, for the same reason.
+ */
 const writeLedger = async (target, { organizationId, branchId, delta, type, adjustmentId, balanceAfter, createdBy }) => {
-  if (target.kind === 'product') {
+  if (!target.variant) {
     await inventorySyncService.recordStockChange({
       organizationId,
       productId: target.product._id,
@@ -116,6 +176,22 @@ const writeLedger = async (target, { organizationId, branchId, delta, type, adju
   });
 };
 
+/** Flips the given IMEI/serial units to their post-adjustment status and appends a history entry. */
+const applySerializedStatusChange = async (target, { status, note, createdBy }) => {
+  const isLostOrStolen = status === 'lost' || status === 'stolen';
+  await Imei.updateMany(
+    { _id: { $in: target.imeiRecords.map((r) => r._id) } },
+    {
+      $set: {
+        status,
+        ...(isLostOrStolen ? { lostStolenAt: new Date(), lostStolenReason: note || '' } : {}),
+        ...(status === 'in_stock' ? { lostStolenAt: null, lostStolenReason: '' } : {}),
+      },
+      $push: { history: { status, note: note || '', byUserId: createdBy, at: new Date() } },
+    }
+  );
+};
+
 const buildProductName = (target) =>
   target.variant && !target.variant.isDefault
     ? `${target.product.name}${target.variant.sku ? ` — ${target.variant.sku}` : ''}`
@@ -134,6 +210,7 @@ const createAdjustment = async ({
   productId,
   variantId,
   batchId,
+  imeis,
   type,
   direction,
   quantity,
@@ -146,16 +223,35 @@ const createAdjustment = async ({
   }
 
   const resolvedDirection = resolveDirection(type, direction);
-  const target = await resolveTarget({ organizationId, branchId, productId, variantId, batchId });
+  const target = await resolveTarget({ organizationId, branchId, productId, variantId, batchId, imeis });
 
-  if (resolvedDirection === 'decrease' && target.available < quantity) {
+  if (target.kind === 'serialized' && resolvedDirection === 'increase') {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "Increasing stock for IMEI/serial-tracked products isn't supported via adjustments — receive them through a purchase instead."
+    );
+  }
+
+  // A serialized adjustment's quantity is however many units were actually selected,
+  // never a number typed separately — there's no such thing as a partial unit.
+  const effectiveQuantity = target.kind === 'serialized' ? target.imeiRecords.length : quantity;
+
+  if (resolvedDirection === 'decrease' && target.available < effectiveQuantity) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock: only ${target.available} unit(s) available`);
   }
 
-  const delta = resolvedDirection === 'increase' ? quantity : -quantity;
+  const delta = resolvedDirection === 'increase' ? effectiveQuantity : -effectiveQuantity;
   const previousQuantity = target.available;
   const newQuantity = await mutateStock(target, delta);
   const unitCost = target.unitCost || 0;
+
+  if (target.kind === 'serialized') {
+    await applySerializedStatusChange(target, {
+      status: IMEI_STATUS_BY_ADJUSTMENT_TYPE[type] || 'scrapped',
+      note: reason?.trim() || `Stock adjustment: ${type}`,
+      createdBy,
+    });
+  }
 
   const adjustment = await StockAdjustment.create({
     organizationId,
@@ -163,12 +259,13 @@ const createAdjustment = async ({
     productId: target.product._id,
     variantId: target.variant?._id,
     batchId: target.batch?._id,
+    imeis: target.kind === 'serialized' ? target.imeiRecords.map((r) => r.imei) : undefined,
     productName: buildProductName(target),
     type,
     direction: resolvedDirection,
-    quantity,
+    quantity: effectiveQuantity,
     unitCost,
-    totalValue: Number((unitCost * quantity).toFixed(2)),
+    totalValue: Number((unitCost * effectiveQuantity).toFixed(2)),
     previousQuantity,
     newQuantity,
     reason: reason?.trim() || undefined,
@@ -189,6 +286,26 @@ const createAdjustment = async ({
   return adjustment;
 };
 
+/**
+ * Re-resolves the exact units a serialized adjustment moved, by number, regardless of
+ * their current status — unlike resolveSerializedTarget (used for creating a new
+ * adjustment), this doesn't require them to currently be 'in_stock', since a decrease
+ * adjustment leaves them in whatever terminal status it set (see
+ * IMEI_STATUS_BY_ADJUSTMENT_TYPE) and reversal's whole job is undoing exactly that.
+ */
+const resolveSerializedReversalTarget = async ({ organizationId, productId, variantId, imeis }) => {
+  const product = await Product.findOne({ _id: productId, organizationId });
+  if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product no longer exists');
+
+  const records = await Imei.find({ organizationId, productId, imei: { $in: imeis } });
+  if (records.length !== imeis.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Some units from this adjustment could no longer be found');
+  }
+
+  const variant = variantId ? await ProductVariant.findOne({ _id: variantId, organizationId }) : null;
+  return { kind: 'serialized', product, variant, imeiRecords: records, available: records.length, unitCost: variant?.cost ?? product.cost };
+};
+
 /** Reverses a completed adjustment by creating an opposite-direction entry and applying it — the original is marked 'reversed' but never mutated or deleted. */
 const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy }) => {
   const original = await StockAdjustment.findOne({ _id: adjustmentId, organizationId });
@@ -197,13 +314,21 @@ const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy }) =
     throw new ApiError(httpStatus.BAD_REQUEST, 'This adjustment has already been reversed');
   }
 
-  const target = await resolveTarget({
-    organizationId,
-    branchId: original.branchId,
-    productId: original.productId,
-    variantId: original.variantId,
-    batchId: original.batchId,
-  });
+  const isSerialized = original.imeis && original.imeis.length > 0;
+  const target = isSerialized
+    ? await resolveSerializedReversalTarget({
+        organizationId,
+        productId: original.productId,
+        variantId: original.variantId,
+        imeis: original.imeis,
+      })
+    : await resolveTarget({
+        organizationId,
+        branchId: original.branchId,
+        productId: original.productId,
+        variantId: original.variantId,
+        batchId: original.batchId,
+      });
 
   const oppositeDirection = original.direction === 'increase' ? 'decrease' : 'increase';
   if (oppositeDirection === 'decrease' && target.available < original.quantity) {
@@ -215,12 +340,23 @@ const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy }) =
   const newQuantity = await mutateStock(target, delta);
   const unitCost = target.unitCost || original.unitCost || 0;
 
+  if (isSerialized) {
+    // A serialized adjustment is always a decrease (see createAdjustment), so its
+    // reversal is always an increase — the units simply go back to being in_stock.
+    await applySerializedStatusChange(target, {
+      status: 'in_stock',
+      note: `Reversal of adjustment ${original._id}`,
+      createdBy: reversedBy,
+    });
+  }
+
   const reversal = await StockAdjustment.create({
     organizationId,
     branchId: original.branchId,
     productId: original.productId,
     variantId: original.variantId,
     batchId: original.batchId,
+    imeis: isSerialized ? original.imeis : undefined,
     productName: original.productName,
     type: original.type,
     direction: oppositeDirection,

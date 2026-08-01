@@ -177,12 +177,17 @@ employeeSchema.virtual('fullName').get(function () {
 // Index for better query performance
 employeeSchema.index({ organizationId: 1, branchId: 1, employeeId: 1 }, { unique: true });
 employeeSchema.index({ organizationId: 1, branchId: 1, email: 1 }, { unique: true });
-// Sparse alone only skips docs where cnic is absent — it still enforces uniqueness
-// across docs where cnic is stored as "" (blank field from the form), which caused
-// every employee without a CNIC to collide. Partial filter excludes blanks too.
+// Sparse alone doesn't help here: for a *compound* index, "sparse" only skips a
+// document when ALL of the indexed fields are missing — organizationId/branchId are
+// always present, so a plain sparse index still indexed every cnic-less employee under
+// the same (organizationId, branchId, null) key, colliding as soon as a second one was
+// added. A partial filter excludes them properly instead — but note MongoDB partial
+// indexes only support a small operator allowlist ($eq/$gt/$gte/$lt/$lte/$type/$exists/
+// top-level $and), so `$ne` (used by an earlier version of this filter) is rejected at
+// creation time. `$gt: ''` is the supported equivalent of "is a non-empty string".
 employeeSchema.index(
   { organizationId: 1, branchId: 1, cnic: 1 },
-  { unique: true, partialFilterExpression: { cnic: { $type: 'string', $ne: '' } } }
+  { unique: true, partialFilterExpression: { cnic: { $gt: '' } } }
 );
 employeeSchema.index({ department: 1 });
 employeeSchema.index({ employmentStatus: 1 });
