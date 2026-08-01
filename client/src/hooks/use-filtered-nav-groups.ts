@@ -119,6 +119,7 @@ export function useFilteredNavGroups(): NavGroup[] {
           const allowed = item.systemRole as string[]
           return allowed.includes('system_admin')
         }
+        if (item.anyPermission) return item.anyPermission.some((p: string) => checkItemPermission(p))
         if (!item.permission) return true
         return checkItemPermission(item.permission)
       }
@@ -133,6 +134,10 @@ export function useFilteredNavGroups(): NavGroup[] {
         if (!user?.systemRole) return false
         const allowed = item.systemRole as string[]
         return allowed.includes(user.systemRole)
+      }
+
+      if (item.anyPermission) {
+        return item.anyPermission.some((p: string) => checkItemPermission(p))
       }
 
       if (!item.permission) {

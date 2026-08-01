@@ -17,23 +17,36 @@ import { PersonalLedger } from './components/personal-ledger';
 import { RecurringExpenseManager } from './components/recurring-expense-manager';
 import { useLanguage } from '@/context/language-context';
 import { fetchAndStashPrintContact } from '@/features/invoice/utils/invoice-print-contact-bridge';
+import { usePermissions } from '@/context/permission-context';
 
 export default function AccountingPage() {
   const { t } = useLanguage();
+  const { hasPermission } = usePermissions();
   const searchParams = useSearch({ strict: false }) as any;
   const [initialCustomer, setInitialCustomer] = useState<any>(null);
   const [initialSupplier, setInitialSupplier] = useState<any>(null);
   const [initialLedgerEntry, setInitialLedgerEntry] = useState<string | undefined>(undefined);
   const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0);
 
-  // Determine active tab from search params or default to dashboard
-  const activeTab = searchParams?.tab === 'customer-ledger' && searchParams?.customerId 
-    ? 'customers' 
-    : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId 
+  // Customer/Supplier Ledger are reachable with just viewCustomers/viewSuppliers, not
+  // the full viewAccounting — everything else on this page (Dashboard, Expenses,
+  // Recurring, My Account) stays viewAccounting-only.
+  const canDashboard = hasPermission('viewAccounting');
+  const canExpenses = hasPermission('viewAccounting');
+  const canCustomers = hasPermission('viewAccounting') || hasPermission('viewCustomers');
+  const canSuppliers = hasPermission('viewAccounting') || hasPermission('viewSuppliers');
+  const canRecurring = hasPermission('viewAccounting');
+  const canWallet = hasPermission('viewAccounting');
+  const defaultTab = canDashboard ? 'dashboard' : canCustomers ? 'customers' : canSuppliers ? 'suppliers' : 'dashboard';
+
+  // Determine active tab from search params or default to the first tab this role can see
+  const activeTab = searchParams?.tab === 'customer-ledger' && searchParams?.customerId
+    ? 'customers'
+    : searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId
     ? 'suppliers'
     : searchParams?.tab && ['dashboard', 'expenses', 'recurring', 'customers', 'suppliers', 'wallet'].includes(searchParams.tab)
     ? searchParams.tab
-    : 'dashboard';
+    : defaultTab;
 
   const [manualTab, setManualTab] = useState<string | null>(null);
 
@@ -88,62 +101,86 @@ export default function AccountingPage() {
 
       {/* Main Content Tabs */}
       <Tabs value={manualTab || activeTab} onValueChange={setManualTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
-          <TabsTrigger value="dashboard" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('Dashboard')}</span>
-          </TabsTrigger>
-          <TabsTrigger value="expenses" className="flex items-center gap-2">
-            <Receipt className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('Expenses')}</span>
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('Customers')}</span>
-          </TabsTrigger>
-          <TabsTrigger value="suppliers" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('Suppliers')}</span>
-          </TabsTrigger>
-          <TabsTrigger value="recurring" className="flex items-center gap-2">
-            <CalendarClock className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('Recurring')}</span>
-          </TabsTrigger>
-          <TabsTrigger value="wallet" className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('My Account')}</span>
-          </TabsTrigger>
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 lg:w-fit">
+          {canDashboard && (
+            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('Dashboard')}</span>
+            </TabsTrigger>
+          )}
+          {canExpenses && (
+            <TabsTrigger value="expenses" className="flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('Expenses')}</span>
+            </TabsTrigger>
+          )}
+          {canCustomers && (
+            <TabsTrigger value="customers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('Customers')}</span>
+            </TabsTrigger>
+          )}
+          {canSuppliers && (
+            <TabsTrigger value="suppliers" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('Suppliers')}</span>
+            </TabsTrigger>
+          )}
+          {canRecurring && (
+            <TabsTrigger value="recurring" className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('Recurring')}</span>
+            </TabsTrigger>
+          )}
+          {canWallet && (
+            <TabsTrigger value="wallet" className="flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('My Account')}</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Dashboard Tab */}
-        <TabsContent value="dashboard">
-          <AccountsDashboard refreshTrigger={expenseRefreshTrigger} />
-        </TabsContent>
+        {canDashboard && (
+          <TabsContent value="dashboard">
+            <AccountsDashboard refreshTrigger={expenseRefreshTrigger} />
+          </TabsContent>
+        )}
 
         {/* Expenses Tab */}
-        <TabsContent value="expenses">
-          <ExpenseManagement onExpenseChange={() => setExpenseRefreshTrigger(prev => prev + 1)} />
-        </TabsContent>
+        {canExpenses && (
+          <TabsContent value="expenses">
+            <ExpenseManagement onExpenseChange={() => setExpenseRefreshTrigger(prev => prev + 1)} />
+          </TabsContent>
+        )}
 
         {/* Customer Ledger Tab */}
-        <TabsContent value="customers">
-          <CustomerLedger initialCustomer={initialCustomer} initialLedgerEntry={initialLedgerEntry} />
-        </TabsContent>
+        {canCustomers && (
+          <TabsContent value="customers">
+            <CustomerLedger initialCustomer={initialCustomer} initialLedgerEntry={initialLedgerEntry} />
+          </TabsContent>
+        )}
 
         {/* Supplier Ledger Tab */}
-        <TabsContent value="suppliers">
-          <SupplierLedger initialSupplier={initialSupplier} initialLedgerEntry={initialLedgerEntry} />
-        </TabsContent>
+        {canSuppliers && (
+          <TabsContent value="suppliers">
+            <SupplierLedger initialSupplier={initialSupplier} initialLedgerEntry={initialLedgerEntry} />
+          </TabsContent>
+        )}
 
         {/* Recurring Expenses Tab */}
-        <TabsContent value="recurring">
-          <RecurringExpenseManager />
-        </TabsContent>
+        {canRecurring && (
+          <TabsContent value="recurring">
+            <RecurringExpenseManager />
+          </TabsContent>
+        )}
 
         {/* Personal Wallet Tab */}
-        <TabsContent value="wallet">
-          <PersonalLedger />
-        </TabsContent>
+        {canWallet && (
+          <TabsContent value="wallet">
+            <PersonalLedger />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

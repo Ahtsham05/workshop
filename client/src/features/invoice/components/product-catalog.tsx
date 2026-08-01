@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ProductHistoryDialog } from './product-history-dialog'
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { usePermissions } from '@/context/permission-context'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -49,6 +50,8 @@ export function ProductCatalog({
   selectedCustomerName
 }: ProductCatalogProps) {
   const { t } = useLanguage()
+  const { hasPermission } = usePermissions()
+  const canViewCost = hasPermission('viewProducts')
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
@@ -207,20 +210,24 @@ export function ProductCatalog({
                 {showImages ? t('with_images') : t('without_images')}
               </Label>
             </div>
-            {/* Purchase Price Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowCost(!showCost)}
-              title={showCost ? t('Hide purchase price') : t('Show purchase price')}
-              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
-                showCost
-                  ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
-                  : 'border-border text-muted-foreground hover:bg-muted/50'
-              }`}
-            >
-              {showCost ? <Eye className='h-3.5 w-3.5' /> : <EyeOff className='h-3.5 w-3.5' />}
-              {t('Cost')}
-            </button>
+            {/* Purchase Price Toggle — only for roles that can also view products;
+                the server already strips cost from the catalog response otherwise,
+                so this stays hidden rather than reveal a stale/blank figure. */}
+            {canViewCost && (
+              <button
+                type="button"
+                onClick={() => setShowCost(!showCost)}
+                title={showCost ? t('Hide purchase price') : t('Show purchase price')}
+                className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
+                  showCost
+                    ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                    : 'border-border text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                {showCost ? <Eye className='h-3.5 w-3.5' /> : <EyeOff className='h-3.5 w-3.5' />}
+                {t('Cost')}
+              </button>
+            )}
           </div>
 
           {isBarcodeMode && (
@@ -433,7 +440,7 @@ export function ProductCatalog({
                               </span>
                             )}
                           </div>
-                          {(product.hasVariants || product.cost != null) && (
+                          {canViewCost && (product.hasVariants || product.cost != null) && (
                             <div className={`flex ${showImages ? 'justify-center' : ''} text-xs select-none`}>
                               <span
                                 className={`text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 cursor-pointer hover:blur-none hover:opacity-100 ${

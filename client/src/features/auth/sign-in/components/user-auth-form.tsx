@@ -18,7 +18,8 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { signinWithEmailPassword } from '@/stores/auth.slice'
+import { signinWithEmailPassword, setActiveBranch } from '@/stores/auth.slice'
+import { resetAllApiCaches } from '@/stores/reset-all-apis'
 import { getUserHome } from '@/lib/rbac'
 import type { AppUser } from '@/lib/rbac'
 import { resolveRouteAccess } from '@/lib/route-permissions'
@@ -102,6 +103,15 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
       localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('refreshToken', result?.tokens?.refresh?.token)
       localStorage.setItem('user', JSON.stringify(result?.user))
+      // Login is a client-side route transition, not a full reload — the Redux store
+      // (and every RTK Query cache in it) survives across accounts in the same tab.
+      // Clearing localStorage alone leaves state.auth.activeBranchId (in memory) still
+      // pointing at whoever was logged in before, which stops BranchSwitcher's
+      // auto-select effect from ever picking this user's real branch (it only fires
+      // when activeBranchId is empty) — and leaves every cached query free to keep
+      // serving the previous session's (possibly wrong-branch, wrong-permission) data.
+      dispatch(setActiveBranch(null))
+      resetAllApiCaches(dispatch)
       localStorage.removeItem('activeBranchId')
       localStorage.removeItem('activeBranchName')
 

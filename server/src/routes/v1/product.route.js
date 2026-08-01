@@ -9,23 +9,38 @@ const { upload } = require('../../middlewares/upload');
 const router = express.Router();
 router.use(auth(), branchScope());
 
+// Read access for anyone who can legitimately browse the product catalog to do their
+// job, not just full product management — covers the Invoice, Fast Billing, Purchase
+// Invoice, Purchase Orders, Stock Adjustment, and Stock Transfer item pickers, all of
+// which hit /all or /purchasable. Purchase cost is redacted server-side for roles that
+// have none of the product/purchasing permissions below — see getAllProducts and
+// getPurchasableCatalog.
+const CATALOG_READ_PERMISSIONS = [
+  'viewProducts',
+  'viewInvoices', 'createInvoices', 'editInvoices',
+  'viewPurchases', 'createPurchases', 'editPurchases',
+  'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders',
+];
+
 router
   .route('/')
   .post(
-    auth('createProducts'), 
-    upload.single('image'), 
-    validate(productValidation.createProduct), 
+    auth('createProducts'),
+    upload.single('image'),
+    validate(productValidation.createProduct),
     productController.createProduct
   )
   .get(auth('viewProducts'), validate(productValidation.getProducts), productController.getProducts);
 
 router
   .route('/all')
-  .get(auth('viewProducts'), validate(productValidation.getAllProducts), productController.getAllProducts);
+  .get(auth(...CATALOG_READ_PERMISSIONS), validate(productValidation.getAllProducts), productController.getAllProducts);
 
-router
-  .route('/purchasable')
-  .get(auth('viewProducts'), validate(productValidation.getAllProducts), productController.getPurchasableCatalog);
+router.route('/purchasable').get(
+  auth(...CATALOG_READ_PERMISSIONS),
+  validate(productValidation.getAllProducts),
+  productController.getPurchasableCatalog
+);
 
 // Bulk update route
 router

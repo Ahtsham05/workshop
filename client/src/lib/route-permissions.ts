@@ -115,7 +115,11 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/purchase-returns', anyPermission: ['viewPurchaseReturns', 'viewPurchases'] },
   { prefix: '/invoice', anyPermission: ['viewInvoices'] },
   { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'viewInvoices'] },
-  { prefix: '/accounting', anyPermission: ['viewAccounting'] },
+  // Customer/Supplier Ledger tabs live inside the Accounting page — a role granted
+  // just Customers (or Suppliers) access can reach the page to use its own ledger tab
+  // even without full viewAccounting; features/accounting/index.tsx hides the other
+  // tabs (Dashboard, Expenses, Recurring, My Account) for such a role.
+  { prefix: '/accounting', anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'] },
   { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/reports', anyPermission: ['viewReports'] },
 

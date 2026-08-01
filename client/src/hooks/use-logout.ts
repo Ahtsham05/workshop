@@ -3,6 +3,7 @@ import { AppDispatch } from '@/stores/store'
 import { logout, setActiveBranch, setUser } from '@/stores/auth.slice'
 import { useAuth } from '@/context/auth-context'
 import { clearAllAuthStorage } from '@/lib/auth-cache'
+import { resetAllApiCaches } from '@/stores/reset-all-apis'
 import toast from 'react-hot-toast'
 
 export function useLogout() {
@@ -22,6 +23,7 @@ export function useLogout() {
 
     dispatch(setUser(null))
     dispatch(setActiveBranch(null))
+    resetAllApiCaches(dispatch)
     clearOfflineMode()
     clearAllAuthStorage()
 

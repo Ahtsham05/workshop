@@ -17,6 +17,11 @@ interface BaseNavItem {
   badge?: string
   icon?: React.ElementType
   permission?: string
+  /** Visible if the user has ANY of these — for a parent group whose children are
+   *  individually gated by different permissions (e.g. Accounts, unlocked by
+   *  viewAccounting OR viewCustomers OR viewSuppliers, with each ledger tab still
+   *  gated by its own `permission` below). Takes precedence over `permission`. */
+  anyPermission?: string[]
   systemRole?: string[]
   businessTypes?: string[]
   excludeBusinessTypes?: string[]

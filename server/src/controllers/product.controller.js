@@ -8,8 +8,38 @@ const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter')
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 const productVisionService = require('../services/productVision.service');
 const { auditLogService } = require('../services');
+const { userHasAnyPermission } = require('../middlewares/permission');
 
 const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'barcode'];
+
+// Purchase cost only belongs to roles that manage products or purchasing — a pure
+// sales/invoicing role can browse the catalog to build an invoice, but shouldn't be
+// able to read what the shop paid for stock. Used to redact cost at the API boundary
+// (not just in the UI) so it's never in the response for a role that isn't allowed to
+// see it — see getAllProducts and getPurchasableCatalog.
+const COST_VIEW_PERMISSIONS = [
+  'viewProducts',
+  'viewPurchases', 'createPurchases', 'editPurchases',
+  'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders',
+];
+
+/** Strips cost/costPerUnit from a product-ish item (plain object or Mongoose doc). */
+const stripCostFields = (item) => {
+  // .toJSON() (not .toObject()) — the schema's toJSON plugin transform (_id -> id,
+  // drop __v/timestamps) is only registered under toJSON, so this is what res.send()
+  // would have produced anyway; using .toObject() here would silently change the
+  // response shape only for roles that hit this redaction path.
+  const plain = typeof item.toJSON === 'function' ? item.toJSON() : item;
+  const { cost, ...rest } = plain;
+  if (rest.variantPriceRange) {
+    const { minCost, maxCost, ...priceRest } = rest.variantPriceRange;
+    rest.variantPriceRange = priceRest;
+  }
+  if (Array.isArray(rest.batches)) {
+    rest.batches = rest.batches.map(({ costPerUnit, ...batchRest }) => batchRest);
+  }
+  return rest;
+};
 
 const createProduct = catchAsync(async (req, res) => {
   let productData = req.body;
@@ -212,14 +242,18 @@ const getAllProducts = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
   const products = await productService.getAllProducts(filter);
-  res.send(products);
+
+  const canViewCost = await userHasAnyPermission(req.user, COST_VIEW_PERMISSIONS);
+  res.send(canViewCost ? products : products.map(stripCostFields));
 });
 
 const getPurchasableCatalog = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
   const items = await productService.getPurchasableCatalog(filter);
-  res.send(items);
+
+  const canViewCost = await userHasAnyPermission(req.user, COST_VIEW_PERMISSIONS);
+  res.send(canViewCost ? items : items.map(stripCostFields));
 });
 
 const bulkUpdateProducts = catchAsync(async (req, res) => {

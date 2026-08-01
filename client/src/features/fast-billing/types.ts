@@ -36,7 +36,7 @@ export function catalogItemToCartLine(item: PurchaseCatalogItem, quantity = 1, u
     barcode: item.barcode,
     unit: item.unit,
     unitPrice: unitPrice ?? item.price,
-    cost: item.cost,
+    cost: item.cost ?? 0,
     quantity,
     stockQuantity: item.stockQuantity,
     image: item.image,

@@ -8,31 +8,35 @@ const expenseController = require('../../controllers/expense.controller');
 const router = express.Router();
 router.use(auth(), branchScope());
 
+// Same fix as customerLedger.route.js/supplierLedger.route.js — viewAccounting is the
+// single umbrella flag for this whole feature area (see permission-registry.js's
+// 'accounting' group), so it now unlocks read+write here alongside the Payments
+// permissions these routes originally required on their own.
 router
   .route('/')
-  .post(auth('createPayments'), validate(expenseValidation.createExpense), expenseController.createExpense)
-  .get(auth('viewPayments'), validate(expenseValidation.getExpenses), expenseController.getExpenses);
+  .post(auth('createPayments', 'viewAccounting'), validate(expenseValidation.createExpense), expenseController.createExpense)
+  .get(auth('viewPayments', 'viewAccounting'), validate(expenseValidation.getExpenses), expenseController.getExpenses);
 
 router
   .route('/summary')
-  .get(auth('viewPayments'), validate(expenseValidation.getExpenseSummary), expenseController.getExpenseSummary);
+  .get(auth('viewPayments', 'viewAccounting'), validate(expenseValidation.getExpenseSummary), expenseController.getExpenseSummary);
 
 router
   .route('/trends')
-  .get(auth('viewPayments'), expenseController.getExpenseTrends);
+  .get(auth('viewPayments', 'viewAccounting'), expenseController.getExpenseTrends);
 
 router
   .route('/pay-bulk')
-  .post(auth('editPayments'), validate(expenseValidation.payExpensesBulk), expenseController.payExpensesBulk);
+  .post(auth('editPayments', 'viewAccounting'), validate(expenseValidation.payExpensesBulk), expenseController.payExpensesBulk);
 
 router
   .route('/:expenseId')
-  .get(auth('viewPayments'), validate(expenseValidation.getExpense), expenseController.getExpense)
-  .patch(auth('editPayments'), validate(expenseValidation.updateExpense), expenseController.updateExpense)
-  .delete(auth('deletePayments'), validate(expenseValidation.deleteExpense), expenseController.deleteExpense);
+  .get(auth('viewPayments', 'viewAccounting'), validate(expenseValidation.getExpense), expenseController.getExpense)
+  .patch(auth('editPayments', 'viewAccounting'), validate(expenseValidation.updateExpense), expenseController.updateExpense)
+  .delete(auth('deletePayments', 'viewAccounting'), validate(expenseValidation.deleteExpense), expenseController.deleteExpense);
 
 router
   .route('/:expenseId/pay')
-  .patch(auth('editPayments'), validate(expenseValidation.payExpense), expenseController.payExpense);
+  .patch(auth('editPayments', 'viewAccounting'), validate(expenseValidation.payExpense), expenseController.payExpense);
 
 module.exports = router;

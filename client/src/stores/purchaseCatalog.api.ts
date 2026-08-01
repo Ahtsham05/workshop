@@ -28,7 +28,9 @@ export interface PurchaseCatalogBatch {
   batchNumber: string
   quantity: number
   expiryDate?: string
-  costPerUnit: number
+  // Omitted by the server for roles without product/purchasing access — see
+  // getPurchasableCatalog's cost redaction.
+  costPerUnit?: number
   sellingPrice?: number
 }
 
@@ -55,7 +57,9 @@ export interface PurchaseCatalogItem {
   category?: string
   categories?: { _id: string; name: string; image?: { url: string; publicId: string } }[]
   price: number
-  cost: number
+  // Omitted by the server for roles without product/purchasing access — see
+  // getPurchasableCatalog's cost redaction. Treat as "unknown", not "free".
+  cost?: number
   stockQuantity: number
   trackBatch?: boolean
   trackExpiry?: boolean

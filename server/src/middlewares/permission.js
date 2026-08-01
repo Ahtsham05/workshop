@@ -136,8 +136,30 @@ const isAdmin = () => {
   return checkPermission('viewRoles');
 };
 
+/**
+ * Non-middleware permission check for controllers that need to branch on
+ * permissions (e.g. redacting a field) rather than reject the whole request.
+ * @param {object} user - req.user
+ * @param {string[]} permissions - permission keys, OR'd together
+ * @returns {Promise<boolean>}
+ */
+const userHasAnyPermission = async (user, permissions) => {
+  if (!user) return false;
+  if (user.systemRole === 'superAdmin' || user.systemRole === 'system_admin') return true;
+
+  if (!user.role || typeof user.role === 'string') {
+    await user.populate('role');
+  }
+
+  const userPermissions = user.role && user.role.permissions;
+  if (!userPermissions) return false;
+
+  return permissions.some((permission) => userPermissions[permission] === true);
+};
+
 module.exports = {
   checkPermission,
   checkAllPermissions,
   isAdmin,
+  userHasAnyPermission,
 };

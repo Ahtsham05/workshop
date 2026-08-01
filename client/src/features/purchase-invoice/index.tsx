@@ -572,7 +572,11 @@ const PurchaseInvoicePage = () => {
         variantId,
         trackBatch: product.trackBatch,
         trackExpiry: product.trackExpiry,
-        knownBatches: product.knownBatches,
+        // costPerUnit is only ever omitted for roles without product/purchasing access
+        // (see getPurchasableCatalog) — reaching Purchase Invoice already requires
+        // viewPurchases, so this is just satisfying the stricter local type, not a
+        // real fallback that should ever be exercised here.
+        knownBatches: product.knownBatches?.map((b) => ({ ...b, costPerUnit: b.costPerUnit ?? 0 })),
         batchNumber: defaultBatch?.batchNumber,
         expiryDate: defaultBatch?.expiryDate?.slice(0, 10),
       };

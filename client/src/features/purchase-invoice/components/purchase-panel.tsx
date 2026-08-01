@@ -693,7 +693,11 @@ export default function PurchasePanel({
       handleProductSelect(itemIndex, builtProduct, catalogItem.variantId, {
         trackBatch: catalogItem.trackBatch,
         trackExpiry: catalogItem.trackExpiry,
-        knownBatches: catalogItem.batches,
+        // costPerUnit is only ever omitted for roles without product/purchasing access
+        // (see getPurchasableCatalog) — reaching Purchase Invoice already requires
+        // viewPurchases, so this is just satisfying the stricter local type, not a
+        // real fallback that should ever be exercised here.
+        knownBatches: catalogItem.batches?.map((b) => ({ ...b, costPerUnit: b.costPerUnit ?? 0 })),
       })
     },
     [handleProductSelect]

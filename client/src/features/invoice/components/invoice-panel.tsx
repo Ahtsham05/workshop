@@ -872,7 +872,7 @@ export function InvoicePanel({
     // No automatic FEFO splitting across batches yet. Skips depleted (0-qty) batches so
     // a newly added line doesn't default to one that can't actually fulfill anything.
     const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
-      ? product.knownBatches?.find((b) => b.quantity > 0) ?? product.knownBatches?.[0]
+      ? product.knownBatches?.find((b: { quantity: number }) => b.quantity > 0) ?? product.knownBatches?.[0]
       : undefined
     const batchId = defaultBatch?.id
     const batchNumber = defaultBatch?.batchNumber
@@ -1203,7 +1203,9 @@ export function InvoicePanel({
         const batches = catalogEntry?.batches ?? []
         if (batches.length === 0) return { ...item, imeis: nextImeis }
 
-        const batchIdByImei = new Map(records.map((r) => [r.imei, r.batchId || null]))
+        const batchIdByImei = new Map<string, string | null>(
+          records.map((r) => [r.imei, (typeof r.batchId === 'string' ? r.batchId : r.batchId?.id) || null])
+        )
         const knownCounts = new Map<string, number>()
         nextImeis.forEach((num) => {
           const bId = batchIdByImei.get(num)
@@ -2617,17 +2619,19 @@ export function InvoicePanel({
                                                 >
                                                   Stock: {catalogItem.stockQuantity}
                                                 </span>
-                                                <span
-                                                  className={cn(
-                                                    'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
-                                                    showProductCost
-                                                      ? 'cursor-default'
-                                                      : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
-                                                  )}
-                                                  title="Purchase cost"
-                                                >
-                                                  Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
-                                                </span>
+                                                {catalogItem.cost != null && (
+                                                  <span
+                                                    className={cn(
+                                                      'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
+                                                      showProductCost
+                                                        ? 'cursor-default'
+                                                        : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
+                                                    )}
+                                                    title="Purchase cost"
+                                                  >
+                                                    Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
+                                                  </span>
+                                                )}
                                                 {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
                                                   <span
                                                     className="text-blue-600"

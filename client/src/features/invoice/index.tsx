@@ -222,7 +222,9 @@ export interface Product {
   variantId?: string
   trackBatch?: boolean
   trackExpiry?: boolean
-  knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number; sellingPrice?: number }[]
+  // costPerUnit is omitted server-side for roles without product/purchasing access —
+  // see getPurchasableCatalog's cost redaction.
+  knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit?: number; sellingPrice?: number }[]
 }
 
 export interface Category {

@@ -213,15 +213,18 @@ export const sidebarData: SidebarData = {
         {
           title: 'Accounts',
           icon: IconChecklist,
-          permission: 'viewAccounting',
+          // A role with just Customers (or Suppliers) access still needs this group
+          // visible to reach its own ledger tab — the tabs below are individually
+          // gated so it only sees what it's actually allowed to see.
+          anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Dashboard', url: '/accounting?tab=dashboard' as never, icon: IconLayoutDashboard },
-            { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash },
-            { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers },
-            { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding },
-            { title: 'Recurring', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent },
-            { title: 'My Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard },
+            { title: 'Dashboard', url: '/accounting?tab=dashboard' as never, icon: IconLayoutDashboard, permission: 'viewAccounting' },
+            { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash, permission: 'viewAccounting' },
+            { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers, permission: 'viewCustomers' },
+            { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding, permission: 'viewSuppliers' },
+            { title: 'Recurring', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, permission: 'viewAccounting' },
+            { title: 'My Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard, permission: 'viewAccounting' },
           ],
         },
         {
