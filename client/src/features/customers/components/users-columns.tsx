@@ -10,7 +10,7 @@ import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
-import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
+import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
 
 export const useCustomerColumns = (): ColumnDef<Customer>[] => {
@@ -94,6 +94,7 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
               whatsapp={whatsapp}
               name={row.original.name}
               message={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+              {...getCustomerBalanceTemplate({ name: row.original.name, balance: row.original.balance })}
             />
             <SmsSendButton
               phone={phone}

@@ -88,7 +88,17 @@ export function WhatsAppProvider({ children }: { children: ReactNode }) {
         return true
       } catch (err: unknown) {
         const e = err as { data?: { message?: string } }
-        toast.error(e.data?.message || 'Failed to send WhatsApp message')
+        const errorMessage = e.data?.message || ''
+        // Outside the 24h window with no approved template to fall back to (e.g. a settled/
+        // credit balance, which has no matching template) — Meta simply won't allow this send
+        // through the Cloud API, so open a wa.me deep link instead of dead-ending on an error.
+        if (/24 hours|24-hour|approved .* template/i.test(errorMessage)) {
+          const digits = phone.replace(/\D/g, '')
+          window.open(`https://wa.me/${digits}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+          toast.info('No auto-template applies here — opened WhatsApp so you can send this manually.')
+          return true
+        }
+        toast.error(errorMessage || 'Failed to send WhatsApp message')
         return false
       }
     },
