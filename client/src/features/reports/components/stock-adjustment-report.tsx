@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adjustment-type-badge'
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from '@/features/stock-adjustments/lib/adjustment-types'
+import { expiryBadge } from '../utils/expiry-badge'
 
 interface StockAdjustmentReportProps {
   startDate: string
@@ -59,6 +60,9 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
               [t('date')]: format(new Date(row.date), 'yyyy-MM-dd'),
               [t('product')]: row.productName,
               [t('Type')]: t(ADJUSTMENT_TYPE_META[row.type].label),
+              Variant: row.variantLabel || '',
+              'Batch #': row.batchNumber || '',
+              Expiry: row.expiryDate ? format(new Date(row.expiryDate), 'yyyy-MM-dd') : '',
               [t('Direction')]: row.direction,
               Qty: row.quantity,
               [t('Stock')]: `${row.previousQuantity} -> ${row.newQuantity}`,
@@ -191,6 +195,9 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
                     <TableHead>{t('date')}</TableHead>
                     <TableHead>{t('product')}</TableHead>
                     <TableHead>{t('Type')}</TableHead>
+                    <TableHead>Variant</TableHead>
+                    <TableHead>Batch #</TableHead>
+                    <TableHead>Expiry</TableHead>
                     <TableHead className='text-right'>Qty</TableHead>
                     <TableHead className='text-right'>{t('Stock')}</TableHead>
                     <TableHead className='text-right'>{t('value')}</TableHead>
@@ -209,6 +216,9 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
                       <TableCell>
                         <AdjustmentTypeBadge type={row.type} />
                       </TableCell>
+                      <TableCell className='text-muted-foreground text-sm'>{row.variantLabel || '—'}</TableCell>
+                      <TableCell className='font-mono text-xs text-muted-foreground'>{row.batchNumber || '—'}</TableCell>
+                      <TableCell>{row.expiryDate ? expiryBadge(row.expiryDate) : '—'}</TableCell>
                       <TableCell className={cn('text-right font-medium', row.direction === 'increase' ? 'text-emerald-600' : 'text-rose-600')}>
                         {row.direction === 'increase' ? '+' : '−'}
                         {row.quantity}

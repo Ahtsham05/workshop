@@ -264,6 +264,7 @@ export default function ImeiTrackingPage() {
                       <TableHead>Number</TableHead>
                       {isMobileShop && <TableHead>Type</TableHead>}
                       <TableHead>Product</TableHead>
+                      <TableHead>Batch</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Warranty</TableHead>
@@ -282,6 +283,9 @@ export default function ImeiTrackingPage() {
                         <TableCell className='text-sm'>
                           <div className='font-medium'>{record.productName || '—'}</div>
                           <div className='text-xs text-muted-foreground'>{[record.brand, record.model, record.color].filter(Boolean).join(' · ')}</div>
+                        </TableCell>
+                        <TableCell className='font-mono text-xs text-muted-foreground'>
+                          {(typeof record.batchId === 'object' && record.batchId?.batchNumber) || '—'}
                         </TableCell>
                         <TableCell>
                           <Badge className={`text-xs ${statusConfig[record.status].color}`}>{statusConfig[record.status].label}</Badge>
@@ -340,6 +344,7 @@ export default function ImeiTrackingPage() {
                   <DetailRow label='Brand / Model' value={[detailRecord.brand, detailRecord.model].filter(Boolean).join(' · ') || '—'} />
                   <DetailRow label='Color / Storage' value={[detailRecord.color, detailRecord.storage].filter(Boolean).join(' · ') || '—'} />
                   <DetailRow label='Supplier' value={detailRecord.supplierName || '—'} />
+                  <DetailRow label='Batch' value={(typeof detailRecord.batchId === 'object' && detailRecord.batchId?.batchNumber) || '—'} />
                   <DetailRow label='Purchase Date' value={detailRecord.purchaseDate ? format(new Date(detailRecord.purchaseDate), 'dd MMM yyyy') : '—'} />
                 </div>
                 <div className='space-y-3'>

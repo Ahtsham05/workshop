@@ -84,10 +84,43 @@ export interface InvoiceItem {
   // Real (non-default) variant this line item is for, when product.hasVariants —
   // see docs/architecture/universal-product-migration.md.
   variantId?: string
-  // Manually picked batch to deplete (no automatic FEFO yet). Only set when the
-  // variant tracks batch/expiry.
+  // Picked batch to deplete. Only set when the variant tracks batch/expiry. When the
+  // line is split across multiple batches (batchAllocations below has 2+ entries — a
+  // single batch didn't have enough, so the earliest-expiry batches are drawn from in
+  // order, auto-suggested and editable), this mirrors the *first* allocation.
   batchId?: string
   batchNumber?: string
+  /** Present only when this line draws from more than one batch. Each entry's quantity
+   *  must sum to the line's `quantity` — see docs/architecture/universal-product-migration.md. */
+  batchAllocations?: BatchAllocation[]
+}
+
+export interface BatchAllocation {
+  batchId: string
+  batchNumber: string
+  quantity: number
+}
+
+/**
+ * Greedily fills `neededQty` from `batches` in the order given (the catalog already
+ * sorts by earliest expiry — FEFO) — the "big ERP" default for splitting a sale across
+ * lots when no single one has enough. Returns however much it could allocate; if
+ * `remaining > 0`, total stock across every batch fell short of what was asked for.
+ */
+export function autoAllocateBatches(
+  batches: { id: string; batchNumber: string; quantity: number }[],
+  neededQty: number,
+): { allocations: BatchAllocation[]; remaining: number } {
+  const allocations: BatchAllocation[] = []
+  let remaining = neededQty
+  for (const b of batches) {
+    if (remaining <= 0) break
+    if (b.quantity <= 0) continue
+    const take = Math.min(b.quantity, remaining)
+    allocations.push({ batchId: b.id, batchNumber: b.batchNumber, quantity: take })
+    remaining -= take
+  }
+  return { allocations, remaining }
 }
 
 export function createEmptyManualInvoiceItem(): InvoiceItem {
@@ -710,11 +743,13 @@ export default function InvoicePage() {
   const addToInvoice = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
     // Get the product ID - try different possible field names
     const productId = product._id || product.id
-    // Default to the earliest-expiring batch (knownBatches is already sorted that way
-    // by the backend) — the seller can still switch batches on the line afterward. No
-    // automatic FEFO splitting across batches yet.
+    // Default to the earliest-expiring batch that still has stock (knownBatches is
+    // already sorted that way by the backend) — the seller can still switch batches on
+    // the line afterward. No automatic FEFO splitting across batches yet. Skips depleted
+    // (0-qty) batches so a newly added line doesn't default to one that can't actually
+    // fulfill anything.
     const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
-      ? product.knownBatches?.[0]
+      ? product.knownBatches?.find((b) => b.quantity > 0) ?? product.knownBatches?.[0]
       : undefined
     const batchId = defaultBatch?.id
     const batchNumber = defaultBatch?.batchNumber
@@ -1033,16 +1068,40 @@ export default function InvoicePage() {
     // (whose stockQuantity is a stale fallback once a product hasVariants). See
     // docs/architecture/universal-product-migration.md.
     if (currentItem.variantId) {
-      const quantityDifference = newQuantity - currentItem.quantity
-      if (quantityDifference > 0) {
-        const catalogEntry = sellableCatalog.find(c => c.variantId === currentItem.variantId)
-        // A manually picked batch must have enough on its own — no automatic FEFO
-        // splitting across batches yet.
-        const available = currentItem.batchId
-          ? catalogEntry?.batches?.find(b => b.id === currentItem.batchId)?.quantity ?? 0
-          : catalogEntry?.stockQuantity ?? 0
-        if (quantityDifference > available) {
-          toast.error(`${currentItem.name} - Cannot increase by ${quantityDifference}. Only ${available} units available`)
+      const catalogEntry = sellableCatalog.find(c => c.variantId === currentItem.variantId)
+      const batches = catalogEntry?.batches ?? []
+      let nextBatchId = currentItem.batchId
+      let nextBatchNumber = currentItem.batchNumber
+      let nextBatchAllocations: BatchAllocation[] | undefined
+
+      if (batches.length > 0) {
+        // The currently selected batch (auto-defaulted, or manually chosen by the
+        // seller) is always tried first — a quantity that fits inside it alone stays a
+        // plain single-batch line, exactly as before. Only when it falls short does this
+        // draw the remainder from the other batches in FEFO (earliest-expiry) order —
+        // "big ERP" style splitting — rather than blocking the increase outright.
+        const primaryBatch = currentItem.batchId ? batches.find(b => b.id === currentItem.batchId) : undefined
+        if (primaryBatch && newQuantity <= primaryBatch.quantity) {
+          nextBatchAllocations = undefined
+        } else {
+          const orderedBatches = primaryBatch ? [primaryBatch, ...batches.filter(b => b.id !== primaryBatch.id)] : batches
+          const { allocations, remaining } = autoAllocateBatches(orderedBatches, newQuantity)
+          if (remaining > 0) {
+            toast.error(`${currentItem.name} - Only ${newQuantity - remaining} unit(s) available across all batches`)
+            return
+          }
+          nextBatchAllocations = allocations.length > 1 ? allocations : undefined
+          if (allocations.length > 0) {
+            nextBatchId = allocations[0].batchId
+            nextBatchNumber = allocations[0].batchNumber
+          }
+        }
+      } else {
+        // Not batch-tracked at all (trackExpiry-only, or a real variant with no batches)
+        // — fall back to total variant stock, same as before.
+        const available = catalogEntry?.stockQuantity ?? 0
+        if (newQuantity > available) {
+          toast.error(`${currentItem.name} - Only ${available} unit(s) available`)
           return
         }
       }
@@ -1059,6 +1118,9 @@ export default function InvoicePage() {
           ...item,
           quantity: newQuantity,
           stockQuantity: newQuantity,
+          batchId: nextBatchId,
+          batchNumber: nextBatchNumber,
+          batchAllocations: nextBatchAllocations,
           subtotal: net.subtotal,
           profit: net.profit,
           discountAmount: net.discountAmount,

@@ -26,40 +26,48 @@ const isDualWriteEnabledForOrg = (organizationId) => {
   return allowedOrgs.includes(organizationId.toString());
 };
 
-const getOrCreateDefaultVariant = async (productId) => {
-  let variant = await ProductVariant.findOne({ productId, isDefault: true });
+const getOrCreateDefaultVariant = async (productId, session) => {
+  let variant = await ProductVariant.findOne({ productId, isDefault: true }).session(session || null);
   if (variant) return variant;
 
-  const product = await Product.findById(productId).lean();
+  const product = await Product.findById(productId).session(session || null).lean();
   if (!product) return null;
 
-  return ProductVariant.create({
-    organizationId: product.organizationId,
-    branchId: product.branchId,
-    productId: product._id,
-    isDefault: true,
-    sku: product.sku || undefined,
-    attributes: {},
-    price: product.price,
-    cost: product.cost,
-    unit: product.unit,
-    trackSerial: !!(product.trackImei || product.trackSerial),
-    isActive: true,
-  });
+  const created = await ProductVariant.create(
+    [{
+      organizationId: product.organizationId,
+      branchId: product.branchId,
+      productId: product._id,
+      isDefault: true,
+      sku: product.sku || undefined,
+      attributes: {},
+      price: product.price,
+      cost: product.cost,
+      unit: product.unit,
+      trackSerial: !!(product.trackImei || product.trackSerial),
+      isActive: true,
+    }],
+    { session },
+  );
+  return created[0];
 };
 
-const getOrCreateInventory = async (variant) => {
-  let inventory = await Inventory.findOne({ variantId: variant._id });
+const getOrCreateInventory = async (variant, session) => {
+  let inventory = await Inventory.findOne({ variantId: variant._id }).session(session || null);
   if (inventory) return inventory;
 
-  return Inventory.create({
-    organizationId: variant.organizationId,
-    branchId: variant.branchId,
-    productId: variant.productId,
-    variantId: variant._id,
-    quantity: 0,
-    averageCost: variant.cost,
-  });
+  const created = await Inventory.create(
+    [{
+      organizationId: variant.organizationId,
+      branchId: variant.branchId,
+      productId: variant.productId,
+      variantId: variant._id,
+      quantity: 0,
+      averageCost: variant.cost,
+    }],
+    { session },
+  );
+  return created[0];
 };
 
 /**

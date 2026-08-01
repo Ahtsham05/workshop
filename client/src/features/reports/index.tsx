@@ -29,6 +29,7 @@ import { ProfitLossReport } from './components/profit-loss-report'
 import { InventoryReport } from './components/inventory-report'
 import { BatchExpiryReport } from './components/batch-expiry-report'
 import { StockAdjustmentReport } from './components/stock-adjustment-report'
+import { StockTransferReport } from './components/stock-transfer-report'
 import { TaxReport } from './components/tax-report'
 import { SalesReturnsReport } from './components/sales-returns-report'
 import { PurchaseReturnsReport } from './components/purchase-returns-report'
@@ -234,7 +235,12 @@ export default function ReportsPage() {
       {/* Reports Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className='overflow-x-auto pb-1'>
-          <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full sm:min-w-0'>
+          {/* capitalize: several tab labels come from shared i18n keys (t('sales'),
+              t('purchases'), etc.) whose dictionary values are lowercase elsewhere in
+              the app — rather than touch those shared keys, which are used well beyond
+              this tab bar, a CSS transform on the shared TabsList inherits to every
+              TabsTrigger below it and normalizes them here only. */}
+          <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full capitalize sm:min-w-0'>
             <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
             <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
             {isMobileShop && (
@@ -244,13 +250,14 @@ export default function ReportsPage() {
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
             <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
             <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('customers')}</TabsTrigger>
-            <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging Report')}</TabsTrigger>
+            <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
             <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
             <TabsTrigger value='supplier-aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Supplier Aging')}</TabsTrigger>
             <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
-            <TabsTrigger value='inventory' className='text-xs sm:text-sm px-2 sm:px-3'>{t('inventory')}</TabsTrigger>
+            <TabsTrigger value='stock' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock')}</TabsTrigger>
             <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
             <TabsTrigger value='stock-adjustments' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Adjustments')}</TabsTrigger>
+            <TabsTrigger value='stock-transfers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Transfers')}</TabsTrigger>
             <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
             <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
             <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
@@ -339,8 +346,8 @@ export default function ReportsPage() {
             : <LockedFeatureCard featureName='Profit & Loss Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
-        <TabsContent value='inventory' className='mt-6'>
-          <InventoryReport ref={activeTab === 'inventory' ? exportRef : null} />
+        <TabsContent value='stock' className='mt-6'>
+          <InventoryReport ref={activeTab === 'stock' ? exportRef : null} />
         </TabsContent>
 
         <TabsContent value='batch-expiry' className='mt-6'>
@@ -349,6 +356,10 @@ export default function ReportsPage() {
 
         <TabsContent value='stock-adjustments' className='mt-6'>
           <StockAdjustmentReport ref={activeTab === 'stock-adjustments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+        </TabsContent>
+
+        <TabsContent value='stock-transfers' className='mt-6'>
+          <StockTransferReport ref={activeTab === 'stock-transfers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='tax' className='mt-6'>

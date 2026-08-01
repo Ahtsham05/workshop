@@ -25,6 +25,13 @@ const invoiceItem = Joi.object({
   variantId: Joi.string().custom(objectId).optional(),
   batchId: Joi.string().custom(objectId).optional(),
   batchNumber: Joi.string().trim().allow('').optional(),
+  // Present only when this line is split across multiple batches (client-suggested
+  // FEFO, editable) — see docs/architecture/universal-product-migration.md.
+  batchAllocations: Joi.array().items(Joi.object({
+    batchId: Joi.string().custom(objectId).required(),
+    batchNumber: Joi.string().trim().allow('').optional(),
+    quantity: Joi.number().integer().min(1).required(),
+  })).optional(),
 });
 
 const splitPayment = Joi.object({

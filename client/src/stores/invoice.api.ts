@@ -47,10 +47,27 @@ const patchPurchaseCatalogStockForSale = (dispatch: any, invoiceData: any) => {
 
         row.stockQuantity = Math.max(0, Number(row.stockQuantity || 0) - qty)
 
-        if (item.batchId && row.batches) {
-          const batch = row.batches.find((b: any) => b.id === item.batchId)
-          if (batch) batch.quantity = Math.max(0, Number(batch.quantity || 0) - qty)
-        }
+        if (!row.batches) return
+
+        // A line can be split across several batches — an auto FEFO split, or a
+        // serial/IMEI-tracked line where different scanned units belong to different
+        // batches (see updateItemImeis in invoice-panel.tsx) — so walk every allocation
+        // instead of assuming the whole line's qty came from one batch. Mirrors the
+        // server's own fallback (getItemBatchAllocations in invoice.service.js): use
+        // batchAllocations when present, else treat batchId as a single allocation of
+        // the full line quantity. Decrementing only the first/display batch by the
+        // whole qty (the old behavior) left every other batch in the split showing a
+        // stale "left" count until something else forced a refetch.
+        const allocations = Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0
+          ? item.batchAllocations
+          : item.batchId
+            ? [{ batchId: item.batchId, quantity: qty }]
+            : []
+
+        allocations.forEach((alloc: any) => {
+          const batch = row.batches.find((b: any) => b.id === alloc.batchId)
+          if (batch) batch.quantity = Math.max(0, Number(batch.quantity || 0) - Number(alloc.quantity || 0))
+        })
       })
     }),
   )

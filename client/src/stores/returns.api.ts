@@ -2,15 +2,19 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
+import { imeiApi } from './imei.api'
 
 // Returns restore/deduct stock behind the scenes — refresh the product catalog's
-// stock+batch chips and the per-variant batch list, which live in separate RTK Query
-// slices and won't auto-refetch otherwise.
+// stock+batch chips, the per-variant batch list, and (a sales return of a serial/IMEI
+// line restores those specific units to in_stock — see salesReturn.service.js) the IMEI
+// picker/tracking list, all of which live in separate RTK Query slices and won't
+// auto-refetch otherwise.
 const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
+    dispatch(imeiApi.util.invalidateTags(['Imei']))
   } catch {
     // mutation failed — nothing to invalidate
   }

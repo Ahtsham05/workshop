@@ -1086,6 +1086,13 @@ function InvoiceDetails({
                         {item.imeis && item.imeis.length > 0 && (
                           <p className='text-xs text-muted-foreground'>IMEI/Serial: {item.imeis.join(', ')}</p>
                         )}
+                        {item.batchAllocations && item.batchAllocations.length > 1 ? (
+                          <p className='text-xs text-muted-foreground'>
+                            Batch: {item.batchAllocations.map((a: any) => `${a.batchNumber}×${a.quantity}`).join(', ')}
+                          </p>
+                        ) : item.batchNumber ? (
+                          <p className='text-xs text-muted-foreground'>Batch: {item.batchNumber}</p>
+                        ) : null}
                       </div>
                     </div>
                   </TableCell>

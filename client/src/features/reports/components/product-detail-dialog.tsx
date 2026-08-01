@@ -3,16 +3,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGetProductDetailReportQuery, useGetStockAdjustmentReportQuery } from '@/stores/reports.api'
+import { useGetProductDetailReportQuery, useGetStockAdjustmentReportQuery, useGetStockTransferReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown, Users, Package } from 'lucide-react'
+import { Boxes, ArrowDownToLine, ArrowUpFromLine, Wallet, Receipt } from 'lucide-react'
 import { getUnitLabel } from '@/lib/units'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import { cn } from '@/lib/utils'
 import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adjustment-type-badge'
+import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
+import { MovementTile } from './movement-tile'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -31,6 +33,10 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
     { productId: productId!, startDate, endDate },
     { skip: !productId }
   )
+  const { data: transfersData } = useGetStockTransferReportQuery(
+    { productId: productId!, startDate, endDate },
+    { skip: !productId }
+  )
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
@@ -44,13 +50,13 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
           'flex max-h-[92vh] w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1400px)]',
         )}
       >
-        <div className='shrink-0 border-b px-6 pt-6 pb-4'>
+        <div className='shrink-0 border-b px-4 pt-4 pb-3 sm:px-6 sm:pt-6 sm:pb-4'>
           <DialogHeader>
             <DialogTitle>{t('Product Details')}</DialogTitle>
           </DialogHeader>
         </div>
 
-        <div className='min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4'>
+        <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3 sm:px-6 sm:pb-6 sm:pt-4'>
         {isLoading ? (
           <Skeleton className='h-[400px] w-full' />
         ) : data ? (
@@ -65,14 +71,10 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
               >
                 {reportEntityName(language, data?.product?.name, data?.product?.nameUrdu)}
               </h3>
-              <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
+              <div className='grid grid-cols-2 md:grid-cols-3 gap-4'>
                 <div>
                   <p className='text-xs text-muted-foreground mb-1'>{t('barcode')}</p>
                   <p className='font-medium'>{data?.product?.barcode || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className='text-xs text-muted-foreground mb-1'>{t('current_stock')}</p>
-                  <p className='font-medium'>{data?.product?.currentStock || 0}</p>
                 </div>
                 <div>
                   <p className='text-xs text-muted-foreground mb-1'>{t('Purchase Price')}</p>
@@ -85,61 +87,100 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
               </div>
             </div>
 
-            {/* Summary Cards */}
-            <div className='grid gap-3 grid-cols-2 md:grid-cols-4'>
-              <div className='bg-green-50 dark:bg-green-950 p-3 rounded-lg border'>
-                <div className='flex items-center justify-between mb-2'>
-                  <p className='text-xs font-medium text-muted-foreground'>{t('Total Sold')}</p>
-                  <TrendingUp className='h-4 w-4 text-green-600' />
-                </div>
-                <p className='text-2xl font-bold'>{data?.summary?.totalSold || 0}</p>
-                <p className='text-xs text-muted-foreground mt-1'>
-                  to {data?.summary?.uniqueCustomers || 0} {t('customers')}
-                </p>
-              </div>
+            {/* Stock Movement — every quantity that moved this product's stock in the
+                selected period, plus where it currently stands. Adjustments only ever
+                include 'completed' ones (see getStockAdjustmentReport); transfers are
+                filtered to 'completed' here too so an in-transit or cancelled transfer
+                — which never actually touched this branch's stock — doesn't inflate the
+                in/out totals, even though the Stock Transfers tab below still lists it. */}
+            {(() => {
+              const completedTransfers = (transfersData?.lineItems ?? []).filter((tr) => tr.status === 'completed')
+              const transferIn = completedTransfers
+                .filter((tr) => tr.productDirection === 'in')
+                .reduce((sum, tr) => sum + tr.quantity, 0)
+              const transferOut = completedTransfers
+                .filter((tr) => tr.productDirection === 'out')
+                .reduce((sum, tr) => sum + tr.quantity, 0)
+              const adjustmentIn = (adjustmentsData?.lineItems ?? [])
+                .filter((adj) => adj.direction === 'increase')
+                .reduce((sum, adj) => sum + adj.quantity, 0)
+              const adjustmentOut = (adjustmentsData?.lineItems ?? [])
+                .filter((adj) => adj.direction === 'decrease')
+                .reduce((sum, adj) => sum + adj.quantity, 0)
 
-              <div className='bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border'>
-                <div className='flex items-center justify-between mb-2'>
-                  <p className='text-xs font-medium text-muted-foreground'>{t('Total Purchased')}</p>
-                  <TrendingDown className='h-4 w-4 text-blue-600' />
+              return (
+                <div>
+                  <h4 className='text-sm font-semibold text-muted-foreground mb-2'>{t('Stock Movement')}</h4>
+                  <div className='grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7'>
+                    <MovementTile
+                      icon={Boxes}
+                      tone='slate'
+                      label={t('Current Stock')}
+                      value={String(data?.product?.currentStock || 0)}
+                    />
+                    <MovementTile
+                      icon={ArrowDownToLine}
+                      tone='sky'
+                      label={t('Purchased')}
+                      value={String(data?.summary?.totalPurchased || 0)}
+                      sub={`${t('from')} ${data?.summary?.uniqueSuppliers || 0} ${t('suppliers')}`}
+                    />
+                    <MovementTile
+                      icon={ArrowUpFromLine}
+                      tone='emerald'
+                      label={t('Sold')}
+                      value={String(data?.summary?.totalSold || 0)}
+                      sub={`${t('to')} ${data?.summary?.uniqueCustomers || 0} ${t('customers')}`}
+                    />
+                    <MovementTile icon={ArrowDownToLine} tone='cyan' label={t('Adjustment In')} value={String(adjustmentIn)} />
+                    <MovementTile icon={ArrowUpFromLine} tone='rose' label={t('Adjustment Out')} value={String(adjustmentOut)} />
+                    <MovementTile icon={ArrowDownToLine} tone='indigo' label={t('Transfer In')} value={String(transferIn)} />
+                    <MovementTile icon={ArrowUpFromLine} tone='amber' label={t('Transfer Out')} value={String(transferOut)} />
+                  </div>
                 </div>
-                <p className='text-2xl font-bold'>{data?.summary?.totalPurchased || 0}</p>
-                <p className='text-xs text-muted-foreground mt-1'>
-                  from {data?.summary?.uniqueSuppliers || 0} {t('suppliers')}
-                </p>
-              </div>
+              )
+            })()}
 
-              <div className='bg-emerald-50 dark:bg-emerald-950 p-3 rounded-lg border'>
-                <div className='flex items-center justify-between mb-2'>
-                  <p className='text-xs font-medium text-muted-foreground'>{t('Total Revenue')}</p>
-                  <Package className='h-4 w-4 text-emerald-600' />
-                </div>
-                <p className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalRevenue || 0)}</p>
-                <p className='text-xs text-green-600 mt-1'>
-                  {t('Profit')}: {formatCurrency(data?.summary?.totalProfit || 0)}
-                </p>
-              </div>
-
-              <div className='bg-orange-50 dark:bg-orange-950 p-3 rounded-lg border'>
-                <div className='flex items-center justify-between mb-2'>
-                  <p className='text-xs font-medium text-muted-foreground'>{t('Total Cost')}</p>
-                  <Users className='h-4 w-4 text-orange-600' />
-                </div>
-                <p className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalCost || 0)}</p>
+            {/* Financial Summary */}
+            <div>
+              <h4 className='text-sm font-semibold text-muted-foreground mb-2'>{t('Financial Summary')}</h4>
+              <div className='grid gap-3 grid-cols-1 sm:grid-cols-2'>
+                <MovementTile
+                  icon={Wallet}
+                  tone='emerald'
+                  label={t('Total Revenue')}
+                  value={formatCurrency(data?.summary?.totalRevenue || 0)}
+                  sub={`${t('Profit')}: ${formatCurrency(data?.summary?.totalProfit || 0)}`}
+                />
+                <MovementTile
+                  icon={Receipt}
+                  tone='orange'
+                  label={t('Total Cost')}
+                  value={formatCurrency(data?.summary?.totalCost || 0)}
+                />
               </div>
             </div>
 
-            {/* Sales and Purchases Tabs */}
+            {/* Sales and Purchases Tabs — a fixed 4-column grid squeezed these labels
+                into overlapping, unreadable text on narrow screens (each cell forced to
+                ~1/4 the dialog's width regardless of how long its label was). A
+                horizontally scrollable row lets each tab keep its natural width and
+                just scrolls instead of wrapping/clipping. */}
             <Tabs defaultValue='sales'>
-              <TabsList className='grid w-full grid-cols-3'>
-                <TabsTrigger value='sales'>
-                  {t('Sale To Customers')} ({data?.sales?.length || 0})
+              <TabsList className='flex w-full justify-start overflow-x-auto'>
+                <TabsTrigger value='sales' className='shrink-0'>
+                  <span className='sm:hidden'>{t('Sales')}</span>
+                  <span className='hidden sm:inline'>{t('Sale To Customers')}</span> ({data?.sales?.length || 0})
                 </TabsTrigger>
-                <TabsTrigger value='purchases'>
-                  {t('Purchase From Suppliers')} ({data?.purchases?.length || 0})
+                <TabsTrigger value='purchases' className='shrink-0'>
+                  <span className='sm:hidden'>{t('Purchases')}</span>
+                  <span className='hidden sm:inline'>{t('Purchase From Suppliers')}</span> ({data?.purchases?.length || 0})
                 </TabsTrigger>
-                <TabsTrigger value='adjustments'>
+                <TabsTrigger value='adjustments' className='shrink-0'>
                   {t('Stock Adjustments')} ({adjustmentsData?.lineItems?.length || 0})
+                </TabsTrigger>
+                <TabsTrigger value='transfers' className='shrink-0'>
+                  {t('Stock Transfers')} ({transfersData?.lineItems?.length || 0})
                 </TabsTrigger>
               </TabsList>
 
@@ -156,6 +197,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[100px]'>Variant</TableHead>
                           <TableHead className='min-w-[100px]'>Batch #</TableHead>
                           <TableHead className='min-w-[100px]'>Expiry</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('IMEI/Serial')}</TableHead>
                           <TableHead className='text-right min-w-[80px]'>{t('Quantity')}</TableHead>
                           <TableHead className='min-w-[60px]'>{t('Unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
@@ -184,8 +226,15 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               </TableCell>
                               {/* <TableCell>{sale.customerPhone || 'N/A'}</TableCell> */}
                               <TableCell className='text-muted-foreground text-sm'>{sale.variantLabel || '—'}</TableCell>
-                              <TableCell className='font-mono text-xs text-muted-foreground'>{sale.batchNumber || '—'}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground'>
+                                {Array.isArray(sale.batchAllocations) && sale.batchAllocations.length > 1
+                                  ? sale.batchAllocations.map((a: any) => `${a.batchNumber}×${a.quantity}`).join(', ')
+                                  : sale.batchNumber || '—'}
+                              </TableCell>
                               <TableCell>{expiryBadge(sale.expiryDate)}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={(sale.imeis || []).join(', ')}>
+                                {sale.imeis && sale.imeis.length > 0 ? sale.imeis.join(', ') : '—'}
+                              </TableCell>
                               <TableCell className='text-right'>{sale.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(sale.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(sale.price)}</TableCell>
@@ -197,7 +246,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={12} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={13} className='text-center py-8 text-muted-foreground'>
                               {t('no_sales_found')}
                             </TableCell>
                           </TableRow>
@@ -221,6 +270,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           <TableHead className='min-w-[100px]'>Variant</TableHead>
                           <TableHead className='min-w-[100px]'>Batch #</TableHead>
                           <TableHead className='min-w-[100px]'>Expiry</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('IMEI/Serial')}</TableHead>
                           <TableHead className='text-right min-w-[80px]'>{t('quantity')}</TableHead>
                           <TableHead className='min-w-[60px]'>{t('unit')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('price')}</TableHead>
@@ -250,6 +300,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell className='text-muted-foreground text-sm'>{purchase.variantLabel || '—'}</TableCell>
                               <TableCell className='font-mono text-xs text-muted-foreground'>{purchase.batchNumber || '—'}</TableCell>
                               <TableCell>{expiryBadge(purchase.expiryDate)}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={(purchase.imeis || []).join(', ')}>
+                                {purchase.imeis && purchase.imeis.length > 0 ? purchase.imeis.join(', ') : '—'}
+                              </TableCell>
                               <TableCell className='text-right'>{purchase.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(purchase.unit)}</TableCell>
                               <TableCell className='text-right'>{formatCurrency(purchase.price)}</TableCell>
@@ -258,7 +311,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={11} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={12} className='text-center py-8 text-muted-foreground'>
                               {t('no_purchases_found')}
                             </TableCell>
                           </TableRow>
@@ -277,6 +330,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                         <TableRow>
                           <TableHead className='min-w-[100px]'>{t('date')}</TableHead>
                           <TableHead className='min-w-[120px]'>{t('Type')}</TableHead>
+                          <TableHead className='min-w-[100px]'>Variant</TableHead>
+                          <TableHead className='min-w-[100px]'>Batch #</TableHead>
+                          <TableHead className='min-w-[100px]'>Expiry</TableHead>
                           <TableHead className='text-right min-w-[80px]'>Qty</TableHead>
                           <TableHead className='text-right min-w-[120px]'>{t('Stock')}</TableHead>
                           <TableHead className='text-right min-w-[100px]'>{t('value')}</TableHead>
@@ -292,6 +348,9 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell>
                                 <AdjustmentTypeBadge type={adj.type} />
                               </TableCell>
+                              <TableCell className='text-muted-foreground text-sm'>{adj.variantLabel || '—'}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground'>{adj.batchNumber || '—'}</TableCell>
+                              <TableCell>{adj.expiryDate ? expiryBadge(adj.expiryDate) : '—'}</TableCell>
                               <TableCell
                                 className={cn(
                                   'text-right font-medium',
@@ -313,8 +372,53 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
+                            <TableCell colSpan={10} className='text-center py-8 text-muted-foreground'>
                               {t('No stock adjustments found for the selected period')}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value='transfers' className='mt-4'>
+                <div className='border rounded-lg overflow-hidden'>
+                  <div className='overflow-x-auto'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className='min-w-[100px]'>{t('date')}</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('From')}</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('To')}</TableHead>
+                          <TableHead className='text-right min-w-[80px]'>Qty</TableHead>
+                          <TableHead className='min-w-[150px]'>{t('IMEI/Serial')}</TableHead>
+                          <TableHead className='min-w-[100px]'>{t('Status')}</TableHead>
+                          <TableHead className='min-w-[100px]'>{t('By')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {transfersData?.lineItems && transfersData.lineItems.length > 0 ? (
+                          transfersData.lineItems.map((tr) => (
+                            <TableRow key={tr.id}>
+                              <TableCell className='whitespace-nowrap'>{format(new Date(tr.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='text-sm text-muted-foreground'>{tr.fromBranchName || '—'}</TableCell>
+                              <TableCell className='text-sm text-muted-foreground'>{tr.toBranchName || '—'}</TableCell>
+                              <TableCell className='text-right font-medium'>{tr.quantity}</TableCell>
+                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[200px] truncate' title={tr.imeis.join(', ')}>
+                                {tr.imeis.length > 0 ? tr.imeis.join(', ') : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <TransferStatusBadge status={tr.status} />
+                              </TableCell>
+                              <TableCell className='text-sm text-muted-foreground'>{tr.decidedByName || '—'}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
+                              {t('No stock transfers found for the selected period')}
                             </TableCell>
                           </TableRow>
                         )}

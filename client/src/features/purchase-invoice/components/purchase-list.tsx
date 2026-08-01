@@ -594,6 +594,9 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                             {item.expiryDate && ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}`}
                           </div>
                         )}
+                        {item.imeis && item.imeis.length > 0 && (
+                          <div className="text-xs text-muted-foreground">IMEI/Serial: {item.imeis.join(', ')}</div>
+                        )}
                       </div>
                     </div>
                   </TableCell>

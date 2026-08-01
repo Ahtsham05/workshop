@@ -16,6 +16,8 @@ const getAvailableImeis = catchAsync(async (req, res) => {
   const { organizationId, branchId } = getBranchContext(req);
   const records = await imeiService.getAvailableImeisForProduct({
     productId: req.query.productId,
+    batchId: req.query.batchId,
+    batchIds: req.query.batchIds ? req.query.batchIds.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     search: req.query.search,
     organizationId,
     branchId,

@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
-const { Product, ProductVariant, Inventory, Batch, Organization } = require('../models');
+const mongoose = require('mongoose');
+const { Product, ProductVariant, Inventory, Batch, Imei, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
@@ -35,36 +36,55 @@ const assertImeiAllowedForBusinessType = async ({ organizationId, businessType }
  * tracking) or if the product itself has hasVariants=true (tracking for those lives on
  * each real variant instead, managed via the existing variant management UI).
  */
-const syncDefaultVariantTracking = async (product, updateFields) => {
+const syncDefaultVariantTracking = async (product, updateFields, session) => {
   if (product.hasVariants) return;
   const wantsBatch = Object.prototype.hasOwnProperty.call(updateFields, 'trackBatch');
   const wantsExpiry = Object.prototype.hasOwnProperty.call(updateFields, 'trackExpiry');
   if (!wantsBatch && !wantsExpiry) return;
 
-  const variant = await getOrCreateDefaultVariant(product._id);
+  const variant = await getOrCreateDefaultVariant(product._id, session);
   if (!variant) return;
 
   const wasTracked = !!(variant.trackBatch || variant.trackExpiry);
   if (wantsBatch) variant.trackBatch = !!updateFields.trackBatch;
   if (wantsExpiry) variant.trackExpiry = !!updateFields.trackExpiry;
-  await variant.save();
+  await variant.save({ session });
 
   const nowTracked = !!(variant.trackBatch || variant.trackExpiry);
   if (!nowTracked) return;
 
-  const inventory = await getOrCreateInventory(variant);
+  const inventory = await getOrCreateInventory(variant, session);
   // First time tracking turns on for a product that already has stock: seed one
   // opening batch so that existing stock doesn't vanish from the batch-aware views.
-  // Uses the batch number/expiry the user entered on the product form, if any —
-  // falls back to an auto-generated number so the batch is never left unidentified.
+  // Uses the batch number/expiry/selling price the user entered on the product form,
+  // if any — falls back to an auto-generated number so the batch is never left
+  // unidentified. skipProductMirror is required here: this batch represents stock
+  // that's *already* counted in Product.stockQuantity (it's a migration into the new
+  // batch system, not newly arrived stock), so createBatch's usual dual-write back onto
+  // Product.stockQuantity would double-count it (e.g. 6 in stock would become 12).
   if (!wasTracked && Number(product.stockQuantity) > 0 && Number(inventory.quantity) === 0) {
-    await batchService.createBatch(variant._id, {
+    const openingBatch = await batchService.createBatch(variant._id, {
       batchNumber: updateFields.batchNumber || `OPENING-${Date.now()}`,
       quantity: Number(product.stockQuantity),
       costPerUnit: Number(product.cost) || 0,
+      sellingPrice: Number(product.price) || undefined,
       expiryDate: updateFields.expiryDate || undefined,
+      session,
       createdBy: product.createdBy,
+      skipProductMirror: true,
     });
+
+    // Any serial/IMEI numbers already recorded for this product (entered as opening
+    // stock alongside it, before this batch existed to link them to) belong to this
+    // exact batch — it's the one just seeded to represent that same opening stock.
+    // Without this, they'd stay unassigned forever and the sale screen's "filter
+    // serials by selected batch" would keep showing them under every batch on this
+    // product, not just the one they actually came from.
+    await Imei.updateMany(
+      { productId: product._id, batchId: null },
+      { $set: { batchId: openingBatch._id } },
+      { session },
+    );
   }
 };
 
@@ -136,24 +156,37 @@ const createProduct = async (productBody) => {
   if (productFields.trackImei) {
     await assertImeiAllowedForBusinessType({ organizationId: productFields.organizationId, businessType });
   }
-  const product = new Product(productFields); // Create a new instance of the Product model
-  await product.save(); // Save the product instance
 
-  if ((product.trackImei || product.trackSerial) && imeis && imeis.length > 0) {
-    await imeiService.syncImeisForPurchaseItem({
-      purchaseId: null,
-      productId: product._id,
-      productName: product.name,
-      imeis,
-      type: product.trackSerial ? 'serial' : 'imei',
-      purchasePrice: product.cost,
-      organizationId: product.organizationId,
-      branchId: product.branchId,
-      createdBy: product.createdBy,
+  // Everything that follows must succeed together: a duplicate serial/IMEI number (or
+  // any other failure in variant/batch setup) must roll back the product itself, not
+  // leave a half-created product sitting in the database while the UI reports failure.
+  const session = await mongoose.startSession();
+  let product;
+  try {
+    await session.withTransaction(async () => {
+      const created = await Product.create([productFields], { session });
+      product = created[0];
+
+      if ((product.trackImei || product.trackSerial) && imeis && imeis.length > 0) {
+        await imeiService.syncImeisForPurchaseItem({
+          purchaseId: null,
+          productId: product._id,
+          productName: product.name,
+          imeis,
+          type: product.trackSerial ? 'serial' : 'imei',
+          purchasePrice: product.cost,
+          organizationId: product.organizationId,
+          branchId: product.branchId,
+          createdBy: product.createdBy,
+          session,
+        });
+      }
+
+      await syncDefaultVariantTracking(product, productBody, session);
     });
+  } finally {
+    await session.endSession();
   }
-
-  await syncDefaultVariantTracking(product, productBody);
 
   return product;
 };

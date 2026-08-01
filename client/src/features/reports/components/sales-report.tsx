@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { useGetSalesReportQuery, useGetSalesInvoiceDetailsQuery, SalesInvoiceDetail } from '@/stores/reports.api'
+import { useGetSalesReportQuery, useGetSalesInvoiceDetailsQuery, SalesInvoiceDetail, SalesInvoiceItem } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { TrendingUp, DollarSign, ShoppingCart, Package, ChevronDown, ChevronRight, Eye, LayoutList } from 'lucide-react'
@@ -27,6 +27,16 @@ import LongText from '@/components/long-text'
 interface SalesReportProps {
   startDate: string
   endDate: string
+}
+
+// A line split across several batches only mirrors the *first* one onto batchNumber
+// (see invoice.model.js) — show the real per-batch breakdown when it's present, instead
+// of attributing the whole line's quantity to a single batch.
+const formatBatchDisplay = (item: Pick<SalesInvoiceItem, 'batchNumber' | 'batchAllocations'>): string => {
+  if (item.batchAllocations && item.batchAllocations.length > 1) {
+    return item.batchAllocations.map((a) => `${a.batchNumber}×${a.quantity}`).join(', ')
+  }
+  return item.batchNumber || ''
 }
 
 const statusColors: Record<string, string> = {
@@ -66,6 +76,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         imeis?: string[]
         variantLabel?: string | null
         batchNumber?: string | null
+        batchAllocations?: SalesInvoiceItem['batchAllocations']
         expiryDate?: string | null
       }>>()
       detailData.invoices.forEach((inv) => {
@@ -83,6 +94,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             imeis: item.imeis,
             variantLabel: item.variantLabel,
             batchNumber: item.batchNumber,
+            batchAllocations: item.batchAllocations,
             expiryDate: item.expiryDate,
           })
         })
@@ -138,7 +150,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   Balance:        idx === 0 ? inv.balance : '',
                   Product:        reportEntityName(language, item.name, item.nameUrdu),
                   Variant:        item.variantLabel || '',
-                  'Batch #':      item.batchNumber || '',
+                  'Batch #':      formatBatchDisplay(item),
                   Expiry:         item.expiryDate ? format(new Date(item.expiryDate), 'yyyy-MM-dd') : '',
                   Qty:            item.quantity,
                   'Unit Sale Price':   item.unitPrice,
@@ -438,7 +450,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               {row.variantLabel || '—'}
                             </TableCell>
                             <TableCell className='font-mono text-xs text-muted-foreground'>
-                              {row.batchNumber || '—'}
+                              {formatBatchDisplay(row) || '—'}
                             </TableCell>
                             <TableCell>{expiryBadge(row.expiryDate)}</TableCell>
                             <TableCell className='text-right text-sm'>{row.quantity}</TableCell>
@@ -611,7 +623,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 {(item.variantLabel || item.batchNumber || item.expiryDate) && (
                                   <span className='mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground'>
                                     {item.variantLabel && <span>{item.variantLabel}</span>}
-                                    {item.batchNumber && <span className='font-mono'>{item.batchNumber}</span>}
+                                    {formatBatchDisplay(item) && <span className='font-mono'>{formatBatchDisplay(item)}</span>}
                                     {item.expiryDate && expiryBadge(item.expiryDate)}
                                   </span>
                                 )}
@@ -686,7 +698,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
 
         {/* ── Invoice View Dialog ───────────────────────────────────────────── */}
         <Dialog open={!!viewInvoice} onOpenChange={(open) => !open && setViewInvoice(null)}>
-          <DialogContent className='max-w-2xl max-h-[90vh] overflow-y-auto'>
+          <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto'>
             {viewInvoice && (
               <>
                 <DialogHeader>
@@ -723,6 +735,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 {/* Items */}
                 <div>
                   <p className='text-sm font-semibold mb-3'>Items Sold</p>
+                  <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -788,6 +801,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       </TableRow>
                     </TableFooter>
                   </Table>
+                  </div>
                 </div>
 
                 <Separator />

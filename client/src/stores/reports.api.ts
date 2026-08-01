@@ -53,6 +53,12 @@ export interface SalesReportSummary {
   minInvoiceValue: number
 }
 
+export interface ReportBatchAllocation {
+  batchId: string
+  batchNumber?: string
+  quantity: number
+}
+
 export interface SalesInvoiceItem {
   name: string
   nameUrdu?: string
@@ -65,7 +71,11 @@ export interface SalesInvoiceItem {
   imeis?: string[]
   variantId?: string | null
   variantLabel?: string | null
+  // Mirrors only the *first* batch when the line was split across several — prefer
+  // batchAllocations below when present, since that's the real per-batch breakdown.
   batchNumber?: string | null
+  // Present only when this line drew from more than one batch.
+  batchAllocations?: ReportBatchAllocation[]
   expiryDate?: string | null
 }
 
@@ -155,8 +165,11 @@ export interface ProductReportData {
   totalDiscount?: number
   avgSellingPrice: number
   currentStock: number
-  minStockLevel: number
   unit?: string
+  // Every variant label, batch number, IMEI/serial, and batch expiry date (YYYY-MM-DD)
+  // that appeared on a sold line for this product in the period — lets the product
+  // search box match on those, not just the product name.
+  searchTags: string[]
 }
 
 export interface CustomerReportData {
@@ -325,6 +338,7 @@ export interface InventoryBatchRow {
   expiryDate?: string | null
   costPerUnit: number
   sellingPrice?: number
+  value: number
 }
 
 export interface InventoryReportData {
@@ -334,14 +348,22 @@ export interface InventoryReportData {
   barcode: string
   category: string
   stockQuantity: number
-  minStockLevel: number
-  purchasePrice: number
-  sellingPrice: number
+  // Server's actual Product fields — cost (purchase) / price (selling); the type
+  // previously claimed purchasePrice/sellingPrice/minStockLevel, none of which exist
+  // on the schema or were ever sent, so this was always undefined at runtime.
+  cost: number
+  price: number
   stockValue: number
   potentialRevenue: number
   status: string
   unit?: string
   batches?: InventoryBatchRow[]
+  trackImei: boolean
+  trackSerial: boolean
+  // In-stock IMEI/serial numbers, capped server-side (see getInventoryReport) — use
+  // imeisTotalCount for the real count when it exceeds what's included here.
+  imeis: string[]
+  imeisTotalCount: number
 }
 
 export interface BatchExpiryReportRow {
@@ -393,6 +415,10 @@ export interface StockAdjustmentReportLineItem {
   reason?: string
   status: 'completed' | 'reversed'
   createdByName?: string
+  // Set when the adjustment targeted a real (or batch/expiry-tracked) variant.
+  variantLabel?: string | null
+  batchNumber?: string | null
+  expiryDate?: string | null
 }
 
 export interface StockAdjustmentReportDatewise {
@@ -407,6 +433,44 @@ export interface StockAdjustmentReport {
   byType: Record<StockAdjustmentReportLineItem['type'], StockAdjustmentTypeStat>
   datewise: StockAdjustmentReportDatewise[]
   lineItems: StockAdjustmentReportLineItem[]
+  period: { startDate: string; endDate: string }
+}
+
+export type StockTransferReportStatus = 'suggested' | 'approved' | 'in_transit' | 'completed' | 'cancelled'
+
+export interface StockTransferReportLineItem {
+  id: string
+  date: string
+  productName: string
+  fromBranchName: string
+  toBranchName: string
+  quantity: number
+  // Present for IMEI/serial-tracked transfers — the specific units moved.
+  imeis: string[]
+  batchNumber?: string
+  reason?: string
+  status: StockTransferReportStatus
+  decidedByName?: string
+  completedAt?: string | null
+  // Only set when the query was scoped to a single productId — 'in' when that product
+  // was the destination of this transfer, 'out' when it was the source.
+  productDirection?: 'in' | 'out'
+}
+
+export interface StockTransferReportDatewise {
+  _id: string
+  count: number
+  quantity: number
+}
+
+export interface StockTransferReport {
+  summary: {
+    totalTransfers: number
+    totalUnitsMoved: number
+    statusCounts: Partial<Record<StockTransferReportStatus, number>>
+  }
+  datewise: StockTransferReportDatewise[]
+  lineItems: StockTransferReportLineItem[]
   period: { startDate: string; endDate: string }
 }
 
@@ -970,7 +1034,7 @@ export interface WalletWiseReport {
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1179,6 +1243,18 @@ export const reportsApi = createApi({
       },
       providesTags: ['StockAdjustmentReport'],
     }),
+    getStockTransferReport: builder.query<StockTransferReport, { startDate?: string; endDate?: string; status?: string; direction?: 'incoming' | 'outgoing'; productId?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        if (params.status) searchParams.set('status', params.status)
+        if (params.direction) searchParams.set('direction', params.direction)
+        if (params.productId) searchParams.set('productId', params.productId)
+        return `/stock-transfers?${searchParams.toString()}`
+      },
+      providesTags: ['StockTransferReport'],
+    }),
     getTaxReport: builder.query<{
       data: TaxReportData[]
       summary: any
@@ -1343,6 +1419,7 @@ export const {
   useGetInventoryReportQuery,
   useGetBatchExpiryReportQuery,
   useGetStockAdjustmentReportQuery,
+  useGetStockTransferReportQuery,
   useGetTaxReportQuery,
   useGetSalesReturnsReportQuery,
   useGetPurchaseReturnsReportQuery,

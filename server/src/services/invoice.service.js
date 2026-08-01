@@ -40,6 +40,25 @@ const resolveInvoiceItemDiscount = (item, grossSubtotal, costBasis) => {
 };
 
 /**
+ * Normalizes a line item's batch draw into a uniform list of { batchId, batchNumber,
+ * quantity } allocations — whether it's the common single-batch case (one batch covers
+ * the whole line) or a split across multiple batches when no single batch had enough
+ * (auto-suggested FEFO by the client, editable there; see docs/architecture/
+ * universal-product-migration.md). Every validate/sell/restore call site can then just
+ * loop over this list instead of branching on "is this item split or not" — a
+ * single-batch item is simply a one-entry allocation.
+ */
+const getItemBatchAllocations = (item) => {
+  if (Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0) {
+    return item.batchAllocations;
+  }
+  if (item.batchId) {
+    return [{ batchId: item.batchId, batchNumber: item.batchNumber, quantity: item.stockQuantity ?? item.quantity }];
+  }
+  return [];
+};
+
+/**
  * Post (or re-post) the double-entry journal entries for an invoice.
  * Fire-and-forget: accounting must never block or break a sale.
  * Skips quotations/drafts (no revenue recognised yet).
@@ -252,10 +271,10 @@ const createInvoice = async (invoiceBody, userId) => {
   // queries into a fixed 3 parallel queries regardless of invoice size.
   const productIds = [...new Set(invoiceBody.items.filter((i) => i.productId).map((i) => String(i.productId)))];
   const batchIds = !isQuotation
-    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && i.batchId).map((i) => String(i.batchId)))]
+    ? [...new Set(invoiceBody.items.filter((i) => i.variantId).flatMap((i) => getItemBatchAllocations(i).map((a) => String(a.batchId))))]
     : [];
   const variantIdsNeedingInventory = !isQuotation
-    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && !i.batchId).map((i) => String(i.variantId)))]
+    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && getItemBatchAllocations(i).length === 0).map((i) => String(i.variantId)))]
     : [];
 
   const [productsList, batchesList, inventoriesList] = await Promise.all([
@@ -289,17 +308,28 @@ const createInvoice = async (invoiceBody, userId) => {
     // support for variants yet (matches the same scope limit as Purchase's variant
     // items), so quantity is used as-is.
     if (item.variantId) {
+      const allocations = getItemBatchAllocations(item);
       if (!isQuotation) {
-        // A manually picked batch (no automatic FEFO yet) must have enough on its own —
-        // see docs/architecture/universal-product-migration.md.
-        if (item.batchId) {
-          const batch = batchById.get(String(item.batchId));
-          const available = batch?.quantity ?? 0;
-          if (!batch || batch.status !== 'active' || available < item.quantity) {
+        // A picked batch (or, since a single batch can run short, a client-suggested
+        // FEFO split across several) must have enough across its allocations — no
+        // server-side auto-splitting; the client always sends the exact breakdown.
+        if (allocations.length > 0) {
+          const allocatedTotal = allocations.reduce((sum, a) => sum + Number(a.quantity || 0), 0);
+          if (allocatedTotal !== item.quantity) {
             throw new ApiError(
               httpStatus.BAD_REQUEST,
-              `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+              `Batch allocation for ${item.name || product.name} totals ${allocatedTotal}, but the line quantity is ${item.quantity}`
             );
+          }
+          for (const alloc of allocations) {
+            const batch = batchById.get(String(alloc.batchId));
+            const available = batch?.quantity ?? 0;
+            if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${alloc.quantity}`
+              );
+            }
           }
         } else {
           const inventory = inventoryByVariantId.get(String(item.variantId));
@@ -316,11 +346,17 @@ const createInvoice = async (invoiceBody, userId) => {
       {
         const gross = item.quantity * item.unitPrice;
         const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
+        // A split keeps the first allocation as the display-only batchId/batchNumber
+        // (populate, print, legacy readers) while the real per-batch breakdown lives in
+        // batchAllocations — only stored when there genuinely are 2+ batches involved,
+        // so a plain single-batch line looks exactly as it always has.
+        const isSplit = allocations.length > 1;
         validatedItems.push({
           productId: item.productId,
           variantId: item.variantId,
-          batchId: item.batchId,
-          batchNumber: item.batchNumber,
+          batchId: isSplit ? allocations[0].batchId : item.batchId,
+          batchNumber: isSplit ? allocations[0].batchNumber : item.batchNumber,
+          batchAllocations: isSplit ? allocations.map((a) => ({ batchId: a.batchId, batchNumber: a.batchNumber, quantity: a.quantity })) : undefined,
           name: item.name || product.name,
           nameUrdu: item.nameUrdu || product.nameUrdu || '',
           image: item.image || product.image,
@@ -509,19 +545,23 @@ const createInvoice = async (invoiceBody, userId) => {
   // Update product stock quantities (quotations do not affect stock until converted).
   // Real-variant line items bypass the legacy Product.stockQuantity path entirely —
   // that field is a fallback-only display value once a product hasVariants, see
-  // docs/architecture/universal-product-migration.md. A manually picked batchId
-  // deducts from that specific Batch; without one, this just decrements the variant's
-  // total Inventory.quantity (automatic FEFO splitting is a deliberate follow-up).
+  // docs/architecture/universal-product-migration.md. A picked batch (or a client-
+  // suggested FEFO split across several, when one batch didn't have enough) deducts
+  // from each of those specific Batches; without any, this just decrements the
+  // variant's total Inventory.quantity.
   if (!isQuotation) {
     // Each line item touches its own product/batch/variant, so the stock writes are
     // independent of one another — run them concurrently instead of one at a time.
     await Promise.all(validatedItems.map(async (item) => {
-      if (item.variantId && item.batchId) {
-        await batchService.sellFromBatch(item.batchId, item.stockQuantity, {
-          refType: 'Invoice',
-          refId: invoice._id,
-          userId,
-        });
+      const allocations = getItemBatchAllocations(item);
+      if (item.variantId && allocations.length > 0) {
+        for (const alloc of allocations) {
+          await batchService.sellFromBatch(alloc.batchId, alloc.quantity, {
+            refType: 'Invoice',
+            refId: invoice._id,
+            userId,
+          });
+        }
         return;
       }
       if (item.variantId) {
@@ -742,12 +782,15 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     if (originalType !== 'quotation') {
       for (const item of invoice.items) {
         const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
-        if (item.variantId && item.batchId) {
-          await batchService.restoreToBatch(item.batchId, restoredQuantity, {
-            refType: 'Invoice',
-            refId: invoice._id,
-            userId,
-          });
+        const allocations = getItemBatchAllocations(item);
+        if (item.variantId && allocations.length > 0) {
+          for (const alloc of allocations) {
+            await batchService.restoreToBatch(alloc.batchId, alloc.quantity, {
+              refType: 'Invoice',
+              refId: invoice._id,
+              userId,
+            });
+          }
           continue;
         }
         if (item.variantId) {
@@ -796,15 +839,25 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       }
 
       if (item.variantId) {
+        const allocations = getItemBatchAllocations(item);
         if (!willRemainQuotation) {
-          if (item.batchId) {
-            const batch = await Batch.findById(item.batchId);
-            const available = batch?.quantity ?? 0;
-            if (!batch || batch.status !== 'active' || available < item.quantity) {
+          if (allocations.length > 0) {
+            const allocatedTotal = allocations.reduce((sum, a) => sum + Number(a.quantity || 0), 0);
+            if (allocatedTotal !== item.quantity) {
               throw new ApiError(
                 httpStatus.BAD_REQUEST,
-                `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
+                `Batch allocation for ${item.name || product.name} totals ${allocatedTotal}, but the line quantity is ${item.quantity}`
               );
+            }
+            for (const alloc of allocations) {
+              const batch = await Batch.findById(alloc.batchId);
+              const available = batch?.quantity ?? 0;
+              if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+                throw new ApiError(
+                  httpStatus.BAD_REQUEST,
+                  `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${alloc.quantity}`
+                );
+              }
             }
           } else {
             const inventory = await Inventory.findOne({ variantId: item.variantId });
@@ -819,11 +872,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
         }
         const gross = item.quantity * item.unitPrice;
         const discount = resolveInvoiceItemDiscount(item, gross, item.quantity * item.cost);
+        const isSplit = allocations.length > 1;
         validatedItems.push({
           productId: item.productId,
           variantId: item.variantId,
-          batchId: item.batchId,
-          batchNumber: item.batchNumber,
+          batchId: isSplit ? allocations[0].batchId : item.batchId,
+          batchNumber: isSplit ? allocations[0].batchNumber : item.batchNumber,
+          batchAllocations: isSplit ? allocations.map((a) => ({ batchId: a.batchId, batchNumber: a.batchNumber, quantity: a.quantity })) : undefined,
           name: item.name || product.name,
           nameUrdu: item.nameUrdu || product.nameUrdu || '',
           image: item.image || product.image,
@@ -892,12 +947,15 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     // Update stock quantities for new items (quotations do not affect stock)
     if (!willRemainQuotation) {
       for (const item of validatedItems) {
-        if (item.variantId && item.batchId) {
-          await batchService.sellFromBatch(item.batchId, item.stockQuantity, {
-            refType: 'Invoice',
-            refId: invoice._id,
-            userId,
-          });
+        const allocations = getItemBatchAllocations(item);
+        if (item.variantId && allocations.length > 0) {
+          for (const alloc of allocations) {
+            await batchService.sellFromBatch(alloc.batchId, alloc.quantity, {
+              refType: 'Invoice',
+              refId: invoice._id,
+              userId,
+            });
+          }
           continue;
         }
         if (item.variantId) {
@@ -1118,11 +1176,14 @@ const deleteInvoiceById = async (invoiceId) => {
   if (invoice.type !== 'quotation') {
     for (const item of invoice.items) {
       const restoredQuantity = Number(item.stockQuantity || item.quantity || 0);
-      if (item.variantId && item.batchId) {
-        await batchService.restoreToBatch(item.batchId, restoredQuantity, {
-          refType: 'Invoice',
-          refId: invoice._id,
-        });
+      const allocations = getItemBatchAllocations(item);
+      if (item.variantId && allocations.length > 0) {
+        for (const alloc of allocations) {
+          await batchService.restoreToBatch(alloc.batchId, alloc.quantity, {
+            refType: 'Invoice',
+            refId: invoice._id,
+          });
+        }
         continue;
       }
       if (item.variantId) {
@@ -1224,14 +1285,17 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   for (const item of invoice.items) {
     if (item.variantId) {
       const stockQty = getStockQuantityFromItem(item);
-      if (item.batchId) {
-        const batch = await Batch.findById(item.batchId);
-        const available = batch?.quantity ?? 0;
-        if (!batch || batch.status !== 'active' || available < stockQty) {
-          throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            `Insufficient stock in batch ${batch?.batchNumber || item.batchNumber || ''} for ${item.name}. Available: ${available}, Required: ${stockQty}`,
-          );
+      const allocations = getItemBatchAllocations(item);
+      if (allocations.length > 0) {
+        for (const alloc of allocations) {
+          const batch = await Batch.findById(alloc.batchId);
+          const available = batch?.quantity ?? 0;
+          if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+            throw new ApiError(
+              httpStatus.BAD_REQUEST,
+              `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name}. Available: ${available}, Required: ${alloc.quantity}`,
+            );
+          }
         }
         continue;
       }
@@ -1300,12 +1364,15 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
 
   for (const item of invoice.items) {
     const stockQty = getStockQuantityFromItem(item);
-    if (item.variantId && item.batchId) {
-      await batchService.sellFromBatch(item.batchId, stockQty, {
-        refType: 'Invoice',
-        refId: invoice._id,
-        userId,
-      });
+    const allocations = getItemBatchAllocations(item);
+    if (item.variantId && allocations.length > 0) {
+      for (const alloc of allocations) {
+        await batchService.sellFromBatch(alloc.batchId, alloc.quantity, {
+          refType: 'Invoice',
+          refId: invoice._id,
+          userId,
+        });
+      }
       continue;
     }
     if (item.variantId) {

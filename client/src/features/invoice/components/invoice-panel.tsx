@@ -7,12 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase, History } from 'lucide-react'
-import { useGetAvailableImeisQuery } from '@/stores/imei.api'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase, History, SplitSquareHorizontal, ScanLine, ListChecks } from 'lucide-react'
+import { useGetAvailableImeisQuery, type ImeiRecord } from '@/stores/imei.api'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
-import { Invoice, InvoiceItem, createEmptyManualInvoiceItem } from '../index'
+import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
@@ -37,7 +38,7 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
-import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem, type PurchaseCatalogBatch } from '@/stores/purchaseCatalog.api'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
@@ -99,85 +100,319 @@ import { ProductHistoryDialog } from './product-history-dialog'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
-/** Picks IMEI/serial numbers to sell from in-stock inventory, for products with trackImei/trackSerial enabled. */
-function ImeiPicker({
+/**
+ * Compact row trigger for the serial/IMEI picker — replaces rendering every selected
+ * number inline (unworkable once a product's pool runs into the hundreds); just a status
+ * pill that opens SerialNumberDialog. Color signals progress at a glance: red until at
+ * least one is picked, amber mid-way, green once the line is fully covered.
+ */
+function SerialSummaryTrigger({
+  selectedCount,
+  quantity,
+  isSerial,
+  onClick,
+}: {
+  selectedCount: number
+  quantity: number
+  isSerial: boolean
+  onClick: () => void
+}) {
+  const label = isSerial ? 'Serial #' : 'IMEI'
+  const complete = selectedCount >= quantity
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+        complete
+          ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400'
+          : selectedCount > 0
+            ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400'
+            : 'border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10',
+      )}
+    >
+      {complete ? <Check className='h-2.5 w-2.5' /> : <ListChecks className='h-2.5 w-2.5' />}
+      {label}: {selectedCount}/{quantity}
+    </button>
+  )
+}
+
+/**
+ * Full-screen(ish) picker for IMEI/serial numbers, opened from SerialSummaryTrigger
+ * instead of rendering the whole in-stock pool as inline tags — a product can easily
+ * carry a hundred-plus in-stock units, which never worked as a wrapping tag list. Built
+ * for scanner-driven entry: scan (or type) a code and hit Enter to add it and stay ready
+ * for the next scan; once the line's full quantity is picked, Enter (or the footer
+ * button) closes the dialog and hands off to `onComplete` — wired by the caller to open
+ * the next line's product picker, so a whole cart of serialized items can be rung up
+ * without touching the mouse.
+ */
+function SerialNumberDialog({
+  open,
+  onOpenChange,
   productId,
+  batchId,
+  batchIds,
+  itemName,
   quantity,
   selected,
+  isSerial,
   onChange,
-  isSerial = false,
+  onComplete,
 }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   productId: string
+  batchId?: string
+  batchIds?: string[]
+  itemName: string
   quantity: number
   selected: string[]
-  onChange: (next: string[]) => void
-  isSerial?: boolean
+  isSerial: boolean
+  onChange: (next: string[], records: ImeiRecord[]) => void
+  onComplete: () => void
 }) {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(search), 250)
+    const t = setTimeout(() => setDebounced(search), 200)
     return () => clearTimeout(t)
   }, [search])
+  useEffect(() => {
+    if (!open) return
+    setSearch('')
+    focusField(searchInputRef.current, false)
+  }, [open])
+
   const { data: available = [], isFetching } = useGetAvailableImeisQuery(
-    { productId, search: debounced },
-    { skip: !productId },
+    { productId, batchId: batchIds?.length ? undefined : batchId, batchIds, search: debounced },
+    { skip: !productId || !open },
   )
-  const remaining = available.filter((d) => !selected.includes(d.imei))
+  // Selected units can scroll out of the current (possibly search-filtered) `available`
+  // page — keep every record this dialog has seen this session so a batch lookup for an
+  // already-selected serial never goes missing just because the search box changed.
+  const seenRecordsRef = useRef<Map<string, ImeiRecord>>(new Map())
+  available.forEach((d) => seenRecordsRef.current.set(d.imei, d))
+
   const label = isSerial ? 'Serial Number' : 'IMEI'
+  const isFull = selected.length >= quantity
+  const pickable = available.filter((d) => !selected.includes(d.imei))
+
+  const commit = (next: string[]) => onChange(next, [...seenRecordsRef.current.values()])
+
+  const finish = () => {
+    onOpenChange(false)
+    onComplete()
+  }
+
+  // Every field runs mouse-free: arrow keys move a highlighted row (like a combobox),
+  // Enter picks it — and the instant the line's full quantity is reached, the dialog
+  // closes itself and hands off to the next product. No confirmation click needed; the
+  // pick that completes the line *is* the confirmation.
+  const pick = (imei: string) => {
+    if (isFull || selected.includes(imei)) return
+    const next = [...selected, imei]
+    commit(next)
+    setSearch('')
+    if (next.length >= quantity) finish()
+  }
+  const unpick = (imei: string) => commit(selected.filter((n) => n !== imei))
+
+  const [highlightImei, setHighlightImei] = useState<string | null>(null)
+  const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  useEffect(() => {
+    setHighlightImei((prev) => (prev && pickable.some((d) => d.imei === prev) ? prev : pickable[0]?.imei ?? null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available, selected])
+  useEffect(() => {
+    if (highlightImei) rowRefs.current[highlightImei]?.scrollIntoView({ block: 'nearest' })
+  }, [highlightImei])
+
+  const moveHighlight = (dir: 1 | -1) => {
+    if (pickable.length === 0) return
+    const idx = pickable.findIndex((d) => d.imei === highlightImei)
+    const nextIdx = idx === -1 ? (dir === 1 ? 0 : pickable.length - 1) : (idx + dir + pickable.length) % pickable.length
+    setHighlightImei(pickable[nextIdx].imei)
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveHighlight(1); return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); moveHighlight(-1); return }
+    if (e.key !== 'Enter' || e.shiftKey) return
+    e.preventDefault()
+    if (isFull) { finish(); return }
+    // A barcode scanner types the code then sends Enter itself, faster than the search
+    // debounce can catch up — so an exact match against whatever's already loaded takes
+    // priority over the (possibly stale) highlighted row. Pure keyboard browsing with no
+    // typed text just picks whatever's highlighted.
+    const term = search.trim().toLowerCase()
+    const exact = term ? available.find((d) => d.imei.toLowerCase() === term && !selected.includes(d.imei)) : undefined
+    const target = exact ?? pickable.find((d) => d.imei === highlightImei)
+    if (target) pick(target.imei)
+  }
 
   return (
-    <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
-      <div className='flex items-center justify-between'>
-        <span className='text-xs font-medium text-amber-700'>
-          {label} Numbers ({selected.length}/{quantity})
-        </span>
-      </div>
-      <div className='relative'>
-        <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground' />
-        <Input
-          placeholder={`Search in-stock ${label.toLowerCase()}…`}
-          value={search}
-          showVoiceInput={false}
-          onChange={(e) => setSearch(e.target.value)}
-          className='h-8 text-sm pl-8'
-        />
-      </div>
-      {isFetching ? (
-        <p className='text-xs text-muted-foreground'>Loading…</p>
-      ) : remaining.length > 0 ? (
-        <div className='flex flex-wrap gap-1.5 max-h-28 overflow-y-auto'>
-          {remaining.map((d) => (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader>
+          <DialogTitle className='flex items-center gap-2 text-base'>
+            <ScanLine className='h-4 w-4 text-amber-600' />
+            {isSerial ? 'Serial Numbers' : 'IMEI Numbers'}
+          </DialogTitle>
+          <DialogDescription className='truncate'>{itemName}</DialogDescription>
+        </DialogHeader>
+
+        <div className='flex items-center justify-between'>
+          <span className='text-xs text-muted-foreground'>↑↓ to move · Enter to pick · or scan</span>
+          <Badge className={isFull ? 'bg-green-600 hover:bg-green-600' : ''} variant={isFull ? 'default' : 'secondary'}>
+            {selected.length} / {quantity} selected
+          </Badge>
+        </div>
+
+        <div className='relative'>
+          <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground' />
+          <Input
+            ref={searchInputRef}
+            placeholder={`Scan or search ${label.toLowerCase()}…`}
+            value={search}
+            showVoiceInput={false}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            className='h-9 pl-8'
+          />
+        </div>
+
+        <div className='max-h-72 space-y-0.5 overflow-y-auto rounded-md border bg-muted/20 p-1.5'>
+          {isFetching ? (
+            <div className='flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground'>
+              <Loader2 className='h-4 w-4 animate-spin' /> Loading…
+            </div>
+          ) : available.length > 0 ? (
+            available.map((d) => {
+              const isSelected = selected.includes(d.imei)
+              const isHighlighted = !isSelected && d.imei === highlightImei
+              return (
+                <button
+                  key={d.id}
+                  ref={(el) => { rowRefs.current[d.imei] = el }}
+                  type='button'
+                  disabled={!isSelected && isFull}
+                  onClick={() => (isSelected ? unpick(d.imei) : pick(d.imei))}
+                  onMouseEnter={() => !isSelected && setHighlightImei(d.imei)}
+                  className={cn(
+                    'flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors',
+                    !isSelected && 'hover:bg-accent hover:text-accent-foreground',
+                    isSelected && 'bg-green-50 dark:bg-green-950/25',
+                    isHighlighted && 'bg-accent text-accent-foreground',
+                    !isSelected && isFull && 'cursor-not-allowed opacity-40',
+                  )}
+                >
+                  <span className={cn('font-mono', isSelected && 'font-semibold')}>{d.imei}</span>
+                  {isSelected ? (
+                    <Check className='h-4 w-4 text-green-600' />
+                  ) : isHighlighted ? (
+                    <span className='text-[10px] font-medium text-muted-foreground'>Enter ↵</span>
+                  ) : null}
+                </button>
+              )
+            })
+          ) : (
+            <p className='py-8 text-center text-sm text-muted-foreground'>
+              No in-stock {label.toLowerCase()} found{debounced ? ' for this search' : ''}.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className='flex-row items-center justify-between sm:justify-between'>
+          <span className={cn('text-xs font-medium', isFull ? 'text-green-600' : 'text-amber-600')}>
+            {isFull ? `All ${quantity} selected` : `${quantity - selected.length} more needed`}
+          </span>
+          <Button size='sm' disabled={!isFull} onClick={finish}>
+            Done — Next Product
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * Editable breakdown for a line split across multiple batches (auto-suggested FEFO —
+ * earliest expiry first — when one batch alone couldn't cover the requested quantity,
+ * see autoAllocateBatches in ../index.tsx). Each pill's quantity is independently
+ * editable — the line's total is just their sum, so nudging one number grows/shrinks
+ * the line rather than needing to balance against a fixed target. Dropping a pill to 0
+ * removes it; if only one batch is left, the caller collapses back to a plain
+ * single-batch line automatically. Laid out as a single wrapping row of pills (matching
+ * the plain single-batch chips it replaces) rather than a stacked list, so a split line
+ * costs no more vertical space than an unsplit one.
+ */
+function BatchAllocationEditor({
+  allocations,
+  batches,
+  onUpdateQuantity,
+  onAddBatch,
+}: {
+  allocations: BatchAllocation[]
+  batches: PurchaseCatalogBatch[]
+  onUpdateQuantity: (batchId: string, quantity: number) => void
+  onAddBatch: (batch: { id: string; batchNumber: string }) => void
+}) {
+  const total = allocations.reduce((sum, a) => sum + a.quantity, 0)
+  const unused = batches.filter((b) => b.quantity > 0 && !allocations.some((a) => a.batchId === b.id))
+  return (
+    <div className='inline-flex shrink-0 flex-wrap items-center gap-1'>
+      <span className='inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'>
+        <SplitSquareHorizontal className='h-2.5 w-2.5' />
+        Split
+      </span>
+      {allocations.map((alloc) => {
+        const batchInfo = batches.find((b) => b.id === alloc.batchId)
+        const cap = batchInfo?.quantity ?? alloc.quantity
+        const overCap = alloc.quantity > cap
+        return (
+          <div
+            key={alloc.batchId}
+            title={batchInfo?.expiryDate ? `Expires ${new Date(batchInfo.expiryDate).toLocaleDateString()}` : undefined}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1 text-[11px] transition-colors',
+              overCap
+                ? 'border-destructive bg-destructive/10 text-destructive'
+                : 'border-blue-600 bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200',
+            )}
+          >
+            <span className='font-medium'>{alloc.batchNumber}</span>
+            <Input
+              type='number'
+              min={0}
+              value={alloc.quantity}
+              onChange={(e) => onUpdateQuantity(alloc.batchId, Math.max(0, parseInt(e.target.value) || 0))}
+              onFocus={(e) => e.target.select()}
+              className='h-4 w-9 border-0 bg-transparent p-0 text-center text-[11px] font-semibold shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+            />
             <button
-              key={d.id}
               type='button'
-              disabled={selected.length >= quantity}
-              onClick={() => onChange([...selected, d.imei])}
-              className='text-xs px-2 py-1 rounded-md border bg-background hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed'
+              onClick={() => onUpdateQuantity(alloc.batchId, 0)}
+              className='rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10'
             >
-              {d.imei}
+              <X className='h-2.5 w-2.5' />
             </button>
-          ))}
-        </div>
-      ) : (
-        <p className='text-xs text-muted-foreground'>No in-stock {label.toLowerCase()} found{debounced ? ' for this search' : ''}.</p>
-      )}
-      {selected.length > 0 && (
-        <div className='flex flex-wrap gap-1.5'>
-          {selected.map((num) => (
-            <Badge key={num} variant='secondary' className='gap-1 pr-1'>
-              {num}
-              <button
-                type='button'
-                onClick={() => onChange(selected.filter((n) => n !== num))}
-                className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
-              >
-                <X className='h-3 w-3' />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
+          </div>
+        )
+      })}
+      {unused.map((b) => (
+        <button
+          key={b.id}
+          type='button'
+          onClick={() => onAddBatch({ id: b.id, batchNumber: b.batchNumber })}
+          className='rounded-full border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-solid hover:bg-accent hover:text-foreground'
+        >
+          + {b.batchNumber} · {b.quantity} left
+        </button>
+      ))}
+      <span className='text-[11px] font-medium text-muted-foreground'>= {total} pcs</span>
     </div>
   )
 }
@@ -266,6 +501,8 @@ export function InvoicePanel({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  // Which line's serial/IMEI picker dialog is open — '' means none.
+  const [serialDialogItemId, setSerialDialogItemId] = useState<string>('')
   const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
   const [customerBalance, setCustomerBalance] = useState<number>(0)
   const [isWhatsAppSending, setIsWhatsAppSending] = useState(false)
@@ -630,11 +867,12 @@ export function InvoicePanel({
     const currentProduct = variantId ? undefined : products.find(p => (p._id || p.id) === productId)
     const currentStock = currentProduct ? currentProduct.stockQuantity : product.stockQuantity
 
-    // Default to the earliest-expiring batch (already sorted that way by the backend)
-    // — the seller can still switch batches on the line afterward. No automatic FEFO
-    // splitting across batches yet.
+    // Default to the earliest-expiring batch that still has stock (already sorted that
+    // way by the backend) — the seller can still switch batches on the line afterward.
+    // No automatic FEFO splitting across batches yet. Skips depleted (0-qty) batches so
+    // a newly added line doesn't default to one that can't actually fulfill anything.
     const defaultBatch = variantId && (product.trackBatch || product.trackExpiry)
-      ? product.knownBatches?.[0]
+      ? product.knownBatches?.find((b) => b.quantity > 0) ?? product.knownBatches?.[0]
       : undefined
     const batchId = defaultBatch?.id
     const batchNumber = defaultBatch?.batchNumber
@@ -825,22 +1063,31 @@ export function InvoicePanel({
   // product/variant's own price — NOT to whatever the line currently shows — so
   // re-selecting an earlier batch reliably resets the price instead of silently
   // keeping whatever the last-selected batch left behind.
-  const updateItemBatch = useCallback((itemId: string, batchId: string, batchNumber: string, costPerUnit?: number, sellingPrice?: number, basePrice?: number) => {
+  const updateItemBatch = useCallback((itemId: string, batchId: string, batchNumber: string, availableQuantity: number, costPerUnit?: number, sellingPrice?: number, basePrice?: number) => {
+    // Switching to a batch with less stock than the line already asks for must pull the
+    // quantity down to match — otherwise the line silently keeps a quantity the newly
+    // selected batch can't actually fulfill (caught late, only when saving fails).
+    const currentItem = invoice.items.find((item) => item.id === itemId)
+    if (currentItem && availableQuantity > 0 && availableQuantity < currentItem.quantity) {
+      toast.error(`${currentItem.name} - quantity reduced to ${availableQuantity} to match batch ${batchNumber}'s available stock`)
+    }
+
     setInvoice(prev => {
       const newItems = prev.items.map(item => {
         if (item.id !== itemId) return item
         const cost = costPerUnit ?? item.cost
         const unitPrice = sellingPrice ?? basePrice ?? item.unitPrice
+        const quantity = availableQuantity > 0 ? Math.min(item.quantity, availableQuantity) : item.quantity
         const selectedProduct = products.find((p) => (p._id || p.id) === item.productId) || { unit: item.unit }
         const lineValues = calculateInvoiceLineValues({
           product: selectedProduct,
-          quantity: item.quantity,
+          quantity,
           unit: item.unit,
           unitPrice,
           cost,
           conversionFactor: item.conversionFactor,
         })
-        if (!lineValues) return { ...item, batchId, batchNumber, cost, profit: item.subtotal - (cost * item.quantity) }
+        if (!lineValues) return { ...item, batchId, batchNumber, cost, quantity, stockQuantity: quantity, profit: item.subtotal - (cost * quantity) }
         const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
         return {
           ...item,
@@ -848,6 +1095,8 @@ export function InvoicePanel({
           batchNumber,
           cost,
           unitPrice,
+          quantity,
+          stockQuantity: quantity,
           subtotal: net.subtotal,
           profit: net.profit,
           discountAmount: net.discountAmount,
@@ -866,7 +1115,144 @@ export function InvoicePanel({
         totalCost: totals.totalCost,
       }
     })
+  }, [invoice.items, setInvoice, calculateTotals, products])
+
+  // Shared recompute for editing a line's batch split — a batch chip's "insufficient
+  // stock" block is only for a *single* picked batch; once a line is split across
+  // several (see autoAllocateBatches in updateQuantity), the seller can rebalance those
+  // rows by hand. The total (`item.quantity`) is always just the sum of the rows, so
+  // editing one number naturally grows/shrinks the line rather than needing to be
+  // rebalanced against a fixed target. Collapses back to a plain single-batch line
+  // (clearing batchAllocations) the moment only one row is left with stock.
+  const applyBatchAllocations = useCallback((itemId: string, compute: (current: BatchAllocation[]) => BatchAllocation[]) => {
+    setInvoice(prev => {
+      const newItems = prev.items.map(item => {
+        if (item.id !== itemId) return item
+        const current: BatchAllocation[] = item.batchAllocations
+          ?? (item.batchId ? [{ batchId: item.batchId, batchNumber: item.batchNumber || '', quantity: item.quantity }] : [])
+        const next = compute(current).filter((a) => a.quantity > 0)
+        const totalQty = next.reduce((sum, a) => sum + a.quantity, 0)
+        const selectedProduct = products.find((p) => (p._id || p.id) === item.productId) || { unit: item.unit }
+        const lineValues = calculateInvoiceLineValues({
+          product: selectedProduct,
+          quantity: totalQty,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          cost: item.cost,
+          conversionFactor: item.conversionFactor,
+        })
+        const discountPatch = lineValues
+          ? applyLineDiscount(lineValues, item.discountType, item.discountValue)
+          : { subtotal: item.subtotal, profit: item.profit, discountAmount: item.discountAmount }
+        const only = next.length <= 1 ? next[0] : undefined
+        return {
+          ...item,
+          quantity: totalQty,
+          stockQuantity: totalQty,
+          batchId: only ? only.batchId : (next[0]?.batchId ?? item.batchId),
+          batchNumber: only ? only.batchNumber : (next[0]?.batchNumber ?? item.batchNumber),
+          batchAllocations: only ? undefined : next,
+          subtotal: discountPatch.subtotal,
+          profit: discountPatch.profit,
+          discountAmount: discountPatch.discountAmount,
+        }
+      })
+      if (!calculateTotals) return { ...prev, items: newItems }
+      const totals = calculateTotals(newItems, prev.discountType, prev.discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0)
+      return {
+        ...prev,
+        items: newItems,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+      }
+    })
   }, [setInvoice, calculateTotals, products])
+
+  const updateAllocationQuantity = useCallback((itemId: string, batchId: string, newQty: number) => {
+    applyBatchAllocations(itemId, (current) => current.map((a) => (a.batchId === batchId ? { ...a, quantity: newQty } : a)))
+  }, [applyBatchAllocations])
+
+  const addBatchToSplit = useCallback((itemId: string, batch: { id: string; batchNumber: string }) => {
+    applyBatchAllocations(itemId, (current) =>
+      current.some((a) => a.batchId === batch.id) ? current : [...current, { batchId: batch.id, batchNumber: batch.batchNumber, quantity: 1 }],
+    )
+  }, [applyBatchAllocations])
+
+  /**
+   * When a serial-tracked + batch-tracked line's picked serials change, re-derive the
+   * batch split from what was actually picked — each serial belongs to exactly one real
+   * batch (or none, for legacy/opening stock), so the allocation should follow the
+   * seller's serial choices instead of being edited independently and risking a mismatch
+   * (a batch counted as "3" on the line but only 2 of its actual serials picked). Any
+   * portion of the line not yet pinned to a specific batch — serials still left to pick,
+   * or ones with no recorded batch — fills whichever batches still have room, in the same
+   * FEFO order as the initial auto-split, so the numbers always keep summing to the
+   * line's quantity.
+   */
+  const updateItemImeis = useCallback((itemId: string, nextImeis: string[], records: ImeiRecord[]) => {
+    setInvoice(prev => {
+      const newItems = prev.items.map((item) => {
+        if (item.id !== itemId) return item
+        if (!item.variantId) return { ...item, imeis: nextImeis }
+
+        const catalogEntry = sellableCatalog.find((c) => c.variantId === item.variantId)
+        const batches = catalogEntry?.batches ?? []
+        if (batches.length === 0) return { ...item, imeis: nextImeis }
+
+        const batchIdByImei = new Map(records.map((r) => [r.imei, r.batchId || null]))
+        const knownCounts = new Map<string, number>()
+        nextImeis.forEach((num) => {
+          const bId = batchIdByImei.get(num)
+          if (bId) knownCounts.set(bId, (knownCounts.get(bId) || 0) + 1)
+        })
+
+        const currentAllocations: BatchAllocation[] = item.batchAllocations
+          ?? (item.batchId ? [{ batchId: item.batchId, batchNumber: item.batchNumber || '', quantity: item.quantity }] : [])
+
+        // Preserve the batches already part of the split (for order/labels), plus any new
+        // one a picked serial actually belongs to that wasn't already in it.
+        const orderedBatchIds = [...new Set([...currentAllocations.map((a) => a.batchId), ...knownCounts.keys()])]
+        const next: BatchAllocation[] = orderedBatchIds.map((batchId) => ({
+          batchId,
+          batchNumber: currentAllocations.find((a) => a.batchId === batchId)?.batchNumber
+            ?? batches.find((b) => b.id === batchId)?.batchNumber ?? '',
+          quantity: knownCounts.get(batchId) ?? 0,
+        }))
+
+        let leftover = Math.max(0, item.quantity - next.reduce((sum, a) => sum + a.quantity, 0))
+        for (const alloc of next) {
+          if (leftover <= 0) break
+          const cap = batches.find((b) => b.id === alloc.batchId)?.quantity ?? Infinity
+          const take = Math.min(Math.max(0, cap - alloc.quantity), leftover)
+          alloc.quantity += take
+          leftover -= take
+        }
+        if (leftover > 0) {
+          for (const b of batches.filter((b) => b.quantity > 0 && !next.some((a) => a.batchId === b.id))) {
+            if (leftover <= 0) break
+            const take = Math.min(b.quantity, leftover)
+            next.push({ batchId: b.id, batchNumber: b.batchNumber, quantity: take })
+            leftover -= take
+          }
+        }
+
+        const finalAllocations = next.filter((a) => a.quantity > 0)
+        const only = finalAllocations.length <= 1 ? finalAllocations[0] : undefined
+        return {
+          ...item,
+          imeis: nextImeis,
+          batchId: only ? only.batchId : (finalAllocations[0]?.batchId ?? item.batchId),
+          batchNumber: only ? only.batchNumber : (finalAllocations[0]?.batchNumber ?? item.batchNumber),
+          batchAllocations: only ? undefined : finalAllocations,
+        }
+      })
+      return { ...prev, items: newItems }
+    })
+  }, [setInvoice, sellableCatalog])
 
   const addNewRowAndOpenProduct = useCallback(() => {
     const nextEmptyRow = invoice.items.find((item) => item.isManualEntry && !item.productId)
@@ -902,9 +1288,20 @@ export function InvoicePanel({
     onEnterAdvance(e, () => focusField(priceInputRefs.current[currentItemId]))
   }, [])
 
-  const handlePriceKeyDown = useCallback((e: React.KeyboardEvent) => {
-    onEnterAdvance(e, addNewRowAndOpenProduct)
-  }, [addNewRowAndOpenProduct])
+  const handlePriceKeyDown = useCallback((e: React.KeyboardEvent, currentItemId: string) => {
+    onEnterAdvance(e, () => {
+      // Serial/IMEI-tracked lines route through the picker dialog next — it hands off to
+      // the next product itself (onComplete) once the line's fully covered. Everything
+      // else goes straight to the next product row, as before.
+      const item = invoice.items.find((i) => i.id === currentItemId)
+      const product = item ? products.find((p: any) => (p._id || p.id) === item.productId) : undefined
+      if (product?.trackImei || product?.trackSerial) {
+        setSerialDialogItemId(currentItemId)
+        return
+      }
+      addNewRowAndOpenProduct()
+    })
+  }, [invoice.items, products, addNewRowAndOpenProduct])
 
   const focusInvoiceType = useCallback(() => focusField(invoiceTypeTriggerRef.current), [])
   const focusInvoiceDate = useCallback(() => focusField(invoiceDateRef.current), [])
@@ -1144,6 +1541,7 @@ export function InvoicePanel({
           variantId: item.variantId,
           batchId: item.batchId,
           batchNumber: item.batchNumber,
+          batchAllocations: item.batchAllocations,
           name: item.name,
           nameUrdu: item.nameUrdu,
           image: item.image,
@@ -2025,7 +2423,13 @@ export function InvoicePanel({
                 const catalogEntry = item.variantId
                   ? sellableCatalog.find(c => c.variantId === item.variantId)
                   : undefined
-                const remainingStock = item.variantId ? catalogEntry?.stockQuantity : currentProduct?.stockQuantity
+                const totalCatalogStock = item.variantId ? catalogEntry?.stockQuantity : currentProduct?.stockQuantity
+                // The catalog number is a snapshot from when it was fetched — it has no idea
+                // this line has already claimed `item.quantity` of it. Subtract that out so
+                // the badge reads as "what's left after this invoice", not "what existed
+                // before you started adding it" — otherwise it never moves as you type a
+                // higher quantity, even while a batch chip below visibly runs out.
+                const remainingStock = totalCatalogStock !== undefined ? Math.max(0, totalCatalogStock - item.quantity) : undefined
                 // Compact "fast invoicing" mode (catalog hidden): the whole item row
                 // folds onto one line — name flexes to fill the middle, qty/price/subtotal
                 // and delete sit fixed-width at the end — instead of stacking name above
@@ -2261,12 +2665,18 @@ export function InvoicePanel({
                               primaryClassName='font-semibold text-sm'
                               truncate={compact}
                             />
-                            <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', compact && 'flex-nowrap')}>
+                            {/* Everything about "what stock backs this line" — remaining
+                                stock, the batch(es) it draws from, and (for serialized
+                                products) how many serials are picked — lives in one wrapping
+                                pill row right under the name, instead of stacking each as its
+                                own line. Keeps a line item to two rows tall so more items fit
+                                on screen at once. */}
+                            <div className='flex flex-wrap items-center gap-1.5 mt-1'>
                               {!compact && (
                                 <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
                               )}
                               {remainingStock !== undefined && (
-                                <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+                                <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
                                   remainingStock <= 0 ? 'bg-red-100 text-red-700' :
                                   remainingStock <= 5 ? 'bg-red-50 text-red-500' :
                                   remainingStock <= 20 ? 'bg-amber-50 text-amber-600' :
@@ -2278,36 +2688,90 @@ export function InvoicePanel({
                                     remainingStock <= 20 ? 'bg-amber-400' :
                                     'bg-green-500'
                                   }`} />
-                                  {remainingStock <= 0 ? 'Out of stock' : `${remainingStock} left`}
+                                  {/* remainingStock is "what's left after this line sells" — 0
+                                      doesn't mean there's nothing to sell, it can just mean this
+                                      line is taking the last unit(s) (e.g. exactly 2 in stock,
+                                      selling 2). Only call it "Out of stock" when there was
+                                      truly nothing here before this line was even added. */}
+                                  {remainingStock <= 0
+                                    ? ((totalCatalogStock ?? 0) > 0 ? '0 left' : 'Out of stock')
+                                    : `${remainingStock} left`}
                                 </span>
                               )}
-                            </div>
-                            {/* Which batch this sale depletes — defaults to earliest
-                                expiry but switchable; no automatic FEFO splitting across
-                                batches yet, see docs/architecture/universal-product-migration.md. */}
-                            {catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0 && (
-                              <div className='flex flex-wrap items-center gap-1 mt-1'>
-                                {catalogEntry.batches.map(b => {
-                                  const isSelected = item.batchId === b.id
-                                  return (
-                                    <button
-                                      key={b.id}
-                                      type='button'
-                                      onClick={() => updateItemBatch(item.id, b.id, b.batchNumber, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
-                                      title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
-                                      className={cn(
-                                        'rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
-                                        isSelected
-                                          ? 'border-blue-600 bg-blue-100 text-blue-800'
-                                          : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                                      )}
-                                    >
-                                      {b.batchNumber} · {b.quantity} left
-                                    </button>
+                              {/* Which batch(es) this sale depletes — defaults to the
+                                  earliest-expiry batch, switchable by clicking another. If
+                                  the quantity outgrows a single batch, updateQuantity
+                                  auto-suggests a FEFO split (earliest expiry first) across
+                                  several — rendered here as an editable breakdown instead of
+                                  these plain single-select chips. See
+                                  docs/architecture/universal-product-migration.md. */}
+                              {catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0 && (
+                                item.batchAllocations && item.batchAllocations.length > 1 ? (
+                                  <BatchAllocationEditor
+                                    allocations={item.batchAllocations}
+                                    batches={catalogEntry.batches}
+                                    onUpdateQuantity={(batchId, qty) => updateAllocationQuantity(item.id, batchId, qty)}
+                                    onAddBatch={(batch) => addBatchToSplit(item.id, batch)}
+                                  />
+                                ) : (() => {
+                                  // Hide batches with nothing left to sell from — nothing to pick
+                                  // there. The exception is whichever batch this line already has
+                                  // selected: keep showing it (even at 0) so the selection and its
+                                  // "insufficient stock" warning below stay visible instead of the
+                                  // chip just vanishing with no explanation.
+                                  const visibleBatches = catalogEntry.batches!.filter(
+                                    (b) => b.quantity > 0 || item.batchId === b.id,
                                   )
-                                })}
-                              </div>
-                            )}
+                                  if (visibleBatches.length === 0) return null
+                                  return (
+                                    <>
+                                      {visibleBatches.map(b => {
+                                        const isSelected = item.batchId === b.id
+                                        // Only the batch this line is actually drawing from has its
+                                        // stock reduced by this line's quantity — other batches'
+                                        // numbers are untouched by a selection that doesn't draw from them.
+                                        const batchLeft = isSelected ? Math.max(0, b.quantity - item.quantity) : b.quantity
+                                        return (
+                                          <button
+                                            key={b.id}
+                                            type='button'
+                                            onClick={() => updateItemBatch(item.id, b.id, b.batchNumber, b.quantity, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
+                                            title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                                            className={cn(
+                                              'shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
+                                              isSelected
+                                                ? 'border-blue-600 bg-blue-100 text-blue-800'
+                                                : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                                            )}
+                                          >
+                                            {b.batchNumber} · {batchLeft} left
+                                          </button>
+                                        )
+                                      })}
+                                    </>
+                                  )
+                                })()
+                              )}
+                              {(currentProduct?.trackImei || currentProduct?.trackSerial) && (
+                                <SerialSummaryTrigger
+                                  selectedCount={(item.imeis || []).length}
+                                  quantity={item.quantity}
+                                  isSerial={!!currentProduct?.trackSerial}
+                                  onClick={() => setSerialDialogItemId(item.id)}
+                                />
+                              )}
+                            </div>
+                            {!(item.batchAllocations && item.batchAllocations.length > 1) && (() => {
+                              const selectedBatch = item.batchId
+                                ? catalogEntry?.batches?.find((b) => b.id === item.batchId)
+                                : undefined
+                              if (!selectedBatch || item.quantity <= selectedBatch.quantity) return null
+                              return (
+                                <p className='text-xs text-destructive mt-1'>
+                                  Only {selectedBatch.quantity} available in batch {selectedBatch.batchNumber} — reduce the quantity or pick a different batch.
+                                </p>
+                              )
+                            })()}
                           </div>
                         )}
                       </div>
@@ -2466,7 +2930,7 @@ export function InvoicePanel({
                             inputMode="decimal"
                             showVoiceInput={false}
                             value={item.unitPrice > 0 ? item.unitPrice : ''}
-                            onKeyDown={handlePriceKeyDown}
+                            onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
                             onChange={(e) => {
                               const newPrice = parseFloat(e.target.value) || 0
                               const newItems = invoice.items.map(i =>
@@ -2586,24 +3050,6 @@ export function InvoicePanel({
                     {compact && historyButton}
                     {compact && deleteButton}
                     </div>
-                    {(() => {
-                      const product = products.find((p: any) => (p._id || p.id) === item.productId)
-                      if (!product?.trackImei && !product?.trackSerial) return null
-                      return (
-                        <ImeiPicker
-                          productId={item.productId}
-                          quantity={item.quantity}
-                          selected={item.imeis || []}
-                          isSerial={!!product?.trackSerial}
-                          onChange={(next) => {
-                            setInvoice((prev) => ({
-                              ...prev,
-                              items: prev.items.map((it) => (it.id === item.id ? { ...it, imeis: next } : it)),
-                            }))
-                          }}
-                        />
-                      )
-                    })()}
                   </div>
                 )
               })
@@ -3106,6 +3552,27 @@ export function InvoicePanel({
           currentPrice={historyDialog.currentPrice}
         />
       )}
+
+      {(() => {
+        const dialogItem = invoice.items.find((i) => i.id === serialDialogItemId)
+        if (!dialogItem) return null
+        const dialogProduct = products.find((p: any) => (p._id || p.id) === dialogItem.productId)
+        return (
+          <SerialNumberDialog
+            open={!!serialDialogItemId}
+            onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
+            productId={dialogItem.productId}
+            batchId={dialogItem.batchId}
+            batchIds={dialogItem.batchAllocations?.map((a) => a.batchId)}
+            itemName={dialogItem.name}
+            quantity={dialogItem.quantity}
+            selected={dialogItem.imeis || []}
+            isSerial={!!dialogProduct?.trackSerial}
+            onChange={(next, records) => updateItemImeis(dialogItem.id, next, records)}
+            onComplete={addNewRowAndOpenProduct}
+          />
+        )
+      })()}
 
     </div>
   )

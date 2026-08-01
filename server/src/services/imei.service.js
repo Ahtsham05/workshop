@@ -22,9 +22,20 @@ const getImeisForPurchaseItem = async ({ purchaseId, productId, organizationId, 
   return Imei.find({ purchaseId, productId, organizationId, branchId });
 };
 
-/** Used by the sale form: in-stock IMEIs available to pick from for a given product. */
-const getAvailableImeisForProduct = async ({ productId, organizationId, branchId, search }) => {
+/**
+ * Used by the sale form: in-stock IMEIs available to pick from for a given product.
+ * When `batchId` (single batch) or `batchIds` (a line split across several batches) is
+ * given, only units from those batches — plus units with no recorded batch (opening
+ * stock, or purchased before serial-batch linking existed) — are offered, so picking a
+ * batch narrows the list instead of always showing every in-stock unit of the product
+ * regardless of which batch it actually belongs to.
+ */
+const getAvailableImeisForProduct = async ({ productId, organizationId, branchId, search, batchId, batchIds }) => {
   const filter = { productId, organizationId, branchId, status: 'in_stock' };
+  const ids = [...new Set([...(batchIds || []), ...(batchId ? [batchId] : [])].map(String).filter(Boolean))];
+  if (ids.length > 0) {
+    filter.$or = [{ batchId: null }, { batchId: { $in: ids } }];
+  }
   if (search && search.trim()) {
     const digits = search.replace(/\D/g, '');
     filter.imei = { $regex: digits || search.trim(), $options: 'i' };
@@ -48,6 +59,7 @@ const syncImeisForPurchaseItem = async ({
   productName,
   imeis = [],
   type = 'imei',
+  batchId = null,
   purchasePrice,
   supplierId,
   supplierName,
@@ -55,28 +67,32 @@ const syncImeisForPurchaseItem = async ({
   organizationId,
   branchId,
   createdBy,
+  session,
 }) => {
   const wantedNumbers = [...new Set(imeis.map(normalizeImei).filter(Boolean))];
 
-  const existing = await Imei.find({ purchaseId: purchaseId || null, productId, organizationId, branchId });
+  const existing = await Imei.find({ purchaseId: purchaseId || null, productId, organizationId, branchId }).session(session || null);
   const existingByNumber = new Map(existing.map((d) => [normalizeImei(d.imei), d]));
 
   // Remove numbers that were deleted from the form, but only if still in stock (never delete a sold record).
   const toDelete = existing.filter((d) => !wantedNumbers.includes(normalizeImei(d.imei)) && d.status === 'in_stock');
   if (toDelete.length > 0) {
-    await Imei.deleteMany({ _id: { $in: toDelete.map((d) => d._id) } });
+    await Imei.deleteMany({ _id: { $in: toDelete.map((d) => d._id) } }, { session });
   }
 
   const newNumbers = wantedNumbers.filter((num) => !existingByNumber.has(num));
   if (newNumbers.length === 0) return;
 
-  // Guard against re-adding a number that's already tracked elsewhere in this org/branch.
+  // Guard against re-adding a number that's already tracked elsewhere in this org/branch. This
+  // check — and every write below — must run inside the caller's transaction (when given): a
+  // duplicate found here throws, and the whole create (Product or Purchase) must roll back
+  // instead of leaving a persisted record behind with no serials synced to it.
   const duplicates = await Imei.find({
     organizationId,
     branchId,
     imei: { $in: newNumbers },
     status: { $in: ['in_stock', 'sold'] },
-  });
+  }).session(session || null);
   if (duplicates.length > 0) {
     const label = type === 'serial' ? 'Serial number' : 'IMEI';
     throw new ApiError(
@@ -94,6 +110,7 @@ const syncImeisForPurchaseItem = async ({
       productId,
       productName,
       purchaseId: purchaseId || null,
+      batchId: batchId || null,
       purchasePrice,
       supplierId: supplierId || null,
       supplierName: supplierName || '',
@@ -102,6 +119,7 @@ const syncImeisForPurchaseItem = async ({
       createdBy,
       history: [historyEntry('in_stock', { byUserId: createdBy, note: purchaseId ? 'Received via purchase' : 'Added as opening stock' })],
     })),
+    { session },
   );
 };
 
@@ -140,6 +158,23 @@ const validateImeisAvailable = async ({ items, organizationId, branchId }) => {
     const missing = numbers.filter((num) => !foundSet.has(num));
     if (missing.length > 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, `IMEI/Serial number not available in stock: ${missing.join(', ')}`);
+    }
+
+    // Catch a genuine batch mismatch (the unit's recorded batch differs from every batch
+    // picked on this line — a single batch, or the several a split line draws from) —
+    // units with no recorded batch (legacy/opening stock) are never rejected, only ones
+    // that are *known* to belong to a different batch.
+    const allowedBatchIds = Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0
+      ? item.batchAllocations.map((a) => String(a.batchId))
+      : item.batchId ? [String(item.batchId)] : [];
+    if (allowedBatchIds.length > 0) {
+      const mismatched = found.filter((d) => d.batchId && !allowedBatchIds.includes(String(d.batchId)));
+      if (mismatched.length > 0) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Serial number(s) ${mismatched.map((d) => d.imei).join(', ')} belong to a different batch than the one selected for ${item.name || 'this item'}`
+        );
+      }
     }
   }
 };
@@ -204,6 +239,53 @@ const releaseImeisForInvoice = async (invoiceId) => {
   );
 };
 
+/** Used when a sales return restores specific sold units: puts just those IMEIs back
+ *  into stock and clears their sale info, without touching the rest of the invoice's
+ *  units (a partial return only restores the units actually coming back — unlike
+ *  releaseImeisForInvoice above, which reverts the whole invoice). Matched by invoiceId
+ *  + productId + exact numbers, so it can never accidentally release a unit from a
+ *  different sale of the same product. */
+const releaseImeisByNumbers = async ({ invoiceId, productId, imeis, organizationId, branchId, note }) => {
+  const numbers = (imeis || []).map(normalizeImei).filter(Boolean);
+  if (numbers.length === 0) return;
+  await Imei.updateMany(
+    { organizationId, branchId, invoiceId, productId, imei: { $in: numbers } },
+    {
+      $set: {
+        status: 'in_stock',
+        invoiceId: null,
+        salePrice: 0,
+        customerId: null,
+        customerName: '',
+        customerPhone: '',
+        customerCNIC: '',
+        saleDate: null,
+        warrantyMonths: 0,
+        warrantyStartDate: null,
+        warrantyEndDate: null,
+      },
+      $push: { history: historyEntry('in_stock', { note: note || 'Returned by customer' }) },
+    },
+  );
+};
+
+/** Reverses releaseImeisByNumbers (a sales return gets rejected/deleted after already
+ *  restoring units to stock) — re-marks those units as sold under the original invoice,
+ *  but only the ones still sitting `in_stock`. A unit already resold to someone else in
+ *  the meantime is deliberately left alone rather than yanked out from under that new
+ *  sale; it just won't be perfectly reconciled by this reversal. */
+const reclaimImeisForReturn = async ({ invoiceId, productId, imeis, organizationId, branchId }) => {
+  const numbers = (imeis || []).map(normalizeImei).filter(Boolean);
+  if (numbers.length === 0) return;
+  await Imei.updateMany(
+    { organizationId, branchId, productId, imei: { $in: numbers }, status: 'in_stock' },
+    {
+      $set: { status: 'sold', invoiceId },
+      $push: { history: historyEntry('sold', { note: 'Return reversed' }) },
+    },
+  );
+};
+
 /** Marks a device as lost or stolen, recording who reported it and why. */
 const markImeiLostOrStolen = async (id, { status, reason, updatedBy }) => {
   if (!['lost', 'stolen'].includes(status)) {
@@ -260,11 +342,14 @@ const queryImeis = async (filter, options) => {
   }
 
   queryOptions.sortBy = queryOptions.sortBy || 'createdAt:-1';
+  // Resolve batchId to its batchNumber — the tracking page shows which batch each unit
+  // belongs to, and a raw ObjectId is meaningless to a seller.
+  queryOptions.populate = [{ path: 'batchId', select: 'batchNumber' }];
   return Imei.paginate(queryFilter, queryOptions);
 };
 
 const getImeiById = async (id) => {
-  const record = await Imei.findById(id);
+  const record = await Imei.findById(id).populate('batchId', 'batchNumber');
   if (!record) throw new ApiError(httpStatus.NOT_FOUND, 'IMEI record not found');
   return record;
 };
@@ -336,5 +421,7 @@ module.exports = {
   validateImeisAvailable,
   markImeisSoldForInvoice,
   releaseImeisForInvoice,
+  releaseImeisByNumbers,
+  reclaimImeisForReturn,
   markImeiLostOrStolen,
 };

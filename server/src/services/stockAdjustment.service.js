@@ -73,6 +73,14 @@ const mutateStock = async (target, delta) => {
     await Batch.updateOne({ _id: target.batch._id }, { $inc: { quantity: delta }, status: nextQty <= 0 ? 'depleted' : 'active' });
   }
 
+  // A simple product's hidden default variant (batch/expiry tracking turned on) keeps
+  // Inventory authoritative, but Product.stockQuantity must still mirror it — every
+  // legacy read path (Products List, low/critical-stock widgets, dashboard) resolves
+  // stock from Product.stockQuantity for any non-hasVariants product.
+  if (target.variant.isDefault) {
+    await Product.findByIdAndUpdate(target.product._id, { $inc: { stockQuantity: delta } });
+  }
+
   return updatedInventory.quantity;
 };
 

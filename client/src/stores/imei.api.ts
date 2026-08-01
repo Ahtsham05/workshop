@@ -20,6 +20,11 @@ export interface ImeiRecord {
   imei2?: string
   productId: string
   productName?: string
+  /** Which Batch this unit arrived in, when the product is also batch-tracked — null for
+   *  opening stock or units purchased before serial-batch linking existed. Populated to
+   *  `{ id, batchNumber }` by the list/detail endpoints (queryImeis/getImeiById); other
+   *  endpoints (e.g. getAvailableImeisForProduct) return the raw id string. */
+  batchId?: string | { id: string; batchNumber?: string } | null
   brand?: string
   model?: string
   color?: string
@@ -83,10 +88,16 @@ export const imeiApi = createApi({
   baseQuery,
   tagTypes: ['Imei'],
   endpoints: (builder) => ({
-    // In-stock IMEIs available to pick from when selling a given product
-    getAvailableImeis: builder.query<ImeiRecord[], { productId: string; search?: string }>({
-      query: ({ productId, search }) => {
+    // In-stock IMEIs available to pick from when selling a given product. Passing
+    // batchId (single batch) or batchIds (a line split across several) narrows the list
+    // to those batches' units (plus any with no recorded batch) — it's part of the
+    // query's cache key, so switching the line's batch selection automatically refetches
+    // instead of showing the same list regardless of which batch(es) are picked.
+    getAvailableImeis: builder.query<ImeiRecord[], { productId: string; batchId?: string; batchIds?: string[]; search?: string }>({
+      query: ({ productId, batchId, batchIds, search }) => {
         const p = new URLSearchParams({ productId })
+        if (batchId) p.set('batchId', batchId)
+        if (batchIds && batchIds.length > 0) p.set('batchIds', batchIds.join(','))
         if (search) p.set('search', search)
         return `/imeis/available?${p.toString()}`
       },

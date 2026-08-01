@@ -1,26 +1,46 @@
 const httpStatus = require('http-status');
-const { ProductVariant, Inventory, Batch, InventoryTransaction } = require('../models');
+const { Product, ProductVariant, Inventory, Batch, InventoryTransaction } = require('../models');
 const ApiError = require('../utils/ApiError');
+
+/**
+ * Mirrors a Batch-driven Inventory.quantity change back onto Product.stockQuantity
+ * for a simple product's hidden default variant. Once a simple product turns on
+ * trackBatch/trackExpiry, Inventory becomes authoritative for its stock, but
+ * Product.stockQuantity is still what Products List, the low/critical-stock widgets,
+ * and the dashboard read for every non-hasVariants product. No-op for real
+ * (non-default) variants, where Product.stockQuantity is never authoritative.
+ */
+const mirrorToProductIfDefault = async (variant, quantityDelta, session) => {
+  if (!variant || !variant.isDefault || !quantityDelta) return;
+  await Product.findByIdAndUpdate(variant.productId, { $inc: { stockQuantity: quantityDelta } }, { session });
+};
 
 /**
  * Creates a Batch and increments Inventory.quantity to match, logging the matching
  * InventoryTransaction (same accounting as inventorySync.service.js for legacy products).
- * If `batchNumber` matches an existing *active* batch for this variant, this re-stocks
- * it instead (quantity increases; the existing costPerUnit/expiryDate are left exactly
- * as originally recorded, so re-stocking never silently rewrites batch history) —
- * otherwise a brand new Batch is created. This is also what makes purchasing the same
- * batch number twice safe, instead of hitting the batchNumber unique index.
+ * If `batchNumber` matches an existing active *or depleted* batch for this variant, this
+ * re-stocks it instead (quantity increases and status reverts to 'active'; the existing
+ * costPerUnit/expiryDate are left exactly as originally recorded, so re-stocking never
+ * silently rewrites batch history) — otherwise a brand new Batch is created. This is also
+ * what makes purchasing the same batch number twice safe, instead of hitting the
+ * batchNumber unique index — including after that batch sold out to 0 in between.
  *
- * Called from two places:
+ * Called from three places:
  *  - purchase.service.js's createPurchase, with `purchaseId` set — this is now the
  *    primary path for batch-tracked variants (see
  *    docs/architecture/universal-product-migration.md).
  *  - batch.controller.js's "Receive batch" endpoint, with no `purchaseId` — reserved
  *    for opening stock, manual corrections, and supplier replacements that don't go
  *    through a Purchase.
+ *  - product.service.js#syncDefaultVariantTracking, with `skipProductMirror: true` —
+ *    this one doesn't add new stock, it *migrates* a simple product's existing
+ *    Product.stockQuantity into a first batch the moment tracking is turned on, so the
+ *    quantity must NOT also be re-added to Product.stockQuantity (it's already counted
+ *    there) or the product ends up double-counted (e.g. 6 in stock becomes 12).
  */
 const createBatch = async (variantId, body) => {
-  const variant = await ProductVariant.findById(variantId);
+  const session = body.session;
+  const variant = await ProductVariant.findById(variantId).session(session || null);
   if (!variant) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found');
   }
@@ -35,56 +55,74 @@ const createBatch = async (variantId, body) => {
     );
   }
 
-  const inventory = await Inventory.findOne({ variantId });
+  const inventory = await Inventory.findOne({ variantId }).session(session || null);
   if (!inventory) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Inventory row not found for this variant');
   }
 
+  // Match on batchNumber alone (not just 'active') — it's unique per (org, inventory)
+  // regardless of status, so a batch that sold out to 0 and became 'depleted' still
+  // occupies that batchNumber. Restocking it must find and revive that same document;
+  // matching only 'active' would miss it and then collide with the unique index trying
+  // to create a second batch with the same number. 'expired'/'written_off' are
+  // deliberately excluded — those are terminal, audit-preserving states for a specific
+  // lot, not "temporarily out of stock" — so a new purchase under the same number still
+  // creates a fresh batch for those (matching prior behavior).
   const existingBatch = await Batch.findOne({
     inventoryId: inventory._id,
     batchNumber: body.batchNumber,
-    status: 'active',
-  });
+    status: { $in: ['active', 'depleted'] },
+  }).session(session || null);
 
   const batch = existingBatch
     ? await Batch.findOneAndUpdate(
         { _id: existingBatch._id },
-        { $inc: { quantity: body.quantity } },
-        { new: true }
+        { $inc: { quantity: body.quantity }, $set: { status: 'active' } },
+        { new: true, session }
       )
-    : await Batch.create({
-        organizationId: variant.organizationId,
-        inventoryId: inventory._id,
-        batchNumber: body.batchNumber,
-        quantity: body.quantity,
-        costPerUnit: body.costPerUnit,
-        sellingPrice: body.sellingPrice,
-        manufactureDate: body.manufactureDate,
-        expiryDate: body.expiryDate,
-        supplierId: body.supplierId,
-        purchaseId: body.purchaseId,
-        status: 'active',
-      });
+    : (await Batch.create(
+        [{
+          organizationId: variant.organizationId,
+          inventoryId: inventory._id,
+          batchNumber: body.batchNumber,
+          quantity: body.quantity,
+          costPerUnit: body.costPerUnit,
+          sellingPrice: body.sellingPrice,
+          manufactureDate: body.manufactureDate,
+          expiryDate: body.expiryDate,
+          supplierId: body.supplierId,
+          purchaseId: body.purchaseId,
+          status: 'active',
+        }],
+        { session },
+      ))[0];
 
   const updatedInventory = await Inventory.findOneAndUpdate(
     { _id: inventory._id },
     { $inc: { quantity: body.quantity } },
-    { new: true }
+    { new: true, session }
   );
 
-  await InventoryTransaction.create({
-    organizationId: variant.organizationId,
-    branchId: variant.branchId,
-    inventoryId: inventory._id,
-    variantId: variant._id,
-    type: 'purchase',
-    quantityDelta: body.quantity,
-    balanceAfter: updatedInventory.quantity,
-    unitCost: body.costPerUnit,
-    refType: 'Batch',
-    refId: batch._id,
-    createdBy: body.createdBy,
-  });
+  await InventoryTransaction.create(
+    [{
+      organizationId: variant.organizationId,
+      branchId: variant.branchId,
+      inventoryId: inventory._id,
+      variantId: variant._id,
+      type: 'purchase',
+      quantityDelta: body.quantity,
+      balanceAfter: updatedInventory.quantity,
+      unitCost: body.costPerUnit,
+      refType: 'Batch',
+      refId: batch._id,
+      createdBy: body.createdBy,
+    }],
+    { session },
+  );
+
+  if (!body.skipProductMirror) {
+    await mirrorToProductIfDefault(variant, body.quantity, session);
+  }
 
   return batch;
 };
@@ -135,7 +173,20 @@ const adjustBatchQuantity = async (variantId, { batchNumber, quantityDelta, crea
     createdBy,
   });
 
-  return updatedInventory;
+  await mirrorToProductIfDefault(variant, quantityDelta);
+
+  return { ...updatedInventory.toObject(), batchId: batch?._id || null };
+};
+
+/** Looks up an active batch's _id by number, without mutating anything — used when a
+ * purchase edit needs to link serials to a batch but the quantity itself didn't change
+ * (so adjustBatchQuantity, which requires a delta, isn't the right call). */
+const findBatchIdByNumber = async (variantId, batchNumber) => {
+  if (!batchNumber) return null;
+  const inventory = await Inventory.findOne({ variantId });
+  if (!inventory) return null;
+  const batch = await Batch.findOne({ inventoryId: inventory._id, batchNumber });
+  return batch?._id || null;
 };
 
 const getBatchesForVariant = async (variantId) => {
@@ -159,8 +210,10 @@ const getExpiringBatches = async (organizationId, days = 30) => {
 
 /**
  * Marks a batch as written off (expired/damaged/lost) and removes its remaining
- * quantity from Inventory.quantity. Does not touch Product.stockQuantity — batches only
- * exist for real (non-default) variants, which were never part of the legacy field.
+ * quantity from Inventory.quantity — also mirrored to Product.stockQuantity when
+ * this batch belongs to a simple product's hidden default variant (batches aren't
+ * exclusive to real variants: a simple product with batch/expiry tracking turned on
+ * gets batches on its own default variant too, see syncDefaultVariantTracking).
  */
 const writeOffBatch = async (batchId, { reason, userId } = {}) => {
   const batch = await Batch.findById(batchId);
@@ -194,6 +247,9 @@ const writeOffBatch = async (batchId, { reason, userId } = {}) => {
     refId: batch._id,
     createdBy: userId,
   });
+
+  const variant = await ProductVariant.findById(inventory.variantId).select('isDefault productId').lean();
+  await mirrorToProductIfDefault(variant, -batch.quantity);
 
   return batch;
 };
@@ -247,6 +303,9 @@ const sellFromBatch = async (batchId, quantity, { userId, refType, refId } = {})
     createdBy: userId,
   });
 
+  const variant = await ProductVariant.findById(inventory.variantId).select('isDefault productId').lean();
+  await mirrorToProductIfDefault(variant, -quantity);
+
   return updatedBatch;
 };
 
@@ -284,12 +343,16 @@ const restoreToBatch = async (batchId, quantity, { userId, refType, refId } = {}
     createdBy: userId,
   });
 
+  const variant = await ProductVariant.findById(inventory.variantId).select('isDefault productId').lean();
+  await mirrorToProductIfDefault(variant, quantity);
+
   return updatedBatch;
 };
 
 module.exports = {
   createBatch,
   adjustBatchQuantity,
+  findBatchIdByNumber,
   getBatchesForVariant,
   getExpiringBatches,
   writeOffBatch,

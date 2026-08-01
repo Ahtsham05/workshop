@@ -41,6 +41,17 @@ const imeiSchema = new mongoose.Schema(
       ref: 'Product',
       index: true,
     },
+    // Which specific Batch this unit arrived in, when the product is also batch-tracked
+    // (see docs/architecture/universal-product-migration.md). Lets the sale screen filter
+    // "available serials" to the batch picked on the line. null for units added as opening
+    // stock or purchased before this field existed — those stay selectable for any batch
+    // rather than becoming silently unsellable.
+    batchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Batch',
+      default: null,
+      index: true,
+    },
     productName: {
       type: String,
       trim: true,
@@ -82,8 +93,18 @@ const imeiSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen'],
+      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen', 'in_transit'],
       default: 'in_stock',
+      index: true,
+    },
+    // Set while this unit is mid-transfer between branches (status 'in_transit') so a
+    // completed/cancelled transfer knows exactly which records to resolve — cleared once
+    // the transfer completes (unit lands at the destination) or is cancelled (returns to
+    // the source). null the rest of the time. See inventoryTransfer.service.js.
+    transferId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InventoryTransfer',
+      default: null,
       index: true,
     },
     purchasePrice: {

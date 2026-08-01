@@ -59,6 +59,11 @@ const InventoryTransferSchema = new mongoose.Schema(
 
     quantity: { type: Number, required: true, min: 1 },
 
+    // Set instead of relying on quantity alone when the product is IMEI/serial-tracked —
+    // a snapshot of exactly which units are moving (for display; the authoritative link
+    // during the transfer is each Imei record's own transferId, see imei.model.js).
+    imeis: [{ type: String, trim: true }],
+
     reason: { type: String, trim: true }, // human-readable justification, e.g. "Lahore has 100 units, Karachi has 5 and is selling 8/day"
 
     status: {

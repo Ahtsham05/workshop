@@ -49,11 +49,21 @@ const invoiceItemSchema = new mongoose.Schema({
     // default-variant dual-write path in invoice.service.js, unchanged. See
     // docs/architecture/universal-product-migration.md.
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
-    // Manually picked batch to deplete (no automatic FEFO yet — see
-    // docs/architecture/universal-product-migration.md). Only set for variants where
-    // trackBatch/trackExpiry is true.
+    // Picked batch to deplete. Only set for variants where trackBatch/trackExpiry is
+    // true. When the line is split across multiple batches (batchAllocations below has
+    // 2+ entries — client-suggested FEFO, earliest expiry first, editable by the
+    // seller), this mirrors the *first* allocation for backward-compatible display
+    // (populate, print) — the real per-batch breakdown lives in batchAllocations.
     batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
     batchNumber: { type: String, trim: true },
+    // Present only when this line draws from more than one batch (a single batch didn't
+    // have enough on its own). Each entry's quantity must sum to the line's `quantity`.
+    // See docs/architecture/universal-product-migration.md.
+    batchAllocations: [{
+        batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
+        batchNumber: { type: String, trim: true },
+        quantity: { type: Number, required: true, min: 1 },
+    }],
 }, { _id: false });
 
 const InvoiceSchema = new mongoose.Schema({

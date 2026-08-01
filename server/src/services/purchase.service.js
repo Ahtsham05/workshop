@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Purchase, Product, ProductVariant, Supplier, SupplierLedger, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { resolvePurchaseLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
@@ -58,6 +59,37 @@ const getPurchaseVariantId = (item) => {
 /** (productId, variantId) composite key — two different variants of the same
  * product must be matched/adjusted as separate lines, not conflated. */
 const getPurchaseItemKey = (item) => `${getPurchaseProductId(item)}:${getPurchaseVariantId(item)}`;
+
+/**
+ * Syncs serial/IMEI numbers for a variant (real or hidden-default) purchase line item —
+ * the counterpart to the plain-product `imeiService.syncImeisForPurchaseItem` calls
+ * elsewhere in this file, which never ran for variant items. That was a real gap: a
+ * batch-tracked + serial-tracked product purchased through this module silently dropped
+ * every serial number entered on the line. `batchId` links each unit to the specific
+ * batch it arrived in (see imei.model.js), so the sale screen can filter "available
+ * serials" down to the batch picked on that line instead of showing every in-stock unit
+ * of the product regardless of which batch it's actually in.
+ */
+const syncVariantSerials = async ({ variant, imeis, batchId, purchase, netUnitCost, supplierId, supplierName, session }) => {
+  const product = await Product.findById(variant.productId).select('name trackImei trackSerial').session(session || null);
+  if (!product || !(product.trackImei || product.trackSerial)) return;
+  await imeiService.syncImeisForPurchaseItem({
+    purchaseId: purchase._id,
+    productId: variant.productId,
+    productName: product.name,
+    imeis: imeis || [],
+    type: product.trackSerial ? 'serial' : 'imei',
+    batchId: batchId || null,
+    purchasePrice: netUnitCost,
+    supplierId: supplierId || null,
+    supplierName: supplierName || '',
+    purchaseDate: purchase.purchaseDate,
+    organizationId: purchase.organizationId,
+    branchId: purchase.branchId,
+    createdBy: purchase.createdBy,
+    session,
+  });
+};
 
 /** Sum of all line totals (each already net of its own item-level discount) — the
  * base the invoice-level discount is spread proportionally across in
@@ -230,7 +262,6 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, p
 const createPurchase = async (purchaseBody) => {
   const businessType = await getOrganizationBusinessType(purchaseBody.organizationId);
 
-  // First, create the purchase
   const normalizedBody = {
     ...purchaseBody,
     balance:
@@ -238,111 +269,151 @@ const createPurchase = async (purchaseBody) => {
         ? resolvePurchaseInvoiceBalance(purchaseBody.totalAmount, purchaseBody.paidAmount)
         : purchaseBody.balance,
   };
-  const purchase = await Purchase.create(normalizedBody);
 
-  const supplierDoc = purchase.supplier ? await Supplier.findById(purchase.supplier).select('name') : null;
-  const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
-  const purchaseDiscount = Number(purchase.discount || 0);
+  // The purchase record and every stock/batch/inventory/serial write it triggers must
+  // succeed or fail together. Before this, a duplicate serial/IMEI (or any other error)
+  // partway through the items loop would throw *after* the Purchase document was already
+  // persisted — the request came back as an error, but the purchase (and any stock
+  // already adjusted for earlier items) silently remained in the database. Wrapping the
+  // whole thing in a transaction makes a failure genuinely undo everything, matching what
+  // the error response tells the user. Ledger/cashbook/accounts posting below stays
+  // outside the transaction, same as before — those have always been best-effort and
+  // independently fault-tolerant, not part of the purchase's own data integrity.
+  const session = await mongoose.startSession();
+  let purchase;
+  try {
+    await session.withTransaction(async () => {
+      const created = await Purchase.create([normalizedBody], { session });
+      purchase = created[0];
 
-  // Now, update the stock quantity of each product in the purchase
-  for (const item of purchase.items) {
-    const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
-    // Real-variant line item — bypasses the legacy Product.stockQuantity path entirely
-    // (that field is a fallback-only display value once a product hasVariants; it must
-    // never be mutated by variant-specific purchasing). Batch/expiry-tracked variants
-    // create a Batch (the new primary source of batches, see
-    // docs/architecture/universal-product-migration.md); other real variants get a
-    // plain inventory increment via inventory.service.js.
-    if (item.variantId) {
-      const variant = await ProductVariant.findById(item.variantId);
-      if (variant) {
-        const quantityDelta = Number(item.quantity || 0);
-        item.stockQuantity = quantityDelta;
+      const supplierDoc = purchase.supplier
+        ? await Supplier.findById(purchase.supplier).select('name').session(session)
+        : null;
+      const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
+      const purchaseDiscount = Number(purchase.discount || 0);
 
-        if ((variant.trackBatch || variant.trackExpiry) && item.batchNumber) {
-          await batchService.createBatch(variant._id, {
-            batchNumber: item.batchNumber,
-            quantity: quantityDelta,
-            costPerUnit: netUnitCost,
-            sellingPrice: item.sellingPriceAtPurchase,
-            expiryDate: item.expiryDate,
-            purchaseId: purchase._id,
+      // Now, update the stock quantity of each product in the purchase
+      for (const item of purchase.items) {
+        const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
+        // Real-variant line item — bypasses the legacy Product.stockQuantity path entirely
+        // (that field is a fallback-only display value once a product hasVariants; it must
+        // never be mutated by variant-specific purchasing). Batch/expiry-tracked variants
+        // create a Batch (the new primary source of batches, see
+        // docs/architecture/universal-product-migration.md); other real variants get a
+        // plain inventory increment via inventory.service.js.
+        if (item.variantId) {
+          const variant = await ProductVariant.findById(item.variantId).session(session);
+          if (variant) {
+            const quantityDelta = Number(item.quantity || 0);
+            item.stockQuantity = quantityDelta;
+            let batchId = null;
+
+            if ((variant.trackBatch || variant.trackExpiry) && item.batchNumber) {
+              const batch = await batchService.createBatch(variant._id, {
+                batchNumber: item.batchNumber,
+                quantity: quantityDelta,
+                costPerUnit: netUnitCost,
+                sellingPrice: item.sellingPriceAtPurchase,
+                expiryDate: item.expiryDate,
+                purchaseId: purchase._id,
+                createdBy: purchase.createdBy,
+                session,
+              });
+              batchId = batch._id;
+            } else {
+              await inventoryService.adjustInventory(variant._id, {
+                quantityDelta,
+                reason: 'Purchase',
+                userId: purchase.createdBy,
+                session,
+              });
+            }
+
+            if (item.imeis && item.imeis.length > 0) {
+              await syncVariantSerials({
+                variant,
+                imeis: item.imeis,
+                batchId,
+                purchase,
+                netUnitCost,
+                supplierId: purchase.supplier,
+                supplierName: supplierDoc?.name,
+                session,
+              });
+            }
+          }
+          continue;
+        }
+
+        const product = await Product.findById(item.product).session(session);
+
+        if (product) {
+          const conversion = toStockQuantity({ product, item, businessType });
+          item.unit = conversion.lineUnit;
+          item.conversionFactor = conversion.conversionFactor;
+          item.stockQuantity = conversion.stockQuantity;
+
+          // Increase stock in product stock unit (typically pcs)
+          product.stockQuantity += conversion.stockQuantity;
+
+          // Update the product's cost price to the latest purchase price — net of any
+          // item/invoice discount, since that's what was actually paid per unit.
+          if (item.priceAtPurchase > 0) {
+            product.cost = netUnitCost;
+          }
+
+          // Update the product's selling price if provided
+          if (item.sellingPriceAtPurchase > 0) {
+            product.price = item.sellingPriceAtPurchase;
+          }
+
+          // Save the updated product
+          await product.save({ session });
+
+          await inventorySyncService.recordStockChange({
+            organizationId: purchase.organizationId,
+            productId: product._id,
+            quantityDelta: conversion.stockQuantity,
+            type: 'purchase',
+            refType: 'Purchase',
+            refId: purchase._id,
+            unitCost: netUnitCost,
             createdBy: purchase.createdBy,
           });
-        } else {
-          await inventoryService.adjustInventory(variant._id, {
-            quantityDelta,
-            reason: 'Purchase',
-            userId: purchase.createdBy,
-          });
+
+          // Track per-unit IMEI/serial numbers for products that require it (mobile phones / serialized goods)
+          if ((product.trackImei || product.trackSerial) && item.imeis && item.imeis.length > 0) {
+            await imeiService.syncImeisForPurchaseItem({
+              purchaseId: purchase._id,
+              productId: product._id,
+              productName: product.name,
+              imeis: item.imeis,
+              type: product.trackSerial ? 'serial' : 'imei',
+              purchasePrice: netUnitCost,
+              supplierId: purchase.supplier || null,
+              supplierName: supplierDoc?.name || '',
+              purchaseDate: purchase.purchaseDate,
+              organizationId: purchase.organizationId,
+              branchId: purchase.branchId,
+              createdBy: purchase.createdBy,
+              session,
+            });
+          }
         }
       }
-      continue;
-    }
 
-    const product = await Product.findById(item.product);
-
-    if (product) {
-      const conversion = toStockQuantity({ product, item, businessType });
-      item.unit = conversion.lineUnit;
-      item.conversionFactor = conversion.conversionFactor;
-      item.stockQuantity = conversion.stockQuantity;
-
-      // Increase stock in product stock unit (typically pcs)
-      product.stockQuantity += conversion.stockQuantity;
-
-      // Update the product's cost price to the latest purchase price — net of any
-      // item/invoice discount, since that's what was actually paid per unit.
-      if (item.priceAtPurchase > 0) {
-        product.cost = netUnitCost;
+      // Calculate balance if paidAmount is provided
+      if (purchase.paidAmount !== undefined) {
+        purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
       }
 
-      // Update the product's selling price if provided
-      if (item.sellingPriceAtPurchase > 0) {
-        product.price = item.sellingPriceAtPurchase;
-      }
-
-      // Save the updated product
-      await product.save();
-
-      await inventorySyncService.recordStockChange({
-        organizationId: purchase.organizationId,
-        productId: product._id,
-        quantityDelta: conversion.stockQuantity,
-        type: 'purchase',
-        refType: 'Purchase',
-        refId: purchase._id,
-        unitCost: netUnitCost,
-        createdBy: purchase.createdBy,
-      });
-
-      // Track per-unit IMEI/serial numbers for products that require it (mobile phones / serialized goods)
-      if ((product.trackImei || product.trackSerial) && item.imeis && item.imeis.length > 0) {
-        await imeiService.syncImeisForPurchaseItem({
-          purchaseId: purchase._id,
-          productId: product._id,
-          productName: product.name,
-          imeis: item.imeis,
-          type: product.trackSerial ? 'serial' : 'imei',
-          purchasePrice: netUnitCost,
-          supplierId: purchase.supplier || null,
-          supplierName: supplierDoc?.name || '',
-          purchaseDate: purchase.purchaseDate,
-          organizationId: purchase.organizationId,
-          branchId: purchase.branchId,
-          createdBy: purchase.createdBy,
-        });
-      }
-    }
+      // Save the purchase with balance calculated
+      await purchase.save({ session });
+    });
+  } finally {
+    await session.endSession();
   }
 
-  // Calculate balance if paidAmount is provided
-  if (purchase.paidAmount !== undefined) {
-    purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
-  }
-
-  // Save the purchase with balance calculated
-  await purchase.save();
   await syncPurchaseCashAndWalletEntries(purchase, null, null, 0);
   postPurchaseToAccounts(purchase);
 
@@ -473,22 +544,38 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           const newQuantity = Number(updatedItem.quantity || 0);
           const quantityDifference = newQuantity - previousQuantity;
           updatedItem.stockQuantity = newQuantity;
+          let batchId = null;
 
-          if (quantityDifference !== 0) {
-            if ((variant.trackBatch || variant.trackExpiry) && updatedItem.batchNumber) {
-              await batchService.adjustBatchQuantity(variant._id, {
+          if ((variant.trackBatch || variant.trackExpiry) && updatedItem.batchNumber) {
+            if (quantityDifference !== 0) {
+              const result = await batchService.adjustBatchQuantity(variant._id, {
                 batchNumber: updatedItem.batchNumber,
                 quantityDelta: quantityDifference,
                 createdBy: purchase.createdBy,
               });
+              batchId = result.batchId;
             } else {
-              await inventoryService.adjustInventory(variant._id, {
-                quantityDelta: quantityDifference,
-                reason: 'Purchase edit',
-                userId: purchase.createdBy,
-              });
+              // Quantity unchanged — still resolve the batch id so edited serials
+              // (added/removed without a quantity change) link to the right batch.
+              batchId = await batchService.findBatchIdByNumber(variant._id, updatedItem.batchNumber);
             }
+          } else if (quantityDifference !== 0) {
+            await inventoryService.adjustInventory(variant._id, {
+              quantityDelta: quantityDifference,
+              reason: 'Purchase edit',
+              userId: purchase.createdBy,
+            });
           }
+
+          await syncVariantSerials({
+            variant,
+            imeis: updatedItem.imeis,
+            batchId,
+            purchase,
+            netUnitCost,
+            supplierId: supplierIdForUpdate,
+            supplierName: supplierDocForUpdate?.name,
+          });
         }
         continue;
       }
@@ -559,9 +646,10 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
       if (variant) {
         const quantityDelta = Number(updatedItem.quantity || 0);
         updatedItem.stockQuantity = quantityDelta;
+        let batchId = null;
 
         if ((variant.trackBatch || variant.trackExpiry) && updatedItem.batchNumber) {
-          await batchService.createBatch(variant._id, {
+          const batch = await batchService.createBatch(variant._id, {
             batchNumber: updatedItem.batchNumber,
             quantity: quantityDelta,
             costPerUnit: netUnitCost,
@@ -570,11 +658,24 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             purchaseId: purchase._id,
             createdBy: purchase.createdBy,
           });
+          batchId = batch._id;
         } else {
           await inventoryService.adjustInventory(variant._id, {
             quantityDelta,
             reason: 'Purchase edit (new item)',
             userId: purchase.createdBy,
+          });
+        }
+
+        if (updatedItem.imeis && updatedItem.imeis.length > 0) {
+          await syncVariantSerials({
+            variant,
+            imeis: updatedItem.imeis,
+            batchId,
+            purchase,
+            netUnitCost,
+            supplierId: supplierIdForUpdate,
+            supplierName: supplierDocForUpdate?.name,
           });
         }
       }
@@ -663,6 +764,18 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             userId: purchase.createdBy,
           });
         }
+
+        // Release any still-in-stock serials this line item brought in — same as the
+        // plain-product removed-item branch below.
+        await syncVariantSerials({
+          variant,
+          imeis: [],
+          batchId: null,
+          purchase,
+          netUnitCost: originalItem.priceAtPurchase,
+          supplierId: supplierIdForUpdate,
+          supplierName: supplierDocForUpdate?.name,
+        });
       }
       continue;
     }

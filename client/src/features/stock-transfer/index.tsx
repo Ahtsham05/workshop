@@ -156,7 +156,14 @@ export default function StockTransfer() {
                   const isDest = branchId(tr.toBranchId) === activeBranchId
                   return (
                     <TableRow key={tr.id}>
-                      <TableCell className='font-medium max-w-[200px] truncate' title={tr.productName}>{tr.productName}</TableCell>
+                      <TableCell className='font-medium max-w-[200px]' title={tr.productName}>
+                        <div className='truncate'>{tr.productName}</div>
+                        {tr.imeis && tr.imeis.length > 0 && (
+                          <div className='truncate text-xs font-normal text-muted-foreground' title={tr.imeis.join(', ')}>
+                            IMEI/Serial: {tr.imeis.join(', ')}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
                       <TableCell className='text-right'>{tr.quantity}</TableCell>

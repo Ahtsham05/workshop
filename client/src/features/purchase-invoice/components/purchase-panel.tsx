@@ -20,7 +20,15 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
 import { getDisplayStock } from '@/lib/product-stock-display'
@@ -80,6 +88,171 @@ import {
   EntityQuickCreateDialogs,
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
+
+/**
+ * Compact pill trigger for a purchase line's serial/IMEI entry — mirrors Invoice's
+ * SerialSummaryTrigger (see invoice-panel.tsx) so the two flows read the same way.
+ * Replaces an always-expanded "Serial Numbers (0/1)" box that used to run full width
+ * under every serialized line, costing each row its own permanent chunk of vertical
+ * space whether or not the seller was actively entering codes.
+ */
+function PurchaseSerialSummaryTrigger({
+  selectedCount,
+  quantity,
+  isSerial,
+  onClick,
+}: {
+  selectedCount: number
+  quantity: number
+  isSerial: boolean
+  onClick: () => void
+}) {
+  const label = isSerial ? 'Serial #' : 'IMEI'
+  const complete = selectedCount >= quantity
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+        complete
+          ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400'
+          : selectedCount > 0
+            ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400'
+            : 'border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10',
+      )}
+    >
+      {complete ? <Check className='h-2.5 w-2.5' /> : <ListChecks className='h-2.5 w-2.5' />}
+      {label}: {selectedCount}/{quantity}
+    </button>
+  )
+}
+
+/**
+ * Modal for entering the serial/IMEI numbers a purchase line adds to stock. Unlike
+ * Invoice's SerialNumberDialog — which picks *existing* in-stock units from a fetched
+ * pool — a purchase is the one place these numbers first enter the system, so this is
+ * pure scan-or-type entry with no server-side "available" list behind it.
+ */
+function PurchaseSerialEntryDialog({
+  open,
+  onOpenChange,
+  itemName,
+  quantity,
+  isSerial,
+  imeis,
+  onAdd,
+  onRemove,
+  onComplete,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  itemName: string
+  quantity: number
+  isSerial: boolean
+  imeis: string[]
+  onAdd: (value: string) => void
+  onRemove: (value: string) => void
+  // Continues the row's Enter-key cascade (batch fields, or the next row) — fired once
+  // the line is fully entered, whether that happened by scanning the last unit or by
+  // clicking Done early. Mirrors Invoice's SerialNumberDialog onComplete.
+  onComplete: () => void
+}) {
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    setDraft('')
+    focusField(inputRef.current, false)
+  }, [open])
+
+  const label = isSerial ? 'Serial Number' : 'IMEI'
+  const isFull = imeis.length >= quantity
+
+  const finish = () => {
+    onOpenChange(false)
+    onComplete()
+  }
+
+  const commit = () => {
+    const cleaned = draft.trim()
+    if (!cleaned || imeis.includes(cleaned)) return
+    onAdd(cleaned)
+    setDraft('')
+    // The scan that reaches the required count closes the dialog and hands off to the
+    // rest of the cascade itself — no extra Enter or click needed to move on.
+    if (imeis.length + 1 >= quantity) finish()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader>
+          <DialogTitle className='flex items-center gap-2 text-base'>
+            <ScanLine className='h-4 w-4 text-amber-600' />
+            {isSerial ? 'Serial Numbers' : 'IMEI Numbers'}
+          </DialogTitle>
+          <DialogDescription className='truncate'>{itemName}</DialogDescription>
+        </DialogHeader>
+
+        <div className='flex items-center justify-between'>
+          <span className='text-xs text-muted-foreground'>Scan or type, then Enter</span>
+          <Badge className={isFull ? 'bg-green-600 hover:bg-green-600' : ''} variant={isFull ? 'default' : 'secondary'}>
+            {imeis.length} / {quantity} entered
+          </Badge>
+        </div>
+
+        <div className='flex items-center gap-2'>
+          <Input
+            ref={inputRef}
+            placeholder={`Scan or type ${label.toLowerCase()}…`}
+            value={draft}
+            showVoiceInput={false}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault()
+                commit()
+              }
+            }}
+            className='h-9 flex-1'
+          />
+          <Button type='button' size='sm' onClick={commit}>
+            <Plus className='h-3.5 w-3.5' />
+          </Button>
+        </div>
+
+        <div className='max-h-72 space-y-0.5 overflow-y-auto rounded-md border bg-muted/20 p-1.5'>
+          {imeis.length > 0 ? (
+            imeis.map((num) => (
+              <div key={num} className='flex items-center justify-between rounded-sm px-3 py-2 text-sm bg-green-50 dark:bg-green-950/25'>
+                <span className='font-mono font-semibold'>{num}</span>
+                <button
+                  type='button'
+                  onClick={() => onRemove(num)}
+                  className='rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10'
+                >
+                  <X className='h-3.5 w-3.5' />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className='py-8 text-center text-sm text-muted-foreground'>
+              No {isSerial ? 'serial numbers' : 'IMEIs'} entered yet.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className='flex-row items-center justify-between sm:justify-between'>
+          <span className={cn('text-xs font-medium', isFull ? 'text-green-600' : 'text-amber-600')}>
+            {isFull ? `All ${quantity} entered` : `${quantity - imeis.length} more needed`}
+          </span>
+          <Button size='sm' onClick={finish}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 interface PurchasePanelProps {
   purchase: Purchase
@@ -141,7 +314,8 @@ export default function PurchasePanel({
   const [aiScanOpen, setAiScanOpen] = useState(false)
   const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
   const [quickCreateProductIndex, setQuickCreateProductIndex] = useState<number | null>(null)
-  const [imeiDraftByProduct, setImeiDraftByProduct] = useState<Record<string, string>>({})
+  // Which line's serial/IMEI entry dialog is open — null means none.
+  const [serialDialogIndex, setSerialDialogIndex] = useState<number | null>(null)
 
   // Raw text the user is currently typing into a decimal field (price/discount/paid
   // amount), keyed by a field id — e.g. "3:purchasePrice". A controlled input whose
@@ -557,6 +731,7 @@ export default function PurchasePanel({
   }, [purchase.items, addNewPurchaseRowAndOpenProduct])
 
   // Keyboard cascade for a purchase row: Quantity → Purchase Price → Sale Price →
+  // (Serial/IMEI entry dialog, only for tracked products not yet fully entered) →
   // (Batch Number → Expiry Date, only when the selected variant tracks batch/expiry) →
   // a brand new row with the product picker already open.
   const handlePurchaseQuantityKeyDown = useCallback(
@@ -573,17 +748,31 @@ export default function PurchasePanel({
     [],
   )
 
+  // Shared tail of the cascade — used both when Sale Price's Enter skips serial entry
+  // (not tracked, or already fully entered) and as the serial dialog's onComplete, so
+  // finishing serial entry continues into batch fields instead of stranding the seller
+  // there with no keyboard path onward.
+  const advanceAfterSaleFields = useCallback((index: number) => {
+    if (itemNeedsBatchRef.current[index]) {
+      focusItemField(index, 'batchNumber')
+    } else {
+      addNewPurchaseRowAndOpenProduct()
+    }
+  }, [addNewPurchaseRowAndOpenProduct])
+
   const handleSellingPriceKeyDown = useCallback(
     (e: React.KeyboardEvent, index: number) => {
       onEnterAdvance(e, () => {
-        if (itemNeedsBatchRef.current[index]) {
-          focusItemField(index, 'batchNumber')
-        } else {
-          addNewPurchaseRowAndOpenProduct()
+        const item = purchase.items[index]
+        const needsSerial = !!(item?.product?.trackImei || item?.product?.trackSerial)
+        if (needsSerial && (item?.imeis || []).length < (item?.quantity || 0)) {
+          setSerialDialogIndex(index)
+          return
         }
+        advanceAfterSaleFields(index)
       })
     },
-    [addNewPurchaseRowAndOpenProduct],
+    [purchase.items, advanceAfterSaleFields],
   )
 
   const focusPaymentType = useCallback(() => focusField(paymentTypeTriggerRef.current), [])
@@ -1415,7 +1604,11 @@ export default function PurchasePanel({
                           primaryClassName='font-semibold text-sm'
                           truncate={compact}
                         />
-                        <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', compact && 'flex-nowrap')}>
+                        {/* Stock + serial-entry status live in one wrapping pill row right
+                            under the name, matching Invoice's item row — instead of the
+                            serial box being its own always-expanded section further down,
+                            it's now a status pill here that opens a dialog on click. */}
+                        <div className='flex flex-wrap items-center gap-1.5 mt-1'>
                           {!compact && item.product.barcode && (
                             <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
                           )}
@@ -1425,7 +1618,7 @@ export default function PurchasePanel({
                           {(() => {
                             const stock = getDisplayStock(item.product)
                             return (
-                              <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+                              <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
                                 stock <= 0 ? 'bg-red-100 text-red-700' :
                                 stock <= 5 ? 'bg-red-50 text-red-500' :
                                 stock <= 20 ? 'bg-amber-50 text-amber-600' :
@@ -1441,6 +1634,14 @@ export default function PurchasePanel({
                               </span>
                             )
                           })()}
+                          {(item.product.trackImei || item.product.trackSerial) && (
+                            <PurchaseSerialSummaryTrigger
+                              selectedCount={(item.imeis || []).length}
+                              quantity={item.quantity}
+                              isSerial={!!item.product.trackSerial}
+                              onClick={() => setSerialDialogIndex(index)}
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -1641,62 +1842,6 @@ export default function PurchasePanel({
                     {compact && deleteButton}
                     </div>
 
-                    {/* Row 3: IMEI/serial numbers (only for products that require per-unit tracking) */}
-                    {(item.product.trackImei || item.product.trackSerial) && (
-                      <div className='border-t bg-amber-50/40 dark:bg-amber-950/10 px-3 py-2.5 space-y-2'>
-                        <div className='flex items-center justify-between'>
-                          <span className='text-xs font-medium text-amber-700'>
-                            {item.product.trackSerial ? 'Serial Numbers' : 'IMEI Numbers'} ({(item.imeis || []).length}/{item.quantity})
-                          </span>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <Input
-                            placeholder={`Scan or type ${item.product.trackSerial ? 'serial number' : 'IMEI'}, press Enter`}
-                            value={imeiDraftByProduct[productId] || ''}
-                            showVoiceInput={false}
-                            onChange={(e) =>
-                              setImeiDraftByProduct((prev) => ({ ...prev, [productId]: e.target.value }))
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ',') {
-                                e.preventDefault()
-                                addImeiToItem(index, imeiDraftByProduct[productId] || '')
-                                setImeiDraftByProduct((prev) => ({ ...prev, [productId]: '' }))
-                              }
-                            }}
-                            className='h-8 text-sm flex-1'
-                          />
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='outline'
-                            className='h-8'
-                            onClick={() => {
-                              addImeiToItem(index, imeiDraftByProduct[productId] || '')
-                              setImeiDraftByProduct((prev) => ({ ...prev, [productId]: '' }))
-                            }}
-                          >
-                            <Plus className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                        {(item.imeis || []).length > 0 && (
-                          <div className='flex flex-wrap gap-1.5'>
-                            {(item.imeis || []).map((num) => (
-                              <Badge key={num} variant='secondary' className='gap-1 pr-1'>
-                                {num}
-                                <button
-                                  type='button'
-                                  onClick={() => removeImeiFromItem(index, num)}
-                                  className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
-                                >
-                                  <X className='h-3 w-3' />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* Row 4: variant + batch/expiry (only for products with variants) */}
                     <PurchaseItemVariantBatchFields
@@ -2002,6 +2147,24 @@ export default function PurchasePanel({
         products={products}
         onApply={handleApplyAiScan}
       />
+
+      {(() => {
+        const item = serialDialogIndex !== null ? purchase.items[serialDialogIndex] : undefined
+        if (!item) return null
+        return (
+          <PurchaseSerialEntryDialog
+            open={serialDialogIndex !== null}
+            onOpenChange={(open) => { if (!open) setSerialDialogIndex(null) }}
+            itemName={item.product.name}
+            quantity={item.quantity}
+            isSerial={!!item.product.trackSerial}
+            imeis={item.imeis || []}
+            onAdd={(value) => addImeiToItem(serialDialogIndex as number, value)}
+            onRemove={(value) => removeImeiFromItem(serialDialogIndex as number, value)}
+            onComplete={() => advanceAfterSaleFields(serialDialogIndex as number)}
+          />
+        )
+      })()}
 
       <EntityQuickCreateDialogs
         state={quickCreate}

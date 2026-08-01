@@ -2,12 +2,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useGetProductReportQuery } from '@/stores/reports.api'
-import { useGetProductsByCategoryQuery, useGetProductsByBrandQuery, useGetCategoryProductsQuery, useGetBrandProductsQuery } from '@/stores/dashboard.api'
+import {
+  useGetProductsByCategoryQuery,
+  useGetProductsByBrandQuery,
+  useGetCategoryProductsQuery,
+  useGetBrandProductsQuery,
+  type ProductDetail,
+} from '@/stores/dashboard.api'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye, Layers, Tag, Package, Smartphone, TrendingUp } from 'lucide-react'
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
+import { Eye, Layers, Tag, Package, Smartphone, TrendingUp, ChevronDown, ChevronRight, ChevronsUpDown, ChevronsDownUp } from 'lucide-react'
+import { Fragment, forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -18,7 +24,6 @@ import { ProductDetailDialog } from './product-detail-dialog'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import LongText from '@/components/long-text'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface ProductReportProps {
   startDate: string
@@ -41,20 +46,40 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     })
     
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
-    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
-    const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
+    const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
+    const [expandedBrandIds, setExpandedBrandIds] = useState<Set<string>>(new Set())
     const [searchTerm, setSearchTerm] = useState('')
     const [activeView, setActiveView] = useState<'products' | 'categories' | 'brands'>('products')
 
-    // Fetch detailed products for selected category/brand
-    const { data: categoryProducts, isLoading: categoryProductsLoading } = useGetCategoryProductsQuery(
-      { categoryId: selectedCategoryId!, period: 'custom', startDate, endDate },
-      { skip: !selectedCategoryId }
+    const toggleCategoryRow = (id: string) => {
+      setExpandedCategoryIds((prev) => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+    }
+    const toggleBrandRow = (id: string) => {
+      setExpandedBrandIds((prev) => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+    }
+
+    const allCategoryIds = useMemo(
+      () => (categoryData ?? []).map((c) => c.categoryId).filter((id): id is string => !!id),
+      [categoryData]
     )
-    const { data: brandProducts, isLoading: brandProductsLoading } = useGetBrandProductsQuery(
-      { brandId: selectedBrandId!, period: 'custom', startDate, endDate },
-      { skip: !selectedBrandId }
+    const allCategoriesExpanded = allCategoryIds.length > 0 && allCategoryIds.every((id) => expandedCategoryIds.has(id))
+    const toggleAllCategories = () =>
+      setExpandedCategoryIds(allCategoriesExpanded ? new Set() : new Set(allCategoryIds))
+
+    const allBrandIds = useMemo(
+      () => (brandData ?? []).map((b) => b.brandId).filter((id): id is string => !!id),
+      [brandData]
     )
+    const allBrandsExpanded = allBrandIds.length > 0 && allBrandIds.every((id) => expandedBrandIds.has(id))
+    const toggleAllBrands = () => setExpandedBrandIds(allBrandsExpanded ? new Set() : new Set(allBrandIds))
 
     const filteredProducts = useMemo(() => {
       if (!data?.data) return []
@@ -63,7 +88,11 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
       return data.data.filter((product) =>
         reportEntityName(language, product.productName, product.productNameUrdu)
           .toLowerCase()
-          .includes(term)
+          .includes(term) ||
+        // Matches a variant label, batch number, IMEI/serial, or batch expiry date
+        // (YYYY-MM-DD) that appeared on a sold line for this product — see
+        // getProductReport's searchTags projection.
+        (product.searchTags ?? []).some((tag) => tag.toLowerCase().includes(term))
       )
     }, [data?.data, searchTerm, language])
 
@@ -368,19 +397,31 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
             </div>
 
             <Card>
-              <CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 space-y-0'>
                 <CardTitle className='flex items-center gap-2'>
                   <Layers className='h-5 w-5 text-blue-600' />
                   {t('Sales by Category')}
                 </CardTitle>
+                {!categoryLoading && allCategoryIds.length > 0 && (
+                  <Button variant='outline' size='sm' onClick={toggleAllCategories}>
+                    {allCategoriesExpanded ? (
+                      <ChevronsDownUp className='h-4 w-4 mr-2' />
+                    ) : (
+                      <ChevronsUpDown className='h-4 w-4 mr-2' />
+                    )}
+                    {allCategoriesExpanded ? t('Collapse All') : t('Expand All')}
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {categoryLoading ? (
                   <Skeleton className='h-[300px]' />
                 ) : (
+                  <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className='w-8' />
                         <TableHead>{t('Category')}</TableHead>
                         <TableHead className='text-right'>{t('Products')}</TableHead>
                         <TableHead className='text-right'>{t('Quantity Sold')}</TableHead>
@@ -388,13 +429,27 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableHead className='text-right'>{t('Cost')}</TableHead>
                         <TableHead className='text-right'>{t('Profit')}</TableHead>
                         <TableHead className='text-right'>{t('Margin')}</TableHead>
-                        <TableHead className='text-right'>{t('Actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {categoryData && categoryData.length > 0 ? (
-                        categoryData.map((category) => (
-                          <TableRow key={category.categoryId || category.categoryName}>
+                        categoryData.map((category) => {
+                          const rowId = category.categoryId || category.categoryName
+                          const isExpandable = !!category.categoryId
+                          const isOpen = expandedCategoryIds.has(rowId)
+                          return (
+                          <Fragment key={rowId}>
+                          <TableRow
+                            className={isExpandable ? 'cursor-pointer hover:bg-muted/30' : undefined}
+                            onClick={() => isExpandable && toggleCategoryRow(rowId)}
+                          >
+                            <TableCell className='w-8'>
+                              {isExpandable && (
+                                <Button variant='ghost' size='icon' className='h-6 w-6'>
+                                  {isOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
+                                </Button>
+                              )}
+                            </TableCell>
                             <TableCell className='font-medium'>
                               <div className='flex items-center gap-2'>
                                 <Layers className='h-4 w-4 text-blue-600' />
@@ -413,31 +468,35 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               {formatCurrency(category.profit)}
                             </TableCell>
                             <TableCell className='text-right'>
-                              <Badge 
-                                variant='outline' 
+                              <Badge
+                                variant='outline'
                                 className={`${
-                                  category.margin > 30 
-                                    ? 'bg-green-50 text-green-700' 
-                                    : category.margin > 15 
-                                    ? 'bg-blue-50 text-blue-700' 
+                                  category.margin > 30
+                                    ? 'bg-green-50 text-green-700'
+                                    : category.margin > 15
+                                    ? 'bg-blue-50 text-blue-700'
                                     : 'bg-amber-50 text-amber-700'
                                 }`}
                               >
                                 {category.margin.toFixed(1)}%
                               </Badge>
                             </TableCell>
-                            <TableCell className='text-right'>
-                              <Button
-                                variant='ghost'
-                                size='sm'
-                                onClick={() => setSelectedCategoryId(category.categoryId || null)}
-                                disabled={!category.categoryId}
-                              >
-                                <Eye className='h-4 w-4' />
-                              </Button>
-                            </TableCell>
                           </TableRow>
-                        ))
+                          {isOpen && category.categoryId && (
+                            <TableRow className='bg-muted/20 hover:bg-muted/20'>
+                              <TableCell />
+                              <TableCell colSpan={7} className='py-2'>
+                                <CategoryTransactionsPanel
+                                  categoryId={category.categoryId}
+                                  startDate={startDate}
+                                  endDate={endDate}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </Fragment>
+                          )
+                        })
                       ) : (
                         <TableRow>
                           <TableCell colSpan={8} className='text-center text-muted-foreground py-8'>
@@ -447,6 +506,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                       )}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -497,19 +557,31 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
             </div>
 
             <Card>
-              <CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 space-y-0'>
                 <CardTitle className='flex items-center gap-2'>
                   <Tag className='h-5 w-5 text-purple-600' />
                   {t('Sales by Brand')}
                 </CardTitle>
+                {!brandLoading && allBrandIds.length > 0 && (
+                  <Button variant='outline' size='sm' onClick={toggleAllBrands}>
+                    {allBrandsExpanded ? (
+                      <ChevronsDownUp className='h-4 w-4 mr-2' />
+                    ) : (
+                      <ChevronsUpDown className='h-4 w-4 mr-2' />
+                    )}
+                    {allBrandsExpanded ? t('Collapse All') : t('Expand All')}
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {brandLoading ? (
                   <Skeleton className='h-[300px]' />
                 ) : (
+                  <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className='w-8' />
                         <TableHead>{t('Brand')}</TableHead>
                         <TableHead className='text-center'>{t('Type')}</TableHead>
                         <TableHead className='text-right'>{t('Products')}</TableHead>
@@ -518,19 +590,33 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableHead className='text-right'>{t('Cost')}</TableHead>
                         <TableHead className='text-right'>{t('Profit')}</TableHead>
                         <TableHead className='text-right'>{t('Margin')}</TableHead>
-                        <TableHead className='text-right'>{t('Actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {brandData && brandData.length > 0 ? (
-                        brandData.map((brand) => (
-                          <TableRow key={brand.brandId || brand.brandName}>
+                        brandData.map((brand) => {
+                          const rowId = brand.brandId || brand.brandName
+                          const isExpandable = !!brand.brandId
+                          const isOpen = expandedBrandIds.has(rowId)
+                          return (
+                          <Fragment key={rowId}>
+                          <TableRow
+                            className={isExpandable ? 'cursor-pointer hover:bg-muted/30' : undefined}
+                            onClick={() => isExpandable && toggleBrandRow(rowId)}
+                          >
+                            <TableCell className='w-8'>
+                              {isExpandable && (
+                                <Button variant='ghost' size='icon' className='h-6 w-6'>
+                                  {isOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
+                                </Button>
+                              )}
+                            </TableCell>
                             <TableCell className='font-medium'>
                               <div className='flex items-center gap-2'>
                                 {brand.brandLogo?.url ? (
-                                  <img 
-                                    src={brand.brandLogo.url} 
-                                    alt={brand.brandName} 
+                                  <img
+                                    src={brand.brandLogo.url}
+                                    alt={brand.brandName}
                                     className='h-6 w-6 rounded object-cover'
                                   />
                                 ) : (
@@ -559,31 +645,35 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               {formatCurrency(brand.profit)}
                             </TableCell>
                             <TableCell className='text-right'>
-                              <Badge 
-                                variant='outline' 
+                              <Badge
+                                variant='outline'
                                 className={`${
-                                  brand.margin > 30 
-                                    ? 'bg-green-50 text-green-700' 
-                                    : brand.margin > 15 
-                                    ? 'bg-blue-50 text-blue-700' 
+                                  brand.margin > 30
+                                    ? 'bg-green-50 text-green-700'
+                                    : brand.margin > 15
+                                    ? 'bg-blue-50 text-blue-700'
                                     : 'bg-amber-50 text-amber-700'
                                 }`}
                               >
                                 {brand.margin.toFixed(1)}%
                               </Badge>
                             </TableCell>
-                            <TableCell className='text-right'>
-                              <Button
-                                variant='ghost'
-                                size='sm'
-                                onClick={() => setSelectedBrandId(brand.brandId || null)}
-                                disabled={!brand.brandId}
-                              >
-                                <Eye className='h-4 w-4' />
-                              </Button>
-                            </TableCell>
                           </TableRow>
-                        ))
+                          {isOpen && brand.brandId && (
+                            <TableRow className='bg-muted/20 hover:bg-muted/20'>
+                              <TableCell />
+                              <TableCell colSpan={8} className='py-2'>
+                                <BrandTransactionsPanel
+                                  brandId={brand.brandId}
+                                  startDate={startDate}
+                                  endDate={endDate}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </Fragment>
+                          )
+                        })
                       ) : (
                         <TableRow>
                           <TableCell colSpan={9} className='text-center text-muted-foreground py-8'>
@@ -593,261 +683,15 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                       )}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
           </>
         )}
 
-        {/* Category Products Dialog */}
-        <Dialog open={!!selectedCategoryId} onOpenChange={(open) => !open && setSelectedCategoryId(null)}>
-          <DialogContent className='max-w-[96vw] w-full max-h-[92vh]'>
-            <DialogHeader>
-              <DialogTitle className='flex items-center gap-2'>
-                <Layers className='h-5 w-5 text-blue-600' />
-                {t('Products in Category')}
-              </DialogTitle>
-              <DialogDescription>
-                {categoryData?.find(c => c.categoryId === selectedCategoryId)?.categoryName}
-              </DialogDescription>
-            </DialogHeader>
-            <div className='space-y-4 max-h-[calc(90vh-180px)] overflow-y-auto px-1'>
-              {categoryProductsLoading ? (
-                <Skeleton className='h-[400px]' />
-              ) : categoryProducts && categoryProducts.length > 0 ? (
-                <>
-                  <div className='text-sm text-muted-foreground'>
-                    {t('Showing')} {categoryProducts.length} {t('transaction(s)')}
-                  </div>
-                  <div className='w-full'>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className='w-[100px]'>{t('Invoice')}</TableHead>
-                          <TableHead className='w-[90px]'>{t('Date')}</TableHead>
-                          <TableHead className='w-[140px]'>{t('Customer')}</TableHead>
-                          <TableHead>{t('Product')}</TableHead>
-                          <TableHead className='text-center w-[60px]'>{t('Type')}</TableHead>
-                          <TableHead className='text-right w-[60px]'>{t('Qty')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Price')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Revenue')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Cost')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Profit')}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {categoryProducts.map((item, index) => (
-                          <TableRow key={`${item.invoiceId}-${item.productId}-${index}`}>
-                            <TableCell className='font-medium text-xs'>
-                              {item.invoiceNo}
-                            </TableCell>
-                            <TableCell className='text-xs text-muted-foreground'>
-                              {format(new Date(item.invoiceDate), 'MMM dd')}
-                            </TableCell>
-                            <TableCell className='text-xs truncate max-w-[140px]' title={item.customerName}>
-                              {item.customerName}
-                            </TableCell>
-                            <TableCell>
-                              <div className='flex items-center gap-2'>
-                                {item.productImage?.url && (
-                                  <img 
-                                    src={item.productImage.url} 
-                                    alt={item.productName} 
-                                    className='h-6 w-6 rounded object-cover flex-shrink-0'
-                                  />
-                                )}
-                                <span className='text-xs truncate' title={item.productName}>
-                                  {item.productName}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              {(item.trackImei || item.trackSerial) && (
-                                <Badge variant='secondary' className='text-[10px] px-1 py-0'>
-                                  <Smartphone className='h-2.5 w-2.5' />
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right text-xs'>{item.quantity}</TableCell>
-                            <TableCell className='text-right text-xs'>{formatCurrency(item.unitPrice)}</TableCell>
-                            <TableCell className='text-right text-xs font-semibold'>
-                              {formatCurrency(item.revenue)}
-                            </TableCell>
-                            <TableCell className='text-right text-xs text-orange-600'>
-                              {formatCurrency(item.cost)}
-                            </TableCell>
-                            <TableCell className='text-right text-xs text-green-600 font-medium'>
-                              {formatCurrency(item.profit)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {/* Summary Row */}
-                  <div className='border-t pt-4 mt-4'>
-                    <div className='grid grid-cols-3 gap-3'>
-                      <Card className={kpiCardClass('emerald')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Revenue')}</div>
-                          <div className='text-lg font-bold'>
-                            {formatCurrency(categoryProducts.reduce((sum, item) => sum + item.revenue, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className={kpiCardClass('orange')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Cost')}</div>
-                          <div className='text-lg font-bold text-orange-600'>
-                            {formatCurrency(categoryProducts.reduce((sum, item) => sum + item.cost, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className={kpiCardClass('emerald')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Profit')}</div>
-                          <div className='text-lg font-bold text-green-600'>
-                            {formatCurrency(categoryProducts.reduce((sum, item) => sum + item.profit, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className='text-center py-8 text-muted-foreground'>
-                  {t('No products found in this category')}
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Brand Products Dialog */}
-        <Dialog open={!!selectedBrandId} onOpenChange={(open) => !open && setSelectedBrandId(null)}>
-          <DialogContent className='max-w-[96vw] w-full max-h-[92vh]'>
-            <DialogHeader>
-              <DialogTitle className='flex items-center gap-2'>
-                <Tag className='h-5 w-5 text-purple-600' />
-                {t('Products by Brand')}
-              </DialogTitle>
-              <DialogDescription>
-                {brandData?.find(b => b.brandId === selectedBrandId)?.brandName}
-              </DialogDescription>
-            </DialogHeader>
-            <div className='space-y-4 max-h-[calc(90vh-180px)] overflow-y-auto px-1'>
-              {brandProductsLoading ? (
-                <Skeleton className='h-[400px]' />
-              ) : brandProducts && brandProducts.length > 0 ? (
-                <>
-                  <div className='text-sm text-muted-foreground'>
-                    {t('Showing')} {brandProducts.length} {t('transaction(s)')}
-                  </div>
-                  <div className='w-full'>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className='w-[100px]'>{t('Invoice')}</TableHead>
-                          <TableHead className='w-[90px]'>{t('Date')}</TableHead>
-                          <TableHead className='w-[140px]'>{t('Customer')}</TableHead>
-                          <TableHead>{t('Product')}</TableHead>
-                          <TableHead className='text-center w-[60px]'>{t('Type')}</TableHead>
-                          <TableHead className='text-right w-[60px]'>{t('Qty')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Price')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Revenue')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Cost')}</TableHead>
-                          <TableHead className='text-right w-[100px]'>{t('Profit')}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {brandProducts.map((item, index) => (
-                          <TableRow key={`${item.invoiceId}-${item.productId}-${index}`}>
-                            <TableCell className='font-medium text-xs'>
-                              {item.invoiceNo}
-                            </TableCell>
-                            <TableCell className='text-xs text-muted-foreground'>
-                              {format(new Date(item.invoiceDate), 'MMM dd')}
-                            </TableCell>
-                            <TableCell className='text-xs truncate max-w-[140px]' title={item.customerName}>
-                              {item.customerName}
-                            </TableCell>
-                            <TableCell>
-                              <div className='flex items-center gap-2'>
-                                {item.productImage?.url && (
-                                  <img 
-                                    src={item.productImage.url} 
-                                    alt={item.productName} 
-                                    className='h-6 w-6 rounded object-cover flex-shrink-0'
-                                  />
-                                )}
-                                <span className='text-xs truncate' title={item.productName}>
-                                  {item.productName}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              {(item.trackImei || item.trackSerial) && (
-                                <Badge variant='secondary' className='text-[10px] px-1 py-0'>
-                                  <Smartphone className='h-2.5 w-2.5' />
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-right text-xs'>{item.quantity}</TableCell>
-                            <TableCell className='text-right text-xs'>{formatCurrency(item.unitPrice)}</TableCell>
-                            <TableCell className='text-right text-xs font-semibold'>
-                              {formatCurrency(item.revenue)}
-                            </TableCell>
-                            <TableCell className='text-right text-xs text-orange-600'>
-                              {formatCurrency(item.cost)}
-                            </TableCell>
-                            <TableCell className='text-right text-xs text-green-600 font-medium'>
-                              {formatCurrency(item.profit)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {/* Summary Row */}
-                  <div className='border-t pt-4 mt-4'>
-                    <div className='grid grid-cols-3 gap-3'>
-                      <Card className={kpiCardClass('emerald')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Revenue')}</div>
-                          <div className='text-lg font-bold'>
-                            {formatCurrency(brandProducts.reduce((sum, item) => sum + item.revenue, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className={kpiCardClass('orange')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Cost')}</div>
-                          <div className='text-lg font-bold text-orange-600'>
-                            {formatCurrency(brandProducts.reduce((sum, item) => sum + item.cost, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className={kpiCardClass('emerald')}>
-                        <CardContent className='pt-3 pb-3'>
-                          <div className='text-xs text-muted-foreground'>{t('Total Profit')}</div>
-                          <div className='text-lg font-bold text-green-600'>
-                            {formatCurrency(brandProducts.reduce((sum, item) => sum + item.profit, 0))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className='text-center py-8 text-muted-foreground'>
-                  {t('No products found for this brand')}
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
         <ProductDetailDialog
+          key={selectedProductId ?? 'closed'}
           productId={selectedProductId}
           startDate={startDate}
           endDate={endDate}
@@ -857,3 +701,146 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     )
   }
 )
+
+ProductReport.displayName = 'ProductReport'
+
+// Inline transaction table shown inside an expanded category/brand row —
+// shared by CategoryTransactionsPanel and BrandTransactionsPanel below since
+// both render the same shape of data (ProductDetail[]), just fetched by a
+// different id.
+function ProductTransactionsTable({
+  items,
+  isLoading,
+  emptyLabel,
+}: {
+  items: ProductDetail[] | undefined
+  isLoading: boolean
+  emptyLabel: string
+}) {
+  const { t } = useLanguage()
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+
+  if (isLoading) return <Skeleton className='h-[160px] w-full' />
+
+  if (!items || items.length === 0) {
+    return <div className='py-6 text-center text-sm text-muted-foreground'>{emptyLabel}</div>
+  }
+
+  const totalRevenue = items.reduce((sum, item) => sum + item.revenue, 0)
+  const totalCost = items.reduce((sum, item) => sum + item.cost, 0)
+  const totalProfit = items.reduce((sum, item) => sum + item.profit, 0)
+
+  return (
+    <div className='space-y-3 py-2'>
+      <div className='overflow-x-auto rounded-lg border bg-background'>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className='h-8 text-xs'>{t('Invoice')}</TableHead>
+              <TableHead className='h-8 text-xs'>{t('Date')}</TableHead>
+              <TableHead className='h-8 text-xs'>{t('Customer')}</TableHead>
+              <TableHead className='h-8 text-xs'>{t('Product')}</TableHead>
+              <TableHead className='h-8 text-right text-xs'>{t('Qty')}</TableHead>
+              <TableHead className='h-8 text-right text-xs'>{t('Price')}</TableHead>
+              <TableHead className='h-8 text-right text-xs'>{t('Revenue')}</TableHead>
+              <TableHead className='h-8 text-right text-xs'>{t('Cost')}</TableHead>
+              <TableHead className='h-8 text-right text-xs'>{t('Profit')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item, index) => (
+              <TableRow key={`${item.invoiceId}-${item.productId}-${index}`}>
+                <TableCell className='py-1.5 text-xs font-medium'>{item.invoiceNo}</TableCell>
+                <TableCell className='py-1.5 text-xs text-muted-foreground'>
+                  {format(new Date(item.invoiceDate), 'MMM dd')}
+                </TableCell>
+                <TableCell className='max-w-[140px] truncate py-1.5 text-xs' title={item.customerName}>
+                  {item.customerName}
+                </TableCell>
+                <TableCell className='py-1.5'>
+                  <div className='flex items-center gap-2'>
+                    {item.productImage?.url && (
+                      <img
+                        src={item.productImage.url}
+                        alt={item.productName}
+                        className='h-5 w-5 shrink-0 rounded object-cover'
+                      />
+                    )}
+                    <span className='truncate text-xs' title={item.productName}>
+                      {item.productName}
+                    </span>
+                    {(item.trackImei || item.trackSerial) && (
+                      <Badge variant='secondary' className='shrink-0 px-1 py-0 text-[10px]'>
+                        <Smartphone className='h-2.5 w-2.5' />
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className='py-1.5 text-right text-xs'>{item.quantity}</TableCell>
+                <TableCell className='py-1.5 text-right text-xs'>{formatCurrency(item.unitPrice)}</TableCell>
+                <TableCell className='py-1.5 text-right text-xs font-semibold'>
+                  {formatCurrency(item.revenue)}
+                </TableCell>
+                <TableCell className='py-1.5 text-right text-xs text-orange-600'>
+                  {formatCurrency(item.cost)}
+                </TableCell>
+                <TableCell className='py-1.5 text-right text-xs font-medium text-green-600'>
+                  {formatCurrency(item.profit)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className='grid grid-cols-3 gap-3'>
+        <Card className={kpiCardClass('emerald')}>
+          <CardContent className='py-2.5'>
+            <div className='text-[11px] text-muted-foreground'>{t('Total Revenue')}</div>
+            <div className='text-sm font-bold'>{formatCurrency(totalRevenue)}</div>
+          </CardContent>
+        </Card>
+        <Card className={kpiCardClass('orange')}>
+          <CardContent className='py-2.5'>
+            <div className='text-[11px] text-muted-foreground'>{t('Total Cost')}</div>
+            <div className='text-sm font-bold text-orange-600'>{formatCurrency(totalCost)}</div>
+          </CardContent>
+        </Card>
+        <Card className={kpiCardClass('emerald')}>
+          <CardContent className='py-2.5'>
+            <div className='text-[11px] text-muted-foreground'>{t('Total Profit')}</div>
+            <div className='text-sm font-bold text-green-600'>{formatCurrency(totalProfit)}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function CategoryTransactionsPanel({
+  categoryId,
+  startDate,
+  endDate,
+}: {
+  categoryId: string
+  startDate: string
+  endDate: string
+}) {
+  const { t } = useLanguage()
+  const { data, isLoading } = useGetCategoryProductsQuery({ categoryId, period: 'custom', startDate, endDate })
+  return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found in this category')} />
+}
+
+function BrandTransactionsPanel({
+  brandId,
+  startDate,
+  endDate,
+}: {
+  brandId: string
+  startDate: string
+  endDate: string
+}) {
+  const { t } = useLanguage()
+  const { data, isLoading } = useGetBrandProductsQuery({ brandId, period: 'custom', startDate, endDate })
+  return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found for this brand')} />
+}

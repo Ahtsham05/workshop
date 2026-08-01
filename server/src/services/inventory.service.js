@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { ProductVariant, Inventory, InventoryTransaction } = require('../models');
+const { Product, ProductVariant, Inventory, InventoryTransaction } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -9,8 +9,8 @@ const ApiError = require('../utils/ApiError');
  * until the org adopts variants, per
  * docs/architecture/universal-product-migration.md section 6.
  */
-const adjustInventory = async (variantId, { quantityDelta, reason, userId, type, refType, refId }) => {
-  const variant = await ProductVariant.findById(variantId);
+const adjustInventory = async (variantId, { quantityDelta, reason, userId, type, refType, refId, session }) => {
+  const variant = await ProductVariant.findById(variantId).session(session || null);
   if (!variant) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found');
   }
@@ -26,7 +26,7 @@ const adjustInventory = async (variantId, { quantityDelta, reason, userId, type,
     );
   }
 
-  const inventory = await Inventory.findOne({ variantId });
+  const inventory = await Inventory.findOne({ variantId }).session(session || null);
   if (!inventory) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Inventory row not found for this variant');
   }
@@ -34,27 +34,34 @@ const adjustInventory = async (variantId, { quantityDelta, reason, userId, type,
   const updated = await Inventory.findOneAndUpdate(
     { _id: inventory._id },
     { $inc: { quantity: quantityDelta } },
-    { new: true }
+    { new: true, session }
   );
 
   if (updated.quantity < 0) {
     // Roll back — don't allow stock to go negative.
-    await Inventory.updateOne({ _id: inventory._id }, { $inc: { quantity: -quantityDelta } });
+    await Inventory.updateOne({ _id: inventory._id }, { $inc: { quantity: -quantityDelta } }, { session });
     throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock. Available: ${inventory.quantity}, Requested: ${-quantityDelta}`);
   }
 
-  await InventoryTransaction.create({
-    organizationId: variant.organizationId,
-    branchId: variant.branchId,
-    inventoryId: inventory._id,
-    variantId: variant._id,
-    type: type || 'adjustment',
-    quantityDelta,
-    balanceAfter: updated.quantity,
-    refType: refType || (reason ? 'ManualAdjustment' : undefined),
-    refId,
-    createdBy: userId,
-  });
+  await InventoryTransaction.create(
+    [{
+      organizationId: variant.organizationId,
+      branchId: variant.branchId,
+      inventoryId: inventory._id,
+      variantId: variant._id,
+      type: type || 'adjustment',
+      quantityDelta,
+      balanceAfter: updated.quantity,
+      refType: refType || (reason ? 'ManualAdjustment' : undefined),
+      refId,
+      createdBy: userId,
+    }],
+    { session },
+  );
+
+  if (variant.isDefault) {
+    await Product.findByIdAndUpdate(variant.productId, { $inc: { stockQuantity: quantityDelta } }, { session });
+  }
 
   return updated;
 };

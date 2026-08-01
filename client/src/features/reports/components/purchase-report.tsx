@@ -642,7 +642,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
 
         {/* Purchase view dialog */}
         <Dialog open={!!viewInvoice} onOpenChange={(open) => !open && setViewInvoice(null)}>
-          <DialogContent className='max-w-2xl max-h-[90vh] overflow-y-auto'>
+          <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto'>
             {viewInvoice && (
               <>
                 <DialogHeader>
@@ -699,6 +699,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
 
                 <div>
                   <p className='text-sm font-semibold mb-3'>Items Purchased</p>
+                  <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -756,6 +757,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                       </TableRow>
                     </TableFooter>
                   </Table>
+                  </div>
                 </div>
               </>
             )}

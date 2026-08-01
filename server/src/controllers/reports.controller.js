@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei } = require('../models');
 const { cashBookService, stockAdjustmentService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
@@ -210,6 +210,11 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
               imeis: { $ifNull: ['$$item.imeis', []] },
               variantId: { $ifNull: ['$$item.variantId', null] },
               batchNumber: { $ifNull: ['$$item.batchNumber', null] },
+              // A line split across several batches only mirrors the *first* one onto
+              // batchNumber above (see invoice.model.js) — surface the real per-batch
+              // breakdown too, so a report can show what actually sold instead of
+              // attributing the whole line's quantity to a single batch.
+              batchAllocations: { $ifNull: ['$$item.batchAllocations', []] },
               variantLabel: variantLabelExpr('item'),
               expiryDate: batchExpiryExpr('item'),
             },
@@ -575,9 +580,74 @@ const getProductReport = catchAsync(async (req, res) => {
           },
         },
         currentStock: { $first: '$product.stockQuantity' },
-        minStockLevel: { $first: '$product.minStockLevel' },
         unit: { $first: '$product.unit' },
+        // Collected so the caller can search this list by variant/batch/serial, not
+        // just product name — see the searchTags $project below. Pulled straight off
+        // the sold items already being unwound here rather than a second pass over
+        // Batch/Imei/ProductVariant, since every value that could ever match a sale in
+        // this period necessarily appears on one of its line items.
+        _batchNumbers: { $addToSet: '$items.batchNumber' },
+        _batchIds: { $addToSet: '$items.batchId' },
+        _variantIds: { $addToSet: '$items.variantId' },
+        _imeiLists: { $push: { $ifNull: ['$items.imeis', []] } },
       } },
+      {
+        $addFields: {
+          _batchNumbers: { $filter: { input: '$_batchNumbers', cond: { $ne: ['$$this', null] } } },
+          _batchIds: { $filter: { input: '$_batchIds', cond: { $ne: ['$$this', null] } } },
+          _variantIds: { $filter: { input: '$_variantIds', cond: { $ne: ['$$this', null] } } },
+          _imeis: { $reduce: { input: '$_imeiLists', initialValue: [], in: { $setUnion: ['$$value', '$$this'] } } },
+        },
+      },
+      {
+        $lookup: {
+          from: ProductVariant.collection.name,
+          localField: '_variantIds',
+          foreignField: '_id',
+          as: '_variantDocs',
+        },
+      },
+      {
+        $lookup: {
+          from: Batch.collection.name,
+          localField: '_batchIds',
+          foreignField: '_id',
+          as: '_batchDocs',
+        },
+      },
+      {
+        $addFields: {
+          _variantLabels: {
+            $map: {
+              input: '$_variantDocs',
+              as: 'v',
+              in: {
+                $reduce: {
+                  input: { $objectToArray: { $ifNull: ['$$v.attributes', {}] } },
+                  initialValue: '',
+                  in: { $cond: [{ $eq: ['$$value', ''] }, '$$this.v', { $concat: ['$$value', ' / ', '$$this.v'] }] },
+                },
+              },
+            },
+          },
+          _expiryDates: {
+            $map: {
+              input: { $filter: { input: '$_batchDocs', cond: { $ne: ['$$this.expiryDate', null] } } },
+              as: 'b',
+              in: { $dateToString: { format: '%Y-%m-%d', date: '$$b.expiryDate' } },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          productName: 1, productNameUrdu: 1, category: 1, totalQuantitySold: 1, totalRevenue: 1,
+          totalProfit: 1, totalDiscount: 1, avgSellingPrice: 1, currentStock: 1, unit: 1,
+          searchTags: {
+            $setUnion: ['$_batchNumbers', '$_imeis', '$_variantLabels', '$_expiryDates'],
+          },
+        },
+      },
       { $sort: { totalRevenue: -1 } },
     ]),
     Product.aggregate([
@@ -680,6 +750,10 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         profit: { $ifNull: ['$items.profit', 0] },
         variantId: { $ifNull: ['$items.variantId', null] },
         batchNumber: { $ifNull: ['$items.batchNumber', null] },
+        // See getSalesInvoiceDetails above — a split line's real per-batch breakdown
+        // lives here, not in the single batchNumber mirror.
+        batchAllocations: { $ifNull: ['$items.batchAllocations', []] },
+        imeis: { $ifNull: ['$items.imeis', []] },
         expiryDate: { $ifNull: ['$batchDoc.expiryDate', null] },
         variantLabel: {
           $cond: [
@@ -723,6 +797,7 @@ const getProductDetailReport = catchAsync(async (req, res) => {
         subtotal: { $ifNull: ['$items.total', { $multiply: ['$items.quantity', { $ifNull: ['$items.priceAtPurchase', 0] }] }] },
         variantId: { $ifNull: ['$items.variantId', null] },
         batchNumber: { $ifNull: ['$items.batchNumber', null] },
+        imeis: { $ifNull: ['$items.imeis', []] },
         expiryDate: { $ifNull: ['$items.expiryDate', null] },
         variantLabel: {
           $cond: [
@@ -759,9 +834,11 @@ const getProductDetailReport = catchAsync(async (req, res) => {
       nameUrdu: product.nameUrdu || '',
       barcode: product.barcode,
       currentStock: product.stockQuantity,
-      purchasePrice: product.purchasePrice,
-      sellingPrice: product.sellingPrice,
-      minStockLevel: product.minStockLevel,
+      // Product's own fields are `cost`/`price` (not purchasePrice/sellingPrice, which
+      // don't exist on the schema) — those always resolved to undefined, so this card
+      // showed "Rs 0.00" for every product regardless of its real cost/price.
+      purchasePrice: product.cost,
+      sellingPrice: product.price,
     },
     summary, sales: salesData, purchases: purchaseData,
     period: { startDate: start, endDate: end },
@@ -1265,39 +1342,24 @@ const getInventoryReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { status } = req.query;
 
-  let baseMatch = { ...scope };
-  if (status === 'low') {
-    baseMatch.$expr = { $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', { $ifNull: ['$minStockLevel', 10] }] }] };
-  } else if (status === 'out') {
-    baseMatch.stockQuantity = 0;
-  }
-
-  const [inventoryData, summary] = await Promise.all([
-    Product.aggregate([
-      { $match: baseMatch },
-      { $project: {
-        name: 1,
-        nameUrdu: { $ifNull: ['$nameUrdu', ''] },
-        barcode: 1, unit: 1,
-        category: { $ifNull: ['$category', 'N/A'] },
-        stockQuantity: 1, cost: 1, price: 1,
-        stockValue: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] },
-        potentialRevenue: { $multiply: ['$stockQuantity', { $ifNull: ['$price', 0] }] },
-        status: { $cond: [{ $eq: ['$stockQuantity', 0] }, 'Out of Stock', { $cond: [{ $lte: ['$stockQuantity', 10] }, 'Low Stock', 'In Stock'] }] },
-      } },
-      { $sort: { stockQuantity: 1 } },
-    ]),
-    Product.aggregate([
-      { $match: { ...scope } },
-      { $group: {
-        _id: null,
-        totalProducts: { $sum: 1 },
-        totalStockQuantity: { $sum: '$stockQuantity' },
-        totalStockValue: { $sum: { $multiply: ['$stockQuantity', { $ifNull: ['$cost', 0] }] } },
-        lowStockCount: { $sum: { $cond: [{ $and: [{ $gt: ['$stockQuantity', 0] }, { $lte: ['$stockQuantity', 10] }] }, 1, 0] } },
-        outOfStockCount: { $sum: { $cond: [{ $eq: ['$stockQuantity', 0] }, 1, 0] } },
-      } },
-    ]),
+  // Every product in scope is fetched unfiltered here — the status filter (below,
+  // after batch correction) can no longer run as a Mongo $match on the raw
+  // Product.stockQuantity field, because that field silently drifts out of sync
+  // with the real batch-tracked quantity (see the correction below). Filtering
+  // and sorting both happen in JS once the corrected numbers are known, so a
+  // product that's actually in stock never gets miscategorized as "Out of Stock"
+  // just because its legacy field went stale.
+  const inventoryData = await Product.aggregate([
+    { $match: { ...scope } },
+    { $project: {
+      name: 1,
+      nameUrdu: { $ifNull: ['$nameUrdu', ''] },
+      barcode: 1, unit: 1,
+      category: { $ifNull: ['$category', 'N/A'] },
+      stockQuantity: 1, cost: 1, price: 1,
+      trackImei: { $ifNull: ['$trackImei', false] },
+      trackSerial: { $ifNull: ['$trackSerial', false] },
+    } },
   ]);
 
   // Attach each product's active batches (if it — or its hidden default variant for
@@ -1330,6 +1392,7 @@ const getInventoryReport = catchAsync(async (req, res) => {
       expiryDate: b.expiryDate,
       costPerUnit: b.costPerUnit,
       sellingPrice: b.sellingPrice,
+      value: b.quantity * (b.costPerUnit || 0),
     });
   });
   const variantsByProduct = new Map();
@@ -1338,16 +1401,109 @@ const getInventoryReport = catchAsync(async (req, res) => {
     if (!variantsByProduct.has(key)) variantsByProduct.set(key, []);
     variantsByProduct.get(key).push(v);
   });
+
+  // Same idea as batches above, but for IMEI/serial-tracked products — "which units are
+  // actually available" is the one thing a plain stock number can't answer for these,
+  // so pull the real in-stock numbers instead of just the count. Capped per product so
+  // one heavily-serialized product (hundreds of phones) can't blow up the response for
+  // every other row in the report; the client gets the true total separately and can
+  // say "+N more" instead of silently truncating with no indication.
+  const IMEI_PREVIEW_LIMIT = 100;
+  const serializedProductIds = inventoryData.filter((p) => p.trackImei || p.trackSerial).map((p) => p._id);
+  const [imeiDocs, imeiCounts] = serializedProductIds.length
+    ? await Promise.all([
+        Imei.find({ productId: { $in: serializedProductIds }, status: 'in_stock' })
+          .sort({ createdAt: 1 })
+          .limit(serializedProductIds.length * IMEI_PREVIEW_LIMIT)
+          .select('productId imei')
+          .lean(),
+        Imei.aggregate([
+          { $match: { productId: { $in: serializedProductIds }, status: 'in_stock' } },
+          { $group: { _id: '$productId', count: { $sum: 1 } } },
+        ]),
+      ])
+    : [[], []];
+  const imeisByProduct = new Map();
+  imeiDocs.forEach((d) => {
+    const key = d.productId.toString();
+    if (!imeisByProduct.has(key)) imeisByProduct.set(key, []);
+    const list = imeisByProduct.get(key);
+    if (list.length < IMEI_PREVIEW_LIMIT) list.push(d.imei);
+  });
+  const imeiTotalByProduct = new Map(imeiCounts.map((c) => [c._id.toString(), c.count]));
+
+  // Batch-tracked products keep their real stock ledger in Batch/Inventory, not
+  // Product.stockQuantity/cost/price — those legacy fields are meant to mirror it
+  // via dual-write during the migration (see inventory.model.js) but can drift out
+  // of sync (a product can show 0/negative stockQuantity while its batches still
+  // hold real, positive quantity). Recomputing stockQuantity/cost/price/stockValue
+  // from the batches whenever any exist is the fix: it's the same data already
+  // rendered in the expandable batch rows below, just summed up to the parent row
+  // instead of trusting the possibly-stale product-level snapshot.
   const dataWithBatches = inventoryData.map((p) => {
     const productVariants = variantsByProduct.get(p._id.toString()) || [];
     const batches = productVariants.flatMap((v) => {
       const inv = inventoryByVariant.get(v._id.toString());
       return inv ? batchesByInventory.get(inv._id.toString()) || [] : [];
     });
-    return { ...p, batches };
+    const key = p._id.toString();
+
+    let stockQuantity = p.stockQuantity || 0;
+    let cost = p.cost || 0;
+    let price = p.price || 0;
+    let stockValue = stockQuantity * cost;
+    let potentialRevenue = stockQuantity * price;
+
+    if (batches.length > 0) {
+      const batchQuantity = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+      const batchCostValue = batches.reduce((sum, b) => sum + (b.quantity || 0) * (b.costPerUnit || 0), 0);
+      const batchRevenueValue = batches.reduce(
+        (sum, b) => sum + (b.quantity || 0) * (b.sellingPrice != null ? b.sellingPrice : price),
+        0
+      );
+      stockQuantity = batchQuantity;
+      stockValue = batchCostValue;
+      potentialRevenue = batchRevenueValue;
+      cost = batchQuantity > 0 ? batchCostValue / batchQuantity : cost;
+      price = batchQuantity > 0 ? batchRevenueValue / batchQuantity : price;
+    }
+
+    const status = stockQuantity <= 0 ? 'Out of Stock' : stockQuantity <= 10 ? 'Low Stock' : 'In Stock';
+
+    return {
+      ...p,
+      stockQuantity,
+      cost,
+      price,
+      stockValue,
+      potentialRevenue,
+      status,
+      batches,
+      imeis: imeisByProduct.get(key) || [],
+      imeisTotalCount: imeiTotalByProduct.get(key) || 0,
+    };
   });
 
-  res.status(httpStatus.OK).send({ data: dataWithBatches, summary: summary[0] || {} });
+  const summary = dataWithBatches.reduce(
+    (acc, p) => {
+      acc.totalProducts += 1;
+      acc.totalStockQuantity += p.stockQuantity;
+      acc.totalStockValue += p.stockValue;
+      if (p.status === 'Low Stock') acc.lowStockCount += 1;
+      else if (p.status === 'Out of Stock') acc.outOfStockCount += 1;
+      return acc;
+    },
+    { totalProducts: 0, totalStockQuantity: 0, totalStockValue: 0, lowStockCount: 0, outOfStockCount: 0 }
+  );
+
+  const filteredData = (status === 'low'
+    ? dataWithBatches.filter((p) => p.status === 'Low Stock')
+    : status === 'out'
+    ? dataWithBatches.filter((p) => p.status === 'Out of Stock')
+    : dataWithBatches
+  ).sort((a, b) => a.stockQuantity - b.stockQuantity);
+
+  res.status(httpStatus.OK).send({ data: filteredData, summary });
 });
 
 /* ── Batch & Expiry (FEFO) ─────────────────────────────────────────────────── */
@@ -1466,7 +1622,17 @@ const getStockAdjustmentReport = catchAsync(async (req, res) => {
       },
       { $sort: { _id: 1 } },
     ]),
-    StockAdjustment.find(baseMatch).sort({ createdAt: -1 }).limit(500).populate('createdBy', 'name').lean(),
+    StockAdjustment.find(baseMatch)
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .populate('createdBy', 'name')
+      // variantId/batchId are set whenever the adjustment targeted a real (or batch/
+      // expiry-tracked) variant — see resolveTarget in stockAdjustment.service.js —
+      // but the report never surfaced them, so an adjustment against a specific batch
+      // looked identical to one against the whole product.
+      .populate('variantId', 'attributes')
+      .populate('batchId', 'batchNumber expiryDate')
+      .lean(),
   ]);
 
   const formattedLineItems = lineItems.map((adj) => ({
@@ -1483,6 +1649,11 @@ const getStockAdjustmentReport = catchAsync(async (req, res) => {
     reason: adj.reason || '',
     status: adj.status,
     createdByName: adj.createdBy?.name || '',
+    variantLabel: adj.variantId?.attributes
+      ? Object.values(adj.variantId.attributes).join(' / ') || null
+      : null,
+    batchNumber: adj.batchId?.batchNumber || null,
+    expiryDate: adj.batchId?.expiryDate || null,
   }));
 
   res.status(httpStatus.OK).send({
@@ -1490,6 +1661,105 @@ const getStockAdjustmentReport = catchAsync(async (req, res) => {
     byType: stats.byType,
     datewise,
     lineItems: formattedLineItems,
+    period: { startDate: start, endDate: end },
+  });
+});
+
+/* ── Stock Transfers (inter-branch inventory movement) ────────────────────────
+ * InventoryTransfer isn't branch-scoped the way most collections are — it has
+ * fromBranchId/toBranchId, not a single branchId — so buildScope()'s branchId can't be
+ * spread onto the match like every other report does; it has to become an explicit
+ * $or (or a single-side match when `direction` narrows it), mirroring queryTransfers
+ * in inventoryTransfer.service.js. */
+const getStockTransferReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const { status, direction, productId } = req.query;
+
+  const baseMatch = { organizationId: scope.organizationId, createdAt: { $gte: start, $lte: end } };
+  if (scope.branchId) {
+    if (direction === 'outgoing') baseMatch.fromBranchId = scope.branchId;
+    else if (direction === 'incoming') baseMatch.toBranchId = scope.branchId;
+    else baseMatch.$or = [{ fromBranchId: scope.branchId }, { toBranchId: scope.branchId }];
+  }
+  if (status) baseMatch.status = status;
+  if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+    const pid = new mongoose.Types.ObjectId(productId);
+    const productMatch = { $or: [{ fromProductId: pid }, { toProductId: pid }] };
+    // Branch scoping above may already own the top-level $or — combine both with $and
+    // instead of letting the second one silently overwrite the first.
+    if (baseMatch.$or) {
+      baseMatch.$and = [{ $or: baseMatch.$or }, productMatch];
+      delete baseMatch.$or;
+    } else {
+      Object.assign(baseMatch, productMatch);
+    }
+  }
+
+  const [datewise, statusAgg, transfers] = await Promise.all([
+    InventoryTransfer.aggregate([
+      { $match: baseMatch },
+      {
+        $group: {
+          _id: businessDateGroup('$createdAt'),
+          count: { $sum: 1 },
+          quantity: { $sum: '$quantity' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    // Separate aggregate for status/quantity totals — the line-item list below is
+    // capped at 500 for display, and summing off that capped list would silently
+    // undercount an org with more transfers than that in range.
+    InventoryTransfer.aggregate([
+      { $match: baseMatch },
+      { $group: { _id: '$status', count: { $sum: 1 }, quantity: { $sum: '$quantity' } } },
+    ]),
+    InventoryTransfer.find(baseMatch)
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .populate('fromBranchId', 'name')
+      .populate('toBranchId', 'name')
+      .populate('decidedBy', 'name')
+      .lean(),
+  ]);
+
+  const statusCounts = {};
+  let totalTransfers = 0;
+  let totalUnitsMoved = 0;
+  statusAgg.forEach((s) => {
+    statusCounts[s._id] = s.count;
+    totalTransfers += s.count;
+    totalUnitsMoved += s.quantity || 0;
+  });
+
+  // Only meaningful when scoped to one product — a transfer where this product was
+  // the source ('out') vs the destination ('in'), so a caller like the Product Details
+  // dialog can sum how much of this specific product's stock moved each way. Left
+  // undefined for the unscoped report (a transfer has no single "product" to be
+  // relative to there).
+  const productFilter = productId && mongoose.Types.ObjectId.isValid(productId) ? String(productId) : null;
+
+  const lineItems = transfers.map((tr) => ({
+    id: tr._id,
+    date: tr.createdAt,
+    productName: tr.productName,
+    fromBranchName: tr.fromBranchId?.name || '',
+    toBranchName: tr.toBranchId?.name || '',
+    quantity: tr.quantity,
+    imeis: tr.imeis || [],
+    batchNumber: tr.batchSnapshot?.batchNumber || '',
+    reason: tr.reason || '',
+    status: tr.status,
+    decidedByName: tr.decidedBy?.name || '',
+    completedAt: tr.completedAt || null,
+    productDirection: productFilter ? (String(tr.fromProductId) === productFilter ? 'out' : 'in') : undefined,
+  }));
+
+  res.status(httpStatus.OK).send({
+    summary: { totalTransfers, totalUnitsMoved, statusCounts },
+    datewise,
+    lineItems,
     period: { startDate: start, endDate: end },
   });
 });
@@ -3797,7 +4067,7 @@ module.exports = {
   getSalesReport, getPurchaseReport, getProductReport, getProductDetailReport,
   getCustomerReport, getCustomerAgingReport, getSupplierReport, getSupplierAgingReport, getExpenseReport,
   getProfitLossReport, getProfitLossFullReport, getInventoryReport, getTaxReport,
-  getBatchExpiryReport, getStockAdjustmentReport,
+  getBatchExpiryReport, getStockAdjustmentReport, getStockTransferReport,
   getSalesReturnsReport, getPurchaseReturnsReport,
   getLoadReport, getWalletWiseReport, getRepairReport, getServiceReport,
   getRoiReport, getMonthlyRoi,

@@ -7,8 +7,59 @@ const accountsSystemService = require('./accountsSystem.service');
 const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
+const imeiService = require('./imei.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+
+/**
+ * Resolves exactly which batches — and, for serial/IMEI-tracked lines, which specific
+ * units — a returned quantity should credit back, using the *original* invoice line
+ * (which still carries the full batchAllocations/imeis) rather than the single
+ * batchId/batchNumber the return item mirrors for display. A full-line return (the
+ * common case: return everything this line sold) can be traced exactly — every batch
+ * gets back precisely what it gave. A partial return of a line split across several
+ * batches is distributed proportionally to each batch's original share, since the
+ * return form doesn't yet offer a batch/serial picker to say exactly which unit is
+ * physically coming back. For that same reason, IMEI/serial restoration only ever
+ * happens on a full-line return — guessing which of several sold serials came back
+ * would risk marking the wrong physical unit as back in stock.
+ */
+const _resolveReturnRestores = (invoiceLineItem, returnedQuantity) => {
+  if (!invoiceLineItem) return { batchAllocations: [], imeis: [] };
+
+  const rawAllocations =
+    Array.isArray(invoiceLineItem.batchAllocations) && invoiceLineItem.batchAllocations.length > 0
+      ? invoiceLineItem.batchAllocations
+      : invoiceLineItem.batchId
+      ? [{ batchId: invoiceLineItem.batchId, quantity: Number(invoiceLineItem.stockQuantity ?? invoiceLineItem.quantity ?? 0) }]
+      : [];
+
+  const soldTotal = rawAllocations.reduce((sum, a) => sum + Number(a.quantity || 0), 0);
+  let batchAllocations = [];
+  if (rawAllocations.length > 0 && soldTotal > 0) {
+    if (returnedQuantity >= soldTotal) {
+      batchAllocations = rawAllocations.map((a) => ({ batchId: a.batchId, quantity: Number(a.quantity || 0) }));
+    } else {
+      let remaining = returnedQuantity;
+      batchAllocations = rawAllocations
+        .map((a, i) => {
+          const isLast = i === rawAllocations.length - 1;
+          const share = isLast
+            ? remaining
+            : Math.min(remaining, Math.round((Number(a.quantity || 0) / soldTotal) * returnedQuantity));
+          remaining -= share;
+          return { batchId: a.batchId, quantity: share };
+        })
+        .filter((a) => a.quantity > 0);
+    }
+  }
+
+  const lineImeis = invoiceLineItem.imeis || [];
+  const soldQtyForImeis = Number(invoiceLineItem.stockQuantity ?? invoiceLineItem.quantity ?? lineImeis.length);
+  const imeis = lineImeis.length > 0 && returnedQuantity >= soldQtyForImeis ? lineImeis : [];
+
+  return { batchAllocations, imeis };
+};
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -138,14 +189,23 @@ const createSalesReturn = async (returnBody) => {
     // don't participate in this Mongoose session), mirrored by `pendingVariantRestores`.
     const pendingStockSyncs = [];
     const pendingVariantRestores = [];
+    const pendingImeiRestores = [];
     for (const item of normalizedItems) {
       const returnedQuantity = Number(item.stockQuantity || item.quantity || 0);
       if (item.variantId) {
-        pendingVariantRestores.push({
-          variantId: item.variantId,
-          batchId: item.batchId,
-          quantity: returnedQuantity,
-        });
+        const invoiceLineItem = invoiceItemsMap.get(item.productId.toString());
+        const { batchAllocations, imeis } = _resolveReturnRestores(invoiceLineItem, returnedQuantity);
+        if (batchAllocations.length > 0) {
+          for (const alloc of batchAllocations) {
+            pendingVariantRestores.push({ variantId: item.variantId, batchId: alloc.batchId, quantity: alloc.quantity });
+          }
+        } else {
+          // No batch on this line at all (non-batch-tracked variant) — plain restore.
+          pendingVariantRestores.push({ variantId: item.variantId, batchId: undefined, quantity: returnedQuantity });
+        }
+        if (imeis.length > 0) {
+          pendingImeiRestores.push({ productId: item.productId, imeis });
+        }
         continue;
       }
       const updated = await Product.findOneAndUpdate(
@@ -210,6 +270,17 @@ const createSalesReturn = async (returnBody) => {
           userId: returnBody.createdBy,
         });
       }
+    }
+
+    for (const restore of pendingImeiRestores) {
+      await imeiService.releaseImeisByNumbers({
+        invoiceId: invoice._id,
+        productId: restore.productId,
+        imeis: restore.imeis,
+        organizationId: returnBody.organizationId,
+        branchId: returnBody.branchId,
+        note: `Returned via ${salesReturn.returnNumber}`,
+      });
     }
 
     accountsSystemService
@@ -393,6 +464,67 @@ const getSalesReturnById = async (id) => {
 };
 
 /**
+ * Reverses the stock (and, where a full line was returned, the IMEI status) that a
+ * sales return applied on creation — used when the return is rejected or deleted.
+ * Re-fetches the original invoice to resolve the same real batchAllocations/imeis that
+ * `createSalesReturn` used, instead of the single batchId/batchNumber mirrored onto the
+ * return item, so reversing a multi-batch or serialized return debits the same batches
+ * (and reclaims the same units) it originally credited.
+ */
+const _reverseSalesReturnStock = async (ret, { userId } = {}) => {
+  const invoice = await Invoice.findById(ret.invoiceId).lean();
+  const invoiceItemsMap = new Map((invoice?.items || []).map((item) => [item.productId.toString(), item]));
+
+  for (const item of ret.items) {
+    const returnedQuantity = Number(item.stockQuantity || item.quantity || 0);
+    const reversedQuantity = -returnedQuantity;
+    if (item.variantId) {
+      const invoiceLineItem = invoiceItemsMap.get(item.productId.toString());
+      const { batchAllocations, imeis } = _resolveReturnRestores(invoiceLineItem, returnedQuantity);
+      if (batchAllocations.length > 0) {
+        for (const alloc of batchAllocations) {
+          await batchService.restoreToBatch(alloc.batchId, -alloc.quantity, {
+            refType: 'SalesReturn',
+            refId: ret._id,
+            userId,
+          });
+        }
+      } else {
+        await inventoryService.adjustInventory(item.variantId, {
+          quantityDelta: reversedQuantity,
+          type: 'return_out',
+          refType: 'SalesReturn',
+          refId: ret._id,
+          userId,
+        });
+      }
+      if (imeis.length > 0) {
+        await imeiService.reclaimImeisForReturn({
+          invoiceId: ret.invoiceId,
+          productId: item.productId,
+          imeis,
+          organizationId: ret.organizationId,
+          branchId: ret.branchId,
+        });
+      }
+      continue;
+    }
+    await Product.findByIdAndUpdate(item.productId, {
+      $inc: { stockQuantity: reversedQuantity },
+    });
+    await inventorySyncService.recordStockChange({
+      organizationId: ret.organizationId,
+      productId: item.productId,
+      quantityDelta: reversedQuantity,
+      type: 'return_out',
+      refType: 'SalesReturn',
+      refId: ret._id,
+      createdBy: userId,
+    });
+  }
+};
+
+/**
  * Approve or reject a pending sales return.
  */
 const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
@@ -414,42 +546,8 @@ const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
     // Stock already increased on creation — create cash entry now
     await _createCashBookEntry(ret);
   } else if (status === 'rejected') {
-    // Reverse stock that was added at creation time. Real-variant / batch-tracked
-    // items reverse via Inventory/Batch instead of the legacy Product.stockQuantity
-    // fallback — see docs/architecture/universal-product-migration.md.
-    for (const item of ret.items) {
-      const reversedQuantity = -Number(item.stockQuantity || item.quantity || 0);
-      if (item.variantId) {
-        if (item.batchId) {
-          await batchService.restoreToBatch(item.batchId, reversedQuantity, {
-            refType: 'SalesReturn',
-            refId: ret._id,
-            userId,
-          });
-        } else {
-          await inventoryService.adjustInventory(item.variantId, {
-            quantityDelta: reversedQuantity,
-            type: 'return_out',
-            refType: 'SalesReturn',
-            refId: ret._id,
-            userId,
-          });
-        }
-        continue;
-      }
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stockQuantity: reversedQuantity },
-      });
-      await inventorySyncService.recordStockChange({
-        organizationId: ret.organizationId,
-        productId: item.productId,
-        quantityDelta: reversedQuantity,
-        type: 'return_out',
-        refType: 'SalesReturn',
-        refId: ret._id,
-        createdBy: userId,
-      });
-    }
+    // Reverse stock (and IMEI status) that was applied at creation time.
+    await _reverseSalesReturnStock(ret, { userId });
   }
 
   return ret;
@@ -459,38 +557,8 @@ const deleteSalesReturn = async (id) => {
   const ret = await SalesReturn.findById(id);
   if (!ret) throw new ApiError(httpStatus.NOT_FOUND, 'Sales return not found');
 
-  // Reverse stock. Real-variant / batch-tracked items reverse via Inventory/Batch
-  // instead of the legacy Product.stockQuantity fallback.
-  for (const item of ret.items) {
-    const reversedQuantity = -Number(item.stockQuantity || item.quantity || 0);
-    if (item.variantId) {
-      if (item.batchId) {
-        await batchService.restoreToBatch(item.batchId, reversedQuantity, {
-          refType: 'SalesReturn',
-          refId: ret._id,
-        });
-      } else {
-        await inventoryService.adjustInventory(item.variantId, {
-          quantityDelta: reversedQuantity,
-          type: 'return_out',
-          refType: 'SalesReturn',
-          refId: ret._id,
-        });
-      }
-      continue;
-    }
-    await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stockQuantity: reversedQuantity },
-    });
-    await inventorySyncService.recordStockChange({
-      organizationId: ret.organizationId,
-      productId: item.productId,
-      quantityDelta: reversedQuantity,
-      type: 'return_out',
-      refType: 'SalesReturn',
-      refId: ret._id,
-    });
-  }
+  // Reverse stock (and IMEI status) that was applied at creation time.
+  await _reverseSalesReturnStock(ret, {});
 
   // Remove cash book entry if any
   await cashBookService.deleteEntriesByReference(ret._id, 'SalesReturn');

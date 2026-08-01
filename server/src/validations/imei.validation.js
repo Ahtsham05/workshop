@@ -36,6 +36,9 @@ const getImei = {
 const getAvailableImeis = {
   query: Joi.object().keys({
     productId: Joi.string().custom(objectId).required(),
+    batchId: Joi.string().custom(objectId),
+    // Comma-separated batch ids, for a line item split across multiple batches.
+    batchIds: Joi.string().trim(),
     search: Joi.string().trim().allow(''),
   }),
 };
