@@ -1,14 +1,66 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, ShoppingCart, Package, BarChart3, Users, Truck, Receipt } from 'lucide-react'
+import { FileText, ShoppingCart, Package, BarChart3, Users, Truck, Receipt, Smartphone, Wallet, Wrench, Signal } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useNavigate } from '@tanstack/react-router'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { isMobileShopBusiness } from '@/lib/business-types'
 
 export function QuickActions() {
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const user = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const isMobileShop = isMobileShopBusiness(org?.businessType || user?.businessType)
 
-  const actions = [
+  const mobileShopActions = [
+    {
+      icon: <FileText className='h-5 w-5' />,
+      label: t('Create Invoice'),
+      onClick: () => navigate({ to: '/invoice' }),
+      color: 'bg-blue-500 hover:bg-blue-600',
+    },
+    {
+      icon: <ShoppingCart className='h-5 w-5' />,
+      label: t('Create Purchase'),
+      onClick: () => navigate({ to: '/purchase-invoice' }),
+      color: 'bg-green-500 hover:bg-green-600',
+    },
+    {
+      icon: <Smartphone className='h-5 w-5' />,
+      label: t('Load Management'),
+      onClick: () => navigate({ to: '/mobile-shop/load' }),
+      color: 'bg-purple-500 hover:bg-purple-600',
+    },
+    {
+      icon: <Wallet className='h-5 w-5' />,
+      label: t('Cash Management'),
+      onClick: () => navigate({ to: '/mobile-shop/cash-management' }),
+      color: 'bg-orange-500 hover:bg-orange-600',
+    },
+    {
+      icon: <Wrench className='h-5 w-5' />,
+      label: t('Services'),
+      onClick: () => navigate({ to: '/mobile-shop/services' }),
+      color: 'bg-cyan-500 hover:bg-cyan-600',
+    },
+    {
+      icon: <Signal className='h-5 w-5' />,
+      label: t('Sim Sale'),
+      onClick: () => navigate({ to: '/mobile-shop/sim-sale' }),
+      color: 'bg-teal-500 hover:bg-teal-600',
+    },
+    {
+      icon: <Receipt className='h-5 w-5' />,
+      label: t('Bill Payments'),
+      onClick: () => navigate({ to: '/mobile-shop/bill-payments' }),
+      color: 'bg-pink-500 hover:bg-pink-600',
+    },
+  ]
+
+  const defaultActions = [
     {
       icon: <FileText className='h-5 w-5' />,
       label: t('Create Invoice'),
@@ -52,6 +104,8 @@ export function QuickActions() {
       color: 'bg-pink-500 hover:bg-pink-600',
     },
   ]
+
+  const actions = isMobileShop ? mobileShopActions : defaultActions
 
   return (
     <Card>
