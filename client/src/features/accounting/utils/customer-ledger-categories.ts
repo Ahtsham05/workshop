@@ -179,6 +179,10 @@ export function resolveCustomerLedgerCategory(entry: LedgerStatementEntry): Cust
     return { key: 'refund', labelKey: 'Refund', sortOrder: 24 };
   }
 
+  if (type === 'purchase') {
+    return { key: 'used_phone_purchase', labelKey: 'Used Phone Purchase', sortOrder: 25 };
+  }
+
   return { key: 'other', labelKey: 'Other', sortOrder: 99 };
 }
 

@@ -14,11 +14,25 @@ const statusOrCsv = Joi.string().custom((value, helpers) => {
   return value;
 });
 
+const ACQUISITION_TYPE_VALUES = ['supplier_purchase', 'buyback', 'trade_in'];
+
+const acquisitionTypeOrCsv = Joi.string().custom((value, helpers) => {
+  const parts = value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0 || !parts.every((p) => ACQUISITION_TYPE_VALUES.includes(p))) {
+    return helpers.error('any.invalid');
+  }
+  return value;
+});
+
 const getImeis = {
   query: Joi.object().keys({
     productId: Joi.string().custom(objectId),
     status: statusOrCsv,
     type: Joi.string().valid('imei', 'serial'),
+    acquisitionType: acquisitionTypeOrCsv,
     warrantyStatus: Joi.string().valid('expiring_soon'),
     search: Joi.string().trim().allow(''),
     sortBy: Joi.string(),

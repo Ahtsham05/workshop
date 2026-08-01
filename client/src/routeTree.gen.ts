@@ -94,6 +94,7 @@ import { Route as AuthenticatedRestaurantPosImport } from './routes/_authenticat
 import { Route as AuthenticatedRestaurantMenuImport } from './routes/_authenticated/restaurant/menu'
 import { Route as AuthenticatedRestaurantKitchenImport } from './routes/_authenticated/restaurant/kitchen'
 import { Route as AuthenticatedMobileShopWalletImport } from './routes/_authenticated/mobile-shop/wallet'
+import { Route as AuthenticatedMobileShopUsedPhonesImport } from './routes/_authenticated/mobile-shop/used-phones'
 import { Route as AuthenticatedMobileShopSimSaleImport } from './routes/_authenticated/mobile-shop/sim-sale'
 import { Route as AuthenticatedMobileShopServicesImport } from './routes/_authenticated/mobile-shop/services'
 import { Route as AuthenticatedMobileShopRepairImport } from './routes/_authenticated/mobile-shop/repair'
@@ -705,6 +706,13 @@ const AuthenticatedMobileShopWalletRoute =
   AuthenticatedMobileShopWalletImport.update({
     id: '/mobile-shop/wallet',
     path: '/mobile-shop/wallet',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedMobileShopUsedPhonesRoute =
+  AuthenticatedMobileShopUsedPhonesImport.update({
+    id: '/mobile-shop/used-phones',
+    path: '/mobile-shop/used-phones',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1391,6 +1399,13 @@ declare module '@tanstack/react-router' {
       path: '/mobile-shop/sim-sale'
       fullPath: '/mobile-shop/sim-sale'
       preLoaderRoute: typeof AuthenticatedMobileShopSimSaleImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/used-phones': {
+      id: '/_authenticated/mobile-shop/used-phones'
+      path: '/mobile-shop/used-phones'
+      fullPath: '/mobile-shop/used-phones'
+      preLoaderRoute: typeof AuthenticatedMobileShopUsedPhonesImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/mobile-shop/wallet': {
@@ -2353,6 +2368,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
   AuthenticatedMobileShopServicesRoute: typeof AuthenticatedMobileShopServicesRoute
   AuthenticatedMobileShopSimSaleRoute: typeof AuthenticatedMobileShopSimSaleRoute
+  AuthenticatedMobileShopUsedPhonesRoute: typeof AuthenticatedMobileShopUsedPhonesRoute
   AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
   AuthenticatedRestaurantKitchenRoute: typeof AuthenticatedRestaurantKitchenRoute
   AuthenticatedRestaurantMenuRoute: typeof AuthenticatedRestaurantMenuRoute
@@ -2433,6 +2449,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileShopRepairRoute: AuthenticatedMobileShopRepairRoute,
   AuthenticatedMobileShopServicesRoute: AuthenticatedMobileShopServicesRoute,
   AuthenticatedMobileShopSimSaleRoute: AuthenticatedMobileShopSimSaleRoute,
+  AuthenticatedMobileShopUsedPhonesRoute:
+    AuthenticatedMobileShopUsedPhonesRoute,
   AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
   AuthenticatedRestaurantKitchenRoute: AuthenticatedRestaurantKitchenRoute,
   AuthenticatedRestaurantMenuRoute: AuthenticatedRestaurantMenuRoute,
@@ -2531,6 +2549,7 @@ export interface FileRoutesByFullPath {
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
+  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2674,6 +2693,7 @@ export interface FileRoutesByTo {
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
+  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2820,6 +2840,7 @@ export interface FileRoutesById {
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/_authenticated/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/_authenticated/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
+  '/_authenticated/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
   '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/_authenticated/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/_authenticated/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2968,6 +2989,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/repair'
     | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
+    | '/mobile-shop/used-phones'
     | '/mobile-shop/wallet'
     | '/restaurant/kitchen'
     | '/restaurant/menu'
@@ -3110,6 +3132,7 @@ export interface FileRouteTypes {
     | '/mobile-shop/repair'
     | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
+    | '/mobile-shop/used-phones'
     | '/mobile-shop/wallet'
     | '/restaurant/kitchen'
     | '/restaurant/menu'
@@ -3254,6 +3277,7 @@ export interface FileRouteTypes {
     | '/_authenticated/mobile-shop/repair'
     | '/_authenticated/mobile-shop/services'
     | '/_authenticated/mobile-shop/sim-sale'
+    | '/_authenticated/mobile-shop/used-phones'
     | '/_authenticated/mobile-shop/wallet'
     | '/_authenticated/restaurant/kitchen'
     | '/_authenticated/restaurant/menu'
@@ -3447,6 +3471,7 @@ export const routeTree = rootRoute
         "/_authenticated/mobile-shop/repair",
         "/_authenticated/mobile-shop/services",
         "/_authenticated/mobile-shop/sim-sale",
+        "/_authenticated/mobile-shop/used-phones",
         "/_authenticated/mobile-shop/wallet",
         "/_authenticated/restaurant/kitchen",
         "/_authenticated/restaurant/menu",
@@ -3687,6 +3712,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/sim-sale": {
       "filePath": "_authenticated/mobile-shop/sim-sale.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/used-phones": {
+      "filePath": "_authenticated/mobile-shop/used-phones.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/mobile-shop/wallet": {

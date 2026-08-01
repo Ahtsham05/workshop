@@ -215,6 +215,8 @@ const en: Record<string, string> = {
     "net_profit": "Net Profit",
     "net_profit_after_expense": "Net Profit After Expense",
     "total_profit_minus_expenses": "Total profit minus operating expenses",
+    "net_profit_after_all_expenses": "Net Profit After All Expenses",
+    "total_profit_minus_paid_and_pending_expenses": "Total profit minus paid and pending expenses",
     "total_purchase_amount_period": "Total purchase amount in selected period",
     "net_margin": "Net Margin",
     "inventory_details": "Inventory Details",

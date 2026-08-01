@@ -1428,6 +1428,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       debit_note: t('Debit Note'),
       adjustment: t('Adjustment'),
       opening_balance: t('Opening Balance'),
+      purchase: t('Used Phone Purchase'),
     };
     return labels[type] || type;
   };
@@ -1441,6 +1442,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       debit_note: 'secondary',
       adjustment: 'outline',
       opening_balance: 'outline',
+      purchase: 'secondary',
     };
     return variants[type] || 'outline';
   };

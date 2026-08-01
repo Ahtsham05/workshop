@@ -32,6 +32,7 @@ module.exports.loadPurchaseService = require('./loadPurchase.service.js');
 module.exports.loadTransactionService = require('./loadTransaction.service.js');
 module.exports.simSaleService = require('./simSale.service.js');
 module.exports.imeiService = require('./imei.service.js');
+module.exports.phoneBuybackService = require('./phoneBuyback.service.js');
 module.exports.salesInsightsService = require('./salesInsights.service.js');
 module.exports.supplierScoringService = require('./supplierScoring.service.js');
 module.exports.purchaseSuggestionsService = require('./purchaseSuggestions.service.js');

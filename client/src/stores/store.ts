@@ -31,6 +31,7 @@ import { whatsappCloudApi } from './whatsappCloud.api';
 import { smsGatewayApi } from './smsGateway.api';
 import { cashRegisterApi } from './cashRegister.api';
 import { imeiApi } from './imei.api';
+import { usedPhoneBuybackApi } from './usedPhoneBuyback.api';
 import { insightApi } from './insight.api';
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
 import { productAttributeApi } from './productAttribute.api';
@@ -81,6 +82,7 @@ export const store = configureStore({
     [smsGatewayApi.reducerPath]: smsGatewayApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
     [imeiApi.reducerPath]: imeiApi.reducer,
+    [usedPhoneBuybackApi.reducerPath]: usedPhoneBuybackApi.reducer,
     [insightApi.reducerPath]: insightApi.reducer,
     [purchaseSuggestionsApi.reducerPath]: purchaseSuggestionsApi.reducer,
     [productAttributeApi.reducerPath]: productAttributeApi.reducer,
@@ -125,6 +127,7 @@ export const store = configureStore({
       smsGatewayApi.middleware,
       cashRegisterApi.middleware,
       imeiApi.middleware,
+      usedPhoneBuybackApi.middleware,
       insightApi.middleware,
       purchaseSuggestionsApi.middleware,
       productAttributeApi.middleware,
