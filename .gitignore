@@ -1,5 +1,7 @@
 client/node_modules
 server/node_modules
+# One-off DB migration toolkit — business-specific scripts + local backups, never committed
+server/_migration/
 logix-plus-solutions/node_modules
 logix-plus-solutions/.next
 logix-plus-solutions/.env.local

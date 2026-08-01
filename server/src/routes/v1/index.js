@@ -36,6 +36,7 @@ const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
 const simSaleRoute = require('./simSale.route');
 const imeiRoute = require('./imei.route');
+const phoneBuybackRoute = require('./phoneBuyback.route');
 const insightRoute = require('./insight.route');
 const purchaseSuggestionsRoute = require('./purchaseSuggestions.route');
 const cashWithdrawalRoute = require('./cashWithdrawal.route');
@@ -264,6 +265,10 @@ const defaultRoutes = [
   {
     path: '/imeis',
     route: imeiRoute,
+  },
+  {
+    path: '/used-phones',
+    route: phoneBuybackRoute,
   },
   {
     path: '/insights',

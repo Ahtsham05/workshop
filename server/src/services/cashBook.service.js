@@ -274,6 +274,7 @@ const CASH_MODULE_LABELS = {
   ServiceInvoice: 'Services',
   Purchase: 'Purchases',
   PurchaseReturn: 'Purchase Returns',
+  PhoneBuyback: 'Used Phones',
   Expense: 'Expenses',
   PersonalLedger: 'My Accounts',
   BillPayment: 'Bill Payments',

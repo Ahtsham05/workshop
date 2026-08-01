@@ -35,6 +35,24 @@ export function buildCustomerBalanceMessage({ branchName, name, balance, currenc
   return `${h}\n${greeting}You have a credit balance of ${fmt(balance, currency)} with us. Please contact us to collect your payment.\n\nThank you!`
 }
 
+/**
+ * Maps a customer balance to the approved WhatsApp template that matches
+ * `buildCustomerBalanceMessage`'s wording, for use outside the 24h customer-service window.
+ * Only the "customer owes us" case has a matching approved template (payment_reminder) —
+ * settled/credit balances have no equivalent template, so callers get `undefined` and should
+ * fall back to a manual send (e.g. wa.me) instead of failing outright.
+ */
+export function getCustomerBalanceTemplate({
+  name,
+  balance,
+}: {
+  name?: string
+  balance?: number
+}): { templateCategory: string; templateParams: (string | number)[] } | undefined {
+  if (!balance || balance <= 0) return undefined
+  return { templateCategory: 'payment_reminder', templateParams: [name || 'there', balance.toFixed(0)] }
+}
+
 export function buildSupplierBalanceMessage({ branchName, name, balance, currency }: BalanceCtx) {
   const h = heading(branchName)
   const greeting = name ? `Dear ${name},\n\n` : ''

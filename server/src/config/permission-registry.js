@@ -121,6 +121,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewInstallments', 'manageInstallments'],
   },
   {
+    id: 'used_phones',
+    label: 'Mobile Shop — Used Phones',
+    permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'deleteUsedPhones'],
+  },
+  {
     id: 'reports',
     label: 'Reports',
     permissions: [
@@ -252,6 +257,7 @@ const PERMISSION_TAB_GROUPS = {
     'services',
     'bill_payments',
     'installments',
+    'used_phones',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],

@@ -34,6 +34,7 @@ export const MOBILE_SHOP_FEATURES = [
   'wallet',
   'customer_ledger',
   'supplier_ledger',
+  'used_phones',
 ] as const
 
 /** HR, admin, and multi-branch features — Business plan and above. */

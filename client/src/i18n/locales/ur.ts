@@ -172,6 +172,8 @@ const ur: Record<string, string> = {
     "net_profit": "خالص منافع",
     "net_profit_after_expense": "اخراجات کے بعد خالص منافع",
     "total_profit_minus_expenses": "کل منافع منہا آپریٹنگ اخراجات",
+    "net_profit_after_all_expenses": "تمام اخراجات کے بعد خالص منافع",
+    "total_profit_minus_paid_and_pending_expenses": "کل منافع منہا ادا شدہ اور زیر التواء اخراجات",
     "total_purchase_amount_period": "منتخب مدت میں کل خریداری کی رقم",
     "net_margin": "خالص مارجن",
     "inventory_details": "انوینٹری کی تفصیلات",

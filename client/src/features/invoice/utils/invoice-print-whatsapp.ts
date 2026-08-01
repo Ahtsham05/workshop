@@ -602,6 +602,7 @@ export function buildPrintWindowActionsBlock(
         filename: filename,
         caption: chatMessage,
         invoiceNumber: meta.invoiceNumber,
+        templateParams: [meta.customerName || 'there', meta.invoiceNumber],
       });
 
       if (!sendResult || !sendResult.success) {

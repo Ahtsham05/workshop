@@ -85,6 +85,9 @@ export default function Dashboard() {
   const totalPaidExpenses = stats?.totalPaidExpenses ?? stats?.totalExpenses ?? 0
   const totalPendingExpenses = stats?.totalPendingExpenses ?? 0
   const netProfitAfterExpense = (stats?.totalProfit || 0) - totalPaidExpenses
+  // Deducts paid + pending expenses together — the fuller picture once pending
+  // (e.g. unpaid recurring) expenses are counted as already committed, not just what's left the bank.
+  const netProfitAfterAllExpenses = (stats?.totalProfit || 0) - (stats?.totalExpenses ?? totalPaidExpenses)
   const inventorySaleCost = (stats?.totalSales || 0) - (stats?.salesProfit || 0)
   const simSaleCost = (stats?.totalSimSale || 0) - (stats?.totalSimSaleProfit || 0)
   const repairCost = (stats?.totalRepairIncome || 0) - (stats?.totalRepairProfit || 0)
@@ -485,6 +488,20 @@ export default function Dashboard() {
             description={t('total_profit_minus_expenses')}
             isLoading={statsLoading}
             tone={netProfitAfterExpense >= 0 ? 'emerald' : 'rose'}
+            link={reportLink('profit-loss')}
+          />
+          <StatCard
+            title={t('net_profit_after_all_expenses')}
+            value={netProfitAfterAllExpenses}
+            icon={<TrendingUp className='h-4 w-4' />}
+            valuePrefix='Rs '
+            description={
+              totalPendingExpenses > 0
+                ? `${t('total_profit_minus_paid_and_pending_expenses')} (${t('Pending')}: Rs ${totalPendingExpenses.toLocaleString()})`
+                : t('total_profit_minus_paid_and_pending_expenses')
+            }
+            isLoading={statsLoading}
+            tone={netProfitAfterAllExpenses >= 0 ? 'emerald' : 'rose'}
             link={reportLink('profit-loss')}
           />
           <StatCard

@@ -115,6 +115,87 @@ const imeiSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // How this unit entered stock. 'buyback'/'trade_in' units come from
+    // used-phone intake (see PhoneBuyback) instead of a Supplier purchase —
+    // sellerName/sellerPhone/etc + condition below are only meaningful then.
+    acquisitionType: {
+      type: String,
+      enum: ['supplier_purchase', 'buyback', 'trade_in'],
+      default: 'supplier_purchase',
+      index: true,
+    },
+    // Asking/resale price for a used unit, distinct from salePrice (what it
+    // actually sold for, set once an invoice is created).
+    askingPrice: {
+      type: Number,
+      default: 0,
+    },
+    buybackId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PhoneBuyback',
+      default: null,
+      index: true,
+    },
+    sellerCustomerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+      default: null,
+    },
+    sellerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sellerPhone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sellerCNIC: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sellerIdCardFront: {
+      url: { type: String },
+      publicId: { type: String },
+    },
+    sellerIdCardBack: {
+      url: { type: String },
+      publicId: { type: String },
+    },
+    // Condition/grading captured at buyback intake. Grade A = like new, D = for
+    // parts. ptaStatus matters specifically for reselling in Pakistan — a
+    // 'blocked' unit should be surfaced with a warning wherever it's shown.
+    condition: {
+      grade: { type: String, enum: ['A', 'B', 'C', 'D'] },
+      screenCondition: { type: String, enum: ['excellent', 'good', 'fair', 'poor', 'cracked'] },
+      bodyCondition: { type: String, enum: ['excellent', 'good', 'fair', 'poor'] },
+      batteryHealthPct: { type: Number, min: 0, max: 100 },
+      checklist: {
+        touchScreen: { type: Boolean, default: true },
+        camera: { type: Boolean, default: true },
+        speaker: { type: Boolean, default: true },
+        microphone: { type: Boolean, default: true },
+        buttons: { type: Boolean, default: true },
+        biometrics: { type: Boolean, default: true }, // Face ID / fingerprint
+        charging: { type: Boolean, default: true },
+        waterDamage: { type: Boolean, default: false },
+      },
+      accessoriesIncluded: [{
+        type: String,
+        enum: ['box', 'charger', 'original_bill', 'earphones', 'back_cover'],
+      }],
+      ptaStatus: {
+        type: String,
+        enum: ['approved', 'non_pta', 'blocked', 'unknown'],
+        default: 'unknown',
+      },
+      photos: [{
+        url: { type: String },
+        publicId: { type: String },
+      }],
+    },
     supplierId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Supplier',

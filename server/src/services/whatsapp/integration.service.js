@@ -52,7 +52,8 @@ async function sendPaymentReminder({ organizationId, branchId, customerId, sentB
     source: 'api',
     sentBy,
     templateCategory: 'payment_reminder',
-    templateParams: [customer.name, totalDue, 'your account'],
+    // Matches the approved payment_reminder template body — {{1}} name, {{2}} balance.
+    templateParams: [customer.name, totalDue],
   });
 }
 

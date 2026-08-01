@@ -7,6 +7,7 @@ export type SendInvoicePdfPayload = {
   filename?: string
   caption?: string
   invoiceNumber?: string
+  templateParams?: string[]
 }
 
 export type SendInvoicePdfResult = {

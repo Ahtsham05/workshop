@@ -22,7 +22,7 @@ const cashBookEntrySchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['sale', 'load', 'repair', 'service', 'purchase', 'expense', 'other', 'sales_return', 'purchase_return', 'bill_payment', 'opening_balance', 'installment', 'wallet'],
+      enum: ['sale', 'load', 'repair', 'service', 'purchase', 'expense', 'other', 'sales_return', 'purchase_return', 'bill_payment', 'opening_balance', 'installment', 'wallet', 'used_phone_buyback'],
       required: true,
     },
     amount: {

@@ -25,15 +25,17 @@ export function SimplePagination({
 }: SimplePaginationProps) {
   if (totalPages <= 1 && !onLimitChange) return null
 
-  const startItem = totalResults ? (currentPage - 1) * limit + 1 : undefined
-  const endItem = totalResults ? Math.min(currentPage * limit, totalResults) : undefined
+  const startItem = totalResults != null ? Math.min((currentPage - 1) * limit + 1, totalResults) : undefined
+  const endItem = totalResults != null ? Math.min(currentPage * limit, totalResults) : undefined
 
   return (
     <div className={`flex flex-wrap items-center justify-between gap-3 pt-3 border-t ${className}`}>
       {/* Results info */}
       <p className='text-sm text-muted-foreground'>
         {totalResults != null
-          ? `Showing ${startItem}–${endItem} of ${totalResults}`
+          ? totalResults === 0
+            ? 'No results'
+            : `Showing ${startItem}–${endItem} of ${totalResults}`
           : `Page ${currentPage} of ${totalPages}`}
       </p>
 

@@ -911,6 +911,14 @@ export const sidebarData: SidebarData = {
           permission: 'viewInstallments',
           businessTypes: ['mobile_shop'],
         },
+        {
+          title: 'Used Phones',
+          url: '/mobile-shop/used-phones',
+          icon: IconRefresh,
+          permission: 'viewUsedPhones',
+          businessTypes: ['mobile_shop'],
+          requiredFeature: 'used_phones',
+        },
       ],
     },
     {

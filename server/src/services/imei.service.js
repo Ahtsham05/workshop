@@ -311,6 +311,10 @@ const queryImeis = async (filter, options) => {
     queryFilter.status = { $in: queryFilter.status.split(',').map((s) => s.trim()).filter(Boolean) };
   }
 
+  if (typeof queryFilter.acquisitionType === 'string' && queryFilter.acquisitionType.includes(',')) {
+    queryFilter.acquisitionType = { $in: queryFilter.acquisitionType.split(',').map((s) => s.trim()).filter(Boolean) };
+  }
+
   if (queryOptions.warrantyStatus === 'expiring_soon') {
     const now = new Date();
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -334,6 +338,7 @@ const queryImeis = async (filter, options) => {
       conditions.push({ model: { $regex: search, $options: 'i' } });
       conditions.push({ customerName: { $regex: search, $options: 'i' } });
       conditions.push({ supplierName: { $regex: search, $options: 'i' } });
+      conditions.push({ sellerName: { $regex: search, $options: 'i' } });
     }
     if (conditions.length > 0) {
       queryFilter.$or = conditions;
@@ -381,8 +386,13 @@ const deleteImei = async (id) => {
   await record.deleteOne();
 };
 
-const getImeiStats = async (organizationId, branchId) => {
+const getImeiStats = async (organizationId, branchId, acquisitionType) => {
   const match = { organizationId: new mongoose.Types.ObjectId(organizationId), branchId: new mongoose.Types.ObjectId(branchId) };
+  if (acquisitionType) {
+    match.acquisitionType = acquisitionType.includes(',')
+      ? { $in: acquisitionType.split(',').map((s) => s.trim()).filter(Boolean) }
+      : acquisitionType;
+  }
 
   const stats = await Imei.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]);
   const result = { in_stock: 0, sold: 0, returned: 0, scrapped: 0, lost: 0, stolen: 0 };
