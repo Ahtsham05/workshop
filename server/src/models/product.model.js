@@ -21,8 +21,8 @@ const ProductSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     },
-    name: { type: String, required: true },
-    nameUrdu: { type: String },
+    name: { type: String, required: true, trim: true },
+    nameUrdu: { type: String, trim: true },
     description: { type: String },
     // No `default: null` here — Mongo's sparse index only skips documents where the
     // field is truly *missing*, not where it's explicitly null, so defaulting to null

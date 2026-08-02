@@ -23,9 +23,10 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
   const { isListening, isSupported, startListening, stopListening } = useVoiceInput({
     language, // Pass language to voice input hook
     onResult: (transcript) => {
-      console.log('Voice input received:', transcript);
-      onTranscript(transcript);
-      toast.success(`${t('voice_recording_stopped')}: "${transcript}"`);
+      const trimmed = transcript.trim();
+      console.log('Voice input received:', trimmed);
+      onTranscript(trimmed);
+      toast.success(`${t('voice_recording_stopped')}: "${trimmed}"`);
     },
     onError: (error) => {
       console.error('Voice input error:', error);

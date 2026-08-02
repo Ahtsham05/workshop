@@ -19,7 +19,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow }: Props) {
   const [value, setValue] = useState('')
 
   const handleDelete = () => {
-    if (value.trim() !== currentRow.username) return
+    if (value.trim() !== currentRow.username.trim()) return
 
     onOpenChange(false)
     showSubmittedData(currentRow, 'The following user has been deleted:')
@@ -30,7 +30,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow }: Props) {
       open={open}
       onOpenChange={onOpenChange}
       handleConfirm={handleDelete}
-      disabled={value.trim() !== currentRow.username}
+      disabled={value.trim() !== currentRow.username.trim()}
       title={
         <span className='text-destructive'>
           <IconAlertTriangle
@@ -59,6 +59,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow }: Props) {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder='Enter username to confirm deletion.'
+              autoComplete='off'
             />
           </Label>
 

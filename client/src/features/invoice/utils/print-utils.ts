@@ -752,6 +752,12 @@ export const generateInvoiceHTML = (
         <span>${urduTexts.current_invoice}:</span>
         <span style="font-weight: bold;">${formatCurrency(currentInvoice)}</span>
       </div>
+      ${paid > 0 ? `
+      <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
+        <span>${urduTexts.paid}:</span>
+        <span style="font-weight: bold;">${formatCurrency(paid)}</span>
+      </div>
+      ` : ''}
       <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
         <span>${urduTexts.net_balance}:</span>
         <span>${formatCurrency(balanceDue)}</span>

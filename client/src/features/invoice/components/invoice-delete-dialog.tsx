@@ -30,7 +30,7 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
       onOpenChange(false)
       return
     }
-    if (value.trim() !== currentRow.invoiceNumber) return
+    if (value.trim() !== currentRow.invoiceNumber.trim()) return
 
     try {
       await deleteInvoice(currentRow._id).unwrap()
@@ -51,7 +51,7 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
         if (!open) setValue('')
       }}
       handleConfirm={handleDelete}
-      disabled={value.trim() !== currentRow.invoiceNumber || isLoading}
+      disabled={value.trim() !== currentRow.invoiceNumber.trim() || isLoading}
       title={
         <span className='text-destructive'>
           <IconAlertTriangle
@@ -80,6 +80,7 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="Enter invoice number to confirm"
+              autoComplete='off'
             />
           </Label>
 

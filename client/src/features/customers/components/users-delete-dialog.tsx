@@ -26,7 +26,7 @@ export function CustomersDeleteDialog({ open, onOpenChange, currentRow, setFetch
   const { t } = useLanguage()
 
   const handleDelete = async () => {
-    if (value.trim() !== currentRow.name) return
+    if (value.trim() !== currentRow.name.trim()) return
 
     onOpenChange(false)
     await dispatch(deleteCustomer(currentRow.id)).then(() => {
@@ -40,7 +40,7 @@ export function CustomersDeleteDialog({ open, onOpenChange, currentRow, setFetch
       open={open}
       onOpenChange={onOpenChange}
       handleConfirm={handleDelete}
-      disabled={value.trim() !== currentRow.name}
+      disabled={value.trim() !== currentRow.name.trim()}
       title={
         <span className='text-destructive'>
           <IconAlertTriangle
@@ -69,6 +69,7 @@ export function CustomersDeleteDialog({ open, onOpenChange, currentRow, setFetch
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={t('enter_customer_name_confirm')}
+              autoComplete='off'
             />
           </Label>
 

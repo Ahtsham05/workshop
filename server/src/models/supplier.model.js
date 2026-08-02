@@ -19,8 +19,8 @@ const SupplierSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
-  name: { type: String, required: true },
-  nameUrdu: { type: String },
+  name: { type: String, required: true, trim: true },
+  nameUrdu: { type: String, trim: true },
   picture: {
     url: { type: String },
     publicId: { type: String },

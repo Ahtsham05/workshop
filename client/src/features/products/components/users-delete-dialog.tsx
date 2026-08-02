@@ -26,7 +26,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: 
   const { t } = useLanguage()
 
   const handleDelete = async() => {
-    if (value.trim() !== currentRow.name) return
+    if (value.trim() !== currentRow.name.trim()) return
 
     onOpenChange(false)
     await dispatch(deleteProduct(currentRow.id || currentRow._id)).then(()=>{
@@ -40,7 +40,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: 
       open={open}
       onOpenChange={onOpenChange}
       handleConfirm={handleDelete}
-      disabled={value.trim() !== currentRow.name}
+      disabled={value.trim() !== currentRow.name.trim()}
       title={
         <span className='text-destructive'>
           <IconAlertTriangle
@@ -64,6 +64,7 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: 
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={t('delete_product_placeholder')}
+              autoComplete='off'
             />
           </Label>
 
