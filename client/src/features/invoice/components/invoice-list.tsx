@@ -80,6 +80,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
+import { formatImeiEntries } from '@/stores/imei.api'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -1084,7 +1085,7 @@ function InvoiceDetails({
                       <div>
                         <BilingualName primary={item.name} secondary={productUrdu} primaryClassName='text-sm' secondaryClassName='text-xs' />
                         {item.imeis && item.imeis.length > 0 && (
-                          <p className='text-xs text-muted-foreground'>IMEI/Serial: {item.imeis.join(', ')}</p>
+                          <p className='text-xs text-muted-foreground'>IMEI/Serial: {formatImeiEntries(item.imeis)}</p>
                         )}
                         {item.batchAllocations && item.batchAllocations.length > 1 ? (
                           <p className='text-xs text-muted-foreground'>

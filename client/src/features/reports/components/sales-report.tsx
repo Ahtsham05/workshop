@@ -23,6 +23,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
+import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 
 interface SalesReportProps {
   startDate: string
@@ -73,7 +74,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         unitPrice: number
         subtotal: number
         discountAmount?: number
-        imeis?: string[]
+        imeis?: ImeiEntryInput[]
         variantLabel?: string | null
         batchNumber?: string | null
         batchAllocations?: SalesInvoiceItem['batchAllocations']
@@ -442,7 +443,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               {reportEntityName(language, row.productName, row.productNameUrdu)}
                               {row.imeis && row.imeis.length > 0 && (
                                 <div className='text-xs font-normal text-muted-foreground'>
-                                  IMEI/Serial: {row.imeis.join(', ')}
+                                  IMEI/Serial: {formatImeiEntries(row.imeis)}
                                 </div>
                               )}
                             </TableCell>
@@ -617,7 +618,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 </LongText>
                                 {item.imeis && item.imeis.length > 0 && (
                                   <span className='block text-xs text-muted-foreground'>
-                                    IMEI/Serial: {item.imeis.join(', ')}
+                                    IMEI/Serial: {formatImeiEntries(item.imeis)}
                                   </span>
                                 )}
                                 {(item.variantLabel || item.batchNumber || item.expiryDate) && (
@@ -761,7 +762,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             </LongText>
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
-                                IMEI/Serial: {item.imeis.join(', ')}
+                                IMEI/Serial: {formatImeiEntries(item.imeis)}
                               </div>
                             )}
                             {(item.variantLabel || item.batchNumber || item.expiryDate) && (

@@ -17,6 +17,15 @@ const noBothImeiAndSerial = (value, helpers) => {
   return value;
 };
 
+// Each entry is either a plain IMEI string, or a { imei, imei2 } pair for dual-SIM phones.
+const imeiEntry = Joi.alternatives().try(
+  Joi.string().trim(),
+  Joi.object().keys({
+    imei: Joi.string().trim().required(),
+    imei2: Joi.string().trim().allow('').optional(),
+  }),
+);
+
 const createProduct = {
   body: Joi.object().keys({
     name: Joi.string().required(),
@@ -42,7 +51,7 @@ const createProduct = {
     trackImei: Joi.boolean().optional(),
     trackSerial: Joi.boolean().optional(),
     warrantyMonths: Joi.number().integer().min(0).optional(),
-    imeis: Joi.array().items(Joi.string().trim()).optional(),
+    imeis: Joi.array().items(imeiEntry).optional(),
     image: Joi.object().keys({
       url: Joi.string(),
       publicId: Joi.string(),
@@ -98,7 +107,7 @@ const updateProduct = {
     trackImei: Joi.boolean().optional(),
     trackSerial: Joi.boolean().optional(),
     warrantyMonths: Joi.number().integer().min(0).optional(),
-    imeis: Joi.array().items(Joi.string().trim()).optional(),
+    imeis: Joi.array().items(imeiEntry).optional(),
     cost: Joi.number(),
     stockQuantity: Joi.number(),
     sku: Joi.string().allow(''),

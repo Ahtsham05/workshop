@@ -22,6 +22,7 @@ export type PermissionKey =
   | 'viewInstallments' | 'manageInstallments'
   | 'viewImeiTracking' | 'manageImeiTracking'
   | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'deleteUsedPhones'
+  | 'viewNewPhones' | 'buyNewPhones' | 'editNewPhones' | 'sellNewPhones' | 'deleteNewPhones'
   | 'viewReports' | 'viewSalesReports' | 'viewPurchaseReports' | 'viewInventoryReports'
   | 'viewCustomerReports' | 'viewSupplierReports' | 'viewProductReports'
   | 'viewExpenseReports' | 'viewSimSaleReports' | 'viewProfitLossReports'
@@ -75,6 +76,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'bill_payments', label: 'Mobile Shop — Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
   { id: 'installments', label: 'Mobile Shop — Installments', permissions: ['viewInstallments', 'manageInstallments'] },
   { id: 'used_phones', label: 'Mobile Shop — Used Phones', permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'deleteUsedPhones'] },
+  { id: 'new_phones', label: 'Mobile Shop — New Phones', permissions: ['viewNewPhones', 'buyNewPhones', 'editNewPhones', 'sellNewPhones', 'deleteNewPhones'] },
   {
     id: 'reports',
     label: 'Reports',
@@ -111,7 +113,7 @@ export const PERMISSION_TAB_GROUPS = {
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'accounts_system',
   ],
   mobile_shop: [
-    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones',
+    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',
   ],
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',

@@ -1,6 +1,16 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
+// Each entry is either a plain IMEI/serial string, or a { imei, imei2 } pair for a
+// dual-SIM phone — mirrors product.validation.js / purchase.validation.js.
+const imeiEntry = Joi.alternatives().try(
+  Joi.string().trim(),
+  Joi.object().keys({
+    imei: Joi.string().trim().required(),
+    imei2: Joi.string().trim().allow('').optional(),
+  }),
+);
+
 const invoiceItem = Joi.object({
   productId: Joi.string().custom(objectId).required(),
   name: Joi.string().required(),
@@ -29,7 +39,7 @@ const invoiceItem = Joi.object({
   discountValue: Joi.number().min(0).optional(),
   discountAmount: Joi.number().min(0).optional(),
   isManualEntry: Joi.boolean().optional(),
-  imeis: Joi.array().items(Joi.string().trim()).optional(),
+  imeis: Joi.array().items(imeiEntry).optional(),
   variantId: Joi.string().custom(objectId).optional(),
   batchId: Joi.string().custom(objectId).optional(),
   batchNumber: Joi.string().trim().allow('').optional(),

@@ -17,7 +17,7 @@ const createBuyback = catchAsync(async (req, res) => {
 const getBuybacks = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['sellerType', 'isTradeIn']);
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'dateFrom', 'dateTo']);
   const result = await phoneBuybackService.queryBuybacks(filter, options);
   res.send(result);
 });
@@ -42,7 +42,7 @@ const deleteBuyback = catchAsync(async (req, res) => {
 
 const getStats = catchAsync(async (req, res) => {
   const { organizationId, branchId } = getBranchContext(req);
-  const stats = await phoneBuybackService.getUsedPhoneStats(organizationId, branchId);
+  const stats = await phoneBuybackService.getUsedPhoneStats(organizationId, branchId, pick(req.query, ['dateFrom', 'dateTo']));
   res.send(stats);
 });
 

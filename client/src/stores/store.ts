@@ -32,6 +32,7 @@ import { smsGatewayApi } from './smsGateway.api';
 import { cashRegisterApi } from './cashRegister.api';
 import { imeiApi } from './imei.api';
 import { usedPhoneBuybackApi } from './usedPhoneBuyback.api';
+import { newPhonesApi } from './newPhones.api';
 import { insightApi } from './insight.api';
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
 import { productAttributeApi } from './productAttribute.api';
@@ -83,6 +84,7 @@ export const store = configureStore({
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
     [imeiApi.reducerPath]: imeiApi.reducer,
     [usedPhoneBuybackApi.reducerPath]: usedPhoneBuybackApi.reducer,
+    [newPhonesApi.reducerPath]: newPhonesApi.reducer,
     [insightApi.reducerPath]: insightApi.reducer,
     [purchaseSuggestionsApi.reducerPath]: purchaseSuggestionsApi.reducer,
     [productAttributeApi.reducerPath]: productAttributeApi.reducer,
@@ -128,6 +130,7 @@ export const store = configureStore({
       cashRegisterApi.middleware,
       imeiApi.middleware,
       usedPhoneBuybackApi.middleware,
+      newPhonesApi.middleware,
       insightApi.middleware,
       purchaseSuggestionsApi.middleware,
       productAttributeApi.middleware,

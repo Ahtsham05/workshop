@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { Product, Branch, ProductVariant, Inventory, Batch, InventoryTransaction, InventoryTransfer, Imei } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
+const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -147,11 +148,11 @@ const resolveSerializedSource = async ({ organizationId, fromBranchId, fromProdu
     organizationId,
     branchId: fromBranchId,
     productId: fromProduct._id,
-    imei: { $in: normalized },
+    ...matchesEitherImei(normalized),
     status: 'in_stock',
   });
   if (records.length !== normalized.length) {
-    const found = new Set(records.map((r) => r.imei));
+    const found = collectImeiNumbers(records);
     const missing = normalized.filter((n) => !found.has(n));
     throw new ApiError(httpStatus.BAD_REQUEST, `Not available for transfer: ${missing.join(', ')}`);
   }

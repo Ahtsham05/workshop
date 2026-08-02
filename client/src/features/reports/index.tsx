@@ -46,6 +46,7 @@ import { MyWalletReport } from './components/my-wallet-report'
 import { ActivitySummaryReport } from './components/activity-summary-report'
 import { SalesPurchaseSummaryReport } from './components/sales-purchase-summary-report'
 import { CompleteReport } from './components/complete-report'
+import { MobilePhoneReport } from './components/mobile-phone-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -291,6 +292,9 @@ export default function ReportsPage() {
             {isMobileShop && (
               <TabsTrigger value='installments' className='text-xs sm:text-sm px-2 sm:px-3'>Installments</TabsTrigger>
             )}
+            {isMobileShop && (
+              <TabsTrigger value='mobile-phones' className='text-xs sm:text-sm px-2 sm:px-3'>Mobile Phone</TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -431,6 +435,12 @@ export default function ReportsPage() {
         {isMobileShop && (
           <TabsContent value='installments' className='mt-6'>
             <InstallmentReport ref={activeTab === 'installments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isMobileShop && (
+          <TabsContent value='mobile-phones' className='mt-6'>
+            <MobilePhoneReport ref={activeTab === 'mobile-phones' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
       </Tabs>

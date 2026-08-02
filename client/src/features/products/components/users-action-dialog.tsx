@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -91,7 +91,8 @@ const formSchema = z.object({
   batchNumber: z.string().optional(),
   expiryDate: z.string().optional(),
   warrantyMonths: z.number().min(0).optional(),
-  imeis: z.array(z.string()).optional(),
+  // Plain string for a single-IMEI unit, or { imei, imei2 } for a dual-SIM phone.
+  imeis: z.array(z.union([z.string(), z.object({ imei: z.string(), imei2: z.string().optional() })])).optional(),
   // No .min() here — price/cost/stock are only required for products WITHOUT variants;
   // see the superRefine below. Once variants exist these fields are unused fallbacks
   // (each variant has its own price/cost/stock) and are hidden from the form entirely.
@@ -154,6 +155,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
   const [imeiDraft, setImeiDraft] = useState('')
+  const [imei2Draft, setImei2Draft] = useState('')
+  const imei1InputRef = useRef<HTMLInputElement>(null)
+  const imei2InputRef = useRef<HTMLInputElement>(null)
   
   const dispatch = useDispatch<AppDispatch>()
   const [createProductVariant] = useCreateProductVariantMutation()
@@ -300,7 +304,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   )
   useEffect(() => {
     if (!open || !isEdit || !openingStockImeis) return
-    form.setValue('imeis', openingStockImeis.map((d) => d.imei))
+    form.setValue('imeis', openingStockImeis.map((d) => (d.imei2 ? { imei: d.imei, imei2: d.imei2 } : d.imei)))
   }, [open, isEdit, openingStockImeis, form])
 
   useEffect(() => {
@@ -1216,16 +1220,48 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   control={form.control}
                   name='imeis'
                   render={({ field }) => {
-                    const imeis = field.value || []
+                    const imeis: (string | { imei: string; imei2?: string })[] = field.value || []
                     const stockQuantity = form.watch('stockQuantity')
                     const isSerial = form.watch('trackSerial')
                     const label = isSerial ? 'serial number' : 'IMEI'
+                    const entryImei = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? e : e.imei)
+                    const entryImei2 = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? undefined : e.imei2)
+                    // Real IMEIs are always 15 digits — serial numbers vary (letters, dashes,
+                    // etc.) and are left free-form. Sanitizing on change (not just capping
+                    // maxLength) also strips pasted spaces/dashes from a scanner's raw output.
+                    const sanitizeImei = (raw: string) => (isSerial ? raw : raw.replace(/\D/g, '').slice(0, 15))
                     const addImei = () => {
                       const cleaned = imeiDraft.trim()
-                      if (!cleaned || imeis.includes(cleaned)) return
-                      field.onChange([...imeis, cleaned])
+                      const cleaned2 = imei2Draft.trim()
+                      if (!cleaned || imeis.some((e) => entryImei(e) === cleaned)) return
+                      field.onChange([...imeis, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned])
                       setImeiDraft('')
+                      setImei2Draft('')
+                      imei1InputRef.current?.focus()
                     }
+                    const imei1Field = (
+                      <Input
+                        ref={imei1InputRef}
+                        placeholder={isSerial ? `Scan or type ${label}` : 'Scan or type IMEI'}
+                        value={imeiDraft}
+                        showVoiceInput={false}
+                        inputMode={isSerial ? undefined : 'numeric'}
+                        onChange={(e) => setImeiDraft(sanitizeImei(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === ',') {
+                            e.preventDefault()
+                            addImei()
+                          } else if (e.key === 'Enter') {
+                            e.preventDefault()
+                            // A serial-tracked product has no second field to hop to — Enter
+                            // commits right away. For IMEI, Enter first moves to IMEI 2 (in
+                            // case this is a dual-SIM unit); a second Enter there commits.
+                            if (isSerial) addImei()
+                            else if (imeiDraft.trim()) imei2InputRef.current?.focus()
+                          }
+                        }}
+                      />
+                    )
                     return (
                       <FormItem className='gap-1.5'>
                         <FormLabel>{isSerial ? 'Serial Numbers' : 'IMEI Numbers'}</FormLabel>
@@ -1236,37 +1272,64 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                 ? `${imeis.length} entered`
                                 : `${imeis.length}/${stockQuantity} entered`}
                             </span>
-                            <div className='flex items-center gap-2'>
-                              <Input
-                                placeholder={`Scan or type ${label}, press Enter`}
-                                value={imeiDraft}
-                                showVoiceInput={false}
-                                onChange={(e) => setImeiDraft(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ',') {
-                                    e.preventDefault()
-                                    addImei()
-                                  }
-                                }}
-                              />
-                              <Button type='button' size='sm' variant='outline' onClick={addImei}>
-                                <Plus className='h-3.5 w-3.5' />
-                              </Button>
-                            </div>
+                            {isSerial ? (
+                              <div className='flex items-center gap-2'>
+                                {imei1Field}
+                                <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
+                                  <Plus className='h-3.5 w-3.5' />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className='space-y-1.5'>
+                                <div className='space-y-1'>
+                                  {imei1Field}
+                                  {imeiDraft.length > 0 && (
+                                    <p className='text-[11px] text-muted-foreground'>{imeiDraft.length}/15 digits</p>
+                                  )}
+                                </div>
+                                <div className='flex items-center gap-2'>
+                                  <Input
+                                    ref={imei2InputRef}
+                                    placeholder='IMEI 2 (optional)'
+                                    value={imei2Draft}
+                                    showVoiceInput={false}
+                                    inputMode='numeric'
+                                    className='flex-1 min-w-0'
+                                    onChange={(e) => setImei2Draft(sanitizeImei(e.target.value))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ',') {
+                                        e.preventDefault()
+                                        addImei()
+                                      } else if (e.key === 'Backspace' && !imei2Draft) {
+                                        // Empty + Backspace hops back to fix IMEI 1 instead of doing nothing.
+                                        imei1InputRef.current?.focus()
+                                      }
+                                    }}
+                                  />
+                                  <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
+                                    <Plus className='h-3.5 w-3.5' />
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                             {imeis.length > 0 && (
                               <div className='flex flex-wrap gap-1.5'>
-                                {imeis.map((num: string) => (
-                                  <Badge key={num} variant='secondary' className='gap-1 pr-1'>
-                                    {num}
-                                    <button
-                                      type='button'
-                                      onClick={() => field.onChange(imeis.filter((n: string) => n !== num))}
-                                      className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
-                                    >
-                                      <X className='h-3 w-3' />
-                                    </button>
-                                  </Badge>
-                                ))}
+                                {imeis.map((entry, idx) => {
+                                  const num = entryImei(entry)
+                                  const num2 = entryImei2(entry)
+                                  return (
+                                    <Badge key={`${num}-${idx}`} variant='secondary' className='gap-1 pr-1'>
+                                      {num2 ? `${num} · ${num2}` : num}
+                                      <button
+                                        type='button'
+                                        onClick={() => field.onChange(imeis.filter((e) => entryImei(e) !== num))}
+                                        className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
+                                      >
+                                        <X className='h-3 w-3' />
+                                      </button>
+                                    </Badge>
+                                  )
+                                })}
                               </div>
                             )}
                           </div>

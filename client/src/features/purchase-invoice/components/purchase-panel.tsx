@@ -28,13 +28,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks, Smartphone } from 'lucide-react'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
 import { getDisplayStock } from '@/lib/product-stock-display'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import type { ImeiEntryInput } from '@/stores/imei.api'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
@@ -63,7 +64,8 @@ import summery from '@/utils/summery'
 import { createEmptyPurchaseManualItem, type Purchase, type PurchaseItem, type Supplier } from '../index'
 import { computeDiscountAmount, type DiscountType } from '../utils/discount'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
-import { isWholesaleRetailBusiness } from '@/lib/business-types'
+import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
+import { BuyUsedPhoneDialog } from '@/features/mobile-shop/old-phones/components/buy-used-phone-dialog'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
@@ -88,6 +90,11 @@ import {
   EntityQuickCreateDialogs,
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
+
+const entryImei = (e: ImeiEntryInput) => (typeof e === 'string' ? e : e.imei)
+const entryImei2 = (e: ImeiEntryInput) => (typeof e === 'string' ? undefined : e.imei2)
+/** Real IMEIs are always 15 digits — strips anything a scanner/paste adds (spaces, dashes). */
+const sanitizeImei = (raw: string) => raw.replace(/\D/g, '').slice(0, 15)
 
 /**
  * Compact pill trigger for a purchase line's serial/IMEI entry — mirrors Invoice's
@@ -150,8 +157,8 @@ function PurchaseSerialEntryDialog({
   itemName: string
   quantity: number
   isSerial: boolean
-  imeis: string[]
-  onAdd: (value: string) => void
+  imeis: ImeiEntryInput[]
+  onAdd: (value: string, value2?: string) => void
   onRemove: (value: string) => void
   // Continues the row's Enter-key cascade (batch fields, or the next row) — fired once
   // the line is fully entered, whether that happened by scanning the last unit or by
@@ -159,10 +166,13 @@ function PurchaseSerialEntryDialog({
   onComplete: () => void
 }) {
   const [draft, setDraft] = useState('')
+  const [draft2, setDraft2] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const input2Ref = useRef<HTMLInputElement | null>(null)
   useEffect(() => {
     if (!open) return
     setDraft('')
+    setDraft2('')
     focusField(inputRef.current, false)
   }, [open])
 
@@ -176,12 +186,15 @@ function PurchaseSerialEntryDialog({
 
   const commit = () => {
     const cleaned = draft.trim()
-    if (!cleaned || imeis.includes(cleaned)) return
-    onAdd(cleaned)
+    const cleaned2 = draft2.trim()
+    if (!cleaned || imeis.some((e) => entryImei(e) === cleaned)) return
+    onAdd(cleaned, cleaned2 || undefined)
     setDraft('')
+    setDraft2('')
     // The scan that reaches the required count closes the dialog and hands off to the
     // rest of the cascade itself — no extra Enter or click needed to move on.
     if (imeis.length + 1 >= quantity) finish()
+    else inputRef.current?.focus()
   }
 
   return (
@@ -202,40 +215,94 @@ function PurchaseSerialEntryDialog({
           </Badge>
         </div>
 
-        <div className='flex items-center gap-2'>
-          <Input
-            ref={inputRef}
-            placeholder={`Scan or type ${label.toLowerCase()}…`}
-            value={draft}
-            showVoiceInput={false}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault()
-                commit()
-              }
-            }}
-            className='h-9 flex-1'
-          />
-          <Button type='button' size='sm' onClick={commit}>
-            <Plus className='h-3.5 w-3.5' />
-          </Button>
-        </div>
+        {isSerial ? (
+          <div className='flex items-center gap-2'>
+            <Input
+              ref={inputRef}
+              placeholder={`Scan or type ${label.toLowerCase()}…`}
+              value={draft}
+              showVoiceInput={false}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault()
+                  commit()
+                }
+              }}
+              className='h-9 flex-1'
+            />
+            <Button type='button' size='sm' className='shrink-0' onClick={commit}>
+              <Plus className='h-3.5 w-3.5' />
+            </Button>
+          </div>
+        ) : (
+          <div className='space-y-1.5'>
+            <div className='space-y-1'>
+              <Input
+                ref={inputRef}
+                placeholder='Scan or type IMEI'
+                value={draft}
+                showVoiceInput={false}
+                inputMode='numeric'
+                onChange={(e) => setDraft(sanitizeImei(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === ',') {
+                    e.preventDefault()
+                    commit()
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    // Enter first hops to IMEI 2 (in case it's a dual-SIM unit); a second
+                    // Enter there commits.
+                    if (draft.trim()) input2Ref.current?.focus()
+                  }
+                }}
+                className='h-9'
+              />
+              {draft.length > 0 && <p className='text-[11px] text-muted-foreground'>{draft.length}/15 digits</p>}
+            </div>
+            <div className='flex items-center gap-2'>
+              <Input
+                ref={input2Ref}
+                placeholder='IMEI 2 (optional)'
+                value={draft2}
+                showVoiceInput={false}
+                inputMode='numeric'
+                onChange={(e) => setDraft2(sanitizeImei(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault()
+                    commit()
+                  } else if (e.key === 'Backspace' && !draft2) {
+                    inputRef.current?.focus()
+                  }
+                }}
+                className='h-9 flex-1'
+              />
+              <Button type='button' size='sm' className='shrink-0' onClick={commit}>
+                <Plus className='h-3.5 w-3.5' />
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className='max-h-72 space-y-0.5 overflow-y-auto rounded-md border bg-muted/20 p-1.5'>
           {imeis.length > 0 ? (
-            imeis.map((num) => (
-              <div key={num} className='flex items-center justify-between rounded-sm px-3 py-2 text-sm bg-green-50 dark:bg-green-950/25'>
-                <span className='font-mono font-semibold'>{num}</span>
-                <button
-                  type='button'
-                  onClick={() => onRemove(num)}
-                  className='rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10'
-                >
-                  <X className='h-3.5 w-3.5' />
-                </button>
-              </div>
-            ))
+            imeis.map((entry, idx) => {
+              const num = entryImei(entry)
+              const num2 = entryImei2(entry)
+              return (
+                <div key={`${num}-${idx}`} className='flex items-center justify-between rounded-sm px-3 py-2 text-sm bg-green-50 dark:bg-green-950/25'>
+                  <span className='font-mono font-semibold'>{num2 ? `${num} · ${num2}` : num}</span>
+                  <button
+                    type='button'
+                    onClick={() => onRemove(num)}
+                    className='rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10'
+                  >
+                    <X className='h-3.5 w-3.5' />
+                  </button>
+                </div>
+              )
+            })
           ) : (
             <p className='py-8 text-center text-sm text-muted-foreground'>
               No {isSerial ? 'serial numbers' : 'IMEIs'} entered yet.
@@ -381,16 +448,17 @@ export default function PurchasePanel({
     })
   }, [setPurchase])
 
-  const addImeiToItem = useCallback((index: number, value: string) => {
+  const addImeiToItem = useCallback((index: number, value: string, value2?: string) => {
     const cleaned = value.trim()
+    const cleaned2 = value2?.trim()
     if (!cleaned) return
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item, i) => {
         if (i !== index) return item
         const existing = item.imeis || []
-        if (existing.includes(cleaned)) return item
-        return { ...item, imeis: [...existing, cleaned] }
+        if (existing.some((e) => entryImei(e) === cleaned)) return item
+        return { ...item, imeis: [...existing, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned] }
       }),
     }))
   }, [setPurchase])
@@ -399,7 +467,7 @@ export default function PurchasePanel({
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item, i) =>
-        i === index ? { ...item, imeis: (item.imeis || []).filter((n) => n !== value) } : item,
+        i === index ? { ...item, imeis: (item.imeis || []).filter((e) => entryImei(e) !== value) } : item,
       ),
     }))
   }, [setPurchase])
@@ -473,6 +541,8 @@ export default function PurchasePanel({
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
+  const [buyUsedPhoneOpen, setBuyUsedPhoneOpen] = useState(false)
   // Paying a supplier is a money-out action — show wallet balances so the user can avoid overdrawing.
   const purchasePaymentMethodOptions = useMemo(
     () =>
@@ -871,7 +941,7 @@ export default function PurchasePanel({
       for (const item of validItems) {
         if (!item.product.trackImei && !item.product.trackSerial) continue
         const label = item.product.trackSerial ? 'serial' : 'IMEI'
-        const imeiCount = (item.imeis || []).filter((n) => n.trim()).length
+        const imeiCount = (item.imeis || []).filter((e) => entryImei(e).trim()).length
         if (imeiCount !== item.quantity) {
           toast.error(
             `${item.product.name}: enter ${item.quantity} ${label} number(s) — ${imeiCount} entered`,
@@ -1079,7 +1149,7 @@ export default function PurchasePanel({
       {/* Supplier Selection Card — left column (compact mode) */}
       <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-1')}>
         <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2">
             <CardTitle className="flex items-center gap-2">
               {onBackToList && (
                 <Button variant="ghost" size="sm" onClick={onBackToList}>
@@ -1089,18 +1159,32 @@ export default function PurchasePanel({
               <Package className="h-5 w-5" />
               {t('Purchase Details')}
             </CardTitle>
-            {!isEditing && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 shrink-0 self-start sm:self-auto"
-                onClick={() => setAiScanOpen(true)}
-              >
-                <Sparkles className="h-4 w-4 text-violet-600" />
-                {t('ai_scan_invoice')}
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {!isEditing && isMobileShop && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setBuyUsedPhoneOpen(true)}
+                >
+                  <Smartphone className="h-4 w-4 text-primary" />
+                  Buy Old Phone
+                </Button>
+              )}
+              {!isEditing && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setAiScanOpen(true)}
+                >
+                  <Sparkles className="h-4 w-4 text-violet-600" />
+                  {t('ai_scan_invoice')}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2152,6 +2236,10 @@ export default function PurchasePanel({
         onApply={handleApplyAiScan}
       />
 
+      {isMobileShop && (
+        <BuyUsedPhoneDialog open={buyUsedPhoneOpen} onOpenChange={setBuyUsedPhoneOpen} />
+      )}
+
       {(() => {
         const item = serialDialogIndex !== null ? purchase.items[serialDialogIndex] : undefined
         if (!item) return null
@@ -2163,7 +2251,7 @@ export default function PurchasePanel({
             quantity={item.quantity}
             isSerial={!!item.product.trackSerial}
             imeis={item.imeis || []}
-            onAdd={(value) => addImeiToItem(serialDialogIndex as number, value)}
+            onAdd={(value, value2) => addImeiToItem(serialDialogIndex as number, value, value2)}
             onRemove={(value) => removeImeiFromItem(serialDialogIndex as number, value)}
             onComplete={() => advanceAfterSaleFields(serialDialogIndex as number)}
           />

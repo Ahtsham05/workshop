@@ -27,13 +27,30 @@ const acquisitionTypeOrCsv = Joi.string().custom((value, helpers) => {
   return value;
 });
 
+// Lets a listing span several products at once (e.g. "every phone model") without a
+// separate request per product — same CSV convention as statusOrCsv/acquisitionTypeOrCsv.
+const objectIdOrCsv = Joi.string().custom((value, helpers) => {
+  const parts = value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0 || !parts.every((p) => /^[0-9a-fA-F]{24}$/.test(p))) {
+    return helpers.error('any.invalid');
+  }
+  return value;
+});
+
 const getImeis = {
   query: Joi.object().keys({
-    productId: Joi.string().custom(objectId),
+    productId: objectIdOrCsv,
     status: statusOrCsv,
     type: Joi.string().valid('imei', 'serial'),
     acquisitionType: acquisitionTypeOrCsv,
     warrantyStatus: Joi.string().valid('expiring_soon'),
+    // Filters by saleDate — only meaningful alongside status=sold, but harmless otherwise
+    // (in-stock units simply have no saleDate to match).
+    dateFrom: Joi.date(),
+    dateTo: Joi.date(),
     search: Joi.string().trim().allow(''),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),

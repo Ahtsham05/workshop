@@ -8,6 +8,7 @@ import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import type { ImeiEntryInput } from '@/stores/imei.api'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading, which would retrigger any effect keyed
@@ -80,7 +81,7 @@ export interface InvoiceItem {
   discountValue?: number
   discountAmount?: number
   isManualEntry?: boolean
-  imeis?: string[]
+  imeis?: ImeiEntryInput[]
   // Real (non-default) variant this line item is for, when product.hasVariants —
   // see docs/architecture/universal-product-migration.md.
   variantId?: string

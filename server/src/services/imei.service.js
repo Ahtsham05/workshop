@@ -5,6 +5,17 @@ const ApiError = require('../utils/ApiError');
 
 const normalizeImei = (value) => String(value || '').trim();
 
+/** Matches a unit by either of its two IMEI slots — a dual-SIM phone can be scanned,
+ *  searched, sold, adjusted, or transferred using whichever of its two numbers the
+ *  person handling it has in front of them; both must resolve to the same unit. */
+const matchesEitherImei = (numbers) => ({ $or: [{ imei: { $in: numbers } }, { imei2: { $in: numbers } }] });
+
+/** Every IMEI value (both slots) present among the given records — used to check
+ *  whether a scanned number was actually found, regardless of which slot it matched.
+ *  (A plain `records.map(r => r.imei)` would miss a number that only matched imei2.) */
+const collectImeiNumbers = (records) =>
+  new Set(records.flatMap((r) => [normalizeImei(r.imei), normalizeImei(r.imei2)].filter(Boolean)));
+
 const historyEntry = (status, { note = '', byUserId = null, byUserName = '' } = {}) => ({
   status,
   note,
@@ -32,20 +43,45 @@ const getImeisForPurchaseItem = async ({ purchaseId, productId, organizationId, 
  */
 const getAvailableImeisForProduct = async ({ productId, organizationId, branchId, search, batchId, batchIds }) => {
   const filter = { productId, organizationId, branchId, status: 'in_stock' };
+  // Batch narrowing and IMEI search are each their own $or — combined under $and so
+  // neither clobbers the other (a bare second `filter.$or = ...` would overwrite the first).
+  const andConditions = [];
   const ids = [...new Set([...(batchIds || []), ...(batchId ? [batchId] : [])].map(String).filter(Boolean))];
   if (ids.length > 0) {
-    filter.$or = [{ batchId: null }, { batchId: { $in: ids } }];
+    andConditions.push({ $or: [{ batchId: null }, { batchId: { $in: ids } }] });
   }
   if (search && search.trim()) {
     const digits = search.replace(/\D/g, '');
-    filter.imei = { $regex: digits || search.trim(), $options: 'i' };
+    const term = digits || search.trim();
+    andConditions.push({ $or: [{ imei: { $regex: term, $options: 'i' } }, { imei2: { $regex: term, $options: 'i' } }] });
   }
+  if (andConditions.length > 0) filter.$and = andConditions;
   return Imei.find(filter).sort({ createdAt: -1 }).limit(50);
 };
 
 /** Used by the product edit form: IMEIs entered directly as opening stock (not tied to any purchase invoice). */
 const getOpeningStockImeisForProduct = async ({ productId, organizationId, branchId }) => {
   return Imei.find({ productId, organizationId, branchId, purchaseId: null }).sort({ createdAt: -1 });
+};
+
+/** Each imeis[] entry is either a plain IMEI string, or a { imei, imei2 } pair for
+ *  dual-SIM phones — normalized to a consistent shape before anything else runs. */
+const normalizeImeiEntry = (entry) => {
+  if (entry && typeof entry === 'object') {
+    return { imei: normalizeImei(entry.imei), imei2: normalizeImei(entry.imei2) };
+  }
+  return { imei: normalizeImei(entry), imei2: '' };
+};
+
+/** Splits a possibly-mixed imeis[] array (used on both Purchase and Invoice line items)
+ *  into the primary number of each entry — one per unit, for "how many were requested"
+ *  checks — and the full flattened set of every number across both slots, for the actual
+ *  $in match via matchesEitherImei so either slot finds the unit. */
+const extractSearchNumbers = (imeis = []) => {
+  const entries = imeis.map(normalizeImeiEntry).filter((e) => e.imei);
+  const primary = entries.map((e) => e.imei);
+  const all = [...new Set([...primary, ...entries.map((e) => e.imei2).filter(Boolean)])];
+  return { primary, all };
 };
 
 /**
@@ -69,7 +105,9 @@ const syncImeisForPurchaseItem = async ({
   createdBy,
   session,
 }) => {
-  const wantedNumbers = [...new Set(imeis.map(normalizeImei).filter(Boolean))];
+  const entries = imeis.map(normalizeImeiEntry).filter((e) => e.imei);
+  const wantedNumbers = [...new Set(entries.map((e) => e.imei))];
+  const entryByImei = new Map(entries.map((e) => [e.imei, e]));
 
   const existing = await Imei.find({ purchaseId: purchaseId || null, productId, organizationId, branchId }).session(session || null);
   const existingByNumber = new Map(existing.map((d) => [normalizeImei(d.imei), d]));
@@ -83,15 +121,18 @@ const syncImeisForPurchaseItem = async ({
   const newNumbers = wantedNumbers.filter((num) => !existingByNumber.has(num));
   if (newNumbers.length === 0) return;
 
-  // Guard against re-adding a number that's already tracked elsewhere in this org/branch. This
-  // check — and every write below — must run inside the caller's transaction (when given): a
-  // duplicate found here throws, and the whole create (Product or Purchase) must roll back
-  // instead of leaving a persisted record behind with no serials synced to it.
+  // Guard against re-adding a number that's already tracked elsewhere in this org/branch — on
+  // either IMEI slot, since a dual-SIM unit's second number must be just as unique as its
+  // first. This check — and every write below — must run inside the caller's transaction (when
+  // given): a duplicate found here throws, and the whole create (Product or Purchase) must roll
+  // back instead of leaving a persisted record behind with no serials synced to it.
+  const newImei2Numbers = newNumbers.map((num) => entryByImei.get(num)?.imei2).filter(Boolean);
+  const allNewNumbers = [...new Set([...newNumbers, ...newImei2Numbers])];
   const duplicates = await Imei.find({
     organizationId,
     branchId,
-    imei: { $in: newNumbers },
     status: { $in: ['in_stock', 'sold'] },
+    $or: [{ imei: { $in: allNewNumbers } }, { imei2: { $in: allNewNumbers } }],
   }).session(session || null);
   if (duplicates.length > 0) {
     const label = type === 'serial' ? 'Serial number' : 'IMEI';
@@ -106,6 +147,7 @@ const syncImeisForPurchaseItem = async ({
       organizationId,
       branchId,
       imei,
+      imei2: entryByImei.get(imei)?.imei2 || '',
       type,
       productId,
       productName,
@@ -146,15 +188,15 @@ const deleteInStockImeisForProduct = async (productId) => {
 const validateImeisAvailable = async ({ items, organizationId, branchId }) => {
   for (const item of items) {
     if (!item.imeis || item.imeis.length === 0) continue;
-    const numbers = item.imeis.map(normalizeImei).filter(Boolean);
+    const { primary: numbers, all: searchNumbers } = extractSearchNumbers(item.imeis);
     const found = await Imei.find({
       organizationId,
       branchId,
       productId: item.productId,
-      imei: { $in: numbers },
+      ...matchesEitherImei(searchNumbers),
       status: 'in_stock',
     });
-    const foundSet = new Set(found.map((d) => normalizeImei(d.imei)));
+    const foundSet = collectImeiNumbers(found);
     const missing = numbers.filter((num) => !foundSet.has(num));
     if (missing.length > 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, `IMEI/Serial number not available in stock: ${missing.join(', ')}`);
@@ -185,7 +227,7 @@ const markImeisSoldForInvoice = async ({ invoiceId, items, customerId, customerN
 
   for (const item of items) {
     if (!item.imeis || item.imeis.length === 0) continue;
-    const numbers = item.imeis.map(normalizeImei).filter(Boolean);
+    const { all: searchNumbers } = extractSearchNumbers(item.imeis);
 
     const product = await Product.findById(item.productId).select('warrantyMonths');
     const warrantyMonths = product?.warrantyMonths || 0;
@@ -194,7 +236,7 @@ const markImeisSoldForInvoice = async ({ invoiceId, items, customerId, customerN
       : null;
 
     await Imei.updateMany(
-      { organizationId, branchId, productId: item.productId, imei: { $in: numbers }, status: 'in_stock' },
+      { organizationId, branchId, productId: item.productId, ...matchesEitherImei(searchNumbers), status: 'in_stock' },
       {
         $set: {
           status: 'sold',
@@ -246,10 +288,10 @@ const releaseImeisForInvoice = async (invoiceId) => {
  *  + productId + exact numbers, so it can never accidentally release a unit from a
  *  different sale of the same product. */
 const releaseImeisByNumbers = async ({ invoiceId, productId, imeis, organizationId, branchId, note }) => {
-  const numbers = (imeis || []).map(normalizeImei).filter(Boolean);
+  const { all: numbers } = extractSearchNumbers(imeis || []);
   if (numbers.length === 0) return;
   await Imei.updateMany(
-    { organizationId, branchId, invoiceId, productId, imei: { $in: numbers } },
+    { organizationId, branchId, invoiceId, productId, ...matchesEitherImei(numbers) },
     {
       $set: {
         status: 'in_stock',
@@ -275,10 +317,10 @@ const releaseImeisByNumbers = async ({ invoiceId, productId, imeis, organization
  *  the meantime is deliberately left alone rather than yanked out from under that new
  *  sale; it just won't be perfectly reconciled by this reversal. */
 const reclaimImeisForReturn = async ({ invoiceId, productId, imeis, organizationId, branchId }) => {
-  const numbers = (imeis || []).map(normalizeImei).filter(Boolean);
+  const { all: numbers } = extractSearchNumbers(imeis || []);
   if (numbers.length === 0) return;
   await Imei.updateMany(
-    { organizationId, branchId, productId, imei: { $in: numbers }, status: 'in_stock' },
+    { organizationId, branchId, productId, ...matchesEitherImei(numbers), status: 'in_stock' },
     {
       $set: { status: 'sold', invoiceId },
       $push: { history: historyEntry('sold', { note: 'Return reversed' }) },
@@ -311,8 +353,20 @@ const queryImeis = async (filter, options) => {
     queryFilter.status = { $in: queryFilter.status.split(',').map((s) => s.trim()).filter(Boolean) };
   }
 
+  if (typeof queryFilter.productId === 'string' && queryFilter.productId.includes(',')) {
+    queryFilter.productId = { $in: queryFilter.productId.split(',').map((s) => s.trim()).filter(Boolean) };
+  }
+
   if (typeof queryFilter.acquisitionType === 'string' && queryFilter.acquisitionType.includes(',')) {
     queryFilter.acquisitionType = { $in: queryFilter.acquisitionType.split(',').map((s) => s.trim()).filter(Boolean) };
+  }
+
+  if (queryOptions.dateFrom || queryOptions.dateTo) {
+    queryFilter.saleDate = {};
+    if (queryOptions.dateFrom) queryFilter.saleDate.$gte = new Date(queryOptions.dateFrom);
+    if (queryOptions.dateTo) queryFilter.saleDate.$lte = new Date(queryOptions.dateTo);
+    delete queryOptions.dateFrom;
+    delete queryOptions.dateTo;
   }
 
   if (queryOptions.warrantyStatus === 'expiring_soon') {
@@ -360,7 +414,7 @@ const getImeiById = async (id) => {
 };
 
 const getImeiByNumber = async (imei, organizationId, branchId) => {
-  return Imei.findOne({ imei, organizationId, branchId });
+  return Imei.findOne({ organizationId, branchId, ...matchesEitherImei([normalizeImei(imei)]) });
 };
 
 const updateImei = async (id, updateBody) => {
@@ -415,6 +469,8 @@ const getImeiStats = async (organizationId, branchId, acquisitionType) => {
 
 module.exports = {
   createImei,
+  matchesEitherImei,
+  collectImeiNumbers,
   queryImeis,
   getImeiById,
   getImeiByNumber,

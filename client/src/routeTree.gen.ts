@@ -128,6 +128,7 @@ import { Route as AuthenticatedSchoolAttendanceIndexImport } from './routes/_aut
 import { Route as AuthenticatedSchoolAttendanceScannerIndexImport } from './routes/_authenticated/school/attendance-scanner/index'
 import { Route as AuthenticatedSchoolAccountsIndexImport } from './routes/_authenticated/school/accounts/index'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
+import { Route as AuthenticatedMobileShopUsedPhonesIndexImport } from './routes/_authenticated/mobile-shop/used-phones/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
 import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticated/hr/leaves/index'
@@ -142,6 +143,8 @@ import { Route as AuthenticatedSchoolReportsResultSheetImport } from './routes/_
 import { Route as AuthenticatedSchoolPortalsTeacherImport } from './routes/_authenticated/school/portals/teacher'
 import { Route as AuthenticatedSchoolPortalsStudentImport } from './routes/_authenticated/school/portals/student'
 import { Route as AuthenticatedSchoolPortalsParentImport } from './routes/_authenticated/school/portals/parent'
+import { Route as AuthenticatedMobileShopUsedPhonesOldPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/old-phones'
+import { Route as AuthenticatedMobileShopUsedPhonesNewPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/new-phones'
 import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
 import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
 import { Route as AuthenticatedSchoolStudentsIdIndexImport } from './routes/_authenticated/school/students/$id.index'
@@ -947,6 +950,13 @@ const AuthenticatedProductsBulkEditIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedMobileShopUsedPhonesIndexRoute =
+  AuthenticatedMobileShopUsedPhonesIndexImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
+  } as any)
+
 const AuthenticatedHrSettingsIndexRoute =
   AuthenticatedHrSettingsIndexImport.update({
     id: '/hr/settings/',
@@ -1044,6 +1054,20 @@ const AuthenticatedSchoolPortalsParentRoute =
     id: '/portals/parent',
     path: '/portals/parent',
     getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedMobileShopUsedPhonesOldPhonesRoute =
+  AuthenticatedMobileShopUsedPhonesOldPhonesImport.update({
+    id: '/old-phones',
+    path: '/old-phones',
+    getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
+  } as any)
+
+const AuthenticatedMobileShopUsedPhonesNewPhonesRoute =
+  AuthenticatedMobileShopUsedPhonesNewPhonesImport.update({
+    id: '/new-phones',
+    path: '/new-phones',
+    getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
   } as any)
 
 const AuthenticatedHrEmployeesCreateRoute =
@@ -1807,6 +1831,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrEmployeesCreateImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/mobile-shop/used-phones/new-phones': {
+      id: '/_authenticated/mobile-shop/used-phones/new-phones'
+      path: '/new-phones'
+      fullPath: '/mobile-shop/used-phones/new-phones'
+      preLoaderRoute: typeof AuthenticatedMobileShopUsedPhonesNewPhonesImport
+      parentRoute: typeof AuthenticatedMobileShopUsedPhonesImport
+    }
+    '/_authenticated/mobile-shop/used-phones/old-phones': {
+      id: '/_authenticated/mobile-shop/used-phones/old-phones'
+      path: '/old-phones'
+      fullPath: '/mobile-shop/used-phones/old-phones'
+      preLoaderRoute: typeof AuthenticatedMobileShopUsedPhonesOldPhonesImport
+      parentRoute: typeof AuthenticatedMobileShopUsedPhonesImport
+    }
     '/_authenticated/school/portals/parent': {
       id: '/_authenticated/school/portals/parent'
       path: '/portals/parent'
@@ -1904,6 +1942,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/hr/settings'
       preLoaderRoute: typeof AuthenticatedHrSettingsIndexImport
       parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/mobile-shop/used-phones/': {
+      id: '/_authenticated/mobile-shop/used-phones/'
+      path: '/'
+      fullPath: '/mobile-shop/used-phones/'
+      preLoaderRoute: typeof AuthenticatedMobileShopUsedPhonesIndexImport
+      parentRoute: typeof AuthenticatedMobileShopUsedPhonesImport
     }
     '/_authenticated/products/bulk-edit/': {
       id: '/_authenticated/products/bulk-edit/'
@@ -2329,6 +2374,27 @@ const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
 const AuthenticatedSchoolRouteWithChildren =
   AuthenticatedSchoolRoute._addFileChildren(AuthenticatedSchoolRouteChildren)
 
+interface AuthenticatedMobileShopUsedPhonesRouteChildren {
+  AuthenticatedMobileShopUsedPhonesNewPhonesRoute: typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
+  AuthenticatedMobileShopUsedPhonesOldPhonesRoute: typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
+  AuthenticatedMobileShopUsedPhonesIndexRoute: typeof AuthenticatedMobileShopUsedPhonesIndexRoute
+}
+
+const AuthenticatedMobileShopUsedPhonesRouteChildren: AuthenticatedMobileShopUsedPhonesRouteChildren =
+  {
+    AuthenticatedMobileShopUsedPhonesNewPhonesRoute:
+      AuthenticatedMobileShopUsedPhonesNewPhonesRoute,
+    AuthenticatedMobileShopUsedPhonesOldPhonesRoute:
+      AuthenticatedMobileShopUsedPhonesOldPhonesRoute,
+    AuthenticatedMobileShopUsedPhonesIndexRoute:
+      AuthenticatedMobileShopUsedPhonesIndexRoute,
+  }
+
+const AuthenticatedMobileShopUsedPhonesRouteWithChildren =
+  AuthenticatedMobileShopUsedPhonesRoute._addFileChildren(
+    AuthenticatedMobileShopUsedPhonesRouteChildren,
+  )
+
 interface AuthenticatedHrEmployeesIdRouteChildren {
   AuthenticatedHrEmployeesIdEditRoute: typeof AuthenticatedHrEmployeesIdEditRoute
 }
@@ -2368,7 +2434,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMobileShopRepairRoute: typeof AuthenticatedMobileShopRepairRoute
   AuthenticatedMobileShopServicesRoute: typeof AuthenticatedMobileShopServicesRoute
   AuthenticatedMobileShopSimSaleRoute: typeof AuthenticatedMobileShopSimSaleRoute
-  AuthenticatedMobileShopUsedPhonesRoute: typeof AuthenticatedMobileShopUsedPhonesRoute
+  AuthenticatedMobileShopUsedPhonesRoute: typeof AuthenticatedMobileShopUsedPhonesRouteWithChildren
   AuthenticatedMobileShopWalletRoute: typeof AuthenticatedMobileShopWalletRoute
   AuthenticatedRestaurantKitchenRoute: typeof AuthenticatedRestaurantKitchenRoute
   AuthenticatedRestaurantMenuRoute: typeof AuthenticatedRestaurantMenuRoute
@@ -2450,7 +2516,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMobileShopServicesRoute: AuthenticatedMobileShopServicesRoute,
   AuthenticatedMobileShopSimSaleRoute: AuthenticatedMobileShopSimSaleRoute,
   AuthenticatedMobileShopUsedPhonesRoute:
-    AuthenticatedMobileShopUsedPhonesRoute,
+    AuthenticatedMobileShopUsedPhonesRouteWithChildren,
   AuthenticatedMobileShopWalletRoute: AuthenticatedMobileShopWalletRoute,
   AuthenticatedRestaurantKitchenRoute: AuthenticatedRestaurantKitchenRoute,
   AuthenticatedRestaurantMenuRoute: AuthenticatedRestaurantMenuRoute,
@@ -2549,7 +2615,7 @@ export interface FileRoutesByFullPath {
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
-  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
+  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRouteWithChildren
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2607,6 +2673,8 @@ export interface FileRoutesByFullPath {
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
+  '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
   '/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
@@ -2621,6 +2689,7 @@ export interface FileRoutesByFullPath {
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
+  '/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
   '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
   '/school/attendance-scanner': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
@@ -2693,7 +2762,6 @@ export interface FileRoutesByTo {
   '/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
-  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
   '/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2751,6 +2819,8 @@ export interface FileRoutesByTo {
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
+  '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
   '/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
@@ -2764,6 +2834,7 @@ export interface FileRoutesByTo {
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
+  '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
   '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
   '/school/attendance-scanner': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
@@ -2840,7 +2911,7 @@ export interface FileRoutesById {
   '/_authenticated/mobile-shop/repair': typeof AuthenticatedMobileShopRepairRoute
   '/_authenticated/mobile-shop/services': typeof AuthenticatedMobileShopServicesRoute
   '/_authenticated/mobile-shop/sim-sale': typeof AuthenticatedMobileShopSimSaleRoute
-  '/_authenticated/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRoute
+  '/_authenticated/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesRouteWithChildren
   '/_authenticated/mobile-shop/wallet': typeof AuthenticatedMobileShopWalletRoute
   '/_authenticated/restaurant/kitchen': typeof AuthenticatedRestaurantKitchenRoute
   '/_authenticated/restaurant/menu': typeof AuthenticatedRestaurantMenuRoute
@@ -2898,6 +2969,8 @@ export interface FileRoutesById {
   '/_authenticated/whatsapp/': typeof AuthenticatedWhatsappIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/_authenticated/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
+  '/_authenticated/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
   '/_authenticated/school/portals/student': typeof AuthenticatedSchoolPortalsStudentRoute
   '/_authenticated/school/portals/teacher': typeof AuthenticatedSchoolPortalsTeacherRoute
@@ -2912,6 +2985,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/leaves/': typeof AuthenticatedHrLeavesIndexRoute
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
   '/_authenticated/hr/settings/': typeof AuthenticatedHrSettingsIndexRoute
+  '/_authenticated/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
   '/_authenticated/school/accounts/': typeof AuthenticatedSchoolAccountsIndexRoute
   '/_authenticated/school/attendance-scanner/': typeof AuthenticatedSchoolAttendanceScannerIndexRoute
@@ -3047,6 +3121,8 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/mobile-shop/used-phones/new-phones'
+    | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
     | '/school/portals/student'
     | '/school/portals/teacher'
@@ -3061,6 +3137,7 @@ export interface FileRouteTypes {
     | '/hr/leaves'
     | '/hr/payroll'
     | '/hr/settings'
+    | '/mobile-shop/used-phones/'
     | '/products/bulk-edit'
     | '/school/accounts'
     | '/school/attendance-scanner'
@@ -3132,7 +3209,6 @@ export interface FileRouteTypes {
     | '/mobile-shop/repair'
     | '/mobile-shop/services'
     | '/mobile-shop/sim-sale'
-    | '/mobile-shop/used-phones'
     | '/mobile-shop/wallet'
     | '/restaurant/kitchen'
     | '/restaurant/menu'
@@ -3190,6 +3266,8 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/mobile-shop/used-phones/new-phones'
+    | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
     | '/school/portals/student'
     | '/school/portals/teacher'
@@ -3203,6 +3281,7 @@ export interface FileRouteTypes {
     | '/hr/leaves'
     | '/hr/payroll'
     | '/hr/settings'
+    | '/mobile-shop/used-phones'
     | '/products/bulk-edit'
     | '/school/accounts'
     | '/school/attendance-scanner'
@@ -3335,6 +3414,8 @@ export interface FileRouteTypes {
     | '/_authenticated/whatsapp/'
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
+    | '/_authenticated/mobile-shop/used-phones/new-phones'
+    | '/_authenticated/mobile-shop/used-phones/old-phones'
     | '/_authenticated/school/portals/parent'
     | '/_authenticated/school/portals/student'
     | '/_authenticated/school/portals/teacher'
@@ -3349,6 +3430,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/leaves/'
     | '/_authenticated/hr/payroll/'
     | '/_authenticated/hr/settings/'
+    | '/_authenticated/mobile-shop/used-phones/'
     | '/_authenticated/products/bulk-edit/'
     | '/_authenticated/school/accounts/'
     | '/_authenticated/school/attendance-scanner/'
@@ -3716,7 +3798,12 @@ export const routeTree = rootRoute
     },
     "/_authenticated/mobile-shop/used-phones": {
       "filePath": "_authenticated/mobile-shop/used-phones.tsx",
-      "parent": "/_authenticated"
+      "parent": "/_authenticated",
+      "children": [
+        "/_authenticated/mobile-shop/used-phones/new-phones",
+        "/_authenticated/mobile-shop/used-phones/old-phones",
+        "/_authenticated/mobile-shop/used-phones/"
+      ]
     },
     "/_authenticated/mobile-shop/wallet": {
       "filePath": "_authenticated/mobile-shop/wallet.tsx",
@@ -3949,6 +4036,14 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/hr/employees/create.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/mobile-shop/used-phones/new-phones": {
+      "filePath": "_authenticated/mobile-shop/used-phones/new-phones.tsx",
+      "parent": "/_authenticated/mobile-shop/used-phones"
+    },
+    "/_authenticated/mobile-shop/used-phones/old-phones": {
+      "filePath": "_authenticated/mobile-shop/used-phones/old-phones.tsx",
+      "parent": "/_authenticated/mobile-shop/used-phones"
+    },
     "/_authenticated/school/portals/parent": {
       "filePath": "_authenticated/school/portals/parent.tsx",
       "parent": "/_authenticated/school"
@@ -4007,6 +4102,10 @@ export const routeTree = rootRoute
     "/_authenticated/hr/settings/": {
       "filePath": "_authenticated/hr/settings/index.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/mobile-shop/used-phones/": {
+      "filePath": "_authenticated/mobile-shop/used-phones/index.tsx",
+      "parent": "/_authenticated/mobile-shop/used-phones"
     },
     "/_authenticated/products/bulk-edit/": {
       "filePath": "_authenticated/products/bulk-edit/index.tsx",

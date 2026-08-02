@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adjustment-type-badge'
 import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
 import { MovementTile } from './movement-tile'
+import { formatImeiEntries } from '@/stores/imei.api'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -232,8 +233,8 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                                   : sale.batchNumber || '—'}
                               </TableCell>
                               <TableCell>{expiryBadge(sale.expiryDate)}</TableCell>
-                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={(sale.imeis || []).join(', ')}>
-                                {sale.imeis && sale.imeis.length > 0 ? sale.imeis.join(', ') : '—'}
+                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={formatImeiEntries(sale.imeis)}>
+                                {sale.imeis && sale.imeis.length > 0 ? formatImeiEntries(sale.imeis) : '—'}
                               </TableCell>
                               <TableCell className='text-right'>{sale.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(sale.unit)}</TableCell>
@@ -300,8 +301,8 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                               <TableCell className='text-muted-foreground text-sm'>{purchase.variantLabel || '—'}</TableCell>
                               <TableCell className='font-mono text-xs text-muted-foreground'>{purchase.batchNumber || '—'}</TableCell>
                               <TableCell>{expiryBadge(purchase.expiryDate)}</TableCell>
-                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={(purchase.imeis || []).join(', ')}>
-                                {purchase.imeis && purchase.imeis.length > 0 ? purchase.imeis.join(', ') : '—'}
+                              <TableCell className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' title={formatImeiEntries(purchase.imeis)}>
+                                {purchase.imeis && purchase.imeis.length > 0 ? formatImeiEntries(purchase.imeis) : '—'}
                               </TableCell>
                               <TableCell className='text-right'>{purchase.quantity}</TableCell>
                               <TableCell className='text-muted-foreground text-sm'>{getUnitLabel(purchase.unit)}</TableCell>

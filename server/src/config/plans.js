@@ -26,6 +26,7 @@ const MOBILE_SHOP_FEATURES = [
   'customer_ledger',
   'supplier_ledger',
   'used_phones',
+  'new_phones',
 ];
 
 /** HR, admin, and multi-branch features — unlocked on Business and above. */

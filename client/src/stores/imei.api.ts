@@ -3,6 +3,18 @@ import { baseQuery } from './base-query'
 
 export type ImeiStatus = 'in_stock' | 'sold' | 'returned' | 'scrapped' | 'lost' | 'stolen'
 
+/** One entry when submitting IMEIs to receive stock (product creation, purchases) — a
+ *  plain string for a single-IMEI unit, or a pair for a dual-SIM phone's second number. */
+export type ImeiEntryInput = string | { imei: string; imei2?: string }
+
+/** Renders a mixed list of ImeiEntryInput (as stored on a Purchase line snapshot) as a
+ *  single display string — "123456" or "123456 · 654321" for a dual-SIM pair — instead
+ *  of the "[object Object]" a plain .join(', ') would produce on a pair entry. */
+export const formatImeiEntries = (entries: ImeiEntryInput[] | undefined | null): string =>
+  (entries || [])
+    .map((e) => (typeof e === 'string' ? e : e.imei2 ? `${e.imei} · ${e.imei2}` : e.imei))
+    .join(', ')
+
 export interface ImeiHistoryEntry {
   status: string
   note?: string
@@ -20,6 +32,9 @@ export interface ImeiRecord {
   imei2?: string
   productId: string
   productName?: string
+  /** The Purchase this unit was received on, when bought via a Purchase (not opening
+   *  stock / a buyback) — lets a caller find & void/delete that purchase from a unit. */
+  purchaseId?: string | null
   /** Which Batch this unit arrived in, when the product is also batch-tracked — null for
    *  opening stock or units purchased before serial-batch linking existed. Populated to
    *  `{ id, batchNumber }` by the list/detail endpoints (queryImeis/getImeiById); other
@@ -31,6 +46,7 @@ export interface ImeiRecord {
   storage?: string
   status: ImeiStatus
   purchasePrice?: number
+  askingPrice?: number
   salePrice?: number
   supplierName?: string
   customerId?: string | null
@@ -78,6 +94,9 @@ export interface GetImeisParams {
   type?: ImeiRecordType
   warrantyStatus?: 'expiring_soon'
   productId?: string
+  /** ISO date strings — filters by saleDate (only meaningful alongside status=sold). */
+  dateFrom?: string
+  dateTo?: string
   page?: number
   limit?: number
   sortBy?: string

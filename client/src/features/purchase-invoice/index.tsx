@@ -4,6 +4,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AppDispatch, RootState } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api';
+import type { ImeiEntryInput } from '@/stores/imei.api';
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading, which retriggers any effect keyed on
@@ -59,7 +60,7 @@ export interface PurchaseItem {
   discountType?: DiscountType;
   discountValue?: number;
   isManualEntry?: boolean; // flag for manual product selection
-  imeis?: string[]; // IMEI/serial numbers received, when product.trackImei is true
+  imeis?: ImeiEntryInput[]; // IMEI/serial numbers received, when product.trackImei is true
   // Real (non-default) variant this line item is for, when product.hasVariants.
   // batchNumber/expiryDate only apply when the chosen variant has trackBatch/trackExpiry —
   // see docs/architecture/universal-product-migration.md.

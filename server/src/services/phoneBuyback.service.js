@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const inventorySyncService = require('./inventorySync.service');
+const { matchesEitherImei } = require('./imei.service');
 
 const USED_PHONES_PRODUCT_NAME = 'Used Phones';
 
@@ -99,7 +100,7 @@ const assertImeiAvailable = async ({ imei, imei2, organizationId, branchId }) =>
   const duplicates = await Imei.find({
     organizationId,
     branchId,
-    imei: { $in: numbers },
+    ...matchesEitherImei(numbers),
     status: { $in: ['in_stock', 'sold'] },
   });
   if (duplicates.length > 0) {
@@ -272,6 +273,14 @@ const queryBuybacks = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
 
+  if (queryOptions.dateFrom || queryOptions.dateTo) {
+    queryFilter.buybackDate = {};
+    if (queryOptions.dateFrom) queryFilter.buybackDate.$gte = new Date(queryOptions.dateFrom);
+    if (queryOptions.dateTo) queryFilter.buybackDate.$lte = new Date(queryOptions.dateTo);
+    delete queryOptions.dateFrom;
+    delete queryOptions.dateTo;
+  }
+
   if (queryOptions.search) {
     const search = String(queryOptions.search).trim();
     const digits = search.replace(/\D/g, '');
@@ -280,6 +289,14 @@ const queryBuybacks = async (filter, options) => {
       conditions.push({ imei: { $regex: digits, $options: 'i' } });
       conditions.push({ sellerPhone: { $regex: digits, $options: 'i' } });
       conditions.push({ sellerCNIC: { $regex: digits, $options: 'i' } });
+      // PhoneBuyback only denormalizes the primary imei — a dual-SIM unit's second
+      // number lives on its linked Imei record, so resolve matches there too.
+      const imei2Matches = await Imei.find({ imei2: { $regex: digits, $options: 'i' }, buybackId: { $ne: null } })
+        .select('buybackId')
+        .lean();
+      if (imei2Matches.length > 0) {
+        conditions.push({ _id: { $in: imei2Matches.map((m) => m.buybackId) } });
+      }
     }
     if (search.length >= 2) {
       conditions.push({ sellerName: { $regex: search, $options: 'i' } });
@@ -392,27 +409,43 @@ const deleteBuyback = async (id, { updatedBy } = {}) => {
   return buyback;
 };
 
-const getUsedPhoneStats = async (organizationId, branchId) => {
+/**
+ * `in_stock`/`capitalInStock` are always a live snapshot (what's on the shelf right now
+ * has no "date range" of its own). `sold`/`soldRevenue`/`soldCost`/`soldProfit` are the
+ * one part of this that genuinely happened at a point in time, so a date range — when
+ * given — narrows those to units sold within it (by saleDate), letting the same stat
+ * cards answer "how's my resale business doing this week/month" instead of only ever
+ * showing all-time totals.
+ */
+const getUsedPhoneStats = async (organizationId, branchId, { dateFrom, dateTo } = {}) => {
   const match = {
     organizationId: new mongoose.Types.ObjectId(organizationId),
     branchId: new mongoose.Types.ObjectId(branchId),
     acquisitionType: { $in: ['buyback', 'trade_in'] },
   };
 
-  const [byStatus, investedAgg, profitAgg] = await Promise.all([
-    Imei.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+  const saleDateFilter = {};
+  if (dateFrom) saleDateFilter.$gte = new Date(dateFrom);
+  if (dateTo) saleDateFilter.$lte = new Date(dateTo);
+  const soldMatch = Object.keys(saleDateFilter).length > 0
+    ? { ...match, status: 'sold', saleDate: saleDateFilter }
+    : { ...match, status: 'sold' };
+
+  const [nonSoldByStatus, soldCount, investedAgg, profitAgg] = await Promise.all([
+    Imei.aggregate([{ $match: { ...match, status: { $ne: 'sold' } } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Imei.countDocuments(soldMatch),
     Imei.aggregate([
       { $match: { ...match, status: 'in_stock' } },
       { $group: { _id: null, total: { $sum: '$purchasePrice' } } },
     ]),
     Imei.aggregate([
-      { $match: { ...match, status: 'sold' } },
+      { $match: soldMatch },
       { $group: { _id: null, revenue: { $sum: '$salePrice' }, cost: { $sum: '$purchasePrice' } } },
     ]),
   ]);
 
-  const statusCounts = { in_stock: 0, sold: 0, returned: 0, scrapped: 0, lost: 0, stolen: 0 };
-  byStatus.forEach((s) => { if (s._id in statusCounts) statusCounts[s._id] = s.count; });
+  const statusCounts = { in_stock: 0, sold: soldCount, returned: 0, scrapped: 0, lost: 0, stolen: 0 };
+  nonSoldByStatus.forEach((s) => { if (s._id in statusCounts) statusCounts[s._id] = s.count; });
 
   const profitRow = profitAgg[0] || { revenue: 0, cost: 0 };
 

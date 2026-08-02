@@ -17,6 +17,7 @@ import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 import { PAPER_FORMATS, type PaperSize, type SheetSize, type PaperFormatKey } from './paper-format'
 import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from './invoice-template'
+import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 
 export type { PrintWindowContact }
 export type { PaperSize }
@@ -34,7 +35,7 @@ export interface PrintInvoiceData {
     // quantity * unitPrice, shown struck-through above this when discountAmount > 0.
     subtotal: number
     discountAmount?: number
-    imeis?: string[]
+    imeis?: ImeiEntryInput[]
   }>
   customerId?: string | { name: string; id: string; _id?: string }
   customerName?: string
@@ -165,13 +166,13 @@ export const formatCurrency = (amount: number): string => {
 
 /** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). Appends IMEI(s) sold, if any. */
 function formatPrintItemCell(
-  item: { name: string; nameUrdu?: string | null; imeis?: string[] },
+  item: { name: string; nameUrdu?: string | null; imeis?: ImeiEntryInput[] },
   lang: InvoiceLanguage,
 ): string {
   const text = lang === 'ur' ? item.nameUrdu?.trim() || item.name : item.name
   let html = escapeHtml(text)
   if (item.imeis && item.imeis.length > 0) {
-    html += `<br><span style="font-size:10px;color:#666;">IMEI/Serial: ${item.imeis.map((n) => escapeHtml(n)).join(', ')}</span>`
+    html += `<br><span style="font-size:10px;color:#666;">IMEI/Serial: ${escapeHtml(formatImeiEntries(item.imeis))}</span>`
   }
   return html
 }

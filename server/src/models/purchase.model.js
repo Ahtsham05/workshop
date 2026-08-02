@@ -46,7 +46,11 @@ const PurchaseSchema = new mongoose.Schema({
       discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
       discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
       total: { type: Number, required: true }, // (quantity * priceAtPurchase) - discountAmount
-      imeis: [{ type: String, trim: true }], // IMEI/serial numbers received for this line item, when product.trackImei is true
+      // IMEI/serial numbers received for this line item, when product.trackImei is true.
+      // Mixed (not [String]) because a dual-SIM phone's entry is { imei, imei2 } instead
+      // of a plain string — see imeiService.syncImeisForPurchaseItem, which is the actual
+      // source of truth for what gets created; this array is just the request snapshot.
+      imeis: [mongoose.Schema.Types.Mixed],
       // Real (non-default) variant this line item is for, when the product hasVariants.
       // Optional and additive — legacy items with no variantId keep going through the
       // default-variant dual-write path in purchase.service.js, unchanged.

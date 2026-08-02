@@ -73,6 +73,8 @@ const getBuybacks = {
     search: Joi.string().trim().allow(''),
     sellerType: Joi.string().valid('customer', 'walkin'),
     isTradeIn: Joi.boolean(),
+    dateFrom: Joi.date(),
+    dateTo: Joi.date(),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
@@ -104,10 +106,18 @@ const deleteBuyback = {
   }),
 };
 
+const getStats = {
+  query: Joi.object().keys({
+    dateFrom: Joi.date(),
+    dateTo: Joi.date(),
+  }),
+};
+
 module.exports = {
   createBuyback,
   getBuybacks,
   getBuyback,
   updateBuyback,
+  getStats,
   deleteBuyback,
 };

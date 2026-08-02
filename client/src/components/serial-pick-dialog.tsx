@@ -104,9 +104,12 @@ export function SerialPickDialog({
     if (isFull) { onOpenChange(false); return }
     // A barcode scanner types the code then sends Enter — match it exactly against what's
     // loaded rather than whatever happens to be highlighted. Pure keyboard browsing with
-    // no typed text just picks whatever's highlighted.
+    // no typed text just picks whatever's highlighted. A dual-SIM unit can be scanned by
+    // either of its two numbers — both must resolve to the same match.
     const term = search.trim().toLowerCase()
-    const exact = term ? available.find((d) => d.imei.toLowerCase() === term && !selected.includes(d.imei)) : undefined
+    const exact = term
+      ? available.find((d) => (d.imei.toLowerCase() === term || d.imei2?.toLowerCase() === term) && !selected.includes(d.imei))
+      : undefined
     const target = exact ?? pickable.find((d) => d.imei === highlightImei) ?? pickable[0]
     if (target) pick(target.imei)
   }
@@ -167,7 +170,9 @@ export function SerialPickDialog({
                     !isSelected && isFull && 'cursor-not-allowed opacity-40',
                   )}
                 >
-                  <span className={cn('font-mono', isSelected && 'font-semibold')}>{d.imei}</span>
+                  <span className={cn('font-mono', isSelected && 'font-semibold')}>
+                    {d.imei2 ? `${d.imei} · ${d.imei2}` : d.imei}
+                  </span>
                   {isSelected ? (
                     <Check className='h-4 w-4 text-green-600' />
                   ) : isHighlighted ? (

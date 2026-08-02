@@ -3,6 +3,7 @@ const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { Product, ProductVariant, Inventory, Batch, InventoryTransaction, StockAdjustment, Imei } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
+const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 
 const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
 
@@ -50,11 +51,11 @@ const resolveSerializedTarget = async ({ organizationId, branchId, product, vari
     organizationId,
     branchId,
     productId: product._id,
-    imei: { $in: numbers },
+    ...matchesEitherImei(numbers),
     status: 'in_stock',
   });
   if (records.length !== numbers.length) {
-    const found = new Set(records.map((r) => r.imei));
+    const found = collectImeiNumbers(records);
     const missing = numbers.filter((n) => !found.has(n));
     throw new ApiError(httpStatus.BAD_REQUEST, `Not currently in stock: ${missing.join(', ')}`);
   }
@@ -297,7 +298,7 @@ const resolveSerializedReversalTarget = async ({ organizationId, productId, vari
   const product = await Product.findOne({ _id: productId, organizationId });
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product no longer exists');
 
-  const records = await Imei.find({ organizationId, productId, imei: { $in: imeis } });
+  const records = await Imei.find({ organizationId, productId, ...matchesEitherImei(imeis) });
   if (records.length !== imeis.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Some units from this adjustment could no longer be found');
   }

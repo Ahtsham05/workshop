@@ -29,6 +29,7 @@ import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
+import { formatImeiEntries } from '@/stores/imei.api'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
@@ -595,7 +596,7 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                           </div>
                         )}
                         {item.imeis && item.imeis.length > 0 && (
-                          <div className="text-xs text-muted-foreground">IMEI/Serial: {item.imeis.join(', ')}</div>
+                          <div className="text-xs text-muted-foreground">IMEI/Serial: {formatImeiEntries(item.imeis)}</div>
                         )}
                       </div>
                     </div>

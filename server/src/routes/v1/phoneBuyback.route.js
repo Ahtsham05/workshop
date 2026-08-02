@@ -12,7 +12,7 @@ const router = express.Router();
 
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('used_phones'));
 
-router.get('/stats', auth('viewUsedPhones'), phoneBuybackController.getStats);
+router.get('/stats', auth('viewUsedPhones'), validate(phoneBuybackValidation.getStats), phoneBuybackController.getStats);
 
 router
   .route('/upload-image')

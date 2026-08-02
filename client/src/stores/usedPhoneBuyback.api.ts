@@ -86,9 +86,19 @@ export interface BuybackListResponse {
 export interface GetBuybacksParams {
   search?: string
   sellerType?: 'customer' | 'walkin'
+  /** ISO date strings — filters by buybackDate (when the unit was bought). */
+  dateFrom?: string
+  dateTo?: string
   page?: number
   limit?: number
   sortBy?: string
+}
+
+export interface UsedPhoneStatsParams {
+  /** ISO date strings — narrows sold/soldRevenue/soldCost/soldProfit to units sold within
+   *  this range (by saleDate); in_stock/capitalInStock always reflect the live snapshot. */
+  dateFrom?: string
+  dateTo?: string
 }
 
 export interface UsedPhoneStats {
@@ -163,8 +173,15 @@ export const usedPhoneBuybackApi = createApi({
       query: (id) => `/used-phones/${id}`,
       providesTags: (_result, _error, id) => [{ type: 'PhoneBuyback', id }],
     }),
-    getUsedPhoneStats: builder.query<UsedPhoneStats, void>({
-      query: () => '/used-phones/stats',
+    getUsedPhoneStats: builder.query<UsedPhoneStats, UsedPhoneStatsParams | void>({
+      query: (params: UsedPhoneStatsParams = {}) => {
+        const p = new URLSearchParams()
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') p.set(key, String(value))
+        })
+        const qs = p.toString()
+        return `/used-phones/stats${qs ? `?${qs}` : ''}`
+      },
       providesTags: ['PhoneBuyback'],
     }),
     createBuyback: builder.mutation<PhoneBuybackRecord, CreateBuybackBody>({

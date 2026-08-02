@@ -1,5 +1,14 @@
 const Joi = require('joi');
 
+// Each entry is either a plain IMEI string, or a { imei, imei2 } pair for dual-SIM phones.
+const imeiEntry = Joi.alternatives().try(
+  Joi.string().trim(),
+  Joi.object().keys({
+    imei: Joi.string().trim().required(),
+    imei2: Joi.string().trim().allow('').optional(),
+  }),
+);
+
 const createPurchase = {
   body: Joi.object().keys({
     supplier: Joi.string().required(),
@@ -17,7 +26,7 @@ const createPurchase = {
         discountValue: Joi.number().min(0).optional(),
         discountAmount: Joi.number().min(0).optional(),
         total: Joi.number().required(),
-        imeis: Joi.array().items(Joi.string().trim()).optional(),
+        imeis: Joi.array().items(imeiEntry).optional(),
         variantId: Joi.string().optional(),
         batchNumber: Joi.string().trim().allow('').optional(),
         expiryDate: Joi.date().optional(),
@@ -78,7 +87,7 @@ const updatePurchase = {
         discountValue: Joi.number().min(0).optional(),
         discountAmount: Joi.number().min(0).optional(),
         total: Joi.number(),
-        imeis: Joi.array().items(Joi.string().trim()).optional(),
+        imeis: Joi.array().items(imeiEntry).optional(),
         variantId: Joi.string().optional(),
         batchNumber: Joi.string().trim().allow('').optional(),
         expiryDate: Joi.date().optional(),

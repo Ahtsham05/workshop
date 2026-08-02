@@ -43,7 +43,11 @@ const invoiceItemSchema = new mongoose.Schema({
     discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
     discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
     isManualEntry: { type: Boolean, default: false },
-    imeis: [{ type: String, trim: true }], // IMEI/serial numbers sold for this line item, when product.trackImei is true
+    // IMEI/serial numbers sold for this line item, when product.trackImei is true. Mixed
+    // (not [String]) because a dual-SIM unit's entry is { imei, imei2 } instead of a plain
+    // string — see purchase.model.js's identical field for why (imei.service.js's
+    // syncImeisForPurchaseItem / extractSearchNumbers are the actual source of truth).
+    imeis: [mongoose.Schema.Types.Mixed],
     // Real (non-default) variant this line item is for, when the product hasVariants.
     // Optional and additive — legacy items with no variantId keep going through the
     // default-variant dual-write path in invoice.service.js, unchanged. See

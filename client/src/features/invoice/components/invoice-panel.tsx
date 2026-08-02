@@ -9,7 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, X, MessageSquare, Send, Briefcase, History, SplitSquareHorizontal, ScanLine, ListChecks } from 'lucide-react'
-import { useGetAvailableImeisQuery, type ImeiRecord } from '@/stores/imei.api'
+import { useGetAvailableImeisQuery, type ImeiRecord, type ImeiEntryInput } from '@/stores/imei.api'
+import { UsedPhoneSelectDialog } from './used-phone-select-dialog'
+import type { PhoneBuybackRecord } from '@/stores/usedPhoneBuyback.api'
+import { isUsedPhonesBucketProduct } from '@/features/mobile-shop/old-phones/constants'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
@@ -100,6 +103,8 @@ import { ProductHistoryDialog } from './product-history-dialog'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
+const entryImei = (e: ImeiEntryInput) => (typeof e === 'string' ? e : e.imei)
+
 /**
  * Compact row trigger for the serial/IMEI picker — replaces rendering every selected
  * number inline (unworkable once a product's pool runs into the hundreds); just a status
@@ -168,9 +173,9 @@ function SerialNumberDialog({
   batchIds?: string[]
   itemName: string
   quantity: number
-  selected: string[]
+  selected: ImeiEntryInput[]
   isSerial: boolean
-  onChange: (next: string[], records: ImeiRecord[]) => void
+  onChange: (next: ImeiEntryInput[], records: ImeiRecord[]) => void
   onComplete: () => void
 }) {
   const [search, setSearch] = useState('')
@@ -198,9 +203,9 @@ function SerialNumberDialog({
 
   const label = isSerial ? 'Serial Number' : 'IMEI'
   const isFull = selected.length >= quantity
-  const pickable = available.filter((d) => !selected.includes(d.imei))
+  const pickable = available.filter((d) => !selected.some((e) => entryImei(e) === d.imei))
 
-  const commit = (next: string[]) => onChange(next, [...seenRecordsRef.current.values()])
+  const commit = (next: ImeiEntryInput[]) => onChange(next, [...seenRecordsRef.current.values()])
 
   const finish = () => {
     onOpenChange(false)
@@ -210,15 +215,18 @@ function SerialNumberDialog({
   // Every field runs mouse-free: arrow keys move a highlighted row (like a combobox),
   // Enter picks it — and the instant the line's full quantity is reached, the dialog
   // closes itself and hands off to the next product. No confirmation click needed; the
-  // pick that completes the line *is* the confirmation.
-  const pick = (imei: string) => {
-    if (isFull || selected.includes(imei)) return
-    const next = [...selected, imei]
+  // pick that completes the line *is* the confirmation. The record already carries its
+  // own imei2 (set when it was received) — dual-SIM units just come along for free here,
+  // no need to ask the seller to type a second number for a unit that's already in stock.
+  const pick = (record: ImeiRecord) => {
+    if (isFull || selected.some((e) => entryImei(e) === record.imei)) return
+    const entry: ImeiEntryInput = record.imei2 ? { imei: record.imei, imei2: record.imei2 } : record.imei
+    const next = [...selected, entry]
     commit(next)
     setSearch('')
     if (next.length >= quantity) finish()
   }
-  const unpick = (imei: string) => commit(selected.filter((n) => n !== imei))
+  const unpick = (imei: string) => commit(selected.filter((e) => entryImei(e) !== imei))
 
   const [highlightImei, setHighlightImei] = useState<string | null>(null)
   const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -246,11 +254,14 @@ function SerialNumberDialog({
     // A barcode scanner types the code then sends Enter itself, faster than the search
     // debounce can catch up — so an exact match against whatever's already loaded takes
     // priority over the (possibly stale) highlighted row. Pure keyboard browsing with no
-    // typed text just picks whatever's highlighted.
+    // typed text just picks whatever's highlighted. A dual-SIM unit can be scanned by
+    // either of its two numbers — both must resolve to the same match.
     const term = search.trim().toLowerCase()
-    const exact = term ? available.find((d) => d.imei.toLowerCase() === term && !selected.includes(d.imei)) : undefined
+    const exact = term
+      ? available.find((d) => (d.imei.toLowerCase() === term || d.imei2?.toLowerCase() === term) && !selected.some((e) => entryImei(e) === d.imei))
+      : undefined
     const target = exact ?? pickable.find((d) => d.imei === highlightImei)
-    if (target) pick(target.imei)
+    if (target) pick(target)
   }
 
   return (
@@ -291,7 +302,7 @@ function SerialNumberDialog({
             </div>
           ) : available.length > 0 ? (
             available.map((d) => {
-              const isSelected = selected.includes(d.imei)
+              const isSelected = selected.some((e) => entryImei(e) === d.imei)
               const isHighlighted = !isSelected && d.imei === highlightImei
               return (
                 <button
@@ -299,7 +310,7 @@ function SerialNumberDialog({
                   ref={(el) => { rowRefs.current[d.imei] = el }}
                   type='button'
                   disabled={!isSelected && isFull}
-                  onClick={() => (isSelected ? unpick(d.imei) : pick(d.imei))}
+                  onClick={() => (isSelected ? unpick(d.imei) : pick(d))}
                   onMouseEnter={() => !isSelected && setHighlightImei(d.imei)}
                   className={cn(
                     'flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors',
@@ -309,7 +320,9 @@ function SerialNumberDialog({
                     !isSelected && isFull && 'cursor-not-allowed opacity-40',
                   )}
                 >
-                  <span className={cn('font-mono', isSelected && 'font-semibold')}>{d.imei}</span>
+                  <span className={cn('font-mono', isSelected && 'font-semibold')}>
+                    {d.imei2 ? `${d.imei} · ${d.imei2}` : d.imei}
+                  </span>
                   {isSelected ? (
                     <Check className='h-4 w-4 text-green-600' />
                   ) : isHighlighted ? (
@@ -1193,11 +1206,32 @@ export function InvoicePanel({
    * FEFO order as the initial auto-split, so the numbers always keep summing to the
    * line's quantity.
    */
-  const updateItemImeis = useCallback((itemId: string, nextImeis: string[], records: ImeiRecord[]) => {
+  const updateItemImeis = useCallback((itemId: string, nextImeis: ImeiEntryInput[], records: ImeiRecord[]) => {
     setInvoice(prev => {
       const newItems = prev.items.map((item) => {
         if (item.id !== itemId) return item
-        if (!item.variantId) return { ...item, imeis: nextImeis }
+        if (!item.variantId) {
+          const patch: Partial<InvoiceItem> = { imeis: nextImeis }
+          // A single-unit line for a bucket-style product (e.g. Old Phones' shared "Used
+          // Phones" catalog entry, price 0 — every unit sells for a different amount) has
+          // no meaningful product-level price or name to default to. Once the specific
+          // unit is picked, back both in from its own record instead — still freely
+          // editable afterwards, and left alone if the cashier already typed a price.
+          if (nextImeis.length === 1 && item.quantity === 1) {
+            const record = records.find((r) => r.imei === entryImei(nextImeis[0]))
+            if (record) {
+              if (record.askingPrice && item.unitPrice === 0) {
+                patch.unitPrice = record.askingPrice
+                patch.subtotal = record.askingPrice * item.quantity
+                patch.profit = patch.subtotal - (item.cost || 0) * item.quantity
+              }
+              if (record.brand || record.model) {
+                patch.name = [record.brand, record.model].filter(Boolean).join(' ')
+              }
+            }
+          }
+          return { ...item, ...patch }
+        }
 
         const catalogEntry = sellableCatalog.find((c) => c.variantId === item.variantId)
         const batches = catalogEntry?.batches ?? []
@@ -1207,8 +1241,8 @@ export function InvoicePanel({
           records.map((r) => [r.imei, (typeof r.batchId === 'string' ? r.batchId : r.batchId?.id) || null])
         )
         const knownCounts = new Map<string, number>()
-        nextImeis.forEach((num) => {
-          const bId = batchIdByImei.get(num)
+        nextImeis.forEach((entry) => {
+          const bId = batchIdByImei.get(entryImei(entry))
           if (bId) knownCounts.set(bId, (knownCounts.get(bId) || 0) + 1)
         })
 
@@ -1255,6 +1289,32 @@ export function InvoicePanel({
       return { ...prev, items: newItems }
     })
   }, [setInvoice, sellableCatalog])
+
+  /** Selecting a specific used phone from UsedPhoneSelectDialog replaces the line's
+   *  identity outright — unlike updateItemImeis's generic backfill (which never overwrites
+   *  a price the cashier already typed), picking a *different* unit here should always
+   *  update the name/price to match it, since the whole point of this picker is knowing
+   *  exactly which phone the line now represents. */
+  const selectUsedPhoneForItem = useCallback((itemId: string, buyback: PhoneBuybackRecord) => {
+    const summary = typeof buyback.imeiRecordId === 'object' && buyback.imeiRecordId !== null ? buyback.imeiRecordId : null
+    const price = summary?.askingPrice || buyback.askingPrice || buyback.agreedPrice || 0
+    const name = [buyback.brand, buyback.model].filter(Boolean).join(' ') || 'Used Phone'
+    const imeiEntry: ImeiEntryInput = summary?.imei2 ? { imei: buyback.imei, imei2: summary.imei2 } : buyback.imei
+    setInvoice((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => item.id === itemId
+        ? {
+          ...item,
+          imeis: [imeiEntry],
+          name,
+          unitPrice: price,
+          subtotal: price * item.quantity,
+          profit: price * item.quantity - (item.cost || 0) * item.quantity,
+        }
+        : item),
+    }))
+    setSerialDialogItemId('')
+  }, [setInvoice])
 
   const addNewRowAndOpenProduct = useCallback(() => {
     const nextEmptyRow = invoice.items.find((item) => item.isManualEntry && !item.productId)
@@ -3561,6 +3621,17 @@ export function InvoicePanel({
         const dialogItem = invoice.items.find((i) => i.id === serialDialogItemId)
         if (!dialogItem) return null
         const dialogProduct = products.find((p: any) => (p._id || p.id) === dialogItem.productId)
+
+        if (isUsedPhonesBucketProduct(dialogProduct)) {
+          return (
+            <UsedPhoneSelectDialog
+              open={!!serialDialogItemId}
+              onOpenChange={(open) => setSerialDialogItemId(open ? serialDialogItemId : '')}
+              onSelect={(buyback) => selectUsedPhoneForItem(dialogItem.id, buyback)}
+            />
+          )
+        }
+
         return (
           <SerialNumberDialog
             open={!!serialDialogItemId}

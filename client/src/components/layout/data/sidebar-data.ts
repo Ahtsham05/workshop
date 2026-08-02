@@ -915,7 +915,7 @@ export const sidebarData: SidebarData = {
           businessTypes: ['mobile_shop'],
         },
         {
-          title: 'Used Phones',
+          title: 'Mobile Phones',
           url: '/mobile-shop/used-phones',
           icon: IconRefresh,
           permission: 'viewUsedPhones',

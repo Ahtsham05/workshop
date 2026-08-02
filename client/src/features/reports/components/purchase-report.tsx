@@ -31,6 +31,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
+import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 
 interface PurchaseReportProps {
   startDate: string
@@ -97,7 +98,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
           quantity: number
           unitPrice: number
           subtotal: number
-          imeis?: string[]
+          imeis?: ImeiEntryInput[]
           variantLabel?: string | null
           batchNumber?: string | null
           expiryDate?: string | null
@@ -586,7 +587,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                                   </LongText>
                                   {item.imeis && item.imeis.length > 0 && (
                                     <span className='block text-xs text-muted-foreground'>
-                                      IMEI/Serial: {item.imeis.join(', ')}
+                                      IMEI/Serial: {formatImeiEntries(item.imeis)}
                                     </span>
                                   )}
                                   {(item.variantLabel || item.batchNumber || item.expiryDate) && (
@@ -725,7 +726,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                             </LongText>
                             {item.imeis && item.imeis.length > 0 && (
                               <div className='text-xs font-normal text-muted-foreground'>
-                                IMEI/Serial: {item.imeis.join(', ')}
+                                IMEI/Serial: {formatImeiEntries(item.imeis)}
                               </div>
                             )}
                             {(item.variantLabel || item.batchNumber || item.expiryDate) && (
