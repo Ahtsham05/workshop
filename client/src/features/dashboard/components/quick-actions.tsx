@@ -1,6 +1,19 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, ShoppingCart, Package, BarChart3, Users, Truck, Receipt, Smartphone, Wallet, Wrench, Signal } from 'lucide-react'
+import {
+  FileText,
+  ShoppingCart,
+  Package,
+  BarChart3,
+  Users,
+  Truck,
+  Receipt,
+  Smartphone,
+  Wallet,
+  Wrench,
+  Signal,
+  RefreshCcw,
+} from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useNavigate } from '@tanstack/react-router'
 import { useSelector } from 'react-redux'
@@ -17,18 +30,6 @@ export function QuickActions() {
 
   const mobileShopActions = [
     {
-      icon: <FileText className='h-5 w-5' />,
-      label: t('Create Invoice'),
-      onClick: () => navigate({ to: '/invoice' }),
-      color: 'bg-blue-500 hover:bg-blue-600',
-    },
-    {
-      icon: <ShoppingCart className='h-5 w-5' />,
-      label: t('Create Purchase'),
-      onClick: () => navigate({ to: '/purchase-invoice' }),
-      color: 'bg-green-500 hover:bg-green-600',
-    },
-    {
       icon: <Smartphone className='h-5 w-5' />,
       label: t('Load Management'),
       onClick: () => navigate({ to: '/mobile-shop/load' }),
@@ -41,12 +42,6 @@ export function QuickActions() {
       color: 'bg-orange-500 hover:bg-orange-600',
     },
     {
-      icon: <Wrench className='h-5 w-5' />,
-      label: t('Services'),
-      onClick: () => navigate({ to: '/mobile-shop/services' }),
-      color: 'bg-cyan-500 hover:bg-cyan-600',
-    },
-    {
       icon: <Signal className='h-5 w-5' />,
       label: t('Sim Sale'),
       onClick: () => navigate({ to: '/mobile-shop/sim-sale' }),
@@ -57,6 +52,24 @@ export function QuickActions() {
       label: t('Bill Payments'),
       onClick: () => navigate({ to: '/mobile-shop/bill-payments' }),
       color: 'bg-pink-500 hover:bg-pink-600',
+    },
+    {
+      icon: <Wrench className='h-5 w-5' />,
+      label: t('Services'),
+      onClick: () => navigate({ to: '/mobile-shop/services' }),
+      color: 'bg-cyan-500 hover:bg-cyan-600',
+    },
+    {
+      icon: <RefreshCcw className='h-5 w-5' />,
+      label: t('Old Mobiles'),
+      onClick: () => navigate({ to: '/mobile-shop/used-phones/old-phones' }),
+      color: 'bg-rose-500 hover:bg-rose-600',
+    },
+    {
+      icon: <Smartphone className='h-5 w-5' />,
+      label: t('New Mobiles'),
+      onClick: () => navigate({ to: '/mobile-shop/used-phones/new-phones' }),
+      color: 'bg-indigo-500 hover:bg-indigo-600',
     },
   ]
 
@@ -105,24 +118,27 @@ export function QuickActions() {
     },
   ]
 
-  const actions = isMobileShop ? mobileShopActions : defaultActions
+  const renderRow = (actions: typeof defaultActions) => (
+    <div className='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4'>
+      {actions.map((action, index) => (
+        <Button
+          key={index}
+          onClick={action.onClick}
+          className={`h-24 flex-col gap-2 text-white ${action.color}`}
+          variant='default'
+        >
+          {action.icon}
+          <span className='text-sm font-medium text-wrap text-center'>{action.label}</span>
+        </Button>
+      ))}
+    </div>
+  )
 
   return (
     <Card>
-      <CardContent className='pt-6'>
-        <div className='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4'>
-          {actions.map((action, index) => (
-            <Button
-              key={index}
-              onClick={action.onClick}
-              className={`h-24 flex-col gap-2 text-white ${action.color}`}
-              variant='default'
-            >
-              {action.icon}
-              <span className='text-sm font-medium text-wrap text-center'>{action.label}</span>
-            </Button>
-          ))}
-        </div>
+      <CardContent className='flex flex-col gap-4 pt-6'>
+        {renderRow(defaultActions)}
+        {isMobileShop && renderRow(mobileShopActions)}
       </CardContent>
     </Card>
   )
