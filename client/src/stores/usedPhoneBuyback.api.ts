@@ -45,6 +45,9 @@ export interface BuybackImeiSummary {
   salePrice?: number
   saleDate?: string | null
   condition?: BuybackCondition
+  /** The Invoice this unit was resold on, once sold — populated to
+   *  `{ id, invoiceNumber, paymentMethod, walletType }` by getBuybacks/getBuybackById. */
+  invoiceId?: string | { id: string; invoiceNumber?: string; paymentMethod?: string; walletType?: string } | null
 }
 
 export interface PhoneBuybackRecord {

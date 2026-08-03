@@ -33,8 +33,13 @@ export interface ImeiRecord {
   productId: string
   productName?: string
   /** The Purchase this unit was received on, when bought via a Purchase (not opening
-   *  stock / a buyback) — lets a caller find & void/delete that purchase from a unit. */
-  purchaseId?: string | null
+   *  stock / a buyback) — lets a caller find & void/delete that purchase from a unit.
+   *  Populated to `{ id, invoiceNumber, paymentType }` by queryImeis; other endpoints
+   *  (e.g. getAvailableImeisForProduct) return the raw id string. */
+  purchaseId?: string | { id: string; invoiceNumber?: string; paymentType?: string } | null
+  /** The Invoice this unit was sold on, once sold. Populated to `{ id, invoiceNumber,
+   *  paymentMethod, walletType }` by queryImeis; other endpoints return the raw id string. */
+  invoiceId?: string | { id: string; invoiceNumber?: string; paymentMethod?: string; walletType?: string } | null
   /** Which Batch this unit arrived in, when the product is also batch-tracked — null for
    *  opening stock or units purchased before serial-batch linking existed. Populated to
    *  `{ id, batchNumber }` by the list/detail endpoints (queryImeis/getImeiById); other

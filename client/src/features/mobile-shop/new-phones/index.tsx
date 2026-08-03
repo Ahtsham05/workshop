@@ -243,8 +243,9 @@ export default function NewPhonesPage() {
 
   const handleDelete = async () => {
     if (!deleteUnit?.purchaseId) return
+    const purchaseId = typeof deleteUnit.purchaseId === 'string' ? deleteUnit.purchaseId : deleteUnit.purchaseId.id
     try {
-      await deleteNewPhonePurchase(deleteUnit.purchaseId).unwrap()
+      await deleteNewPhonePurchase(purchaseId).unwrap()
       toast.success('Purchase deleted')
       setDeleteUnit(null)
       refetchStats()

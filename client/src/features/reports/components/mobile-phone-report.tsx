@@ -17,7 +17,7 @@ import {
 import { useGetNewPhoneStatsQuery } from '@/stores/newPhones.api'
 import { useGetImeisQuery, type ImeiRecord } from '@/stores/imei.api'
 import { fetchAllProducts } from '@/stores/product.slice'
-import { isUsedPhonesBucketProduct } from '@/features/mobile-shop/old-phones/constants'
+import { isUsedPhonesBucketProduct, gradeBadgeClasses, ptaBadgeConfig } from '@/features/mobile-shop/old-phones/constants'
 import type { RootState, AppDispatch } from '@/stores/store'
 
 interface MobilePhoneReportProps {
@@ -33,6 +33,20 @@ interface PhoneProductOption {
   trackImei?: boolean
   name?: string
   category?: string
+}
+
+type RefDoc<T> = string | (T & { id: string }) | null | undefined
+
+/** invoiceId/purchaseId only carry the human-facing number once the API populates them —
+ *  a bare id string means the caller didn't ask for that (never the case here, but keeps
+ *  this safe against any future endpoint that returns the raw id). */
+const invoiceNumberOf = (ref: RefDoc<{ invoiceNumber?: string }>) =>
+  ref && typeof ref === 'object' ? ref.invoiceNumber || '—' : '—'
+
+const paymentMethodOf = (ref: RefDoc<{ paymentMethod?: string; walletType?: string }>) => {
+  if (!ref || typeof ref !== 'object') return '—'
+  if (ref.paymentMethod === 'wallet') return `Wallet${ref.walletType ? ` (${ref.walletType})` : ''}`
+  return ref.paymentMethod || '—'
 }
 
 /** The list/detail endpoints populate imeiRecordId; the raw create response won't be. */
@@ -103,26 +117,54 @@ function UsedPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
                   <TableRow>
                     <TableHead>Device</TableHead>
                     <TableHead>Seller</TableHead>
+                    <TableHead>Grade / PTA</TableHead>
                     <TableHead>Bought On</TableHead>
-                    <TableHead>Price</TableHead>
+                    <TableHead>Buy Price</TableHead>
+                    <TableHead>Payment</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Sale Invoice #</TableHead>
+                    <TableHead>Sale Price</TableHead>
+                    <TableHead>Profit</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((b) => {
                     const summary = getImeiSummary(b)
                     const status = summary?.status ?? 'in_stock'
+                    const isSold = status === 'sold'
+                    const grade = summary?.condition?.grade
+                    const pta = summary?.condition?.ptaStatus ?? 'unknown'
+                    const profit = isSold ? (summary?.salePrice ?? 0) - b.agreedPrice : undefined
                     return (
                       <TableRow key={b.id}>
                         <TableCell>
                           <div className='font-medium whitespace-nowrap'>{[b.brand, b.model].filter(Boolean).join(' ') || '—'}</div>
-                          <div className='text-xs text-muted-foreground font-mono'>{b.imei}</div>
+                          <div className='text-xs text-muted-foreground font-mono'>
+                            {summary?.imei2 ? `${b.imei} · ${summary.imei2}` : b.imei}
+                          </div>
                         </TableCell>
-                        <TableCell className='whitespace-nowrap'>{b.sellerName}</TableCell>
+                        <TableCell className='whitespace-nowrap'>
+                          <div>{b.sellerName}</div>
+                          <div className='text-xs text-muted-foreground'>{b.sellerPhone || '—'}</div>
+                        </TableCell>
+                        <TableCell className='whitespace-nowrap'>
+                          <div className='flex items-center gap-1'>
+                            {grade ? <Badge className={cn('text-xs font-bold', gradeBadgeClasses[grade])}>{grade}</Badge> : <span className='text-muted-foreground'>—</span>}
+                            <Badge className={cn('text-xs', ptaBadgeConfig[pta].color)}>{ptaBadgeConfig[pta].label}</Badge>
+                          </div>
+                        </TableCell>
                         <TableCell className='whitespace-nowrap'>{formatBusinessDate(b.buybackDate)}</TableCell>
                         <TableCell className='whitespace-nowrap'>{fmt(b.agreedPrice)}</TableCell>
+                        <TableCell className='whitespace-nowrap capitalize'>
+                          {b.paymentMethod === 'wallet' ? `Wallet${b.walletType ? ` (${b.walletType})` : ''}` : b.paymentMethod}
+                        </TableCell>
                         <TableCell>
-                          <Badge variant={status === 'sold' ? 'default' : 'secondary'} className='text-xs'>{status}</Badge>
+                          <Badge variant={isSold ? 'default' : 'secondary'} className='text-xs'>{status}</Badge>
+                        </TableCell>
+                        <TableCell className='whitespace-nowrap font-mono text-xs'>{isSold ? invoiceNumberOf(summary?.invoiceId) : '—'}</TableCell>
+                        <TableCell className='whitespace-nowrap'>{isSold ? fmt(summary?.salePrice) : '—'}</TableCell>
+                        <TableCell className={cn('whitespace-nowrap font-medium', profit != null && (profit >= 0 ? 'text-emerald-600' : 'text-destructive'))}>
+                          {profit != null ? fmt(profit) : '—'}
                         </TableCell>
                       </TableRow>
                     )
@@ -215,23 +257,38 @@ function NewPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
                     <TableHead>Device</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Sold On</TableHead>
+                    <TableHead>Sale Invoice #</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Purchase #</TableHead>
                     <TableHead>Cost</TableHead>
                     <TableHead>Sale Price</TableHead>
+                    <TableHead>Profit</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((unit) => (
-                    <TableRow key={unit.id}>
-                      <TableCell>
-                        <div className='font-medium whitespace-nowrap'>{unit.productName || '—'}</div>
-                        <div className='text-xs text-muted-foreground font-mono'>{unit.imei}</div>
-                      </TableCell>
-                      <TableCell className='whitespace-nowrap'>{unit.customerName || 'Walk-in'}</TableCell>
-                      <TableCell className='whitespace-nowrap'>{unit.saleDate ? formatBusinessDate(unit.saleDate) : '—'}</TableCell>
-                      <TableCell className='whitespace-nowrap'>{fmt(unit.purchasePrice)}</TableCell>
-                      <TableCell className='whitespace-nowrap font-medium'>{fmt(unit.salePrice)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {rows.map((unit) => {
+                    const profit = (unit.salePrice ?? 0) - (unit.purchasePrice ?? 0)
+                    return (
+                      <TableRow key={unit.id}>
+                        <TableCell>
+                          <div className='font-medium whitespace-nowrap'>{unit.productName || '—'}</div>
+                          <div className='text-xs text-muted-foreground font-mono'>
+                            {unit.imei2 ? `${unit.imei} · ${unit.imei2}` : unit.imei}
+                          </div>
+                        </TableCell>
+                        <TableCell className='whitespace-nowrap'>{unit.customerName || 'Walk-in'}</TableCell>
+                        <TableCell className='whitespace-nowrap'>{unit.saleDate ? formatBusinessDate(unit.saleDate) : '—'}</TableCell>
+                        <TableCell className='whitespace-nowrap font-mono text-xs'>{invoiceNumberOf(unit.invoiceId)}</TableCell>
+                        <TableCell className='whitespace-nowrap capitalize'>{paymentMethodOf(unit.invoiceId)}</TableCell>
+                        <TableCell className='whitespace-nowrap font-mono text-xs'>{invoiceNumberOf(unit.purchaseId)}</TableCell>
+                        <TableCell className='whitespace-nowrap'>{fmt(unit.purchasePrice)}</TableCell>
+                        <TableCell className='whitespace-nowrap font-medium'>{fmt(unit.salePrice)}</TableCell>
+                        <TableCell className={cn('whitespace-nowrap font-medium', profit >= 0 ? 'text-emerald-600' : 'text-destructive')}>
+                          {fmt(profit)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

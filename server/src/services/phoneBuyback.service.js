@@ -314,7 +314,12 @@ const queryBuybacks = async (filter, options) => {
   }
 
   queryOptions.sortBy = queryOptions.sortBy || 'buybackDate:-1';
-  queryOptions.populate = 'imeiRecordId,sellerCustomerId';
+  // Nested-populate the linked Imei's sale invoice too — the Mobile Phone report needs the
+  // sale invoice # and payment method alongside each buyback for a complete transaction trail.
+  queryOptions.populate = [
+    { path: 'imeiRecordId', populate: { path: 'invoiceId', select: 'invoiceNumber paymentMethod walletType' } },
+    { path: 'sellerCustomerId' },
+  ];
   return PhoneBuyback.paginate(queryFilter, queryOptions);
 };
 

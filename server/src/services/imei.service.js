@@ -422,9 +422,14 @@ const queryImeis = async (filter, options) => {
   }
 
   queryOptions.sortBy = queryOptions.sortBy || 'createdAt:-1';
-  // Resolve batchId to its batchNumber — the tracking page shows which batch each unit
-  // belongs to, and a raw ObjectId is meaningless to a seller.
-  queryOptions.populate = [{ path: 'batchId', select: 'batchNumber' }];
+  // Resolve batchId/purchaseId/invoiceId to their human-facing numbers — a raw ObjectId is
+  // meaningless in a report or list; the Mobile Phone report in particular needs the sale
+  // invoice # and purchase # alongside each unit for a complete transaction trail.
+  queryOptions.populate = [
+    { path: 'batchId', select: 'batchNumber' },
+    { path: 'purchaseId', select: 'invoiceNumber paymentType' },
+    { path: 'invoiceId', select: 'invoiceNumber paymentMethod walletType' },
+  ];
   return Imei.paginate(queryFilter, queryOptions);
 };
 
