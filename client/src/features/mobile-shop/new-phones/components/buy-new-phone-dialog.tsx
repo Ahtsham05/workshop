@@ -14,6 +14,7 @@ import {
 } from '@/components/entity-create-shortcut'
 import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
+import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import { toBusinessDateTimeLocal, parseBusinessDateTimeLocal } from '@/lib/business-timezone'
 import { buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue } from '@/lib/wallet-payment-options'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -216,7 +217,7 @@ export function BuyNewPhoneDialog({
             <ShoppingBag className='h-5 w-5 text-primary' /> Buy New Phone
           </DialogTitle>
         </DialogHeader>
-        <form className='grid gap-4' onSubmit={handleSubmit}>
+        <form className='grid gap-4' onSubmit={handleSubmit} onKeyDown={handleFormEnterKeyDown}>
           <FormSection icon={<Package className='h-4 w-4' />} title='Phone Model' tone='blue'>
             <div className='space-y-1'>
               <Label>Product *</Label>

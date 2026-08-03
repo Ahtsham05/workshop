@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CustomerPhoneAutocomplete, type CustomerSuggestion } from '@/components/ui/customer-phone-autocomplete'
 import { cn } from '@/lib/utils'
+import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import { toBusinessDateTimeLocal, parseBusinessDateTimeLocal } from '@/lib/business-timezone'
 import {
   buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue, toWalletOptionValue,
@@ -350,7 +351,7 @@ export function BuyUsedPhoneDialog({
             <ShoppingBag className='h-5 w-5 text-primary' /> Buy Phone
           </DialogTitle>
         </DialogHeader>
-        <form className='grid gap-4' onSubmit={handleSubmit}>
+        <form className='grid gap-4' onSubmit={handleSubmit} onKeyDown={handleFormEnterKeyDown}>
           {/* Seller */}
           <FormSection icon={<User className='h-4 w-4' />} title='Seller' tone='indigo'>
             <div className='grid gap-3 sm:grid-cols-2'>

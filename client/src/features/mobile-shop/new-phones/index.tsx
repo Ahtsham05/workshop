@@ -32,6 +32,7 @@ import { printPhoneSaleInvoice, type PhoneSaleInvoice } from '@/features/mobile-
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { toBusinessDateTimeLocal, parseBusinessDateTimeLocal } from '@/lib/business-timezone'
+import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import {
   buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue,
 } from '@/lib/wallet-payment-options'
@@ -462,7 +463,7 @@ export default function NewPhonesPage() {
             </DialogTitle>
           </DialogHeader>
           {sellUnit && (
-            <form className='grid gap-4' onSubmit={handleSell}>
+            <form className='grid gap-4' onSubmit={handleSell} onKeyDown={handleFormEnterKeyDown}>
               <div className='rounded-lg border bg-muted/30 p-3'>
                 <div className='font-medium'>{sellUnit.productName || 'Phone'}</div>
                 <div className='text-xs text-muted-foreground font-mono flex items-center gap-1'>

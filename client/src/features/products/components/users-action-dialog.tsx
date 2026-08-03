@@ -73,6 +73,7 @@ import type { VariantDraftRow } from './variants/generate-variant-combinations'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
 import { BrandSelector } from './brand-selector'
+import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -355,24 +356,6 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     toast.error(firstError?.message || 'Please fill in the required fields before saving.')
   }
 
-  // Enter should move to the next field, like Tab, instead of submitting the form —
-  // submission only happens via the Save button. Fields that already use Enter for their
-  // own purpose (adding an IMEI, a custom attribute value, a conversion rule, etc.) call
-  // e.preventDefault() themselves before this ever runs, so e.defaultPrevented lets us
-  // skip those and leave their existing behavior untouched.
-  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
-    if (e.key !== 'Enter' || e.defaultPrevented) return
-    const target = e.target as HTMLElement
-    if (target.tagName !== 'INPUT') return // let buttons/comboboxes/textareas behave normally
-    e.preventDefault()
-    const focusable = Array.from(
-      e.currentTarget.querySelectorAll<HTMLElement>(
-        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
-      )
-    ).filter((el) => el.offsetParent !== null)
-    const nextField = focusable[focusable.indexOf(target) + 1]
-    nextField?.focus()
-  }
 
   const onSubmit = async (values: productForm) => {
     if (!isEdit && (values.trackImei || values.trackSerial)) {
@@ -505,7 +488,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         </DialogHeader>
         <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
-            <form id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+            <form id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormEnterKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
               <EntityFormSection
                 title={isEdit ? 'Product details' : 'New product'}
                 description='Name, description, and categories shoppers see in menus and lists.'
