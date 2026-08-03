@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, isAnyOf, PayloadAction } from "@reduxjs/
 import { catchAsync, handleLoadingErrorParamsForAsycThunk, reduxToolKitCaseBuilder } from "../utils/errorHandler";
 import Axios from "../utils/Axios";
 import summery from "../utils/summery";
+import { customerApi } from "./customer.api";
 import {
   getAllLocalCustomers,
   getLocalCustomersPage,
@@ -43,8 +44,8 @@ export const fetchCustomers = createAsyncThunk(
 
 export const addCustomer = createAsyncThunk(
   'customer/addCustomer',
-  catchAsync(async (data: any) => {
-    return withOfflineMutationFallback(
+  catchAsync(async (data: any, { dispatch }) => {
+    const result = await withOfflineMutationFallback(
       async () => {
         const response = await Axios({
           ...summery.addCustomer,
@@ -54,13 +55,18 @@ export const addCustomer = createAsyncThunk(
       },
       () => createCustomerOffline(data, getOfflineMutationContext()),
     );
+    // This mutation goes through Axios directly, bypassing the RTK Query
+    // `customerApi` cache — invalidate it so dropdowns fed by
+    // useGetAllCustomersQuery (Sim Sale, Services, etc.) pick up the new customer.
+    dispatch(customerApi.util.invalidateTags(['Customer']));
+    return result;
   })
 );
 
 export const updateCustomer = createAsyncThunk(
   'customer/updateCustomer',
-  catchAsync(async (data: any) => {
-    return withOfflineMutationFallback(
+  catchAsync(async (data: any, { dispatch }) => {
+    const result = await withOfflineMutationFallback(
       async () => {
         const response = await Axios({
           ...summery.updateCustomer,
@@ -71,16 +77,19 @@ export const updateCustomer = createAsyncThunk(
       },
       () => updateCustomerOffline(data, getOfflineMutationContext()),
     );
+    dispatch(customerApi.util.invalidateTags(['Customer']));
+    return result;
   })
 );
 
 export const deleteCustomer = createAsyncThunk(
   'customer/deleteCustomer',
-  catchAsync(async (customerId: string) => {
+  catchAsync(async (customerId: string, { dispatch }) => {
     const response = await Axios({
       ...summery.deleteCustomer, // Assuming your API for deleting a customer
       url: `${summery.deleteCustomer.url}/${customerId}`,
     });
+    dispatch(customerApi.util.invalidateTags(['Customer']));
     return response.data;
   })
 );
@@ -115,8 +124,9 @@ export const getCustomerSalesAndTransactions = createAsyncThunk(
 
 export const bulkAddCustomers = createAsyncThunk(
   'customer/bulkAddCustomers',
-  catchAsync(async ({ customers }: { customers: any[] }) => {
+  catchAsync(async ({ customers }: { customers: any[] }, { dispatch }) => {
     const response = await Axios.post(summery.bulkAddCustomers.url, { customers })
+    dispatch(customerApi.util.invalidateTags(['Customer']));
     return response.data
   })
 )
