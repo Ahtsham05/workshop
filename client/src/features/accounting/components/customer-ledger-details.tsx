@@ -1262,6 +1262,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           unitPrice: item.unitPrice,
           subtotal: item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
           discountAmount: item.discountAmount,
+          imeis: item.imeis,
         })),
         customerId: invoice.customerId,
         customerName,

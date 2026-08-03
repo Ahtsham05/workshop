@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import {
   Smartphone, Search, ShieldCheck, ShieldAlert, PackageCheck, Wallet as WalletIcon,
-  TrendingUp, Trash2, ChevronRight, ScanLine, ListFilter, ShoppingBag, X,
+  TrendingUp, Trash2, ChevronRight, ScanLine, ListFilter, ShoppingBag, ShoppingCart, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -23,21 +27,67 @@ import {
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '@/features/mobile-shop/components/mobile-page-shell'
 import { StatCard } from '@/features/dashboard/components/stat-card'
+import { MobileReceiptOffer } from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { printPhoneSaleInvoice, type PhoneSaleInvoice } from '@/features/mobile-shop/utils/phone-sale-print'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { cn } from '@/lib/utils'
-import { formatBusinessDate } from '@/lib/business-timezone'
+import { formatBusinessDate, toBusinessDateTimeLocal, parseBusinessDateTimeLocal } from '@/lib/business-timezone'
 import {
+  buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue,
+} from '@/lib/wallet-payment-options'
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import { useGetAllCustomersQuery } from '@/stores/customer.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import {
+  useCreateUsedPhoneSaleMutation,
   useDeleteBuybackMutation,
   useGetBuybacksQuery,
   useGetUsedPhoneStatsQuery,
   useUpdateBuybackMutation,
   type PhoneBuybackRecord,
 } from '@/stores/usedPhoneBuyback.api'
+import type { RootState } from '@/stores/store'
 import { BuyUsedPhoneDialog } from './components/buy-used-phone-dialog'
 import {
   GRADE_OPTIONS, gradeBadgeClasses, ACCESSORY_OPTIONS, ptaBadgeConfig, statusBadgeConfig,
   CHECKLIST_FIELDS, fmtAmt, getImeiSummary, daysSince,
 } from './constants'
+
+interface CustomerOption {
+  id?: string
+  _id?: string
+  name: string
+  phone?: string
+}
+
+// Stable reference — an inline `[]` fallback would be a new array every render, retriggering
+// any effect/memo keyed on it even though the data hasn't changed.
+const EMPTY_CUSTOMERS: CustomerOption[] = []
+
+const SELL_BASE_PAYMENT_METHODS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank', label: 'Bank Transfer' },
+  { value: 'credit', label: 'Credit / Pay Later' },
+]
+
+type SellFormState = {
+  customerId: string
+  walkInName: string
+  salePrice: string
+  paymentMethod: string
+  saleDate: string
+  notes: string
+}
+
+const makeInitialSellForm = (): SellFormState => ({
+  customerId: '',
+  walkInName: '',
+  salePrice: '',
+  paymentMethod: 'cash',
+  saleDate: toBusinessDateTimeLocal(),
+  notes: '',
+})
 
 export default function OldPhonesPage() {
   const [buyDialogOpen, setBuyDialogOpen] = useState(false)
@@ -73,6 +123,89 @@ export default function OldPhonesPage() {
 
   const [updateBuyback, { isLoading: isUpdating }] = useUpdateBuybackMutation()
   const [deleteBuyback, { isLoading: isDeleting }] = useDeleteBuybackMutation()
+
+  // ── Sell ──
+  const [sellUnit, setSellUnit] = useState<PhoneBuybackRecord | null>(null)
+  const [sellForm, setSellForm] = useState<SellFormState>(makeInitialSellForm)
+  const setSellField = <K extends keyof SellFormState>(key: K, value: SellFormState[K]) =>
+    setSellForm((prev) => ({ ...prev, [key]: value }))
+
+  const customersData = useGetAllCustomersQuery({ includeEmployees: true }).data as CustomerOption[] | undefined
+  const customers = Array.isArray(customersData) ? customersData : EMPTY_CUSTOMERS
+  const customerOptions = useMemo(
+    () => customers.map((c) => ({ value: (c.id || c._id) as string, label: c.name, sublabel: c.phone })),
+    [customers],
+  )
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // Selling is money-in — don't show wallet balances (see buildMergedPaymentOptions docs).
+  const sellPaymentMethodOptions = buildMergedPaymentOptions(SELL_BASE_PAYMENT_METHODS, wallets, false)
+
+  const { data: org } = useGetMyOrganizationQuery()
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
+  const preferredLanguage = useSelector((s: RootState) => s.auth.data?.user?.preferredLanguage || 'en') as 'en' | 'ur'
+  // Holds the just-created sale Invoice so the post-sale banner can print the exact same
+  // professional invoice receipt (with IMEI numbers) every other invoice in the app uses.
+  const [savedInvoice, setSavedInvoice] = useState<PhoneSaleInvoice | null>(null)
+
+  const [createUsedPhoneSale, { isLoading: isSelling }] = useCreateUsedPhoneSaleMutation()
+
+  const openSell = (buyback: PhoneBuybackRecord) => {
+    const summary = getImeiSummary(buyback)
+    setSellUnit(buyback)
+    setSellForm({ ...makeInitialSellForm(), salePrice: String(summary?.askingPrice ?? buyback.askingPrice ?? buyback.agreedPrice ?? '') })
+  }
+
+  const handleSell = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!sellUnit) return
+    const salePrice = Number(sellForm.salePrice)
+    if (!(salePrice > 0)) { toast.error('Sale price must be greater than 0'); return }
+
+    const isWallet = isWalletOptionValue(sellForm.paymentMethod)
+    const isCredit = sellForm.paymentMethod === 'credit'
+    if (isWallet && !getWalletTypeFromOptionValue(sellForm.paymentMethod)) { toast.error('Select a wallet'); return }
+
+    const customer = customers.find((c) => (c.id || c._id) === sellForm.customerId)
+    const summary = getImeiSummary(sellUnit)
+    const deviceName = [sellUnit.brand, sellUnit.model].filter(Boolean).join(' ') || 'Used Phone'
+
+    try {
+      const created = await createUsedPhoneSale({
+        items: [{
+          productId: sellUnit.productId,
+          name: deviceName,
+          quantity: 1,
+          unitPrice: salePrice,
+          subtotal: salePrice,
+          imeis: [summary?.imei2 ? { imei: sellUnit.imei, imei2: summary.imei2 } : sellUnit.imei],
+        }],
+        customerId: customer ? (customer.id || customer._id) : 'walk-in',
+        customerName: customer?.name,
+        walkInCustomerName: customer ? undefined : (sellForm.walkInName.trim() || 'Walk-in Customer'),
+        type: isCredit ? 'credit' : 'cash',
+        subtotal: salePrice,
+        tax: 0,
+        discount: 0,
+        total: salePrice,
+        paidAmount: isCredit ? 0 : salePrice,
+        // 'credit' is a sale *type*, not a payment method — the backend's paymentMethod
+        // enum is cash/wallet/bank/card, so a credit sale (nothing paid yet) is recorded
+        // with the harmless 'cash' default rather than forwarding the raw 'credit' value.
+        paymentMethod: isWallet ? 'wallet' : (isCredit ? 'cash' : sellForm.paymentMethod),
+        walletType: isWallet ? getWalletTypeFromOptionValue(sellForm.paymentMethod) : undefined,
+        invoiceDate: sellForm.saleDate ? parseBusinessDateTimeLocal(sellForm.saleDate) : undefined,
+        notes: sellForm.notes.trim() || undefined,
+      }).unwrap()
+      toast.success('Phone sold')
+      setSavedInvoice(created)
+      setSellUnit(null)
+    } catch (err) {
+      const message = (err as { data?: { message?: string } })?.data?.message
+      toast.error(message || 'Failed to record sale')
+    }
+  }
 
   const openDetail = (buyback: PhoneBuybackRecord) => {
     setDetailBuyback(buyback)
@@ -117,6 +250,13 @@ export default function OldPhonesPage() {
       description='Buy old/used mobile phones from customers and walk-in sellers, grade their condition, and track them through to resale.'
       backTo={{ to: '/mobile-shop/used-phones', label: 'Mobile Phones' }}
     >
+      {savedInvoice && (
+        <MobileReceiptOffer
+          onPrint={() => printPhoneSaleInvoice(savedInvoice, org, branchData, preferredLanguage)}
+          onDismiss={() => setSavedInvoice(null)}
+        />
+      )}
+
       {/* ── Date range + Buy Phone ── */}
       <div className='flex flex-wrap items-center justify-between gap-3 mb-4'>
         <div className='flex flex-wrap items-center gap-2'>
@@ -188,11 +328,13 @@ export default function OldPhonesPage() {
                   const grade = summary?.condition?.grade
                   const pta = summary?.condition?.ptaStatus ?? 'unknown'
                   return (
-                    <button
+                    <div
                       key={b.id}
-                      type='button'
+                      role='button'
+                      tabIndex={0}
                       onClick={() => openDetail(b)}
-                      className='w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/30 active:bg-muted/50'
+                      onKeyDown={(e) => { if (e.key === 'Enter') openDetail(b) }}
+                      className='w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/30 active:bg-muted/50 cursor-pointer'
                     >
                       <div className='flex items-start justify-between gap-2'>
                         <div className='min-w-0'>
@@ -217,7 +359,12 @@ export default function OldPhonesPage() {
                           <div className='text-xs text-muted-foreground'>Ask {fmtAmt(summary?.askingPrice ?? b.askingPrice)}</div>
                         ) : null}
                       </div>
-                    </button>
+                      {status === 'in_stock' && (
+                        <Button size='sm' className='mt-2 w-full' onClick={(e) => { e.stopPropagation(); openSell(b) }}>
+                          <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
+                        </Button>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -271,9 +418,16 @@ export default function OldPhonesPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button size='icon' variant='ghost' className='h-8 w-8'>
-                            <ChevronRight className='h-4 w-4' />
-                          </Button>
+                          <div className='flex items-center gap-1.5'>
+                            {status === 'in_stock' && (
+                              <Button size='sm' onClick={(e) => { e.stopPropagation(); openSell(b) }}>
+                                <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
+                              </Button>
+                            )}
+                            <Button size='icon' variant='ghost' className='h-8 w-8'>
+                              <ChevronRight className='h-4 w-4' />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -297,6 +451,80 @@ export default function OldPhonesPage() {
 
       {/* ── Buy Phone Dialog ── */}
       <BuyUsedPhoneDialog open={buyDialogOpen} onOpenChange={setBuyDialogOpen} />
+
+      {/* ── Sell Dialog ── */}
+      <Dialog open={!!sellUnit} onOpenChange={(open) => !open && setSellUnit(null)}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2'>
+              <ShoppingCart className='h-5 w-5 text-primary' /> Sell Phone
+            </DialogTitle>
+          </DialogHeader>
+          {sellUnit && (
+            <form className='grid gap-4' onSubmit={handleSell}>
+              <div className='rounded-lg border bg-muted/30 p-3'>
+                <div className='font-medium'>{[sellUnit.brand, sellUnit.model].filter(Boolean).join(' ') || 'Used Phone'}</div>
+                <div className='text-xs text-muted-foreground font-mono flex items-center gap-1'>
+                  <ScanLine className='h-3 w-3' />
+                  {getImeiSummary(sellUnit)?.imei2 ? `${sellUnit.imei} · ${getImeiSummary(sellUnit)?.imei2}` : sellUnit.imei}
+                </div>
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Customer</Label>
+                <SearchableSelect
+                  options={customerOptions}
+                  value={sellForm.customerId}
+                  onValueChange={(v) => setSellField('customerId', v)}
+                  placeholder='Walk-in customer'
+                  searchPlaceholder='Search customers...'
+                  clearLabel='Walk-in customer'
+                  emptyText='No customers found'
+                />
+              </div>
+              {!sellForm.customerId && (
+                <div className='space-y-1'>
+                  <Label>Walk-in Customer Name</Label>
+                  <Input placeholder='e.g. Ahmad Khan' value={sellForm.walkInName} onChange={(e) => setSellField('walkInName', e.target.value)} />
+                </div>
+              )}
+
+              <div className='grid gap-3 sm:grid-cols-2'>
+                <div className='space-y-1'>
+                  <Label>Sale Price (Rs) *</Label>
+                  <Input type='number' min='0' step='1' value={sellForm.salePrice} onChange={(e) => setSellField('salePrice', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Payment Method</Label>
+                  <Select value={sellForm.paymentMethod} onValueChange={(v) => setSellField('paymentMethod', v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {sellPaymentMethodOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Date / Time</Label>
+                <Input type='datetime-local' value={sellForm.saleDate} onChange={(e) => setSellField('saleDate', e.target.value)} />
+              </div>
+
+              <div className='space-y-1'>
+                <Label>Notes</Label>
+                <Textarea rows={2} placeholder='Optional notes' value={sellForm.notes} onChange={(e) => setSellField('notes', e.target.value)} />
+              </div>
+
+              <DialogFooter>
+                <Button type='button' variant='outline' onClick={() => setSellUnit(null)}>Cancel</Button>
+                <Button type='submit' disabled={isSelling}>{isSelling ? 'Selling...' : 'Confirm Sale'}</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Detail Dialog ── */}
       <Dialog open={!!detailBuyback} onOpenChange={(open) => !open && setDetailBuyback(null)}>

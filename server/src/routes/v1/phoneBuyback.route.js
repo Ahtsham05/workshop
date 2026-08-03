@@ -5,6 +5,7 @@ const branchScope = require('../../middlewares/branchScope');
 const checkBusinessType = require('../../middlewares/checkBusinessType');
 const checkFeatureAccess = require('../../middlewares/checkFeatureAccess');
 const phoneBuybackValidation = require('../../validations/phoneBuyback.validation');
+const invoiceValidation = require('../../validations/invoice.validation');
 const phoneBuybackController = require('../../controllers/phoneBuyback.controller');
 const { upload } = require('../../middlewares/upload');
 
@@ -13,6 +14,11 @@ const router = express.Router();
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('used_phones'));
 
 router.get('/stats', auth('viewUsedPhones'), validate(phoneBuybackValidation.getStats), phoneBuybackController.getStats);
+
+// Thin, permission-scoped wrapper around the generic Invoice flow — see
+// phoneBuyback.service.js#createUsedPhoneSale for why this exists instead of calling
+// /invoices directly (sellUsedPhones would otherwise never be enforced).
+router.post('/sales', auth('sellUsedPhones'), validate(invoiceValidation.createInvoice), phoneBuybackController.createSale);
 
 router
   .route('/upload-image')

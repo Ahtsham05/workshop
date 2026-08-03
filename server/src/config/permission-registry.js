@@ -123,7 +123,7 @@ const PERMISSION_GROUPS = [
   {
     id: 'used_phones',
     label: 'Mobile Shop — Used Phones',
-    permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'deleteUsedPhones'],
+    permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'sellUsedPhones', 'deleteUsedPhones'],
   },
   {
     id: 'new_phones',

@@ -12,7 +12,7 @@ import {
   Wallet,
   Wrench,
   Signal,
-  RefreshCcw,
+  Banknote,
 } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useNavigate } from '@tanstack/react-router'
@@ -60,16 +60,16 @@ export function QuickActions() {
       color: 'bg-cyan-500 hover:bg-cyan-600',
     },
     {
-      icon: <RefreshCcw className='h-5 w-5' />,
-      label: t('Old Mobiles'),
-      onClick: () => navigate({ to: '/mobile-shop/used-phones/old-phones' }),
-      color: 'bg-rose-500 hover:bg-rose-600',
+      icon: <Smartphone className='h-5 w-5' />,
+      label: t('Mobile Phones'),
+      onClick: () => navigate({ to: '/mobile-shop/used-phones' }),
+      color: 'bg-indigo-500 hover:bg-indigo-600',
     },
     {
-      icon: <Smartphone className='h-5 w-5' />,
-      label: t('New Mobiles'),
-      onClick: () => navigate({ to: '/mobile-shop/used-phones/new-phones' }),
-      color: 'bg-indigo-500 hover:bg-indigo-600',
+      icon: <Banknote className='h-5 w-5' />,
+      label: t('Track Cash'),
+      onClick: () => navigate({ to: '/cash-register' }),
+      color: 'bg-rose-500 hover:bg-rose-600',
     },
   ]
 

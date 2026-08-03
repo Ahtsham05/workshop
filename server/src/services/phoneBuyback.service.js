@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const inventorySyncService = require('./inventorySync.service');
+const invoiceService = require('./invoice.service');
 const { matchesEitherImei } = require('./imei.service');
 
 const USED_PHONES_PRODUCT_NAME = 'Used Phones';
@@ -96,7 +97,12 @@ const getOrCreateUsedPhonesProduct = async ({ organizationId, branchId, createdB
 };
 
 const assertImeiAvailable = async ({ imei, imei2, organizationId, branchId }) => {
-  const numbers = [normalizeImei(imei), normalizeImei(imei2)].filter(Boolean);
+  const normalizedImei = normalizeImei(imei);
+  const normalizedImei2 = normalizeImei(imei2);
+  if (normalizedImei2 && normalizedImei2 === normalizedImei) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `IMEI and IMEI 2 cannot be the same number: ${normalizedImei}`);
+  }
+  const numbers = [normalizedImei, normalizedImei2].filter(Boolean);
   const duplicates = await Imei.find({
     organizationId,
     branchId,
@@ -459,6 +465,17 @@ const getUsedPhoneStats = async (organizationId, branchId, { dateFrom, dateTo } 
   };
 };
 
+/**
+ * Reselling a used phone is just the generic Invoice flow underneath — the unit is a
+ * regular Imei record (acquisitionType: 'buyback') under the shared "Used Phones" bucket
+ * product, and Invoice creation already knows how to match/sell an Imei by either IMEI
+ * slot. This wrapper exists purely so Old Phones has its own sellUsedPhones permission
+ * (mirrors newPhone.service.js#createNewPhoneSale) instead of silently riding on the
+ * generic createInvoices permission, which would let anyone with regular selling rights
+ * resell a used phone without an Old-Phones-specific grant.
+ */
+const createUsedPhoneSale = async (body, userId) => invoiceService.createInvoice(body, userId);
+
 module.exports = {
   getOrCreateUsedPhonesProduct,
   createBuyback,
@@ -467,4 +484,5 @@ module.exports = {
   updateBuyback,
   deleteBuyback,
   getUsedPhoneStats,
+  createUsedPhoneSale,
 };

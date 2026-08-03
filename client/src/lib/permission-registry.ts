@@ -21,7 +21,7 @@ export type PermissionKey =
   | 'viewBillPayments' | 'manageBillPayments'
   | 'viewInstallments' | 'manageInstallments'
   | 'viewImeiTracking' | 'manageImeiTracking'
-  | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'deleteUsedPhones'
+  | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'sellUsedPhones' | 'deleteUsedPhones'
   | 'viewNewPhones' | 'buyNewPhones' | 'editNewPhones' | 'sellNewPhones' | 'deleteNewPhones'
   | 'viewReports' | 'viewSalesReports' | 'viewPurchaseReports' | 'viewInventoryReports'
   | 'viewCustomerReports' | 'viewSupplierReports' | 'viewProductReports'
@@ -75,7 +75,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'services', label: 'Mobile Shop — Services', permissions: ['viewServices', 'manageServices'] },
   { id: 'bill_payments', label: 'Mobile Shop — Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
   { id: 'installments', label: 'Mobile Shop — Installments', permissions: ['viewInstallments', 'manageInstallments'] },
-  { id: 'used_phones', label: 'Mobile Shop — Used Phones', permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'deleteUsedPhones'] },
+  { id: 'used_phones', label: 'Mobile Shop — Used Phones', permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'sellUsedPhones', 'deleteUsedPhones'] },
   { id: 'new_phones', label: 'Mobile Shop — New Phones', permissions: ['viewNewPhones', 'buyNewPhones', 'editNewPhones', 'sellNewPhones', 'deleteNewPhones'] },
   {
     id: 'reports',

@@ -187,7 +187,19 @@ function PurchaseSerialEntryDialog({
   const commit = () => {
     const cleaned = draft.trim()
     const cleaned2 = draft2.trim()
-    if (!cleaned || imeis.some((e) => entryImei(e) === cleaned)) return
+    if (!cleaned) return
+    if (cleaned2 && cleaned2 === cleaned) {
+      toast.error(`${label} and ${label} 2 cannot be the same number`)
+      return
+    }
+    // Check both slots of every already-added entry — otherwise a phone entered as
+    // "112 / 12" lets a second unit reuse "12" as its own primary number undetected,
+    // and dual-SIM matching would then treat the two as the same unit everywhere.
+    const usedNumbers = new Set(imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
+    if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) {
+      toast.error(`This ${label.toLowerCase()} is already entered for another unit`)
+      return
+    }
     onAdd(cleaned, cleaned2 || undefined)
     setDraft('')
     setDraft2('')
@@ -451,13 +463,14 @@ export default function PurchasePanel({
   const addImeiToItem = useCallback((index: number, value: string, value2?: string) => {
     const cleaned = value.trim()
     const cleaned2 = value2?.trim()
-    if (!cleaned) return
+    if (!cleaned || (cleaned2 && cleaned2 === cleaned)) return
     setPurchase((prev) => ({
       ...prev,
       items: prev.items.map((item, i) => {
         if (i !== index) return item
         const existing = item.imeis || []
-        if (existing.some((e) => entryImei(e) === cleaned)) return item
+        const usedNumbers = new Set(existing.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
+        if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) return item
         return { ...item, imeis: [...existing, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned] }
       }),
     }))

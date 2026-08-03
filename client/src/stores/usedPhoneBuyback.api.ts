@@ -199,6 +199,13 @@ export const usedPhoneBuybackApi = createApi({
       invalidatesTags: ['PhoneBuyback'],
       onQueryStarted: invalidateDownstreamCaches,
     }),
+    // Same body shape as the generic /invoices endpoint this wraps (see invoice.api.ts) —
+    // left untyped there too, so matched here.
+    createUsedPhoneSale: builder.mutation({
+      query: (body) => ({ url: '/used-phones/sales', method: 'POST', body }),
+      invalidatesTags: ['PhoneBuyback'],
+      onQueryStarted: invalidateDownstreamCaches,
+    }),
   }),
 })
 
@@ -209,4 +216,5 @@ export const {
   useCreateBuybackMutation,
   useUpdateBuybackMutation,
   useDeleteBuybackMutation,
+  useCreateUsedPhoneSaleMutation,
 } = usedPhoneBuybackApi

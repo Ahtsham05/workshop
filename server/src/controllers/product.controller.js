@@ -4,7 +4,7 @@ const { productService } = require('../services');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
-const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 const productVisionService = require('../services/productVision.service');
 const { auditLogService } = require('../services');
@@ -61,6 +61,7 @@ const createProduct = catchAsync(async (req, res) => {
   }
   
   try {
+    await resolveWriteBranchId(req);
     const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id, businessType: req.user.businessType });
     await auditLogService.recordAuditLog({
       req,

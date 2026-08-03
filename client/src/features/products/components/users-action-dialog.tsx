@@ -1233,7 +1233,20 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     const addImei = () => {
                       const cleaned = imeiDraft.trim()
                       const cleaned2 = imei2Draft.trim()
-                      if (!cleaned || imeis.some((e) => entryImei(e) === cleaned)) return
+                      if (!cleaned) return
+                      if (cleaned2 && cleaned2 === cleaned) {
+                        toast.error(`IMEI and IMEI 2 cannot be the same number`)
+                        return
+                      }
+                      // Check both slots of every existing entry, not just its primary
+                      // number — otherwise "112 / 12" already entered lets a second phone
+                      // reuse "12" as its own primary IMEI undetected (they'd then be
+                      // treated as the same dual-SIM unit everywhere).
+                      const usedNumbers = new Set(imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
+                      if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) {
+                        toast.error(`This ${label} is already entered for another phone`)
+                        return
+                      }
                       field.onChange([...imeis, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned])
                       setImeiDraft('')
                       setImei2Draft('')

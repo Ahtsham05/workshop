@@ -106,6 +106,27 @@ const syncImeisForPurchaseItem = async ({
   session,
 }) => {
   const entries = imeis.map(normalizeImeiEntry).filter((e) => e.imei);
+
+  // Every number across this batch — a phone's own imei/imei2, and every other phone's —
+  // must be pairwise distinct. Without this, entering the same number twice (e.g. as one
+  // phone's imei2 and another phone's imei) goes undetected here, since the only other
+  // check below compares against already-committed DB records — nothing catches a
+  // collision between two entries submitted together in the same batch. Left unguarded,
+  // dual-SIM matching (matchesEitherImei) then treats the two different phones as the
+  // same unit, so selling one silently marks the other sold too.
+  const seenInBatch = new Set();
+  for (const entry of entries) {
+    if (entry.imei2 && entry.imei2 === entry.imei) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `IMEI and IMEI 2 cannot be the same number: ${entry.imei}`);
+    }
+    for (const num of [entry.imei, entry.imei2].filter(Boolean)) {
+      if (seenInBatch.has(num)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `The same IMEI was entered for two different phones: ${num}`);
+      }
+      seenInBatch.add(num);
+    }
+  }
+
   const wantedNumbers = [...new Set(entries.map((e) => e.imei))];
   const entryByImei = new Map(entries.map((e) => [e.imei, e]));
 

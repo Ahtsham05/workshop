@@ -2,12 +2,13 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { supplierService } = require('../services');
 const pick = require('../utils/pick');
-const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary } = require('../middlewares/upload');
 const supplierVisionService = require('../services/supplierVision.service');
 
 const createSupplier = catchAsync(async (req, res) => {
+  await resolveWriteBranchId(req);
   const supplier = await supplierService.createSupplier({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(supplier);
 });

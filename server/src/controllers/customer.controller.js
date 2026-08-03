@@ -3,12 +3,13 @@ const catchAsync = require('../utils/catchAsync');
 const { customerService } = require('../services');
 const pick = require('../utils/pick');
 const { Sale, Transaction } = require('../models');
-const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary } = require('../middlewares/upload');
 const customerVisionService = require('../services/customerVision.service');
 
 const createCustomer = catchAsync(async (req, res) => {
+  await resolveWriteBranchId(req);
   const customer = await customerService.createCustomer({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(customer);
 });

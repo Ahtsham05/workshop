@@ -27,11 +27,11 @@ import {
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '@/features/mobile-shop/components/mobile-page-shell'
 import { StatCard } from '@/features/dashboard/components/stat-card'
-import { MobileReceiptOffer, type MobileReceiptData } from '@/features/mobile-shop/components/mobile-shop-receipt'
-import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
+import { MobileReceiptOffer } from '@/features/mobile-shop/components/mobile-shop-receipt'
+import { printPhoneSaleInvoice, type PhoneSaleInvoice } from '@/features/mobile-shop/utils/phone-sale-print'
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import { toBusinessDateTimeLocal, parseBusinessDateTimeLocal, formatBusinessDate } from '@/lib/business-timezone'
+import { toBusinessDateTimeLocal, parseBusinessDateTimeLocal } from '@/lib/business-timezone'
 import {
   buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue,
 } from '@/lib/wallet-payment-options'
@@ -131,7 +131,12 @@ export default function NewPhonesPage() {
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
-  const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
+  const preferredLanguage = useSelector((s: RootState) => s.auth.data?.user?.preferredLanguage || 'en') as 'en' | 'ur'
+  // Holds the just-created sale Invoice so the post-sale banner can print the exact same
+  // professional invoice receipt (with IMEI numbers) used everywhere else in the app,
+  // instead of a bespoke mini-receipt — matches how selling an Old Phone (via the main
+  // Invoice screen) already prints.
+  const [savedInvoice, setSavedInvoice] = useState<PhoneSaleInvoice | null>(null)
 
   // ── Inventory ──
   const phoneProductIds = useMemo(
@@ -198,18 +203,16 @@ export default function NewPhonesPage() {
     if (isWallet && !getWalletTypeFromOptionValue(sellForm.paymentMethod)) { toast.error('Select a wallet'); return }
 
     const customer = customers.find((c) => (c.id || c._id) === sellForm.customerId)
-    const customerName = customer?.name || sellForm.walkInName.trim() || 'Walk-in Customer'
-    const deviceLabel = [sellUnit.productName, sellUnit.imei].filter(Boolean).join(' — ')
 
     try {
-      await createNewPhoneSale({
+      const created = await createNewPhoneSale({
         items: [{
           productId: sellUnit.productId,
           name: sellUnit.productName || 'Phone',
           quantity: 1,
           unitPrice: salePrice,
           subtotal: salePrice,
-          imeis: [sellUnit.imei],
+          imeis: [sellUnit.imei2 ? { imei: sellUnit.imei, imei2: sellUnit.imei2 } : sellUnit.imei],
         }],
         customerId: customer ? (customer.id || customer._id) : 'walk-in',
         customerName: customer?.name,
@@ -220,24 +223,16 @@ export default function NewPhonesPage() {
         discount: 0,
         total: salePrice,
         paidAmount: isCredit ? 0 : salePrice,
-        paymentMethod: isWallet ? 'wallet' : sellForm.paymentMethod,
+        // 'credit' is a sale *type*, not a payment method — the backend's paymentMethod
+        // enum is cash/wallet/bank/card, so a credit sale (nothing paid yet) is recorded
+        // with the harmless 'cash' default rather than forwarding the raw 'credit' value.
+        paymentMethod: isWallet ? 'wallet' : (isCredit ? 'cash' : sellForm.paymentMethod),
         walletType: isWallet ? getWalletTypeFromOptionValue(sellForm.paymentMethod) : undefined,
         invoiceDate: sellForm.saleDate ? parseBusinessDateTimeLocal(sellForm.saleDate) : undefined,
         notes: sellForm.notes.trim() || undefined,
       }).unwrap()
       toast.success('Phone sold')
-      setSavedReceipt({
-        title: 'Phone sale',
-        subtitle: deviceLabel,
-        issuedAt: formatBusinessDate(sellForm.saleDate || new Date().toISOString()),
-        lines: [
-          { label: 'Customer', value: customerName },
-          { label: 'Device', value: deviceLabel },
-          { label: 'Sale price', value: fmtAmt(salePrice) },
-          { label: 'Payment', value: isWallet ? `Wallet (${getWalletTypeFromOptionValue(sellForm.paymentMethod)})` : sellForm.paymentMethod },
-          ...(isCredit ? [{ label: 'Status', value: 'Credit — pay later' }] : []),
-        ],
-      })
+      setSavedInvoice(created)
       setSellUnit(null)
       refetchStats()
     } catch (err) {
@@ -265,10 +260,10 @@ export default function NewPhonesPage() {
       description='Stock and sell brand-new mobile phones — supplier purchases, customer sales, and inventory tracking.'
       backTo={{ to: '/mobile-shop/used-phones', label: 'Mobile Phones' }}
     >
-      {savedReceipt && (
+      {savedInvoice && (
         <MobileReceiptOffer
-          onPrint={() => printMobileShopReceipt(savedReceipt, org, branchData?.invoiceNote)}
-          onDismiss={() => setSavedReceipt(null)}
+          onPrint={() => printPhoneSaleInvoice(savedInvoice, org, branchData, preferredLanguage)}
+          onDismiss={() => setSavedInvoice(null)}
         />
       )}
 

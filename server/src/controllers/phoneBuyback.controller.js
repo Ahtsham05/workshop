@@ -46,6 +46,11 @@ const getStats = catchAsync(async (req, res) => {
   res.send(stats);
 });
 
+const createSale = catchAsync(async (req, res) => {
+  const invoice = await phoneBuybackService.createUsedPhoneSale({ ...req.body, ...getBranchContext(req) }, req.user.id);
+  res.status(httpStatus.CREATED).send(invoice);
+});
+
 // Used for both seller ID-card photos and device condition photos — a plain
 // Cloudinary upload with no side effects on any record (mirrors
 // customer.controller.js's uploadCustomerImage).
@@ -76,5 +81,6 @@ module.exports = {
   updateBuyback,
   deleteBuyback,
   getStats,
+  createSale,
   uploadBuybackImage,
 };
