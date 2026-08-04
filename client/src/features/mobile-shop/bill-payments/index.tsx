@@ -215,6 +215,22 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
   overdue: 'destructive',
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  bank: 'Bank Transfer',
+  jazzcash: 'JazzCash',
+  easypaisa: 'EasyPaisa',
+}
+
+/** How the shop actually settled a paid bill with the utility company — falls back to
+ * the collection method/wallet for bills paid before payoutPaymentMethod existed. */
+function formatBillPayoutMethod(bill: BillPaymentRecord): string {
+  const method = bill.payoutPaymentMethod || bill.paymentMethod
+  const walletType = bill.payoutWalletType || bill.walletType
+  if (method === 'wallet' && walletType) return walletType
+  return PAYMENT_METHOD_LABELS[method] || method
+}
+
 // ─── Overall Summary Cards ────────────────────────────────────────────────────
 
 interface OverallReportCardsProps {
@@ -417,9 +433,23 @@ interface MarkPaidDialogProps {
 function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
   const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [actualBillAmount, setActualBillAmount] = useState('')
+  const [payoutMethodOption, setPayoutMethodOption] = useState('cash')
   const [updateBill, { isLoading }] = useUpdateBillPaymentMutation()
   const [lookupOlderBills] = useLazyGetBillPaymentsQuery()
   const [olderUnpaid, setOlderUnpaid] = useState<BillPaymentRecord[]>([])
+
+  const { data: walletsData } = useGetWalletsQuery()
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // Settling a bill is money-out (paying the utility company) — show wallet balances
+  // so the cashier can see which one actually has enough to cover it.
+  const payoutMethodOptions = buildMergedPaymentOptions(
+    [
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank', label: 'Bank Transfer' },
+    ],
+    wallets,
+    true,
+  )
 
   useEffect(() => {
     if (bill) {
@@ -427,6 +457,14 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
       // Default to the cashier's own earlier estimate (entered while this bill was
       // still pending/overdue) instead of the original bill amount, if one exists.
       setActualBillAmount(String(bill.expectedLateAmount ?? bill.billAmount))
+      // Default the payout to whatever method/wallet already exists on this bill —
+      // either a previously recorded payout, or (most commonly) the same
+      // cash/wallet the customer's payment was collected into.
+      const existingMethod = bill.payoutPaymentMethod || bill.paymentMethod
+      const existingWallet = bill.payoutWalletType || bill.walletType
+      setPayoutMethodOption(
+        existingMethod === 'wallet' && existingWallet ? toWalletOptionValue(existingWallet) : existingMethod,
+      )
       // Paying this bill auto-settles any older unpaid bill on the same Ref # too —
       // surface that here so the cashier isn't surprised by it.
       lookupOlderBills({ search: bill.referenceNumber, limit: 10 }).unwrap()
@@ -464,11 +502,14 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
       return
     }
     try {
+      const payoutIsWallet = isWalletOptionValue(payoutMethodOption)
       await updateBill({
         id: bill.id,
         body: {
           status: 'paid',
           paymentMethod: bill.paymentMethod,
+          payoutPaymentMethod: payoutIsWallet ? 'wallet' : (payoutMethodOption as BillPaymentRecord['paymentMethod']),
+          payoutWalletType: payoutIsWallet ? getWalletTypeFromOptionValue(payoutMethodOption) : '',
           paymentDate,
           ...(isLate ? { actualBillAmount: parsedActualBillAmount } : {}),
         },
@@ -553,9 +594,25 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
               </div>
             )}
 
-            <div>
-              <Label>Payment Date</Label>
-              <Input type='date' value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+            <div className='grid grid-cols-2 gap-4'>
+              <div>
+                <Label>Payment Date</Label>
+                <Input type='date' value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Paid Via</Label>
+                <Select value={payoutMethodOption} onValueChange={setPayoutMethodOption}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {payoutMethodOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className='text-xs text-muted-foreground mt-1'>Which cash/wallet you're paying {bill.companyName} from</p>
+              </div>
             </div>
           </div>
         )}
@@ -1082,6 +1139,7 @@ export default function BillPaymentsPage() {
                         <TableHead>Collection Date</TableHead>
                         <TableHead>Due Date</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Paid Via</TableHead>
                         <TableHead className='text-right'>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1128,6 +1186,9 @@ export default function BillPaymentsPage() {
                             <Badge variant={STATUS_VARIANT[bill.status] ?? 'secondary'}>
                               {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
                             </Badge>
+                          </TableCell>
+                          <TableCell className='text-xs text-muted-foreground'>
+                            {bill.status === 'paid' ? formatBillPayoutMethod(bill) : '—'}
                           </TableCell>
                           <TableCell className='text-right space-x-1'>
                             {/* Mark as Paid — only for pending/overdue */}

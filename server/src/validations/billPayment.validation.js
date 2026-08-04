@@ -63,6 +63,8 @@ const updateBillPayment = {
       status: Joi.string().valid('pending', 'paid', 'overdue'),
       paymentMethod: Joi.string().valid(...PAYMENT_METHODS),
       walletType: Joi.string().allow(''),
+      payoutPaymentMethod: Joi.string().valid(...PAYMENT_METHODS),
+      payoutWalletType: Joi.string().allow(''),
       notes: Joi.string().allow(''),
     })
     .min(1),

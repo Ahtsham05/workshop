@@ -135,7 +135,7 @@ export default function AccountingPage() {
           {canWallet && (
             <TabsTrigger value="wallet" className="flex items-center gap-2">
               <Wallet className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('My Account')}</span>
+              <span className="hidden sm:inline">{t('My Personal Account')}</span>
             </TabsTrigger>
           )}
         </TabsList>

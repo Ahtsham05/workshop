@@ -669,7 +669,7 @@ function LoadManagementPage({
   const filteredWalletTransfers = useMemo(() => {
     if (!withdrawalSearch.trim()) return walletTransfers
     const lower = withdrawalSearch.toLowerCase()
-    return walletTransfers.filter((t) => 'my account'.includes(lower) || t.walletType.toLowerCase().includes(lower))
+    return walletTransfers.filter((t) => 'my personal account'.includes(lower) || t.walletType.toLowerCase().includes(lower))
   }, [walletTransfers, withdrawalSearch])
 
   // "My Account" transfers merged in date-order alongside customer cash withdrawals, so
@@ -2540,7 +2540,7 @@ function LoadManagementPage({
                     <SearchableSelect
                       options={[
                         { value: '', label: 'Walk-in Customer' },
-                        { value: MY_ACCOUNT_CUSTOMER_ID, label: 'My Account', sublabel: 'Wallet transfer — no cash book impact', badge: 'Internal' },
+                        { value: MY_ACCOUNT_CUSTOMER_ID, label: 'My Personal Account', sublabel: 'Wallet transfer — no cash book impact', badge: 'Internal' },
                         ...customers.map((c: any) => ({
                           value: c.id || c._id,
                           label: c.name,
@@ -2557,7 +2557,7 @@ function LoadManagementPage({
                     />
                     <p className='text-xs text-muted-foreground'>
                       {isMyAccountSelected
-                        ? 'Moves money between this wallet and your own My Account ledger — not a customer transaction.'
+                        ? 'Moves money between this wallet and your own My Personal Account ledger — not a customer transaction.'
                         : 'If selected, paid/received and remaining amounts will be tracked in customer ledger.'}
                     </p>
                   </div>
@@ -2816,8 +2816,8 @@ function LoadManagementPage({
                                 </span>
                               </TableCell>
                               <TableCell className='font-medium'>{t.walletType}</TableCell>
-                              <TableCell>My Account</TableCell>
-                              <TableCell>My Account</TableCell>
+                              <TableCell>My Personal Account</TableCell>
+                              <TableCell>My Personal Account</TableCell>
                               <TableCell>—</TableCell>
                               <TableCell className={isReceive ? 'text-green-600' : 'text-red-600'}>
                                 {isReceive ? '+' : '-'} Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
@@ -2941,7 +2941,7 @@ function LoadManagementPage({
             <AlertDialogDescription>
               This will permanently delete this {deleteConfirm?.type === 'purchase' ? 'purchase' : deleteConfirm?.type === 'transaction' ? 'sale' : deleteConfirm?.type === 'transfer' ? 'transfer' : 'cash transaction'} record.{' '}
               {deleteConfirm?.type === 'transfer'
-                ? 'Wallet balance and your My Account ledger will be reversed.'
+                ? 'Wallet balance and your My Personal Account ledger will be reversed.'
                 : 'Wallet balance and cash book entries will be reversed.'}{' '}
               This action cannot be undone.
             </AlertDialogDescription>

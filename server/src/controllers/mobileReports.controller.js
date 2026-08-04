@@ -540,8 +540,8 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     } else if (entry.referenceModel === 'SupplierLedger') {
       title = entry.type === 'out' ? 'Supplier Wallet Payment' : 'Supplier Wallet Receipt';
     } else if (entry.referenceModel === 'WalletTransfer') {
-      title = entry.type === 'in' ? 'Transfer from My Account' : 'Transfer to My Account';
-      customerName = 'My Account';
+      title = entry.type === 'in' ? 'Transfer from My Personal Account' : 'Transfer to My Personal Account';
+      customerName = 'My Personal Account';
     }
 
     ensureBucket(dateKey).push({

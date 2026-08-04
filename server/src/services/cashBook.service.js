@@ -61,6 +61,19 @@ const deleteEntriesByReference = async (referenceId, referenceModel) => {
   return CashBookEntry.deleteMany({ referenceId: id, referenceModel });
 };
 
+/** Delete just one leg (type 'income' or 'expense') of a reference's cash book entries —
+ * for sources like BillPayment whose two legs can independently move to/from a wallet
+ * (which carries no CashBookEntry at all) without affecting the other leg. */
+const deleteEntryByReferenceAndType = async (referenceId, referenceModel, type, source) => {
+  if (!referenceId || !referenceModel) {
+    return { deletedCount: 0 };
+  }
+  const id = mongoose.Types.ObjectId.isValid(String(referenceId))
+    ? new mongoose.Types.ObjectId(String(referenceId))
+    : referenceId;
+  return CashBookEntry.deleteMany({ referenceId: id, referenceModel, type, ...(source ? { source } : {}) });
+};
+
 const deleteEmployeeLedgerPaymentCashBook = async (entry, employeeName = '') => {
   if (!entry) return 0;
 
@@ -276,7 +289,7 @@ const CASH_MODULE_LABELS = {
   PurchaseReturn: 'Purchase Returns',
   PhoneBuyback: 'Used Phones',
   Expense: 'Expenses',
-  PersonalLedger: 'My Accounts',
+  PersonalLedger: 'My Personal Accounts',
   BillPayment: 'Bill Payments',
   InstallmentPlan: 'Installments',
   InstallmentPayment: 'Installments',
@@ -379,6 +392,7 @@ module.exports = {
   createEntry,
   upsertReferenceEntry,
   deleteEntriesByReference,
+  deleteEntryByReferenceAndType,
   deleteEmployeeLedgerPaymentCashBook,
   queryEntries,
   getSummary,

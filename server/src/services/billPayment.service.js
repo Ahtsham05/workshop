@@ -93,64 +93,70 @@ const applyBillPaymentFinancials = (billPayment) => {
 const computeBillUtilityAmount = (billPayment) =>
   billPayment.status === 'paid' ? Number(billPayment.actualBillAmount || billPayment.billAmount || 0) : 0;
 
+/** How the shop settled with the utility (the payout leg) — falls back to the
+ * collection method/wallet when no payout was explicitly recorded (bills paid before
+ * payoutPaymentMethod existed, or left as the default "same as collection"). */
+const resolvePayoutMethod = (billPayment) => ({
+  method: billPayment.payoutPaymentMethod || billPayment.paymentMethod,
+  walletType: billPayment.payoutWalletType || billPayment.walletType,
+});
+
 const syncBillCashEntry = async (billPayment, previous = null) => {
-  const isWalletPayment = billPayment.paymentMethod === 'wallet' && billPayment.walletType;
+  const isCollectionWallet = billPayment.paymentMethod === 'wallet' && billPayment.walletType;
+  const payout = resolvePayoutMethod(billPayment);
+  const isPayoutWallet = payout.method === 'wallet' && payout.walletType;
   const utilityAmount = computeBillUtilityAmount(billPayment);
 
   const commonFields = {
     organizationId: billPayment.organizationId,
     branchId: billPayment.branchId,
     source: 'bill_payment',
-    paymentMethod: billPayment.paymentMethod,
     referenceId: billPayment._id,
     referenceModel: 'BillPayment',
     createdBy: billPayment.createdBy,
   };
 
-  if (isWalletPayment) {
-    await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
-  } else {
-    // INCOME: total collected from customer (bill amount + service charge)
-    // Created as soon as bill is recorded — customer pays at the counter immediately
-    const incomeEntry = cashBookService.upsertReferenceEntry({
-      ...commonFields,
-      type: 'income',
-      amount: billPayment.totalReceived,
-      date: billPayment.createdAt,
-      description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
-    });
-
-    // EXPENSE: bill amount paid to utility company — only when bill is actually paid.
-    // CashBook entries aren't leg-scoped, so reverting from paid means wiping both
-    // entries first, then re-creating just the income leg.
-    if (utilityAmount > 0) {
-      const lateSuffix = billPayment.paidAfterDueDate && billPayment.latePaymentLoss > 0
-        ? ' (includes late payment surcharge)'
-        : '';
-      await Promise.all([
-        incomeEntry,
-        cashBookService.upsertReferenceEntry({
-          ...commonFields,
-          type: 'expense',
-          amount: utilityAmount,
-          date: billPayment.paymentDate || billPayment.createdAt,
-          description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})${lateSuffix}`,
-        }),
-      ]);
-    } else {
-      await incomeEntry;
-      await cashBookService.deleteEntriesByReference(billPayment._id, 'BillPayment');
-      await cashBookService.upsertReferenceEntry({
+  // INCOME leg: total collected from customer (bill amount + service charge) — created
+  // as soon as the bill is recorded. Cash book only tracks it when collected in
+  // cash/bank; a wallet collection is tracked in the wallet ledger below instead.
+  const incomeEntry = isCollectionWallet
+    ? cashBookService.deleteEntryByReferenceAndType(billPayment._id, 'BillPayment', 'income', 'bill_payment')
+    : cashBookService.upsertReferenceEntry({
         ...commonFields,
         type: 'income',
+        paymentMethod: billPayment.paymentMethod,
         amount: billPayment.totalReceived,
         date: billPayment.createdAt,
         description: `Bill collection: ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
       });
-    }
-  }
 
-  // Wallet ledger: both legs share the same wallet (paymentMethod/walletType).
+  // EXPENSE leg: bill amount actually paid out to the utility company — only once the
+  // bill is paid, and independently of the income leg since the payout can be settled
+  // via a different cash/wallet than however the customer originally paid.
+  const lateSuffix = billPayment.paidAfterDueDate && billPayment.latePaymentLoss > 0
+    ? ' (includes late payment surcharge)'
+    : '';
+  const expenseEntry = utilityAmount > 0 && !isPayoutWallet
+    ? cashBookService.upsertReferenceEntry({
+        ...commonFields,
+        type: 'expense',
+        paymentMethod: payout.method,
+        amount: utilityAmount,
+        date: billPayment.paymentDate || billPayment.createdAt,
+        description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})${lateSuffix}`,
+      })
+    : cashBookService.deleteEntryByReferenceAndType(billPayment._id, 'BillPayment', 'expense', 'bill_payment');
+
+  await Promise.all([incomeEntry, expenseEntry]);
+
+  const previousPayout = previous
+    ? {
+        method: previous.payoutPaymentMethod || previous.paymentMethod,
+        walletType: previous.payoutWalletType || previous.walletType,
+      }
+    : null;
+
+  // Wallet ledger: the two legs independently reflect their own method/wallet.
   await walletEntryService.syncWalletPayment({
     organizationId: billPayment.organizationId,
     branchId: billPayment.branchId,
@@ -176,10 +182,10 @@ const syncBillCashEntry = async (billPayment, previous = null) => {
     referenceModel: 'BillPayment',
     direction: 'out',
     amount: utilityAmount,
-    paymentMethod: billPayment.paymentMethod,
-    walletType: billPayment.walletType,
-    previousPaymentMethod: previous?.paymentMethod,
-    previousWalletType: previous?.walletType,
+    paymentMethod: payout.method,
+    walletType: payout.walletType,
+    previousPaymentMethod: previousPayout?.method,
+    previousWalletType: previousPayout?.walletType,
     previousAmount: previous?.utilityAmount,
     description: `Bill paid to ${billPayment.companyName} – Ref# ${billPayment.referenceNumber} (${billPayment.customerName})`,
     date: billPayment.paymentDate || billPayment.createdAt,
@@ -383,6 +389,8 @@ const cascadeSettlePreviousBills = async (billPayment, userId) => {
     const previous = {
       paymentMethod: old.paymentMethod,
       walletType: old.walletType,
+      payoutPaymentMethod: old.payoutPaymentMethod,
+      payoutWalletType: old.payoutWalletType,
       totalReceived: old.totalReceived,
       utilityAmount: computeBillUtilityAmount(old),
     };
@@ -390,6 +398,12 @@ const cascadeSettlePreviousBills = async (billPayment, userId) => {
     old.paymentDate = billPayment.paymentDate;
     old.actualBillAmount = old.expectedLateAmount ?? old.billAmount;
     old.updatedBy = userId;
+    // Settling the new bill also settles these older ones as part of the very same
+    // real-world payment to the utility — carry over the same payout method/wallet
+    // instead of leaving each older bill defaulting to its own (possibly different)
+    // original collection method.
+    old.payoutPaymentMethod = billPayment.payoutPaymentMethod || billPayment.paymentMethod;
+    old.payoutWalletType = billPayment.payoutWalletType || billPayment.walletType;
     applyBillPaymentFinancials(old);
     await old.save();
     await syncBillCashEntry(old, previous);
@@ -401,6 +415,8 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
   const previous = {
     paymentMethod: billPayment.paymentMethod,
     walletType: billPayment.walletType,
+    payoutPaymentMethod: billPayment.payoutPaymentMethod,
+    payoutWalletType: billPayment.payoutWalletType,
     totalReceived: billPayment.totalReceived,
     utilityAmount: computeBillUtilityAmount(billPayment),
   };
@@ -461,6 +477,7 @@ const deleteBillPaymentById = async (id) => {
     walletType: billPayment.walletType,
     userId,
   });
+  const payout = resolvePayoutMethod(billPayment);
   await walletEntryService.reverseWalletPayment({
     organizationId: billPayment.organizationId,
     branchId: billPayment.branchId,
@@ -468,8 +485,8 @@ const deleteBillPaymentById = async (id) => {
     referenceModel: 'BillPayment',
     direction: 'out',
     amount: computeBillUtilityAmount(billPayment),
-    paymentMethod: billPayment.paymentMethod,
-    walletType: billPayment.walletType,
+    paymentMethod: payout.method,
+    walletType: payout.walletType,
     userId,
   });
   await billPayment.deleteOne();

@@ -291,6 +291,11 @@ export interface BillPaymentRecord {
   status: 'pending' | 'paid' | 'overdue'
   paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
+  // How the shop paid the utility company at settlement — independent from
+  // paymentMethod/walletType above (how the customer paid at collection). Unset for
+  // bills paid before this field existed, or when it matches the collection method.
+  payoutPaymentMethod?: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  payoutWalletType?: string
   notes?: string
   createdAt?: string
 }
@@ -311,6 +316,8 @@ export interface CreateBillPaymentInput {
   expectedLateAmount?: number
   paymentMethod: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
   walletType?: string
+  payoutPaymentMethod?: 'cash' | 'bank' | 'wallet' | 'jazzcash' | 'easypaisa'
+  payoutWalletType?: string
   notes?: string
 }
 

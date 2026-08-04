@@ -1054,6 +1054,9 @@ export interface DailySalesSummaryModule {
    *  Mobiles are phone sales that are also part of Products) — shown for context only,
    *  and excluded from totalSales/totalProfit to avoid double-counting. */
   includedIn?: string
+  /** Set on modules that are cash OUT (Purchases, Expenses) rather than revenue — kept
+   *  out of totalSales/totalProfit and shown in a separate "Money Out" section. */
+  moneyOut?: boolean
   /** Line-item breakdown (which product/service/customer) for the "Details" cards. */
   items: DailySalesSummaryItem[]
 }
@@ -1062,6 +1065,17 @@ export interface DailySalesSummaryReport {
   modules: DailySalesSummaryModule[]
   totalSales: number
   totalProfit: number
+  /** Purchases paid + expenses paid in the period — the money-out counterpart to totalSales. */
+  totalMoneyOut: number
+  /** Same figures as the Cash Book / Accounting page for this exact date range — the
+   *  real org-wide, cash-only ledger (every module, not just this report's), so "Cash
+   *  In Hand" always means the same number everywhere in the app. */
+  cashInHand: {
+    opening: number
+    totalIn: number
+    totalOut: number
+    closing: number
+  }
   period: { startDate: string; endDate: string }
 }
 

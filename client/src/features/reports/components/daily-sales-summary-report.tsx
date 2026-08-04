@@ -15,6 +15,10 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   TrendingUp,
+  TrendingDown,
+  Truck,
+  Wallet,
+  Landmark,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -38,8 +42,11 @@ const MODULE_STYLE: Record<string, { icon: ComponentType<{ className?: string }>
   services: { icon: Briefcase, tone: 'emerald' },
   billPayments: { icon: Receipt, tone: 'amber' },
   installments: { icon: CreditCard, tone: 'rose' },
-  cashSent: { icon: ArrowUpRight, tone: 'sky' },
-  cashReceived: { icon: ArrowDownLeft, tone: 'emerald' },
+  cashSent: { icon: ArrowUpRight, tone: 'emerald' },
+  cashReceived: { icon: ArrowDownLeft, tone: 'rose' },
+  purchases: { icon: Truck, tone: 'rose' },
+  expenses: { icon: Wallet, tone: 'rose' },
+  loadPurchase: { icon: Truck, tone: 'rose' },
 }
 
 const fmt = (v: number) => `Rs ${Math.round(v || 0).toLocaleString('en-PK')}`
@@ -57,7 +64,9 @@ function SummaryRow({ module: m }: { module: DailySalesSummaryModule }) {
         {m.count != null && <span className='shrink-0 text-xs text-muted-foreground'>({m.count})</span>}
       </div>
       <div className='shrink-0 text-right'>
-        <div className='text-sm font-semibold tabular-nums'>{fmt(m.amount)}</div>
+        <div className={cn('text-sm font-semibold tabular-nums', m.moneyOut && 'text-rose-600 dark:text-rose-400')}>
+          {m.moneyOut ? '− ' : ''}{fmt(m.amount)}
+        </div>
       </div>
     </div>
   )
@@ -128,6 +137,11 @@ export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void },
             Note: m.includedIn ? `Included in ${m.includedIn}` : '',
           })),
           { Module: 'TOTAL SALES', Amount: data.totalSales, Count: '', Profit: data.totalProfit, Note: '' },
+          { Module: 'TOTAL MONEY OUT', Amount: -data.totalMoneyOut, Count: '', Profit: '', Note: 'Purchases + Expenses paid' },
+          { Module: 'CASH IN HAND — Opening Balance', Amount: data.cashInHand.opening, Count: '', Profit: '', Note: '' },
+          { Module: 'CASH IN HAND — Total Income', Amount: data.cashInHand.totalIn, Count: '', Profit: '', Note: '' },
+          { Module: 'CASH IN HAND — Total Expense', Amount: -data.cashInHand.totalOut, Count: '', Profit: '', Note: '' },
+          { Module: 'CASH IN HAND — Closing', Amount: data.cashInHand.closing, Count: '', Profit: '', Note: '' },
         ])
         XLSX.utils.book_append_sheet(wb, sheet, 'Daily Summary')
 
@@ -162,12 +176,29 @@ export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void },
     }
 
     const modules = data?.modules ?? []
-    const primaryModules = modules.filter((m) => !m.includedIn)
-    const subModules = modules.filter((m) => m.includedIn)
+    // Hide rows with nothing to show — a zero-amount module is just noise on a report
+    // meant to be screenshotted and shared as-is.
+    const primaryModules = modules.filter((m) => !m.includedIn && !m.moneyOut && m.amount !== 0)
+    const subModules = modules.filter((m) => m.includedIn && m.amount !== 0)
+    const moneyOutModules = modules.filter((m) => m.moneyOut && m.amount !== 0)
+    const cashInHand = data?.cashInHand
     const sameDay = startDate === endDate
 
     return (
       <div className='space-y-6'>
+        {modules.some((m) => m.items.length > 0) && (
+          <div className='space-y-3'>
+            <h3 className='text-sm font-semibold text-muted-foreground'>Details — who bought what</h3>
+            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
+              {modules
+                .filter((m) => m.items.length > 0)
+                .map((m) => (
+                  <ModuleDetailCard key={m.key} module={m} />
+                ))}
+            </div>
+          </div>
+        )}
+
         <Card className='mx-auto max-w-xl border-2 shadow-md'>
           <CardHeader className='items-center border-b bg-muted/30 pb-4 text-center'>
             {branchName && (
@@ -207,21 +238,50 @@ export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void },
                 ))}
               </div>
             )}
+
+            {moneyOutModules.length > 0 && (
+              <div className='mt-4 border-t pt-3'>
+                <p className='mb-1 text-xs font-medium text-muted-foreground'>Money Out —</p>
+                {moneyOutModules.map((m) => (
+                  <SummaryRow key={m.key} module={m} />
+                ))}
+                <div className='mt-3 flex items-center justify-between rounded-lg bg-rose-50 px-3 py-3 dark:bg-rose-500/10'>
+                  <div className='flex items-center gap-2'>
+                    <TrendingDown className='h-4 w-4 text-rose-600 dark:text-rose-400' />
+                    <span className='text-base font-bold'>Total Money Out</span>
+                  </div>
+                  <span className='text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400'>
+                    − {fmt(data?.totalMoneyOut ?? 0)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {cashInHand && (
+              <div
+                className={cn(
+                  'mt-4 flex items-center justify-between rounded-lg border-2 px-3 py-3',
+                  cashInHand.closing >= 0
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-500/10'
+                    : 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-500/10',
+                )}
+              >
+                <div className='flex items-center gap-2'>
+                  <Landmark className={cn('h-4 w-4', cashInHand.closing >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')} />
+                  <span className='text-base font-bold'>Cash In Hand</span>
+                </div>
+                <span
+                  className={cn(
+                    'text-lg font-bold tabular-nums',
+                    cashInHand.closing >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+                  )}
+                >
+                  {fmt(cashInHand.closing)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
-
-        {modules.some((m) => m.items.length > 0) && (
-          <div className='space-y-3'>
-            <h3 className='text-sm font-semibold text-muted-foreground'>Details — who bought what</h3>
-            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
-              {modules
-                .filter((m) => m.items.length > 0)
-                .map((m) => (
-                  <ModuleDetailCard key={m.key} module={m} />
-                ))}
-            </div>
-          </div>
-        )}
       </div>
     )
   },

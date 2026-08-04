@@ -61,7 +61,7 @@ function EmptyNote({ label }: { label: string }) {
 
 const CASH_MODULE_ORDER = [
   'Sales', 'Purchases', 'Load', 'Cash Management', 'Sim Sale', 'Services', 'Agent Bills',
-  'Repairing', 'Expenses', 'My Accounts', 'Bill Payments', 'Installments',
+  'Repairing', 'Expenses', 'My Personal Accounts', 'Bill Payments', 'Installments',
   'Customer Payments', 'Supplier Payments', 'Employee Payments', 'Sales Returns', 'Purchase Returns',
 ]
 
@@ -77,7 +77,7 @@ const MODULE_FLOW_LABELS: Record<string, { in: string; out: string; net: string 
   'Agent Bills': { in: 'Collected', out: 'Paid', net: 'Net' },
   'Repairing': { in: 'Collected', out: 'Paid', net: 'Net' },
   'Expenses': { in: 'Received', out: 'Paid', net: 'Net' },
-  'My Accounts': { in: 'Received', out: 'Drawings', net: 'Net' },
+  'My Personal Accounts': { in: 'Received', out: 'Drawings', net: 'Net' },
   'Bill Payments': { in: 'Collected', out: 'Paid', net: 'Net' },
   'Installments': { in: 'Collected', out: 'Paid', net: 'Net' },
   'Customer Payments': { in: 'Collected', out: 'Refunds', net: 'Net' },
@@ -646,7 +646,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               { Metric: 'Customer Receivables', Value: customers?.summary?.totalBalance ?? 0 },
               { Metric: 'Supplier Payables', Value: suppliers?.summary?.totalBalance ?? 0 },
             ]),
-            'My Accounts',
+            'My Personal Accounts',
           )
 
           if (ledgerIncomeByCategory.length > 0) {
@@ -660,7 +660,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
             XLSX.utils.book_append_sheet(
               wb,
               XLSX.utils.json_to_sheet(ledgerExpenseByCategory.map((c) => ({ Category: c.name, 'Total Amount': c.totalAmount }))),
-              'My Account Expenses',
+              'My Personal Account Expenses',
             )
           }
 
@@ -1235,11 +1235,11 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
           </div>
         )}
 
-        {/* My Accounts */}
+        {/* My Personal Accounts */}
         <div ref={(el) => { sectionRefs.current['accounts'] = el }} className='scroll-mt-24'>
           <Card>
             <CardHeader>
-              <CardTitle>My Accounts</CardTitle>
+              <CardTitle>My Personal Accounts</CardTitle>
               <CardDescription>Your personal cash ledger — open the Accounting module for full ledgers &amp; statements</CardDescription>
             </CardHeader>
             <CardContent className='space-y-6'>
@@ -1472,7 +1472,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
               <div>
                 <p className='mb-3 text-sm font-medium'>All Modules Summary — Actual Cash Movement</p>
                 <p className='mb-4 text-xs text-muted-foreground'>
-                  Every module&apos;s sale and purchase amount, side by side — e.g. My Accounts shows what came in vs personal
+                  Every module&apos;s sale and purchase amount, side by side — e.g. My Personal Accounts shows what came in vs personal
                   drawings, Supplier Payments shows what you paid suppliers vs any refunds, Customer Payments shows what you
                   collected vs any refunds. Sales, Load, Sim Sale, and Cash Management show real profit (revenue or commission
                   minus actual cost) rather than raw cash movement, so buying extra load stock doesn&apos;t show as a loss and

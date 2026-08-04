@@ -2798,7 +2798,7 @@ async function getWalletWiseReport(req, res) {
       id: String(row._id),
       date: row.date,
       type: isWithdrawal ? 'withdrawal' : 'deposit',
-      customerName: 'My Account',
+      customerName: 'My Personal Account',
       customerNumber: '',
       customerCNIC: '',
       accountType: '',
@@ -3581,9 +3581,9 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       id: String(wt._id),
       date: wt.date,
       module: 'Cash Management',
-      subType: isReceive ? 'Transfer from My Account' : 'Transfer to My Account',
+      subType: isReceive ? 'Transfer from My Personal Account' : 'Transfer to My Personal Account',
       reference: '',
-      party: 'My Account',
+      party: 'My Personal Account',
       partyPhone: '',
       paymentType: 'Wallet',
       direction: isReceive ? 'in' : 'out',
@@ -3591,7 +3591,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       paidAmount: wt.amount || 0,
       balance: 0,
       description: `${isReceive ? 'Receive' : 'Send'} via ${wt.walletType || 'wallet'}`,
-      details: `Wallet: ${wt.walletType || ''} | Account: My Account${wt.notes ? ` | ${wt.notes}` : ''}`,
+      details: `Wallet: ${wt.walletType || ''} | Account: My Personal Account${wt.notes ? ` | ${wt.notes}` : ''}`,
       status: 'completed',
     });
   });
@@ -4184,6 +4184,10 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
     installmentItems,
     cashSentItems,
     cashReceivedItems,
+    purchaseItems,
+    expenseItems,
+    loadPurchaseItems,
+    cashInHandSummary,
   ] = await Promise.all([
     mobileDashboardService.getMobileDashboardSummary({
       organizationId,
@@ -4278,6 +4282,36 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
       .select('customerName customerNumber walletType amount profit date')
       .sort('-date')
       .lean(),
+    // Money OUT — what the shop paid suppliers today (cash/wallet actually handed
+    // over, not the full invoice total, matching how Purchase syncs its own cash
+    // book entry off `paidAmount` rather than `totalAmount`; see purchase.service.js).
+    Purchase.find({ ...scope, purchaseDate: inRange })
+      .populate('supplier', 'name')
+      .select('supplier invoiceNumber totalAmount paidAmount purchaseDate')
+      .sort('-purchaseDate')
+      .lean(),
+    // Money OUT — only paid expenses count as cash that actually left today; unpaid
+    // (e.g. auto-generated recurring) obligations haven't moved any cash yet.
+    Expense.find({ ...scope, date: inRange, isPaid: true })
+      .select('category description amount date')
+      .sort('-date')
+      .lean(),
+    // Money OUT — buying load/topup stock from a distributor, same paidAmount
+    // convention as Purchase (see loadPurchase.service.js).
+    LoadPurchase.find({ ...scope, date: inRange })
+      .select('supplierName walletType amount paidAmount date')
+      .sort('-date')
+      .lean(),
+    // The exact same physical Cash In Hand shown on the Cash Book / Accounting pages for
+    // this date range — deliberately the real org-wide, cash-only ledger (not scoped to
+    // just these modules) so this figure is never a different number than the one the
+    // user already sees elsewhere in the app for "Cash In Hand".
+    cashBookService.getCashInHandSummary({
+      organizationId,
+      branchId: req.branchId,
+      startDate: start,
+      endDate: end,
+    }),
   ]);
 
   const imeiDetail = (rows) =>
@@ -4383,7 +4417,10 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
       })),
     },
     {
-      key: 'cashReceived', label: 'Cash Received',
+      // A "Cash Received" withdrawal means the CUSTOMER is withdrawing cash from their
+      // wallet — the shop hands them physical cash, so this is money OUT of the till
+      // (the reverse of "Cash Sent" above, which is a deposit — the shop receives cash).
+      key: 'cashReceived', label: 'Cash Received', moneyOut: true,
       amount: roundReportAmount(dashboard.totalCashReceived), count: dashboard.cashReceivedCount,
       profit: roundReportAmount(dashboard.totalCashReceivedProfit),
       items: cashReceivedItems.map((c) => ({
@@ -4391,6 +4428,42 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
         detail: [c.walletType, c.customerNumber].filter(Boolean).join(' · ') || undefined,
         amount: roundReportAmount(c.amount),
         date: c.date,
+      })),
+    },
+    {
+      key: 'purchases', label: 'Purchases', moneyOut: true,
+      amount: roundReportAmount(purchaseItems.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0)),
+      count: purchaseItems.length,
+      profit: 0,
+      items: purchaseItems.map((p) => ({
+        name: (p.supplier && p.supplier.name) || 'Supplier',
+        detail: p.invoiceNumber || undefined,
+        amount: roundReportAmount(p.paidAmount || 0),
+        date: p.purchaseDate,
+      })),
+    },
+    {
+      key: 'expenses', label: 'Expenses', moneyOut: true,
+      amount: roundReportAmount(expenseItems.reduce((sum, e) => sum + Number(e.amount || 0), 0)),
+      count: expenseItems.length,
+      profit: 0,
+      items: expenseItems.map((e) => ({
+        name: e.category || 'Expense',
+        detail: e.description || undefined,
+        amount: roundReportAmount(e.amount || 0),
+        date: e.date,
+      })),
+    },
+    {
+      key: 'loadPurchase', label: 'Load Purchase', moneyOut: true,
+      amount: roundReportAmount(loadPurchaseItems.reduce((sum, l) => sum + Number(l.paidAmount || 0), 0)),
+      count: loadPurchaseItems.length,
+      profit: 0,
+      items: loadPurchaseItems.map((l) => ({
+        name: l.supplierName || 'Distributor',
+        detail: l.walletType || undefined,
+        amount: roundReportAmount(l.paidAmount || 0),
+        date: l.date,
       })),
     },
   ];
@@ -4415,10 +4488,29 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
       dashboard.totalCashReceivedProfit,
   );
 
+  // Sum straight off the modules actually flagged moneyOut (Purchases, Expenses, Load
+  // Purchase, and Cash Received — a customer withdrawing from their wallet means the
+  // shop hands over physical cash) so this total can never drift from what the "Money
+  // Out" section above it actually lists.
+  const totalMoneyOut = roundReportAmount(modules.filter((m) => m.moneyOut).reduce((sum, m) => sum + m.amount, 0));
+  // Cash Sent (a customer depositing cash to top up their wallet) is money the shop
+  // physically receives, so it adds to Total Sales here even though it isn't counted
+  // as a "sale" above; Cash Received/Purchases/Expenses/Load Purchase are already
+  // netted into totalMoneyOut.
   res.status(httpStatus.OK).send({
     modules,
     totalSales,
     totalProfit,
+    totalMoneyOut,
+    // Same figures as the Cash Book / Accounting page for this exact date range — the
+    // real org-wide, cash-only ledger, not scoped to just this report's modules, so
+    // "Cash In Hand" always means the same number everywhere in the app.
+    cashInHand: {
+      opening: cashInHandSummary.openingBalance,
+      totalIn: roundReportAmount(cashInHandSummary.totalIncome),
+      totalOut: roundReportAmount(cashInHandSummary.totalExpense),
+      closing: cashInHandSummary.closingBalance,
+    },
     period: { startDate: start, endDate: end },
   });
 });

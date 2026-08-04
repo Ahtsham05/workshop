@@ -9,8 +9,8 @@ const REFERENCE_MODEL = 'WalletTransfer';
 
 const describeTransfer = (walletType, direction) =>
   direction === 'wallet_to_account'
-    ? `Transfer: ${walletType} wallet → My Account`
-    : `Transfer: My Account → ${walletType} wallet`;
+    ? `Transfer: ${walletType} wallet → My Personal Account`
+    : `Transfer: My Personal Account → ${walletType} wallet`;
 
 /**
  * Moves money between a Wallet and "My Account" (PersonalLedger) — the reverse of each

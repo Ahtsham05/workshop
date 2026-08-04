@@ -113,6 +113,20 @@ const billPaymentSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // How the shop actually paid the utility company at settlement (Mark as Paid) —
+    // independent from paymentMethod/walletType above, which is how the customer paid
+    // at the counter when this bill was first collected. Unset (falls back to
+    // paymentMethod/walletType) for bills paid before this field existed, or when the
+    // cashier didn't change it from the default of "same as collection".
+    payoutPaymentMethod: {
+      type: String,
+      enum: ['cash', 'bank', 'wallet', 'jazzcash', 'easypaisa'],
+    },
+    // Wallet name when payoutPaymentMethod === 'wallet'
+    payoutWalletType: {
+      type: String,
+      trim: true,
+    },
     notes: {
       type: String,
       trim: true,
