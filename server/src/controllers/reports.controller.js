@@ -2,7 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer } = require('../models');
-const { cashBookService, stockAdjustmentService } = require('../services');
+const { cashBookService, stockAdjustmentService, mobileDashboardService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**

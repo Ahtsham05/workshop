@@ -114,6 +114,12 @@ export function useFilteredNavGroups(): NavGroup[] {
         }
       }
 
+      if (item.allowedEmails && item.allowedEmails.length > 0) {
+        if (!user?.email || !item.allowedEmails.includes(user.email)) {
+          return false
+        }
+      }
+
       if (user?.systemRole === 'system_admin') {
         if (item.systemRole) {
           const allowed = item.systemRole as string[]

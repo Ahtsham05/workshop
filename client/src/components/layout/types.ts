@@ -31,6 +31,8 @@ interface BaseNavItem {
   allowedSchoolRoles?: string[]
   /** If set, users whose schoolRole is in this list cannot see this item */
   excludedSchoolRoles?: string[]
+  /** If set, only users whose email is in this list can see this item */
+  allowedEmails?: string[]
 }
 
 type NavLink = BaseNavItem & {

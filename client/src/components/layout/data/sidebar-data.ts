@@ -969,6 +969,7 @@ export const sidebarData: SidebarData = {
           items: [
             { title: 'Activities Report', url: '/reports?tab=activities' as never, icon: IconHistory },
             { title: 'Summary Report', url: '/reports?tab=summary' as never, icon: IconReportAnalytics },
+            { title: 'Daily Summary Report', url: '/reports?tab=daily-summary' as never, icon: IconCalendarEvent, businessTypes: ['mobile_shop'] },
             { title: 'Final Report', url: '/reports?tab=complete' as never, icon: BarChart3, businessTypes: ['mobile_shop'] },
             { title: 'Sales Report', url: '/reports?tab=sales' as never, icon: ShoppingCart },
             { title: 'Purchases Report', url: '/reports?tab=purchases' as never, icon: Receipt },
@@ -990,10 +991,13 @@ export const sidebarData: SidebarData = {
             { title: 'Repair Report', url: '/reports?tab=repair' as never, icon: Wrench, businessTypes: ['mobile_shop'], requiredFeature: 'repair' },
             { title: 'Services Report', url: '/reports?tab=services' as never, icon: Sparkles, businessTypes: ['mobile_shop'] },
             { title: 'Bill Payments Report', url: '/reports?tab=bill-payments' as never, icon: QrCode, businessTypes: ['mobile_shop'], requiredFeature: 'bill_payment' },
+            // Email must match AGENT_BILL_EMAIL in features/mobile-shop/bill-payments
+            { title: 'Agent Bills Report', url: '/reports?tab=agent-bills' as never, icon: FileText, businessTypes: ['mobile_shop'], allowedEmails: ['bilalmulazim7086@gmail.com'] },
             { title: 'Profit Loss Report', url: '/reports?tab=profit-loss' as never, icon: TrendingDown, requiredFeature: 'profit_loss' },
             { title: 'ROI Report', url: '/reports?tab=roi' as never, icon: BarChart3, requiredFeature: 'roi' },
             { title: 'Sim Sale Report', url: '/reports?tab=sim-sale' as never, icon: Smartphone, businessTypes: ['mobile_shop'] },
             { title: 'Installments Report', url: '/reports?tab=installments' as never, icon: IconCalendar, businessTypes: ['mobile_shop'] },
+            { title: 'Mobile Phone Report', url: '/reports?tab=mobile-phones' as never, icon: Smartphone, businessTypes: ['mobile_shop'] },
           ],
         },
         {
