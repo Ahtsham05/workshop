@@ -79,6 +79,11 @@ import {
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
   useDeleteCashWithdrawalsBatchMutation,
+  useGetWalletTransfersQuery,
+  useCreateWalletTransferMutation,
+  useDeleteWalletTransferMutation,
+  type WalletTransferRecord,
+  type CashWithdrawalRecord,
 } from '@/stores/mobile-shop.api'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
@@ -297,6 +302,13 @@ function buildWithdrawalFormWithWallet(
     commissionRate: rate,
   }
 }
+
+// A synthetic "customer" entry offered in the Cash Received/Send picker so the owner can
+// send/receive money to their own "My Account" ledger the exact same way as a real
+// customer — same form, same list, same everywhere-a-customer-shows convention — instead
+// of a bespoke separate transfer feature. Submitting with this selected creates a
+// WalletTransfer record (via /wallet-transfers) instead of a CashWithdrawal.
+const MY_ACCOUNT_CUSTOMER_ID = '__my_account__'
 
 type LoadManagementPageProps = {
   mode?: 'load' | 'cash-management'
@@ -529,6 +541,7 @@ function LoadManagementPage({
     saleForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
   const selectedWithdrawalWalletId =
     withdrawalForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
+  const isMyAccountSelected = withdrawalForm.customerId === MY_ACCOUNT_CUSTOMER_ID
   const selectedBulkWalletId =
     bulkWithdrawalForm.walletId || (navWallet ? resolveWalletId(navWallet) : '')
 
@@ -554,6 +567,8 @@ function LoadManagementPage({
   const [updateCashWithdrawal] = useUpdateCashWithdrawalMutation()
   const [deleteCashWithdrawal] = useDeleteCashWithdrawalMutation()
   const [deleteCashWithdrawalsBatch, { isLoading: isDeletingBatch }] = useDeleteCashWithdrawalsBatchMutation()
+  const [createWalletTransfer] = useCreateWalletTransferMutation()
+  const [deleteWalletTransfer] = useDeleteWalletTransferMutation()
 
   // Bulk selection state
   const [selectedWithdrawalIds, setSelectedWithdrawalIds] = useState<Set<string>>(new Set())
@@ -565,7 +580,7 @@ function LoadManagementPage({
   const [editingWithdrawal, setEditingWithdrawal] = useState<any>(null)
 
   // Delete confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal'; id: string } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'purchase' | 'transaction' | 'withdrawal' | 'transfer'; id: string } | null>(null)
 
   const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
   const [previewReceipt, setPreviewReceipt] = useState<MobileReceiptData | null>(null)
@@ -585,12 +600,20 @@ function LoadManagementPage({
   const { data: withdrawalsData, refetch: refetchWithdrawals } = useGetCashWithdrawalsQuery(
     withdrawalSearch.trim() ? { page: 1, limit: 1000 } : { page: withdrawalPage, limit: withdrawalLimit },
   )
+  // "My Account" transfers are a separate, much lower-volume collection than customer cash
+  // withdrawals — fetched in one batch and merged into the same Received/Send list below,
+  // rather than trying to unify two different collections behind one server-side pagination.
+  const { data: walletTransfersData } = useGetWalletTransfersQuery(
+    { limit: 200 },
+    { skip: !isCashManagementMode },
+  )
 
   const customers = Array.isArray(customersData) ? customersData : []
   const suppliers = Array.isArray(suppliersRedux) ? suppliersRedux : []
   const purchases = purchasesData?.results ?? []
   const transactions = transactionsData?.results ?? []
   const withdrawals = withdrawalsData?.results ?? []
+  const walletTransfers = walletTransfersData?.results ?? []
 
   const filteredPurchases = useMemo(() => {
     if (!purchaseSearch.trim()) return purchases
@@ -624,6 +647,26 @@ function LoadManagementPage({
       return false
     })
   }, [withdrawals, withdrawalSearch])
+
+  const filteredWalletTransfers = useMemo(() => {
+    if (!withdrawalSearch.trim()) return walletTransfers
+    const lower = withdrawalSearch.toLowerCase()
+    return walletTransfers.filter((t) => 'my account'.includes(lower) || t.walletType.toLowerCase().includes(lower))
+  }, [walletTransfers, withdrawalSearch])
+
+  // "My Account" transfers merged in date-order alongside customer cash withdrawals, so
+  // the Received/Send list reads as one unified history of everything that happened to
+  // this wallet — matching how the transfer is a pseudo-customer in the form above it.
+  type CashRow =
+    | { kind: 'withdrawal'; data: CashWithdrawalRecord }
+    | { kind: 'transfer'; data: WalletTransferRecord }
+  const combinedCashRows = useMemo<CashRow[]>(() => {
+    const rows: CashRow[] = [
+      ...filteredWithdrawals.map((w) => ({ kind: 'withdrawal' as const, data: w })),
+      ...filteredWalletTransfers.map((t) => ({ kind: 'transfer' as const, data: t })),
+    ]
+    return rows.sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime())
+  }, [filteredWithdrawals, filteredWalletTransfers])
 
   const handleSaveTimeout = useCallback(async (refetchList: () => unknown, action: string) => {
     await refetchList()
@@ -1020,6 +1063,47 @@ function LoadManagementPage({
     if (!withdrawalForm.walletId) { toast.error('Please select a wallet'); return }
     if (!withdrawalForm.amount || Number(withdrawalForm.amount) <= 0) { toast.error('Please enter a valid amount'); return }
     if (!withdrawalForm.walletType) { toast.error('Selected wallet is invalid'); return }
+
+    if (isMyAccountSelected) {
+      try {
+        await createWalletTransfer({
+          walletId: withdrawalForm.walletId,
+          walletType: withdrawalForm.walletType,
+          // Received (withdrawal) = wallet increases = funded from My Account.
+          // Send (deposit) = wallet decreases = cashed out into My Account.
+          direction: withdrawalForm.transactionType === 'withdrawal' ? 'account_to_wallet' : 'wallet_to_account',
+          amount: Number(withdrawalForm.amount),
+          notes: withdrawalForm.notes.trim() || undefined,
+          date: parseBusinessDateTimeLocal(withdrawalForm.date || getBusinessToday()),
+        }).unwrap()
+        toast.success('Transfer recorded!')
+        const prevType = withdrawalForm.transactionType
+        const prevWalletId = withdrawalForm.walletId
+        const prevWalletType = withdrawalForm.walletType
+        const prevCommission = withdrawalForm.commissionRate
+        const prevDate = withdrawalForm.date
+        setWithdrawalForm({
+          walletId: prevWalletId,
+          walletType: prevWalletType,
+          amount: '0',
+          cashAmount: '0',
+          transactionType: prevType,
+          customerId: '',
+          customerName: '',
+          customerNumber: '',
+          customerCNIC: '',
+          customerAccountType: 'other',
+          commissionRate: prevCommission,
+          extraCharge: '0',
+          notes: '',
+          date: prevDate,
+        })
+      } catch (error: any) {
+        toast.error(error?.data?.message || 'Failed to record transfer')
+      }
+      return
+    }
+
     if (withdrawalProfit.normalizedCashAmount > Number(withdrawalForm.amount || 0)) {
       toast.error('Cash paid/received must be less than or equal to amount')
       return
@@ -1495,6 +1579,9 @@ function LoadManagementPage({
       } else if (deleteConfirm.type === 'transaction') {
         await deleteLoadTransaction(deleteConfirm.id).unwrap()
         toast.success('Transaction deleted!')
+      } else if (deleteConfirm.type === 'transfer') {
+        await deleteWalletTransfer(deleteConfirm.id).unwrap()
+        toast.success('Transfer deleted!')
       } else {
         await deleteCashWithdrawal(deleteConfirm.id).unwrap()
         toast.success('Transaction deleted!')
@@ -2441,6 +2528,7 @@ function LoadManagementPage({
                     <SearchableSelect
                       options={[
                         { value: '', label: 'Walk-in Customer' },
+                        { value: MY_ACCOUNT_CUSTOMER_ID, label: 'My Account', sublabel: 'Wallet transfer — no cash book impact', badge: 'Internal' },
                         ...customers.map((c: any) => ({
                           value: c.id || c._id,
                           label: c.name,
@@ -2455,9 +2543,14 @@ function LoadManagementPage({
                       emptyText='No customers found.'
                       {...withdrawalEnter.enterProps('withdrawal-customer')}
                     />
-                    <p className='text-xs text-muted-foreground'>If selected, paid/received and remaining amounts will be tracked in customer ledger.</p>
+                    <p className='text-xs text-muted-foreground'>
+                      {isMyAccountSelected
+                        ? 'Moves money between this wallet and your own My Account ledger — not a customer transaction.'
+                        : 'If selected, paid/received and remaining amounts will be tracked in customer ledger.'}
+                    </p>
                   </div>
 
+                  {!isMyAccountSelected && (
                   <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
                     <div className='space-y-2'>
                       <Label htmlFor='customer-name'>Customer Name - Optional</Label>
@@ -2510,7 +2603,9 @@ function LoadManagementPage({
                       onChange={(v) => handleWithdrawalChange('customerAccountType', v)}
                     />
                   </div>
+                  )}
 
+                  {!isMyAccountSelected && (
                   <div className='space-y-2'>
                     <Label htmlFor='withdrawal-cash-amount'>
                       {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid (Rs)' : 'Cash Received (Rs)'} - Optional
@@ -2532,7 +2627,9 @@ function LoadManagementPage({
                       {`Cash amount must be less than or equal to amount. Remaining amount is ${withdrawalForm.transactionType === 'withdrawal' ? 'cash payable' : 'cash receivable'} and will be added to customer ledger.`}
                     </p>
                   </div>
+                  )}
 
+                  {!isMyAccountSelected && (
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
                       <Label htmlFor='withdrawal-commission'>Commission Rate (%) - Optional</Label>
@@ -2554,6 +2651,7 @@ function LoadManagementPage({
                       <Input id='withdrawal-extra' type='number' min='0' step='0.01' placeholder='e.g., 5, 10' value={withdrawalForm.extraCharge} onChange={(e) => handleWithdrawalChange('extraCharge', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-extra')} />
                     </div>
                   </div>
+                  )}
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
@@ -2664,7 +2762,7 @@ function LoadManagementPage({
                 </div>
               </CardHeader>
               <CardContent className='min-w-0'>
-                {filteredWithdrawals.length === 0 ? (
+                {combinedCashRows.length === 0 ? (
                   <div className='flex items-center justify-center h-32'><p className='text-muted-foreground'>{withdrawalSearch.trim() ? 'No results found' : 'No transactions yet.'}</p></div>
                 ) : (
                   <>
@@ -2692,7 +2790,41 @@ function LoadManagementPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredWithdrawals.map((w) => (
+                      {combinedCashRows.map((row) => {
+                        if (row.kind === 'transfer') {
+                          const t = row.data
+                          const isReceive = t.direction === 'account_to_wallet'
+                          return (
+                            <TableRow key={`transfer-${t.id}`}>
+                              <TableCell />
+                              <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell>
+                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${isReceive ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
+                                  {isReceive ? `💸 ${cashTxLabel('withdrawal')}` : `📲 ${cashTxLabel('deposit')}`}
+                                </span>
+                              </TableCell>
+                              <TableCell className='font-medium'>{t.walletType}</TableCell>
+                              <TableCell>My Account</TableCell>
+                              <TableCell>My Account</TableCell>
+                              <TableCell>—</TableCell>
+                              <TableCell className={isReceive ? 'text-green-600' : 'text-red-600'}>
+                                {isReceive ? '+' : '-'} Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                              </TableCell>
+                              <TableCell>—</TableCell>
+                              <TableCell>—</TableCell>
+                              <TableCell>—</TableCell>
+                              <TableCell>—</TableCell>
+                              <TableCell>
+                                <div className='flex gap-1'>
+                                  <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => setDeleteConfirm({ type: 'transfer', id: t.id })}><Trash2 className='h-4 w-4' /></Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        }
+
+                        const w = row.data
+                        return (
                         <TableRow key={w.id} className={selectedWithdrawalIds.has(w.id) ? 'bg-muted/50' : ''}>
                           <TableCell>
                             <Checkbox
@@ -2764,7 +2896,8 @@ function LoadManagementPage({
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                   {!withdrawalSearch.trim() && (
@@ -2794,7 +2927,11 @@ function LoadManagementPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this {deleteConfirm?.type === 'purchase' ? 'purchase' : deleteConfirm?.type === 'transaction' ? 'sale' : 'cash transaction'} record. Wallet balance and cash book entries will be reversed. This action cannot be undone.
+              This will permanently delete this {deleteConfirm?.type === 'purchase' ? 'purchase' : deleteConfirm?.type === 'transaction' ? 'sale' : deleteConfirm?.type === 'transfer' ? 'transfer' : 'cash transaction'} record.{' '}
+              {deleteConfirm?.type === 'transfer'
+                ? 'Wallet balance and your My Account ledger will be reversed.'
+                : 'Wallet balance and cash book entries will be reversed.'}{' '}
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

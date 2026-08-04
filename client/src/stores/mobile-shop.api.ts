@@ -109,6 +109,25 @@ export interface CreateCashWithdrawalInput {
   date: string
 }
 
+export interface WalletTransferRecord {
+  id: string
+  walletId: string
+  walletType: string
+  direction: 'wallet_to_account' | 'account_to_wallet'
+  amount: number
+  notes?: string
+  date: string
+}
+
+export interface CreateWalletTransferInput {
+  walletId: string
+  walletType: string
+  direction: 'wallet_to_account' | 'account_to_wallet'
+  amount: number
+  notes?: string
+  date?: string
+}
+
 export interface CashWithdrawalBatchEntry {
   amount: number
   customerName?: string
@@ -602,7 +621,7 @@ export interface CreateAgentBillsBatchInput {
 export const mobileShopApi = createApi({
   reducerPath: 'mobileShopApi',
   baseQuery,
-  tagTypes: ['MobileDashboard', 'Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer', 'AgentBills'],
+  tagTypes: ['MobileDashboard', 'Wallets', 'WalletTransfers', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'Repairs', 'Services', 'ServiceInvoices', 'RepairStock', 'CashBook', 'UtilityCompanies', 'BillPayments', 'Installments', 'SimSales', 'Customer', 'AgentBills'],
   endpoints: (builder) => ({
     getMobileDashboardSummary: builder.query<MobileDashboardSummary, void>({
       query: () => '/mobile-dashboard/summary',
@@ -756,6 +775,30 @@ export const mobileShopApi = createApi({
         timeout: 120000,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    getWalletTransfers: builder.query<PaginatedResult<WalletTransferRecord>, { page?: number; limit?: number; walletType?: string } | void>({
+      query: (params) => {
+        const p = new URLSearchParams({ limit: String((params as any)?.limit ?? 10) })
+        if ((params as any)?.page) p.set('page', String((params as any).page))
+        if ((params as any)?.walletType) p.set('walletType', (params as any).walletType)
+        return `/wallet-transfers?${p.toString()}`
+      },
+      providesTags: ['WalletTransfers'],
+    }),
+    createWalletTransfer: builder.mutation<WalletTransferRecord, CreateWalletTransferInput>({
+      query: (body) => ({
+        url: '/wallet-transfers',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
+    }),
+    deleteWalletTransfer: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/wallet-transfers/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
     }),
     getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, { page?: number; limit?: number; status?: string } | void>({
       query: (params) => {
@@ -1200,6 +1243,9 @@ export const {
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
   useDeleteCashWithdrawalsBatchMutation,
+  useGetWalletTransfersQuery,
+  useCreateWalletTransferMutation,
+  useDeleteWalletTransferMutation,
   useGetRepairJobsQuery,
   useCreateRepairJobMutation,
   useUpdateRepairJobMutation,

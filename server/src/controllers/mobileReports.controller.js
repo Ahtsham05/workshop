@@ -539,6 +539,9 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       title = entry.type === 'in' ? 'Customer Wallet Receipt' : 'Customer Wallet Payment';
     } else if (entry.referenceModel === 'SupplierLedger') {
       title = entry.type === 'out' ? 'Supplier Wallet Payment' : 'Supplier Wallet Receipt';
+    } else if (entry.referenceModel === 'WalletTransfer') {
+      title = entry.type === 'in' ? 'Transfer from My Account' : 'Transfer to My Account';
+      customerName = 'My Account';
     }
 
     ensureBucket(dateKey).push({
@@ -546,6 +549,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       date: entry.date,
       createdAt: entry.createdAt,
       source: 'wallet_entry',
+      referenceModel: entry.referenceModel || '',
       transactionType: entry.type === 'in' ? 'wallet_in' : 'wallet_out',
       title,
       accountNumber,

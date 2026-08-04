@@ -32,6 +32,7 @@ const organizationRoute = require('./organization.route');
 const branchRoute = require('./branch.route');
 const membershipRoute = require('./membership.route');
 const walletRoute = require('./wallet.route');
+const walletTransferRoute = require('./walletTransfer.route');
 const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
 const simSaleRoute = require('./simSale.route');
@@ -250,6 +251,10 @@ const defaultRoutes = [
   {
     path: '/wallets',
     route: walletRoute,
+  },
+  {
+    path: '/wallet-transfers',
+    route: walletTransferRoute,
   },
   {
     path: '/load-purchases',

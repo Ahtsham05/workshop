@@ -116,8 +116,11 @@ const normalizeWalletCategoryName = (name?: string | null) => {
 type CategoryFlow = 'income' | 'expense';
 
 const isIncomeLedgerType = (type: string) =>
-  type === 'income' || type === 'opening_balance';
+  type === 'income' || type === 'opening_balance' || type === 'transfer';
 
+// A transfer only ever has credit OR debit set (never both — see walletTransfer.service.js),
+// so it's unambiguous which side of the breakdown it belongs on; treated the same as a real
+// income/expense entry here so a Wallet ⇄ My Account transfer shows up in these cards.
 function buildCategoryBreakdown(
   entries: LedgerEntry[],
   flow: CategoryFlow,
@@ -126,7 +129,10 @@ function buildCategoryBreakdown(
   const map = new Map<string, { totalAmount: number; expenseCount: number }>();
   for (const entry of entries) {
     if (flow === 'expense') {
-      if (entry.transactionType !== 'expense' || !(entry.debit > 0)) continue;
+      if (
+        (entry.transactionType !== 'expense' && entry.transactionType !== 'transfer') ||
+        !(entry.debit > 0)
+      ) continue;
     } else if (!isIncomeLedgerType(entry.transactionType) || !(entry.credit > 0)) {
       continue;
     }
@@ -765,7 +771,10 @@ export function PersonalLedger() {
       setExpandedRows(new Set());
       const filtered = source.filter((entry) => {
         if (flow === 'expense') {
-          if (entry.transactionType !== 'expense' || !(entry.debit > 0)) return false;
+          if (
+            (entry.transactionType !== 'expense' && entry.transactionType !== 'transfer') ||
+            !(entry.debit > 0)
+          ) return false;
         } else if (!isIncomeLedgerType(entry.transactionType) || !(entry.credit > 0)) {
           return false;
         }

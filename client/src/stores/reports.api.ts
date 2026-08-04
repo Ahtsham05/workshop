@@ -599,6 +599,8 @@ export interface WalletBalanceDetailItem {
   date: string
   createdAt?: string
   source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase' | 'wallet_entry'
+  /** Which model a 'wallet_entry' row came from (e.g. 'WalletTransfer') — unset for other sources. */
+  referenceModel?: string
   transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase' | 'wallet_in' | 'wallet_out'
   title: string
   accountNumber: string

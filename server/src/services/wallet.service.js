@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale } = require('../models');
+const { Wallet, LoadPurchase, LoadTransaction, CashWithdrawal, SimSale, WalletTransfer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const accountsSystemService = require('./accountsSystem.service');
 
@@ -129,6 +129,7 @@ const deleteWallet = async ({ walletId, organizationId, branchId }) => {
     CashWithdrawal.deleteMany({ organizationId, branchId, $or: [{ walletId: wallet._id }, { walletType: wallet.type }] }),
     LoadPurchase.deleteMany({ organizationId, branchId, walletType: wallet.type }),
     SimSale.deleteMany({ organizationId, branchId, walletType: wallet.type }),
+    WalletTransfer.deleteMany({ organizationId, branchId, $or: [{ walletId: wallet._id }, { walletType: wallet.type }] }),
   ]);
 
   await wallet.deleteOne();

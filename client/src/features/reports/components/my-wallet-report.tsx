@@ -35,10 +35,15 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 function formatReceiveSendTitle(item: WalletBalanceDetailItem) {
-  if (item.transactionType === 'withdrawal') return 'Receive'
-  if (item.transactionType === 'deposit') return 'Send'
+  if (item.transactionType === 'withdrawal' || item.transactionType === 'wallet_in') return 'Receive'
+  if (item.transactionType === 'deposit' || item.transactionType === 'wallet_out') return 'Send'
   return item.title
 }
+
+/** Rows this ledger shows besides customer cash withdrawals — currently just Wallet ⇄ My
+ *  Account transfers, so JazzCash/EasyPaisa balance history stays reconciled here too. */
+const isWalletTransferItem = (item: WalletBalanceDetailItem) =>
+  item.source === 'wallet_entry' && item.referenceModel === 'WalletTransfer'
 
 export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWalletReportProps>(
   ({ startDate, endDate }, ref) => {
@@ -99,7 +104,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
 
       data.rows.forEach((row) => {
         row.detailItems
-          .filter((item) => item.source === 'cash_withdrawal')
+          .filter((item) => item.source === 'cash_withdrawal' || isWalletTransferItem(item))
           .forEach((item) => {
             runningBalance += item.walletImpact
             result.push({
@@ -109,8 +114,8 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
               accountNumber: item.accountNumber || '—',
               accountType: item.customerAccountType || item.network || '—',
               customerName: item.customerName || '—',
-              receiveAmount: item.transactionType === 'withdrawal' ? item.amount : 0,
-              sendAmount: item.transactionType === 'deposit' ? item.amount : 0,
+              receiveAmount: item.transactionType === 'withdrawal' || item.transactionType === 'wallet_in' ? item.amount : 0,
+              sendAmount: item.transactionType === 'deposit' || item.transactionType === 'wallet_out' ? item.amount : 0,
               profit: item.profit || 0,
               balance: runningBalance,
             })

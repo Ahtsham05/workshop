@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer } = require('../models');
 const { cashBookService, stockAdjustmentService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
@@ -2719,7 +2719,7 @@ async function getWalletWiseReport(req, res) {
   const { start, end } = parseRange(req.query);
   const dateMatch = { ...scope, date: { $gte: start, $lte: end } };
 
-  const [wallets, cashRows, loadRows, loadPurchaseRows, simSaleRows] = await Promise.all([
+  const [wallets, cashRows, loadRows, loadPurchaseRows, simSaleRows, walletTransferRows] = await Promise.all([
     Wallet.find(scope).sort({ type: 1 }).lean(),
     CashWithdrawal.find(dateMatch)
       .select('walletType transactionType amount cashAmount profit customerName customerNumber customerCNIC customerAccountType date')
@@ -2735,6 +2735,10 @@ async function getWalletWiseReport(req, res) {
       .lean(),
     SimSale.find(dateMatch)
       .select('walletType productName customerName customerMobile customerCNIC loadAmount purchaseAmount saleAmount commission date')
+      .sort({ date: -1 })
+      .lean(),
+    WalletTransfer.find(dateMatch)
+      .select('walletType direction amount notes date')
       .sort({ date: -1 })
       .lean(),
   ]);
@@ -2773,6 +2777,34 @@ async function getWalletWiseReport(req, res) {
       amount: row.amount || 0,
       cashAmount: row.cashAmount || 0,
       profit: row.profit || 0,
+    });
+  });
+
+  // Wallet ⇄ My Account transfers land in the same per-wallet "cash" bucket as customer
+  // withdrawals/deposits — 'account_to_wallet' increases the wallet (like a withdrawal),
+  // 'wallet_to_account' decreases it (like a deposit) — with "My Account" standing in for
+  // the customer, so this wallet's full send/receive history stays in one place.
+  walletTransferRows.forEach((row) => {
+    const b = getBucket(row.walletType).cash;
+    const isWithdrawal = row.direction === 'account_to_wallet';
+    if (isWithdrawal) {
+      b.withdrawals += 1;
+      b.withdrawalAmount += row.amount || 0;
+    } else {
+      b.deposits += 1;
+      b.depositAmount += row.amount || 0;
+    }
+    b.transactions.push({
+      id: String(row._id),
+      date: row.date,
+      type: isWithdrawal ? 'withdrawal' : 'deposit',
+      customerName: 'My Account',
+      customerNumber: '',
+      customerCNIC: '',
+      accountType: '',
+      amount: row.amount || 0,
+      cashAmount: 0,
+      profit: 0,
     });
   });
 
@@ -3269,6 +3301,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
     customerPayments,
     supplierPayments,
     walletExpenses,
+    walletTransfers,
   ] = await Promise.all([
     Invoice.find({
       ...scope,
@@ -3352,6 +3385,9 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       transactionType: 'expense',
     })
       .select('transactionType transactionDate description category reference debit credit balance paymentMethod notes')
+      .lean(),
+    WalletTransfer.find({ ...scope, ...dateMatch('date') })
+      .select('walletType direction amount notes date')
       .lean(),
   ]);
 
@@ -3532,6 +3568,30 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       balance: 0,
       description: `${isReceive ? 'Receive' : 'Send'} via ${cw.walletType || 'wallet'}`,
       details: `Wallet: ${cw.walletType || ''} | Account: ${cw.customerNumber || '—'}${cw.notes ? ` | ${cw.notes}` : ''}`,
+      status: 'completed',
+    });
+  });
+
+  // Wallet ⇄ My Account transfers — grouped under the same "Cash Management" module as
+  // CashWithdrawal (customer cash⇄wallet exchanges) so the Activity Summary shows every
+  // wallet send/receive movement together, with "My Account" standing in for the customer.
+  walletTransfers.forEach((wt) => {
+    const isReceive = wt.direction === 'account_to_wallet';
+    entries.push({
+      id: String(wt._id),
+      date: wt.date,
+      module: 'Cash Management',
+      subType: isReceive ? 'Transfer from My Account' : 'Transfer to My Account',
+      reference: '',
+      party: 'My Account',
+      partyPhone: '',
+      paymentType: 'Wallet',
+      direction: isReceive ? 'in' : 'out',
+      totalAmount: wt.amount || 0,
+      paidAmount: wt.amount || 0,
+      balance: 0,
+      description: `${isReceive ? 'Receive' : 'Send'} via ${wt.walletType || 'wallet'}`,
+      details: `Wallet: ${wt.walletType || ''} | Account: My Account${wt.notes ? ` | ${wt.notes}` : ''}`,
       status: 'completed',
     });
   });
@@ -3829,6 +3889,8 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     supplierReceived,
     supplierPaid,
     walletExpenses,
+    walletTransferReceived,
+    walletTransferSent,
   ] = await Promise.all([
     aggregateSumCount(
       Invoice,
@@ -3900,6 +3962,16 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
       { ...scope, ...dateRange('transactionDate'), transactionType: 'expense' },
       '$debit',
     ),
+    aggregateSumCount(
+      WalletTransfer,
+      { ...scope, ...dateRange('date'), direction: 'account_to_wallet' },
+      '$amount',
+    ),
+    aggregateSumCount(
+      WalletTransfer,
+      { ...scope, ...dateRange('date'), direction: 'wallet_to_account' },
+      '$amount',
+    ),
   ]);
 
   const modules = [
@@ -3909,8 +3981,11 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     { module: 'Purchase Returns', sales: purchaseReturns.amount, purchases: 0, salesCount: purchaseReturns.count, purchaseCount: 0, mobileOnly: false },
     { module: 'Load Sale', sales: loadSales.amount, purchases: 0, salesCount: loadSales.count, purchaseCount: 0, mobileOnly: true },
     { module: 'Load Purchase', sales: 0, purchases: loadPurchases.amount, salesCount: 0, purchaseCount: loadPurchases.count, mobileOnly: true },
-    { module: 'Cash Received', sales: cashReceived.amount, purchases: 0, salesCount: cashReceived.count, purchaseCount: 0, mobileOnly: true },
-    { module: 'Cash Sent', sales: 0, purchases: cashSent.amount, salesCount: 0, purchaseCount: cashSent.count, mobileOnly: true },
+    // Wallet ⇄ My Account transfers are folded in here — an "account_to_wallet" transfer
+    // increases the wallet just like a customer cash withdrawal does, and "wallet_to_account"
+    // decreases it just like a customer deposit, so they belong in the same Received/Sent totals.
+    { module: 'Cash Received', sales: cashReceived.amount + walletTransferReceived.amount, purchases: 0, salesCount: cashReceived.count + walletTransferReceived.count, purchaseCount: 0, mobileOnly: true },
+    { module: 'Cash Sent', sales: 0, purchases: cashSent.amount + walletTransferSent.amount, salesCount: 0, purchaseCount: cashSent.count + walletTransferSent.count, mobileOnly: true },
     { module: 'Sim Sale', sales: simSales.amount, purchases: simPurchases.amount, salesCount: simSales.count, purchaseCount: simPurchases.count, mobileOnly: true },
     { module: 'Repairing', sales: repairSales.amount, purchases: repairPurchases.amount, salesCount: repairSales.count, purchaseCount: repairPurchases.count, mobileOnly: true },
     { module: 'Services', sales: services.amount, purchases: 0, salesCount: services.count, purchaseCount: 0, mobileOnly: true },
@@ -3954,6 +4029,8 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     customerPaidByMonth,
     supplierPaidByMonth,
     walletExpensesByMonth,
+    walletTransferReceivedByMonth,
+    walletTransferSentByMonth,
   ] = await Promise.all([
     monthlyAmountMap(Invoice, 'invoiceDate', '$total', { ...scope, ...dateRange('invoiceDate'), status: { $ne: 'cancelled' } }),
     monthlyAmountMap(PurchaseReturn, 'date', '$totalAmount', { ...scope, ...dateRange('date'), status: { $ne: 'rejected' } }),
@@ -3977,6 +4054,8 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     monthlyAmountMap(CustomerLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' }),
     monthlyAmountMap(SupplierLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'payment_made' }),
     monthlyAmountMap(PersonalLedger, 'transactionDate', '$debit', { ...scope, ...dateRange('transactionDate'), transactionType: 'expense' }),
+    monthlyAmountMap(WalletTransfer, 'date', '$amount', { ...scope, ...dateRange('date'), direction: 'account_to_wallet' }),
+    monthlyAmountMap(WalletTransfer, 'date', '$amount', { ...scope, ...dateRange('date'), direction: 'wallet_to_account' }),
   ]);
 
   const monthlySalesMap = mergeMonthlyTotals(
@@ -3991,6 +4070,7 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     installmentsByMonth,
     customerReceivedByMonth,
     supplierReceivedByMonth,
+    walletTransferReceivedByMonth,
   );
   const monthlyPurchasesMap = mergeMonthlyTotals(
     purchasesByMonth,
@@ -4004,6 +4084,7 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
     customerPaidByMonth,
     supplierPaidByMonth,
     walletExpensesByMonth,
+    walletTransferSentByMonth,
   );
 
   const monthly = Array.from(

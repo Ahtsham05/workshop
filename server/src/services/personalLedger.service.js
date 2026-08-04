@@ -49,6 +49,9 @@ const resolveCashBookLine = (entry) => {
 
 /**
  * Mirror My Wallet movements into Cash Book (Source: wallet) using real payment channel as Payment.
+ * Skipped for entries linked to a WalletTransfer: that's a purely digital move between a
+ * mobile-money Wallet and My Account — neither leg is physical cash or a bank transaction,
+ * so it must never touch Cash Book (which would otherwise double-count or misclassify it).
  */
 const syncCashBookFromPersonalLedger = async (entry) => {
   if (!entry || !entry._id) {
@@ -56,6 +59,10 @@ const syncCashBookFromPersonalLedger = async (entry) => {
   }
 
   await cashBookService.deleteEntriesByReference(entry._id, 'PersonalLedger');
+
+  if (entry.referenceModel === 'WalletTransfer') {
+    return null;
+  }
 
   const line = resolveCashBookLine(entry);
   if (!line) {
