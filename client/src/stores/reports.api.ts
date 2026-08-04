@@ -1035,10 +1035,40 @@ export interface WalletWiseReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface DailySalesSummaryItem {
+  name: string
+  detail?: string
+  qty?: number
+  amount: number
+  date?: string
+  status?: string
+}
+
+export interface DailySalesSummaryModule {
+  key: string
+  label: string
+  amount: number
+  count: number | null
+  profit: number
+  /** Set on modules whose amount is already counted inside another module (e.g. New/Used
+   *  Mobiles are phone sales that are also part of Products) — shown for context only,
+   *  and excluded from totalSales/totalProfit to avoid double-counting. */
+  includedIn?: string
+  /** Line-item breakdown (which product/service/customer) for the "Details" cards. */
+  items: DailySalesSummaryItem[]
+}
+
+export interface DailySalesSummaryReport {
+  modules: DailySalesSummaryModule[]
+  totalSales: number
+  totalProfit: number
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1402,6 +1432,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['SalesPurchaseSummaryReport'],
     }),
+    getDailySalesSummaryReport: builder.query<DailySalesSummaryReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/daily-sales-summary?${searchParams.toString()}`
+      },
+      providesTags: ['DailySalesSummaryReport'],
+    }),
   }),
 })
 
@@ -1440,4 +1479,5 @@ export const {
   useGetInstallmentReportQuery,
   useGetActivitySummaryReportQuery,
   useGetSalesPurchaseSummaryReportQuery,
+  useGetDailySalesSummaryReportQuery,
 } = reportsApi

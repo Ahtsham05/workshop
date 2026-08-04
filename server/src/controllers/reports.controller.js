@@ -4143,6 +4143,286 @@ const getSalesPurchaseSummaryReport = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Compact, single-glance "what did I sell today" report — the sales-side subset of
+ * getSalesPurchaseSummaryReport's modules (no purchases/expenses/ledger payments), plus
+ * New/Used Mobile phone sales and Installment collections which that report doesn't cover.
+ * Reuses mobileDashboardService's aggregation (rather than re-deriving amounts/profit here)
+ * so these numbers always agree with the Dashboard's mobile-shop KPI cards.
+ * New/Used Mobiles are informational sub-breakdowns of Products (phone sales are still
+ * regular Invoices under the hood) — they're excluded from totalSales to avoid double-counting.
+ */
+const getDailySalesSummaryReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const organizationId = req.organizationId || req.user?.organizationId;
+  const inRange = { $gte: start, $lte: end };
+
+  const phoneProductIds = await Product.find({ ...scope, trackImei: true }).distinct('_id');
+  const imeiSoldMatch = (extra) => ({
+    ...scope,
+    ...extra,
+    status: 'sold',
+    saleDate: inRange,
+  });
+
+  const [
+    dashboard,
+    installments,
+    newMobilesRevenue,
+    newMobilesCost,
+    usedMobilesRevenue,
+    usedMobilesCost,
+    productItems,
+    newMobileItems,
+    usedMobileItems,
+    loadItems,
+    simSaleItems,
+    repairItems,
+    serviceItems,
+    billPaymentItems,
+    installmentItems,
+    cashSentItems,
+    cashReceivedItems,
+  ] = await Promise.all([
+    mobileDashboardService.getMobileDashboardSummary({
+      organizationId,
+      branchId: req.branchId,
+      startDate: start,
+      endDate: end,
+    }),
+    aggregateSumCount(InstallmentPayment, { ...scope, date: inRange }, '$amount'),
+    aggregateSumCount(
+      Imei,
+      imeiSoldMatch({ productId: { $in: phoneProductIds }, acquisitionType: 'supplier_purchase' }),
+      '$salePrice',
+    ),
+    aggregateSumCount(
+      Imei,
+      imeiSoldMatch({ productId: { $in: phoneProductIds }, acquisitionType: 'supplier_purchase' }),
+      '$purchasePrice',
+    ),
+    aggregateSumCount(Imei, imeiSoldMatch({ acquisitionType: { $in: ['buyback', 'trade_in'] } }), '$salePrice'),
+    aggregateSumCount(Imei, imeiSoldMatch({ acquisitionType: { $in: ['buyback', 'trade_in'] } }), '$purchasePrice'),
+    // Which products sold today, and how many — grouped by product, not per-invoice.
+    Invoice.aggregate([
+      { $match: { ...scope, invoiceDate: inRange, status: { $ne: 'cancelled' } } },
+      { $unwind: '$items' },
+      { $lookup: { from: 'products', localField: 'items.productId', foreignField: '_id', as: 'product' } },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: '$items.productId',
+          name: { $first: { $ifNull: ['$product.name', '$items.name'] } },
+          qty: { $sum: '$items.quantity' },
+          amount: {
+            $sum: {
+              $ifNull: ['$items.subtotal', { $multiply: ['$items.quantity', { $ifNull: ['$items.price', '$items.unitPrice', 0] }] }],
+            },
+          },
+        },
+      },
+      { $sort: { amount: -1 } },
+      { $project: { _id: 0, name: 1, qty: 1, amount: 1 } },
+    ]),
+    Imei.find(imeiSoldMatch({ productId: { $in: phoneProductIds }, acquisitionType: 'supplier_purchase' }))
+      .populate('productId', 'name')
+      .select('productId imei salePrice saleDate')
+      .sort('-saleDate')
+      .lean(),
+    Imei.find(imeiSoldMatch({ acquisitionType: { $in: ['buyback', 'trade_in'] } }))
+      .populate('productId', 'name')
+      .select('productId imei salePrice saleDate')
+      .sort('-saleDate')
+      .lean(),
+    LoadTransaction.find({ ...scope, date: inRange })
+      .select('walletType customerName mobileNumber amount receivedAmount profit date')
+      .sort('-date')
+      .lean(),
+    SimSale.find({ ...scope, date: inRange })
+      .select('customerName customerMobile productName saleAmount commission date')
+      .sort('-date')
+      .lean(),
+    RepairJob.find({ ...scope, date: inRange })
+      .select('customerName deviceModel issue charges status date')
+      .sort('-date')
+      .lean(),
+    ServiceInvoice.aggregate([
+      { $match: { ...scope, date: inRange } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.serviceId',
+          name: { $first: '$items.serviceName' },
+          qty: { $sum: '$items.quantity' },
+          amount: { $sum: '$items.total' },
+        },
+      },
+      { $sort: { amount: -1 } },
+      { $project: { _id: 0, name: 1, qty: 1, amount: 1 } },
+    ]),
+    BillPayment.find({ ...scope, ...billPaymentDateMatch(start, end) })
+      .select('customerName billType companyName totalReceived paymentDate createdAt')
+      .sort('-paymentDate')
+      .lean(),
+    InstallmentPayment.find({ ...scope, date: inRange })
+      .populate('installmentPlanId', 'customerName itemDescription')
+      .select('installmentPlanId amount paymentNumber date')
+      .sort('-date')
+      .lean(),
+    CashWithdrawal.find({ ...scope, date: inRange, transactionType: 'deposit' })
+      .select('customerName customerNumber walletType amount profit date')
+      .sort('-date')
+      .lean(),
+    CashWithdrawal.find({ ...scope, date: inRange, transactionType: 'withdrawal' })
+      .select('customerName customerNumber walletType amount profit date')
+      .sort('-date')
+      .lean(),
+  ]);
+
+  const imeiDetail = (rows) =>
+    rows.map((r) => ({
+      name: (r.productId && r.productId.name) || 'Phone',
+      imei: r.imei || '',
+      amount: roundReportAmount(r.salePrice),
+      date: r.saleDate,
+    }));
+
+  const modules = [
+    {
+      key: 'products', label: 'Products',
+      amount: roundReportAmount(dashboard.totalSales), count: null,
+      profit: roundReportAmount(dashboard.salesProfit),
+      items: productItems.map((p) => ({ name: p.name || 'Unknown', qty: p.qty, amount: roundReportAmount(p.amount) })),
+    },
+    {
+      key: 'newMobiles', label: 'New Mobiles',
+      amount: roundReportAmount(newMobilesRevenue.amount), count: newMobilesRevenue.count,
+      profit: roundReportAmount(newMobilesRevenue.amount - newMobilesCost.amount),
+      includedIn: 'products',
+      items: imeiDetail(newMobileItems),
+    },
+    {
+      key: 'usedMobiles', label: 'Used Mobiles',
+      amount: roundReportAmount(usedMobilesRevenue.amount), count: usedMobilesRevenue.count,
+      profit: roundReportAmount(usedMobilesRevenue.amount - usedMobilesCost.amount),
+      includedIn: 'products',
+      items: imeiDetail(usedMobileItems),
+    },
+    {
+      key: 'load', label: 'Load Sold',
+      amount: roundReportAmount(dashboard.totalLoadSold), count: null,
+      profit: roundReportAmount(dashboard.totalLoadSoldProfit),
+      items: loadItems.map((l) => ({
+        name: [l.walletType, l.customerName].filter(Boolean).join(' — ') || l.walletType,
+        detail: l.mobileNumber && l.mobileNumber !== 'N/A' ? l.mobileNumber : undefined,
+        amount: roundReportAmount(l.amount),
+        date: l.date,
+      })),
+    },
+    {
+      key: 'simSale', label: 'Sim Sale',
+      amount: roundReportAmount(dashboard.totalSimSale), count: dashboard.simSaleCount,
+      profit: roundReportAmount(dashboard.totalSimSaleProfit),
+      items: simSaleItems.map((s) => ({
+        name: s.customerName?.trim() || 'Walk-in Customer',
+        detail: [s.productName, s.customerMobile].filter(Boolean).join(' · ') || undefined,
+        amount: roundReportAmount(s.saleAmount),
+        date: s.date,
+      })),
+    },
+    {
+      key: 'repairing', label: 'Repairing',
+      amount: roundReportAmount(dashboard.totalRepairIncome), count: null,
+      profit: roundReportAmount(dashboard.totalRepairProfit),
+      items: repairItems.map((r) => ({
+        name: r.customerName?.trim() || 'Walk-in Customer',
+        detail: [r.deviceModel, r.issue].filter(Boolean).join(' · ') || undefined,
+        amount: roundReportAmount(r.charges),
+        date: r.date,
+        status: r.status,
+      })),
+    },
+    {
+      key: 'services', label: 'Services',
+      amount: roundReportAmount(dashboard.totalServiceIncome), count: dashboard.serviceInvoiceCount,
+      profit: roundReportAmount(dashboard.totalServiceProfit),
+      items: serviceItems.map((s) => ({ name: s.name || 'Service', qty: s.qty, amount: roundReportAmount(s.amount) })),
+    },
+    {
+      key: 'billPayments', label: 'Bill Payments',
+      amount: roundReportAmount(dashboard.totalBillCollection), count: null,
+      profit: roundReportAmount(dashboard.billPaymentProfit),
+      items: billPaymentItems.map((b) => ({
+        name: b.customerName?.trim() || 'Customer',
+        detail: [b.companyName, b.billType].filter(Boolean).join(' · ') || undefined,
+        amount: roundReportAmount(b.totalReceived),
+        date: b.paymentDate || b.createdAt,
+      })),
+    },
+    {
+      key: 'installments', label: 'Installments',
+      amount: roundReportAmount(installments.amount), count: installments.count,
+      profit: 0,
+      items: installmentItems.map((i) => ({
+        name: (i.installmentPlanId && i.installmentPlanId.customerName) || 'Customer',
+        detail: (i.installmentPlanId && i.installmentPlanId.itemDescription) || `Payment #${i.paymentNumber}`,
+        amount: roundReportAmount(i.amount),
+        date: i.date,
+      })),
+    },
+    {
+      key: 'cashSent', label: 'Cash Sent',
+      amount: roundReportAmount(dashboard.totalCashSend), count: dashboard.cashSendCount,
+      profit: roundReportAmount(dashboard.totalCashSendProfit),
+      items: cashSentItems.map((c) => ({
+        name: c.customerName?.trim() || 'Customer',
+        detail: [c.walletType, c.customerNumber].filter(Boolean).join(' · ') || undefined,
+        amount: roundReportAmount(c.amount),
+        date: c.date,
+      })),
+    },
+    {
+      key: 'cashReceived', label: 'Cash Received',
+      amount: roundReportAmount(dashboard.totalCashReceived), count: dashboard.cashReceivedCount,
+      profit: roundReportAmount(dashboard.totalCashReceivedProfit),
+      items: cashReceivedItems.map((c) => ({
+        name: c.customerName?.trim() || 'Customer',
+        detail: [c.walletType, c.customerNumber].filter(Boolean).join(' · ') || undefined,
+        amount: roundReportAmount(c.amount),
+        date: c.date,
+      })),
+    },
+  ];
+
+  const totalSales = roundReportAmount(
+    dashboard.totalSales +
+      dashboard.totalLoadSold +
+      dashboard.totalSimSale +
+      dashboard.totalRepairIncome +
+      dashboard.totalServiceIncome +
+      dashboard.totalBillCollection +
+      installments.amount,
+  );
+  const totalProfit = roundReportAmount(
+    dashboard.salesProfit +
+      dashboard.totalLoadSoldProfit +
+      dashboard.totalSimSaleProfit +
+      dashboard.totalRepairProfit +
+      dashboard.totalServiceProfit +
+      dashboard.billPaymentProfit +
+      dashboard.totalCashSendProfit +
+      dashboard.totalCashReceivedProfit,
+  );
+
+  res.status(httpStatus.OK).send({
+    modules,
+    totalSales,
+    totalProfit,
+    period: { startDate: start, endDate: end },
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -4156,4 +4436,5 @@ module.exports = {
   getSimSaleReport, getInstallmentReport,
   getActivitySummaryReport,
   getSalesPurchaseSummaryReport,
+  getDailySalesSummaryReport,
 };

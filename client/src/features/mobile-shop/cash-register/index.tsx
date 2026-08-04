@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ArrowUpDown,
   Banknote,
   Coins,
   Eye,
@@ -57,6 +58,14 @@ import { formatBusinessDateTime } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
 import { CashCountViewDialog } from './cash-count-view-dialog'
 
+const NOTE_SORT_DIRECTION_STORAGE_KEY = 'cash-register-note-sort-direction'
+type SortDirection = 'asc' | 'desc'
+
+const getStoredNoteSortDirection = (): SortDirection => {
+  if (typeof window === 'undefined') return 'asc'
+  return window.localStorage.getItem(NOTE_SORT_DIRECTION_STORAGE_KEY) === 'desc' ? 'desc' : 'asc'
+}
+
 export default function CashRegisterPage() {
   const { t } = useLanguage()
   const { data, isLoading, refetch } = useGetCashRegisterQuery()
@@ -72,8 +81,13 @@ export default function CashRegisterPage() {
 
   const [counts, setCounts] = useState<DenominationCount[]>([])
   const [notes, setNotes] = useState('')
+  const [noteSortDirection, setNoteSortDirection] = useState<SortDirection>(getStoredNoteSortDirection)
   const saveBtnRef = useRef<HTMLButtonElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    window.localStorage.setItem(NOTE_SORT_DIRECTION_STORAGE_KEY, noteSortDirection)
+  }, [noteSortDirection])
 
   const updateQuantity = useCallback((index: number, quantity: number) => {
     setCounts((prev) =>
@@ -137,7 +151,10 @@ export default function CashRegisterPage() {
     }
   }
 
-  const noteRows = counts.filter((row) => row.kind === 'note')
+  const noteRows = useMemo(() => {
+    const rows = counts.filter((row) => row.kind === 'note')
+    return noteSortDirection === 'desc' ? [...rows].reverse() : rows
+  }, [counts, noteSortDirection])
   const coinRows = counts.filter((row) => row.kind === 'coin')
 
   const renderDenominationRow = (row: DenominationCount) => {
@@ -284,11 +301,26 @@ export default function CashRegisterPage() {
           ) : (
             <>
               <div className='space-y-3'>
-                <div className='flex items-center gap-2'>
-                  <Badge variant='secondary'>{t('Notes')}</Badge>
-                  <span className='text-xs text-muted-foreground'>
-                    {t('Enter how many notes of each value you have')}
-                  </span>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <div className='flex items-center gap-2'>
+                    <Badge variant='secondary'>{t('Notes')}</Badge>
+                    <span className='text-xs text-muted-foreground'>
+                      {t('Enter how many notes of each value you have')}
+                    </span>
+                  </div>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() =>
+                      setNoteSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+                    }
+                  >
+                    <ArrowUpDown className='mr-2 h-4 w-4' />
+                    {noteSortDirection === 'asc'
+                      ? t('Rs 10 → Rs 5,000')
+                      : t('Rs 5,000 → Rs 10')}
+                  </Button>
                 </div>
                 <div className='space-y-2'>
                   {noteRows.map((row) => renderDenominationRow(row))}
