@@ -2485,7 +2485,18 @@ export function InvoicePanel({
                 const catalogEntry = item.variantId
                   ? sellableCatalog.find(c => c.variantId === item.variantId)
                   : undefined
-                const totalCatalogStock = item.variantId ? catalogEntry?.stockQuantity : currentProduct?.stockQuantity
+                // `products` is also a local running-balance cache for plain products:
+                // addToInvoice/updateQuantity already decrement it by this very line's
+                // quantity as it changes (see index.tsx), so `currentProduct.stockQuantity`
+                // is never the raw total either — it's already net of item.quantity, which
+                // would double-subtract it below. `sellableCatalog` is never locally
+                // mutated, so it's the one source that's always the true, un-netted total —
+                // prefer it here too, only falling back to the stale cache if this item
+                // isn't in the catalog at all (e.g. a deleted product).
+                const stockCatalogEntry = item.variantId
+                  ? catalogEntry
+                  : sellableCatalog.find(c => c.type === 'product' && c.productId === item.productId)
+                const totalCatalogStock = stockCatalogEntry?.stockQuantity ?? currentProduct?.stockQuantity
                 // The catalog number is a snapshot from when it was fetched — it has no idea
                 // this line has already claimed `item.quantity` of it. Subtract that out so
                 // the badge reads as "what's left after this invoice", not "what existed

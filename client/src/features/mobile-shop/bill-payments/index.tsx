@@ -1498,7 +1498,7 @@ export default function BillPaymentsPage() {
 
       {/* ── New Bill Dialog (Multi-bill) ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-3xl'>
+        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-5xl'>
           <DialogHeader>
             <DialogTitle>New Bill Payment</DialogTitle>
           </DialogHeader>
@@ -1593,8 +1593,8 @@ export default function BillPaymentsPage() {
                         After Due Date (Rs.)
                       </TableHead>
                       <TableHead>Customer Name</TableHead>
-                      <TableHead>Customer Phone</TableHead>
-                      <TableHead>Ref #</TableHead>
+                      <TableHead className='min-w-[150px]'>Customer Phone</TableHead>
+                      <TableHead className='min-w-[150px]'>Ref #</TableHead>
                       <TableHead className='w-[50px]'></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1641,7 +1641,8 @@ export default function BillPaymentsPage() {
                           <Input
                             type='tel'
                             placeholder='Optional'
-                            className='h-8'
+                            className='h-8 min-w-[140px]'
+                            showVoiceInput={false}
                             value={row.customerPhone}
                             onChange={(e) => updateBillRow(i, 'customerPhone', e.target.value)}
                           />
@@ -1650,7 +1651,8 @@ export default function BillPaymentsPage() {
                           <Input
                             ref={(el) => { billRefRefs.current[i] = el }}
                             placeholder='Optional'
-                            className='h-8'
+                            className='h-8 min-w-[140px]'
+                            showVoiceInput={false}
                             value={row.referenceNumber}
                             onChange={(e) => updateBillRow(i, 'referenceNumber', e.target.value)}
                             onKeyDown={(e) => handleBillRowKeyDown(e, 'ref', i)}
