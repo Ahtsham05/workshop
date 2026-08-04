@@ -77,6 +77,10 @@ router
   .route('/sales-purchase-summary')
   .get(auth('viewReports'), reportsController.getSalesPurchaseSummaryReport);
 
+router
+  .route('/daily-sales-summary')
+  .get(auth('viewReports'), reportsController.getDailySalesSummaryReport);
+
 module.exports = router;
 
 /**

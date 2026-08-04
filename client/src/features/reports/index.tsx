@@ -47,6 +47,7 @@ import { ActivitySummaryReport } from './components/activity-summary-report'
 import { SalesPurchaseSummaryReport } from './components/sales-purchase-summary-report'
 import { CompleteReport } from './components/complete-report'
 import { MobilePhoneReport } from './components/mobile-phone-report'
+import { DailySalesSummaryReport } from './components/daily-sales-summary-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -245,6 +246,9 @@ export default function ReportsPage() {
             <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
             <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
             {isMobileShop && (
+              <TabsTrigger value='daily-summary' className='text-xs sm:text-sm px-2 sm:px-3'>Daily Summary</TabsTrigger>
+            )}
+            {isMobileShop && (
               <TabsTrigger value='complete' className='text-xs sm:text-sm px-2 sm:px-3'>Final Report</TabsTrigger>
             )}
             <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
@@ -305,6 +309,12 @@ export default function ReportsPage() {
         <TabsContent value='summary' className='mt-6'>
           <ActivitySummaryReport ref={activeTab === 'summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
+
+        {isMobileShop && (
+          <TabsContent value='daily-summary' className='mt-6'>
+            <DailySalesSummaryReport ref={activeTab === 'daily-summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
         {isMobileShop && (
           <TabsContent value='complete' className='mt-6'>
