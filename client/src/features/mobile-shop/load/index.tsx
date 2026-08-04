@@ -79,6 +79,7 @@ import {
   useUpdateCashWithdrawalMutation,
   useDeleteCashWithdrawalMutation,
   useDeleteCashWithdrawalsBatchMutation,
+  type LoadTransactionRecord,
 } from '@/stores/mobile-shop.api'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useDispatch, useSelector } from 'react-redux'
@@ -136,6 +137,23 @@ type PurchaseFormState = {
 
 /** Rupee fields: avoid float artifacts from wallet math; keep 2 decimal places. */
 const roundMoney2 = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100
+
+/** SMS/WhatsApp receipt lines for a load sale. */
+const buildLoadSaleSmsLines = (t: LoadTransactionRecord) => {
+  const amount = Number(t.amount || 0)
+  const received = Number(t.receivedAmount ?? amount)
+  const remaining = Math.max(0, amount - received)
+  return [
+    { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
+    { label: 'Amount', value: `Rs. ${amount.toLocaleString('en-PK')}` },
+    ...(remaining > 0
+      ? [
+          { label: 'Received', value: `Rs. ${received.toLocaleString('en-PK')}` },
+          { label: 'Remaining', value: `Rs. ${remaining.toLocaleString('en-PK')}` },
+        ]
+      : []),
+  ]
+}
 
 type LoadSaleFormState = {
   walletId: string
@@ -2068,17 +2086,14 @@ function LoadManagementPage({
                                 message={buildMobileShopReceiptMessage({
                                   branchName,
                                   name: t.customerName?.trim() || (t as any).customerId?.name,
-                                  title: `${t.network || 'Load'} Sale Receipt`,
-                                  lines: [
-                                    { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
-                                    { label: 'Amount', value: `Rs. ${Number(t.amount).toLocaleString('en-PK')}` },
-                                  ],
+                                  title: 'Load Sale Receipt',
+                                  lines: buildLoadSaleSmsLines(t),
                                 })}
                                 templateCategory='load_sale_receipt'
                                 templateParams={[
                                   t.customerName?.trim() || (t as any).customerId?.name || 'there',
                                   Number(t.amount).toLocaleString('en-PK'),
-                                  t.network || 'Load',
+                                  t.walletType || 'Load',
                                   t.mobileNumber === 'N/A' ? '-' : t.mobileNumber,
                                 ]}
                               />
@@ -2088,11 +2103,8 @@ function LoadManagementPage({
                                 defaultMessage={buildMobileShopReceiptMessage({
                                   branchName,
                                   name: t.customerName?.trim() || (t as any).customerId?.name,
-                                  title: `${t.network || 'Load'} Sale Receipt`,
-                                  lines: [
-                                    { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
-                                    { label: 'Amount', value: `Rs. ${Number(t.amount).toLocaleString('en-PK')}` },
-                                  ],
+                                  title: 'Load Sale Receipt',
+                                  lines: buildLoadSaleSmsLines(t),
                                 })}
                               />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
