@@ -34,6 +34,9 @@ interface PhoneProductOption {
   _id?: string
   name: string
   price?: number
+  /** Net unit cost from this product's most recent purchase (any supplier) — updated
+   *  automatically every time it's bought, so it's a good "last price paid" default. */
+  cost?: number
   trackImei?: boolean
   category?: string
 }
@@ -151,6 +154,7 @@ export function BuyNewPhoneDialog({
     setSelectedProductId(id)
     const product = phoneProducts.find((p) => (p.id || p._id) === id)
     if (product?.price && !form.sellingPrice) setField('sellingPrice', String(product.price))
+    if (product?.cost && !form.purchasePrice) setField('purchasePrice', String(product.cost))
   }
 
   const resetForm = () => {
