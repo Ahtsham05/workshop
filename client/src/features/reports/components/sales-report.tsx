@@ -10,11 +10,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { useGetSalesReportQuery, useGetSalesInvoiceDetailsQuery, SalesInvoiceDetail, SalesInvoiceItem } from '@/stores/reports.api'
+import {
+  useGetSalesReportQuery,
+  useGetSalesInvoiceDetailsQuery,
+  useGetActivitySummaryReportQuery,
+  SalesInvoiceDetail,
+  SalesInvoiceItem,
+  ActivitySummaryEntry,
+} from '@/stores/reports.api'
+import { useGetAgentBillReportQuery, AgentBillRecord } from '@/stores/mobile-shop.api'
+import { AGENT_BILL_EMAIL } from '../../mobile-shop/bill-payments'
 import { useLanguage } from '@/context/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { TrendingUp, DollarSign, ShoppingCart, Package, ChevronDown, ChevronRight, Eye, LayoutList } from 'lucide-react'
 import { forwardRef, useImperativeHandle } from 'react'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/stores/store'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -28,7 +39,121 @@ import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 interface SalesReportProps {
   startDate: string
   endDate: string
+  // When the organization is a mobile shop, the Invoice Details table below also
+  // merges in every other sale module (load, sim sale, repair, services, bill
+  // payments, installments, agent bills) so it reads as one unified sales ledger
+  // instead of just product invoices.
+  isMobileShop?: boolean
 }
+
+// A single line inside a unified invoice row. Real sales invoices carry their
+// normal item fields; every other module (load, sim sale, repair, …) is folded
+// into one synthetic line per transaction, with `note` holding the extra context
+// (wallet, technician, bill breakdown, …) that a real line item wouldn't have.
+interface UnifiedInvoiceItem {
+  name: string
+  nameUrdu?: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+  discountAmount?: number
+  imeis?: SalesInvoiceItem['imeis']
+  variantLabel?: string | null
+  batchNumber?: string | null
+  batchAllocations?: SalesInvoiceItem['batchAllocations']
+  expiryDate?: string | null
+  note?: string
+}
+
+// One row of the merged Invoice Details table — either a real sales invoice
+// (module: 'Sales') or another sale module's transaction reshaped to look like one,
+// so the same table, expand/collapse, and "Invoice View" dialog work for all of them.
+interface UnifiedInvoiceRow {
+  _id: string
+  invoiceNumber: string
+  invoiceDate: string
+  customerName?: string
+  customerNameUrdu?: string
+  customerPhone?: string
+  type: string
+  status: string
+  total: number
+  paidAmount: number
+  balance: number
+  discount?: number
+  module: string
+  items: UnifiedInvoiceItem[]
+}
+
+// Modules from the Activity Summary feed that count as "sale modules" for a mobile
+// shop — everything else (Purchases, Expenses, customer/supplier ledger payments…)
+// stays out of a sales ledger.
+const SALE_MODULE_NAMES = new Set([
+  'Load', 'Sim Sale', 'Repairing', 'Services', 'Bill Payments', 'Installments', 'Cash Management',
+])
+
+const salesRowFromDetail = (inv: SalesInvoiceDetail): UnifiedInvoiceRow => ({
+  _id: inv._id,
+  invoiceNumber: inv.invoiceNumber,
+  invoiceDate: inv.invoiceDate,
+  customerName: inv.customerName,
+  customerNameUrdu: inv.customerNameUrdu,
+  customerPhone: inv.customerPhone,
+  type: inv.type,
+  status: inv.status,
+  total: inv.total,
+  paidAmount: inv.paidAmount,
+  balance: inv.balance,
+  discount: inv.discount,
+  module: 'Sales',
+  items: inv.items,
+})
+
+const activityEntryToRow = (entry: ActivitySummaryEntry): UnifiedInvoiceRow => ({
+  _id: entry.id,
+  invoiceNumber: entry.reference || entry.subType,
+  invoiceDate: entry.date,
+  customerName: entry.party,
+  customerPhone: entry.partyPhone,
+  type: entry.subType,
+  status: entry.status,
+  total: entry.totalAmount,
+  paidAmount: entry.paidAmount,
+  balance: entry.balance,
+  module: entry.module,
+  items: [
+    {
+      name: entry.description,
+      quantity: 1,
+      unitPrice: entry.totalAmount,
+      subtotal: entry.totalAmount,
+      note: entry.details || undefined,
+    },
+  ],
+})
+
+const agentBillToRow = (bill: AgentBillRecord): UnifiedInvoiceRow => ({
+  _id: bill.id,
+  invoiceNumber: bill.referenceNumber,
+  invoiceDate: bill.collectionDate || bill.createdAt,
+  customerName: bill.customerName,
+  customerPhone: bill.mobileNo,
+  type: 'Agent Bill',
+  status: bill.isPaid ? 'paid' : 'pending',
+  total: bill.totalAmount,
+  paidAmount: bill.isPaid ? bill.totalAmount : 0,
+  balance: bill.isPaid ? 0 : bill.totalAmount,
+  module: 'Agent Bills',
+  items: [
+    {
+      name: bill.companyName || 'Agent Bill',
+      quantity: 1,
+      unitPrice: bill.currentBillAmount,
+      subtotal: bill.totalAmount,
+      note: bill.overdueAmount > 0 ? `Overdue carried forward: ${bill.overdueAmount}` : undefined,
+    },
+  ],
+})
 
 // A line split across several batches only mirrors the *first* one onto batchNumber
 // (see invoice.model.js) — show the real per-batch breakdown when it's present, instead
@@ -41,11 +166,17 @@ const formatBatchDisplay = (item: Pick<SalesInvoiceItem, 'batchNumber' | 'batchA
 }
 
 const statusColors: Record<string, string> = {
-  paid:      'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  unpaid:    'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200',
-  finalized: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  draft:     'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  refunded:  'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  paid:        'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  unpaid:      'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200',
+  finalized:   'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  draft:       'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  refunded:    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  completed:   'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  pending:     'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  delivered:   'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
+  overdue:     'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  partial:     'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200',
 }
 
 const typeColors: Record<string, string> = {
@@ -54,20 +185,76 @@ const typeColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
 }
 
+// One color per module so the merged Invoice Details table stays scannable —
+// "Sales" is the default ledger, the rest are every other mobile-shop sale module.
+const moduleColors: Record<string, string> = {
+  'Sales':         'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  'Load':          'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+  'Sim Sale':      'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
+  'Repairing':     'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  'Services':      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
+  'Bill Payments':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
+  'Installments':    'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
+  'Agent Bills':     'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
+  'Cash Management': 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-400',
+}
+
 export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReportProps>(
-  ({ startDate, endDate }, ref) => {
+  ({ startDate, endDate, isMobileShop = false }, ref) => {
     const { t, language } = useLanguage()
     const { data, isLoading } = useGetSalesReportQuery({ startDate, endDate, groupBy: 'day' })
     const { data: detailData, isLoading: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
+
+    const user = useSelector((state: RootState) => state.auth.data?.user)
+    const isAgentBillUser = user?.email === AGENT_BILL_EMAIL
+    const { data: activityData, isLoading: activityLoading } = useGetActivitySummaryReportQuery(
+      { startDate, endDate },
+      { skip: !isMobileShop }
+    )
+    const { data: agentBillData, isLoading: agentBillLoading } = useGetAgentBillReportQuery(
+      { startDate, endDate },
+      { skip: !isMobileShop || !isAgentBillUser }
+    )
+
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-    const [viewInvoice, setViewInvoice] = useState<SalesInvoiceDetail | null>(null)
+    const [viewInvoice, setViewInvoice] = useState<UnifiedInvoiceRow | null>(null)
     const [showProductsOnly, setShowProductsOnly] = useState(false)
+
+    // Merge real sales invoices with every other mobile-shop sale module into one
+    // unified ledger — see UnifiedInvoiceRow. For non-mobile-shop businesses this is
+    // just the sales invoices, unchanged.
+    const mergedInvoices = useMemo<UnifiedInvoiceRow[]>(() => {
+      const salesRows = (detailData?.invoices || []).map(salesRowFromDetail)
+      const moduleRows = isMobileShop
+        ? (activityData?.entries || [])
+            .filter((entry) => SALE_MODULE_NAMES.has(entry.module))
+            .map(activityEntryToRow)
+        : []
+      const agentBillRows = isMobileShop && isAgentBillUser
+        ? (agentBillData?.bills || []).map(agentBillToRow)
+        : []
+      return [...salesRows, ...moduleRows, ...agentBillRows].sort(
+        (a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime()
+      )
+    }, [detailData, activityData, agentBillData, isMobileShop, isAgentBillUser])
+
+    const mergedSummary = useMemo(
+      () => ({
+        totalInvoices: mergedInvoices.length,
+        totalItems: mergedInvoices.reduce((s, r) => s + r.items.reduce((s2, i) => s2 + i.quantity, 0), 0),
+        totalSales: mergedInvoices.reduce((s, r) => s + r.total, 0),
+      }),
+      [mergedInvoices]
+    )
+
+    const detailsLoading = detailLoading || (isMobileShop && (activityLoading || (isAgentBillUser && agentBillLoading)))
 
     // Flatten invoices into date-grouped product rows for the Products Only view
     const productsByDate = useMemo(() => {
-      if (!detailData?.invoices) return []
+      if (mergedInvoices.length === 0) return []
       const dateMap = new Map<string, Array<{
         invoiceNumber: string
+        module: string
         productName: string
         productNameUrdu?: string
         quantity: number
@@ -79,13 +266,15 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         batchNumber?: string | null
         batchAllocations?: SalesInvoiceItem['batchAllocations']
         expiryDate?: string | null
+        note?: string
       }>>()
-      detailData.invoices.forEach((inv) => {
+      mergedInvoices.forEach((inv) => {
         const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
         if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
         inv.items.forEach((item) => {
           dateMap.get(dateStr)!.push({
             invoiceNumber: inv.invoiceNumber,
+            module: inv.module,
             productName: item.name,
             productNameUrdu: item.nameUrdu,
             quantity: item.quantity,
@@ -97,11 +286,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             batchNumber: item.batchNumber,
             batchAllocations: item.batchAllocations,
             expiryDate: item.expiryDate,
+            note: item.note,
           })
         })
       })
       return Array.from(dateMap.entries()).map(([date, items]) => ({ date, items }))
-    }, [detailData])
+    }, [mergedInvoices])
 
     const toggleRow = useCallback((id: string) => {
       setExpandedRows((prev) => {
@@ -133,16 +323,17 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             XLSX.utils.book_append_sheet(wb, summarySheet, 'Daily Summary')
           }
 
-          // Sheet 2 — invoice details
-          if (detailData?.invoices && detailData.invoices.length > 0) {
+          // Sheet 2 — invoice details (merged across every sale module for mobile shops)
+          if (mergedInvoices.length > 0) {
             const rows: object[] = []
-            detailData.invoices.forEach((inv) => {
+            mergedInvoices.forEach((inv) => {
               inv.items.forEach((item, idx) => {
                 rows.push({
+                  ...(isMobileShop ? { Module: idx === 0 ? inv.module : '' } : {}),
                   'Invoice #':    idx === 0 ? inv.invoiceNumber : '',
                   Date:           idx === 0 ? format(new Date(inv.invoiceDate), 'yyyy-MM-dd') : '',
-                  Customer:       idx === 0 ? reportEntityName(language, inv.customerName, inv.customerNameUrdu) : '',
-                  'Cust. Phone':  idx === 0 ? inv.customerPhone : '',
+                  Customer:       idx === 0 ? reportEntityName(language, inv.customerName || '', inv.customerNameUrdu) : '',
+                  'Cust. Phone':  idx === 0 ? (inv.customerPhone || '') : '',
                   Type:           idx === 0 ? inv.type : '',
                   Status:         idx === 0 ? inv.status : '',
                   'Invoice Total': idx === 0 ? inv.total : '',
@@ -157,18 +348,20 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   'Unit Sale Price':   item.unitPrice,
                   'Item Discount': item.discountAmount || 0,
                   Subtotal:       item.subtotal,
+                  ...(item.note ? { Notes: item.note } : {}),
                 })
               })
             })
             // Totals row
             rows.push({
+              ...(isMobileShop ? { Module: '' } : {}),
               'Invoice #':    'TOTAL',
               Date:           '',
-              Customer:       `${detailData.summary.totalInvoices} invoices`,
+              Customer:       `${mergedSummary.totalInvoices} invoices`,
               'Cust. Phone':  '',
               Type:           '',
               Status:         '',
-              'Invoice Total': detailData.summary.totalSales,
+              'Invoice Total': mergedSummary.totalSales,
               'Invoice Discount': '',
               'Paid Amount':  '',
               Balance:        '',
@@ -176,10 +369,10 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               Variant:        '',
               'Batch #':      '',
               Expiry:         '',
-              Qty:            detailData.summary.totalItems,
+              Qty:            mergedSummary.totalItems,
               'Unit Sale Price':   '',
               'Item Discount': '',
-              Subtotal:       detailData.summary.totalSales,
+              Subtotal:       mergedSummary.totalSales,
             })
             const detailSheet = XLSX.utils.json_to_sheet(rows)
             XLSX.utils.book_append_sheet(wb, detailSheet, 'Invoice Details')
@@ -197,7 +390,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           toast.error(t('Failed to export data'))
         }
       },
-    }), [data, detailData, t, language])
+    }), [data, mergedInvoices, mergedSummary, isMobileShop, t, language])
 
     const formatCurrency = (value: number) =>
       new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
@@ -344,10 +537,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             <div>
               <CardTitle>Invoice Details</CardTitle>
               <CardDescription>
-                All invoices in the selected period — click a row to see individual items
+                {isMobileShop
+                  ? 'Every sale invoice, load sale/purchase, sim sale, repair, service, bill payment, installment, cash management send/receive and agent bill in the selected period — click a row to see individual items'
+                  : 'All invoices in the selected period — click a row to see individual items'}
               </CardDescription>
             </div>
-            {detailData?.invoices?.length ? (
+            {mergedInvoices.length ? (
               <div className='flex items-center gap-2 shrink-0 mt-1'>
                 <Button
                   variant={showProductsOnly ? 'default' : 'outline'}
@@ -363,12 +558,12 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                     variant='outline'
                     size='sm'
                     onClick={() => {
-                      const allIds = detailData.invoices.map((inv) => inv._id)
+                      const allIds = mergedInvoices.map((inv) => inv._id)
                       const allOpen = allIds.every((id) => expandedRows.has(id))
                       setExpandedRows(allOpen ? new Set() : new Set(allIds))
                     }}
                   >
-                    {detailData.invoices.every((inv) => expandedRows.has(inv._id)) ? (
+                    {mergedInvoices.every((inv) => expandedRows.has(inv._id)) ? (
                       <>
                         <ChevronDown className='h-4 w-4 mr-1.5' />
                         Collapse All
@@ -385,11 +580,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             ) : null}
           </CardHeader>
           <CardContent className='p-0'>
-            {detailLoading ? (
+            {detailsLoading ? (
               <div className='space-y-2 p-6'>
                 {[1, 2, 3].map((i) => <Skeleton key={i} className='h-10 w-full' />)}
               </div>
-            ) : !detailData?.invoices?.length ? (
+            ) : !mergedInvoices.length ? (
               <p className='text-center text-muted-foreground py-10'>No invoices found</p>
             ) : showProductsOnly ? (
               /* ── Products Only View ────────────────────────────────────────── */
@@ -399,6 +594,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                     <TableRow className='bg-muted/50'>
                       <TableHead>Date</TableHead>
                       <TableHead>Invoice #</TableHead>
+                      {isMobileShop && <TableHead>Module</TableHead>}
                       <TableHead>Product</TableHead>
                       <TableHead>Variant</TableHead>
                       <TableHead>Batch #</TableHead>
@@ -414,7 +610,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                         {/* Date group header */}
                         <TableRow className='bg-muted/40 border-t'>
                           <TableCell
-                            colSpan={9}
+                            colSpan={isMobileShop ? 10 : 9}
                             className='py-2 px-4 font-semibold text-sm text-foreground'
                           >
                             {date}
@@ -431,6 +627,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             <TableCell className='font-mono text-xs text-primary'>
                               {row.invoiceNumber}
                             </TableCell>
+                            {isMobileShop && (
+                              <TableCell>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${moduleColors[row.module] ?? ''}`}>
+                                  {row.module}
+                                </span>
+                              </TableCell>
+                            )}
                             <TableCell
                               className={cn(
                                 'font-medium',
@@ -445,6 +648,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 <div className='text-xs font-normal text-muted-foreground'>
                                   IMEI/Serial: {formatImeiEntries(row.imeis)}
                                 </div>
+                              )}
+                              {row.note && (
+                                <div className='text-xs font-normal text-muted-foreground'>{row.note}</div>
                               )}
                             </TableCell>
                             <TableCell className='text-sm text-muted-foreground'>
@@ -479,16 +685,16 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
 
                   <TableFooter>
                     <TableRow className='bg-muted font-bold border-t-2'>
-                      <TableCell colSpan={6} className='text-sm uppercase tracking-wide'>
-                        Total — {detailData.summary.totalInvoices} invoice
-                        {detailData.summary.totalInvoices !== 1 ? 's' : ''}
+                      <TableCell colSpan={isMobileShop ? 7 : 6} className='text-sm uppercase tracking-wide'>
+                        Total — {mergedSummary.totalInvoices} invoice
+                        {mergedSummary.totalInvoices !== 1 ? 's' : ''}
                       </TableCell>
                       <TableCell className='text-right'>
-                        {detailData.summary.totalItems} items
+                        {mergedSummary.totalItems} items
                       </TableCell>
                       <TableCell />
                       <TableCell className='text-right text-lg text-primary'>
-                        {formatCurrency(detailData.summary.totalSales)}
+                        {formatCurrency(mergedSummary.totalSales)}
                       </TableCell>
                     </TableRow>
                   </TableFooter>
@@ -502,6 +708,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                     <TableRow className='bg-muted/50'>
                       <TableHead className='w-8' />
                       <TableHead>Invoice #</TableHead>
+                      {isMobileShop && <TableHead>Module</TableHead>}
                       <TableHead>Date</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Phone</TableHead>
@@ -515,7 +722,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {detailData.invoices.map((inv) => {
+                    {mergedInvoices.map((inv) => {
                       const isOpen = expandedRows.has(inv._id)
                       const totalQty = inv.items.reduce((s, i) => s + i.quantity, 0)
                       return (
@@ -535,6 +742,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             <TableCell className='font-mono font-semibold text-primary'>
                               {inv.invoiceNumber}
                             </TableCell>
+                            {isMobileShop && (
+                              <TableCell>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${moduleColors[inv.module] ?? ''}`}>
+                                  {inv.module}
+                                </span>
+                              </TableCell>
+                            )}
                             <TableCell className='text-sm text-muted-foreground'>
                               {format(new Date(inv.invoiceDate), 'dd MMM yyyy')}
                             </TableCell>
@@ -600,9 +814,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                             >
                               {/* expand icon col */}
                               <TableCell />
-                              {/* Invoice # / Date / Customer (colSpan 3) */}
+                              {/* Invoice # / Module / Date / Customer */}
                               <TableCell
-                                colSpan={3}
+                                colSpan={isMobileShop ? 4 : 3}
                                 className='pl-10 text-sm text-muted-foreground py-2'
                               >
                                 <LongText
@@ -620,6 +834,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                   <span className='block text-xs text-muted-foreground'>
                                     IMEI/Serial: {formatImeiEntries(item.imeis)}
                                   </span>
+                                )}
+                                {item.note && (
+                                  <span className='block text-xs text-muted-foreground'>{item.note}</span>
                                 )}
                                 {(item.variantLabel || item.batchNumber || item.expiryDate) && (
                                   <span className='mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground'>
@@ -670,21 +887,21 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   <TableFooter>
                     <TableRow className='bg-muted font-bold border-t-2'>
                       <TableCell />
-                      <TableCell colSpan={2} className='text-sm uppercase tracking-wide'>
+                      <TableCell colSpan={isMobileShop ? 3 : 2} className='text-sm uppercase tracking-wide'>
                         Total
                       </TableCell>
                       <TableCell className='text-sm'>
-                        {detailData.summary.totalInvoices} invoice
-                        {detailData.summary.totalInvoices !== 1 ? 's' : ''}
+                        {mergedSummary.totalInvoices} invoice
+                        {mergedSummary.totalInvoices !== 1 ? 's' : ''}
                       </TableCell>
                       <TableCell />
                       <TableCell />
                       <TableCell />
                       <TableCell className='text-right'>
-                        {detailData.summary.totalItems} items
+                        {mergedSummary.totalItems} items
                       </TableCell>
                       <TableCell className='text-right text-lg text-primary'>
-                        {formatCurrency(detailData.summary.totalSales)}
+                        {formatCurrency(mergedSummary.totalSales)}
                       </TableCell>
                       <TableCell />
                       <TableCell />
@@ -703,8 +920,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             {viewInvoice && (
               <>
                 <DialogHeader>
-                  <DialogTitle className='flex items-center gap-2'>
+                  <DialogTitle className='flex flex-wrap items-center gap-2'>
                     <span className='font-mono text-primary'>{viewInvoice.invoiceNumber}</span>
+                    {isMobileShop && (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${moduleColors[viewInvoice.module] ?? ''}`}>
+                        {viewInvoice.module}
+                      </span>
+                    )}
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[viewInvoice.status] ?? ''}`}>
                       {viewInvoice.status}
                     </span>
@@ -735,7 +957,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
 
                 {/* Items */}
                 <div>
-                  <p className='text-sm font-semibold mb-3'>Items Sold</p>
+                  <p className='text-sm font-semibold mb-3'>{viewInvoice.module === 'Sales' ? 'Items Sold' : 'Transaction Details'}</p>
                   <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
@@ -764,6 +986,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               <div className='text-xs font-normal text-muted-foreground'>
                                 IMEI/Serial: {formatImeiEntries(item.imeis)}
                               </div>
+                            )}
+                            {item.note && (
+                              <div className='text-xs font-normal text-muted-foreground'>{item.note}</div>
                             )}
                             {(item.variantLabel || item.batchNumber || item.expiryDate) && (
                               <div className='mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground'>
@@ -822,7 +1047,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       {(viewInvoice.discount || 0) > 0 && (
                         <div className='rounded-lg border p-3 text-center'>
                           <p className='text-muted-foreground text-xs mb-1'>Invoice Discount</p>
-                          <p className='text-lg font-bold text-green-600'>-{formatCurrency(viewInvoice.discount)}</p>
+                          <p className='text-lg font-bold text-green-600'>-{formatCurrency(viewInvoice.discount || 0)}</p>
                         </div>
                       )}
                     </div>
