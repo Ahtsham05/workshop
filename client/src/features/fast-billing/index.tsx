@@ -9,6 +9,9 @@ import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/store
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { ImeiEntryInput, ImeiRecord } from '@/stores/imei.api'
+import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
+import { entryImei, SerialNumberDialog } from '@/components/serial-batch-line-controls'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat } from '@/features/invoice/utils/paper-format'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
@@ -109,6 +112,18 @@ export default function FastBillingPage() {
     return map
   }, [catalog])
 
+  // Live lookup from a cart line's key back to its catalog entry — batches and stock
+  // change as other sales go through, so cart lines never cache their own copy; they
+  // always read the current one from here (mirrors invoice-panel's sellableCatalog.find).
+  const catalogByKey = useMemo(() => {
+    const map = new Map<string, PurchaseCatalogItem>()
+    for (const item of catalog) map.set(cartLineKey(item), item)
+    return map
+  }, [catalog])
+
+  // Which cart line's IMEI/serial picker is open — '' means none.
+  const [serialDialogKey, setSerialDialogKey] = useState<string>('')
+
   const addToCart = useCallback((item: PurchaseCatalogItem, quantity = 1, unitPrice?: number) => {
     if (item.stockQuantity <= 0) {
       toast.error(`${item.name} is out of stock`)
@@ -130,6 +145,11 @@ export default function FastBillingPage() {
     setLastAddedKey(key)
     setRecentItems((prev) => [item, ...prev.filter((p) => cartLineKey(p) !== key)].slice(0, MAX_RECENT_ITEMS))
     playBeep('success')
+    // Every add either creates a fresh line with 0 picked, or bumps quantity past
+    // whatever was already picked — either way the line now needs at least one more
+    // serial/IMEI, so the picker always opens right after a scan/click and the flow
+    // stays scan → pick → next scan without an extra step.
+    if (item.trackImei || item.trackSerial) setSerialDialogKey(key)
   }, [])
 
   useEffect(() => {
@@ -185,13 +205,195 @@ export default function FastBillingPage() {
     [barcodeIndex, catalog, addToCart],
   )
 
+  // Batch-tracked lines try the currently-selected batch first — a quantity that fits
+  // inside it alone stays a plain single-batch line, exactly as before. Only when it
+  // falls short does this draw the remainder from the other batches in FEFO order,
+  // auto-suggesting a split rather than blocking the increase outright. Mirrors
+  // features/invoice/index.tsx's updateQuantity variant/batch branch.
   const updateQuantity = useCallback((key: string, quantity: number) => {
+    const currentItem = cart.find((l) => l.key === key)
+    if (currentItem?.variantId && (currentItem.trackBatch || currentItem.trackExpiry)) {
+      const catalogEntry = catalogByKey.get(key)
+      const batches = catalogEntry?.batches ?? []
+      let nextBatchId = currentItem.batchId
+      let nextBatchNumber = currentItem.batchNumber
+      let nextBatchAllocations: BatchAllocation[] | undefined
+
+      if (batches.length > 0) {
+        const primaryBatch = currentItem.batchId ? batches.find((b) => b.id === currentItem.batchId) : undefined
+        if (primaryBatch && quantity <= primaryBatch.quantity) {
+          nextBatchAllocations = undefined
+        } else {
+          const orderedBatches = primaryBatch ? [primaryBatch, ...batches.filter((b) => b.id !== primaryBatch.id)] : batches
+          const { allocations, remaining } = autoAllocateBatches(orderedBatches, quantity)
+          if (remaining > 0) {
+            toast.error(`${currentItem.name} - Only ${quantity - remaining} unit(s) available across all batches`)
+            return
+          }
+          nextBatchAllocations = allocations.length > 1 ? allocations : undefined
+          if (allocations.length > 0) {
+            nextBatchId = allocations[0].batchId
+            nextBatchNumber = allocations[0].batchNumber
+          }
+        }
+      } else {
+        const available = catalogEntry?.stockQuantity ?? 0
+        if (quantity > available) {
+          toast.error(`${currentItem.name} - Only ${available} unit(s) available`)
+          return
+        }
+      }
+
+      setCart((prev) =>
+        prev.map((l) =>
+          l.key === key
+            ? { ...l, quantity, batchId: nextBatchId, batchNumber: nextBatchNumber, batchAllocations: nextBatchAllocations }
+            : l,
+        ),
+      )
+      return
+    }
+
     setCart((prev) => prev.map((l) => (l.key === key ? { ...l, quantity } : l)))
-  }, [])
+  }, [cart, catalogByKey])
 
   const updatePrice = useCallback((key: string, unitPrice: number) => {
     setCart((prev) => prev.map((l) => (l.key === key ? { ...l, unitPrice } : l)))
   }, [])
+
+  // Switching which batch a line deducts from — different batches can have been bought
+  // at, and intended to sell for, different prices, so this swaps both cost AND sale
+  // price to match the picked batch. Mirrors invoice-panel.tsx's updateItemBatch.
+  const updateItemBatch = useCallback(
+    (key: string, batchId: string, batchNumber: string, availableQuantity: number, costPerUnit?: number, sellingPrice?: number, basePrice?: number) => {
+      const currentItem = cart.find((l) => l.key === key)
+      if (currentItem && availableQuantity > 0 && availableQuantity < currentItem.quantity) {
+        toast.error(`${currentItem.name} - quantity reduced to ${availableQuantity} to match batch ${batchNumber}'s available stock`)
+      }
+      setCart((prev) =>
+        prev.map((line) => {
+          if (line.key !== key) return line
+          const cost = costPerUnit ?? line.cost
+          const unitPrice = sellingPrice ?? basePrice ?? line.unitPrice
+          const quantity = availableQuantity > 0 ? Math.min(line.quantity, availableQuantity) : line.quantity
+          return { ...line, batchId, batchNumber, cost, unitPrice, quantity, batchAllocations: undefined }
+        }),
+      )
+    },
+    [cart],
+  )
+
+  // Shared recompute for editing a line's batch split — quantity is always just the sum
+  // of the allocation rows, so editing one grows/shrinks the line rather than needing to
+  // be rebalanced against a fixed target. Collapses back to a plain single-batch line the
+  // moment only one row is left. Mirrors invoice-panel.tsx's applyBatchAllocations.
+  const applyBatchAllocations = useCallback((key: string, compute: (current: BatchAllocation[]) => BatchAllocation[]) => {
+    setCart((prev) =>
+      prev.map((line) => {
+        if (line.key !== key) return line
+        const current: BatchAllocation[] = line.batchAllocations
+          ?? (line.batchId ? [{ batchId: line.batchId, batchNumber: line.batchNumber || '', quantity: line.quantity }] : [])
+        const next = compute(current).filter((a) => a.quantity > 0)
+        const totalQty = next.reduce((sum, a) => sum + a.quantity, 0)
+        const only = next.length <= 1 ? next[0] : undefined
+        return {
+          ...line,
+          quantity: totalQty,
+          batchId: only ? only.batchId : (next[0]?.batchId ?? line.batchId),
+          batchNumber: only ? only.batchNumber : (next[0]?.batchNumber ?? line.batchNumber),
+          batchAllocations: only ? undefined : next,
+        }
+      }),
+    )
+  }, [])
+
+  const updateAllocationQuantity = useCallback((key: string, batchId: string, newQty: number) => {
+    applyBatchAllocations(key, (current) => current.map((a) => (a.batchId === batchId ? { ...a, quantity: newQty } : a)))
+  }, [applyBatchAllocations])
+
+  const addBatchToSplit = useCallback((key: string, batch: { id: string; batchNumber: string }) => {
+    applyBatchAllocations(key, (current) =>
+      current.some((a) => a.batchId === batch.id) ? current : [...current, { batchId: batch.id, batchNumber: batch.batchNumber, quantity: 1 }],
+    )
+  }, [applyBatchAllocations])
+
+  // When a serial-tracked + batch-tracked line's picked serials change, re-derive the
+  // batch split from what was actually picked — each serial belongs to exactly one real
+  // batch (or none, for legacy/opening stock), so the allocation follows the seller's
+  // serial choices instead of risking a mismatch the backend would reject. Mirrors
+  // invoice-panel.tsx's updateItemImeis.
+  const updateItemImeis = useCallback((key: string, nextImeis: ImeiEntryInput[], records: ImeiRecord[]) => {
+    setCart((prev) =>
+      prev.map((line) => {
+        if (line.key !== key) return line
+        if (!line.variantId) {
+          const patch: Partial<CartLine> = { imeis: nextImeis }
+          // A single-unit line with no meaningful product price (price 0) has nothing
+          // sensible to default to — once the specific unit is picked, back price/name in
+          // from its own record instead. Freely editable afterwards either way.
+          if (nextImeis.length === 1 && line.quantity === 1) {
+            const record = records.find((r) => r.imei === entryImei(nextImeis[0]))
+            if (record) {
+              if (record.askingPrice && line.unitPrice === 0) patch.unitPrice = record.askingPrice
+              if (record.brand || record.model) patch.name = [record.brand, record.model].filter(Boolean).join(' ')
+            }
+          }
+          return { ...line, ...patch }
+        }
+
+        const catalogEntry = catalogByKey.get(line.key)
+        const batches = catalogEntry?.batches ?? []
+        if (batches.length === 0) return { ...line, imeis: nextImeis }
+
+        const batchIdByImei = new Map<string, string | null>(
+          records.map((r) => [r.imei, (typeof r.batchId === 'string' ? r.batchId : r.batchId?.id) || null]),
+        )
+        const knownCounts = new Map<string, number>()
+        nextImeis.forEach((entry) => {
+          const bId = batchIdByImei.get(entryImei(entry))
+          if (bId) knownCounts.set(bId, (knownCounts.get(bId) || 0) + 1)
+        })
+
+        const currentAllocations: BatchAllocation[] = line.batchAllocations
+          ?? (line.batchId ? [{ batchId: line.batchId, batchNumber: line.batchNumber || '', quantity: line.quantity }] : [])
+
+        const orderedBatchIds = [...new Set([...currentAllocations.map((a) => a.batchId), ...knownCounts.keys()])]
+        const next: BatchAllocation[] = orderedBatchIds.map((batchId) => ({
+          batchId,
+          batchNumber: currentAllocations.find((a) => a.batchId === batchId)?.batchNumber
+            ?? batches.find((b) => b.id === batchId)?.batchNumber ?? '',
+          quantity: knownCounts.get(batchId) ?? 0,
+        }))
+
+        let leftover = Math.max(0, line.quantity - next.reduce((sum, a) => sum + a.quantity, 0))
+        for (const alloc of next) {
+          if (leftover <= 0) break
+          const cap = batches.find((b) => b.id === alloc.batchId)?.quantity ?? Infinity
+          const take = Math.min(Math.max(0, cap - alloc.quantity), leftover)
+          alloc.quantity += take
+          leftover -= take
+        }
+        if (leftover > 0) {
+          for (const b of batches.filter((b) => b.quantity > 0 && !next.some((a) => a.batchId === b.id))) {
+            if (leftover <= 0) break
+            const take = Math.min(b.quantity, leftover)
+            next.push({ batchId: b.id, batchNumber: b.batchNumber, quantity: take })
+            leftover -= take
+          }
+        }
+
+        const finalAllocations = next.filter((a) => a.quantity > 0)
+        const only = finalAllocations.length <= 1 ? finalAllocations[0] : undefined
+        return {
+          ...line,
+          imeis: nextImeis,
+          batchId: only ? only.batchId : (finalAllocations[0]?.batchId ?? line.batchId),
+          batchNumber: only ? only.batchNumber : (finalAllocations[0]?.batchNumber ?? line.batchNumber),
+          batchAllocations: only ? undefined : finalAllocations,
+        }
+      }),
+    )
+  }, [catalogByKey])
 
   // Update one line's discount (type and/or raw value) — a customer discount on that
   // specific product, on top of any overall-sale discount. Mirrors invoice/purchase-invoice's
@@ -302,6 +504,20 @@ export default function FastBillingPage() {
 
   const handleCharge = useCallback(async () => {
     if (cart.length === 0) return
+
+    // IMEI/serial-tracked lines must have exactly one number selected per unit sold —
+    // same check invoice-panel.tsx runs before save.
+    for (const line of cart) {
+      if (!line.trackImei && !line.trackSerial) continue
+      const label = line.trackSerial ? 'serial' : 'IMEI'
+      const imeiCount = (line.imeis || []).length
+      if (imeiCount !== line.quantity) {
+        toast.error(`${line.name}: select ${line.quantity} ${label} number(s) — ${imeiCount} selected`)
+        setSerialDialogKey(line.key)
+        return
+      }
+    }
+
     try {
       const payload = buildInvoicePayload({ cart, customer, walkInCustomerName, paymentMethod, discountType, discountValue, paidAmount })
       const result = await createInvoice(payload).unwrap()
@@ -521,12 +737,17 @@ export default function FastBillingPage() {
             </div>
             <CartPanel
               cart={cart}
+              catalogByKey={catalogByKey}
               onQuantityChange={updateQuantity}
               onPriceChange={updatePrice}
               onItemDiscountChange={updateItemDiscount}
               onRemove={removeLine}
               highlightKey={lastAddedKey}
               customer={customer}
+              onOpenSerialDialog={setSerialDialogKey}
+              onUpdateBatch={updateItemBatch}
+              onUpdateAllocationQuantity={updateAllocationQuantity}
+              onAddBatchToSplit={addBatchToSplit}
             />
           </div>
         </div>
@@ -571,6 +792,31 @@ export default function FastBillingPage() {
         onConfirm={confirmAddDialog}
         onAfterClose={focusScanInput}
       />
+
+      {(() => {
+        const dialogLine = cart.find((l) => l.key === serialDialogKey)
+        if (!dialogLine) return null
+        return (
+          <SerialNumberDialog
+            open={!!serialDialogKey}
+            onOpenChange={(open) => setSerialDialogKey(open ? serialDialogKey : '')}
+            productId={dialogLine.productId}
+            batchId={dialogLine.batchId}
+            batchIds={dialogLine.batchAllocations?.map((a) => a.batchId)}
+            itemName={dialogLine.name}
+            quantity={dialogLine.quantity}
+            selected={dialogLine.imeis || []}
+            isSerial={!!dialogLine.trackSerial}
+            onChange={(next, records) => updateItemImeis(dialogLine.key, next, records)}
+            onComplete={() => {
+              // Fast Billing has no "next row" to advance to — just close and hand focus
+              // back to the scan input, ready for the next scan.
+              setSerialDialogKey('')
+              focusScanInput()
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

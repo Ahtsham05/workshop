@@ -62,6 +62,9 @@ export function buildInvoicePayload({
     return {
       productId: line.productId,
       variantId: line.variantId,
+      batchId: line.batchId,
+      batchNumber: line.batchNumber,
+      batchAllocations: line.batchAllocations,
       name: line.name,
       nameUrdu: line.nameUrdu,
       quantity: line.quantity,
@@ -74,6 +77,7 @@ export function buildInvoicePayload({
       discountType: line.discountType || 'fixed',
       discountValue: line.discountValue || 0,
       discountAmount: round2(discountAmount),
+      imeis: line.imeis || [],
     }
   })
 

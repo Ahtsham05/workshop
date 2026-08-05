@@ -10,21 +10,43 @@ import type { CartLine } from '../types'
 import type { FastBillCustomer } from '../utils/build-invoice-payload'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { ProductHistoryDialog } from '@/features/invoice/components/product-history-dialog'
+import { BatchAllocationEditor, SerialSummaryTrigger } from '@/components/serial-batch-line-controls'
+import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 type Props = {
   cart: CartLine[]
+  /** Live catalog lookup (by cartLineKey) for batches/stock — never trust a stale copy
+   *  on the cart line, other sales can change batch stock between renders. */
+  catalogByKey: Map<string, PurchaseCatalogItem>
   onQuantityChange: (key: string, quantity: number) => void
   onPriceChange: (key: string, unitPrice: number) => void
   onItemDiscountChange: (key: string, patch: { type?: DiscountType; value?: number }) => void
   onRemove: (key: string) => void
   highlightKey?: string | null
   customer?: FastBillCustomer
+  onOpenSerialDialog: (key: string) => void
+  onUpdateBatch: (key: string, batchId: string, batchNumber: string, availableQuantity: number, costPerUnit?: number, sellingPrice?: number, basePrice?: number) => void
+  onUpdateAllocationQuantity: (key: string, batchId: string, quantity: number) => void
+  onAddBatchToSplit: (key: string, batch: { id: string; batchNumber: string }) => void
 }
 
 const noSpinner =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
-export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscountChange, onRemove, highlightKey, customer }: Props) {
+export function CartPanel({
+  cart,
+  catalogByKey,
+  onQuantityChange,
+  onPriceChange,
+  onItemDiscountChange,
+  onRemove,
+  highlightKey,
+  customer,
+  onOpenSerialDialog,
+  onUpdateBatch,
+  onUpdateAllocationQuantity,
+  onAddBatchToSplit,
+}: Props) {
   const [historyDialog, setHistoryDialog] = useState<{
     open: boolean
     productId: string
@@ -50,6 +72,7 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscoun
           const lineTotal = Math.round((gross - lineDiscount) * 100) / 100
           const remaining = line.stockQuantity - line.quantity
           const justAdded = highlightKey === line.key
+          const catalogEntry = catalogByKey.get(line.key)
           return (
             <li
               key={line.key}
@@ -81,7 +104,66 @@ export function CartPanel({ cart, onQuantityChange, onPriceChange, onItemDiscoun
                     <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', stockDotClasses(remaining))} />
                     {stockLabel(remaining)}
                   </span>
+                  {/* Which batch(es) this sale depletes — defaults to the earliest-expiry
+                      batch, switchable by clicking another; a quantity that outgrows a
+                      single batch auto-splits across several (see updateQuantity in
+                      fast-billing/index.tsx), rendered here as an editable breakdown.
+                      Mirrors invoice-panel.tsx's per-line batch chips. */}
+                  {catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0 && (
+                    line.batchAllocations && line.batchAllocations.length > 1 ? (
+                      <BatchAllocationEditor
+                        allocations={line.batchAllocations}
+                        batches={catalogEntry.batches}
+                        onUpdateQuantity={(batchId, qty) => onUpdateAllocationQuantity(line.key, batchId, qty)}
+                        onAddBatch={(batch) => onAddBatchToSplit(line.key, batch)}
+                      />
+                    ) : (() => {
+                      const visibleBatches = catalogEntry.batches!.filter((b) => b.quantity > 0 || line.batchId === b.id)
+                      if (visibleBatches.length === 0) return null
+                      return (
+                        <>
+                          {visibleBatches.map((b) => {
+                            const isSelected = line.batchId === b.id
+                            const batchLeft = isSelected ? Math.max(0, b.quantity - line.quantity) : b.quantity
+                            return (
+                              <button
+                                key={b.id}
+                                type='button'
+                                onClick={() => onUpdateBatch(line.key, b.id, b.batchNumber, b.quantity, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
+                                title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                                className={cn(
+                                  'shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
+                                  isSelected
+                                    ? 'border-blue-600 bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                                )}
+                              >
+                                {b.batchNumber} · {batchLeft} left
+                              </button>
+                            )
+                          })}
+                        </>
+                      )
+                    })()
+                  )}
+                  {(line.trackImei || line.trackSerial) && (
+                    <SerialSummaryTrigger
+                      selectedCount={(line.imeis || []).length}
+                      quantity={line.quantity}
+                      isSerial={!!line.trackSerial}
+                      onClick={() => onOpenSerialDialog(line.key)}
+                    />
+                  )}
                 </div>
+                {!(line.batchAllocations && line.batchAllocations.length > 1) && (() => {
+                  const selectedBatch = line.batchId ? catalogEntry?.batches?.find((b) => b.id === line.batchId) : undefined
+                  if (!selectedBatch || line.quantity <= selectedBatch.quantity) return null
+                  return (
+                    <p className='mt-1 text-xs text-destructive'>
+                      Only {selectedBatch.quantity} available in batch {selectedBatch.batchNumber} — reduce the quantity or pick a different batch.
+                    </p>
+                  )
+                })()}
               </div>
 
               <div className='flex shrink-0 items-center gap-1.5'>

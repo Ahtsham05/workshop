@@ -9,6 +9,7 @@ import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
+import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading, which would retrigger any effect keyed
@@ -96,33 +97,12 @@ export interface InvoiceItem {
   batchAllocations?: BatchAllocation[]
 }
 
-export interface BatchAllocation {
-  batchId: string
-  batchNumber: string
-  quantity: number
-}
-
-/**
- * Greedily fills `neededQty` from `batches` in the order given (the catalog already
- * sorts by earliest expiry — FEFO) — the "big ERP" default for splitting a sale across
- * lots when no single one has enough. Returns however much it could allocate; if
- * `remaining > 0`, total stock across every batch fell short of what was asked for.
- */
-export function autoAllocateBatches(
-  batches: { id: string; batchNumber: string; quantity: number }[],
-  neededQty: number,
-): { allocations: BatchAllocation[]; remaining: number } {
-  const allocations: BatchAllocation[] = []
-  let remaining = neededQty
-  for (const b of batches) {
-    if (remaining <= 0) break
-    if (b.quantity <= 0) continue
-    const take = Math.min(b.quantity, remaining)
-    allocations.push({ batchId: b.id, batchNumber: b.batchNumber, quantity: take })
-    remaining -= take
-  }
-  return { allocations, remaining }
-}
+// Re-exported so existing `import { BatchAllocation, autoAllocateBatches } from
+// '../index'` call sites (e.g. invoice-panel.tsx) keep working — the actual
+// implementation lives in @/lib/batch-allocation so fast-billing (and anywhere else that
+// sells batch-tracked stock) can use it without pulling in this whole page module.
+export { autoAllocateBatches }
+export type { BatchAllocation }
 
 export function createEmptyManualInvoiceItem(): InvoiceItem {
   return {

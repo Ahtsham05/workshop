@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { selectOnFocus } from '../utils/select-on-focus'
 import { stockBadgeClasses, stockDotClasses, stockLabel } from '../utils/stock-badge'
+import { getDefaultBatch } from '../types'
 
 type Props = {
   item: PurchaseCatalogItem | null
@@ -31,7 +32,11 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
   useEffect(() => {
     if (!item) return
     setQuantity(1)
-    setUnitPrice(item.price)
+    // Default to the auto-picked batch's own selling price when the product is
+    // batch-tracked — a batch can carry its own intended retail price recorded at
+    // purchase time, same default invoice-panel.tsx uses.
+    const batch = getDefaultBatch(item)
+    setUnitPrice(batch?.sellingPrice ?? item.price)
     requestAnimationFrame(() => {
       qtyRef.current?.focus()
       qtyRef.current?.select()
