@@ -323,7 +323,7 @@ export default function ReportsPage() {
         )}
 
         <TabsContent value='sales' className='mt-6'>
-          <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} isMobileShop={isMobileShop} />
         </TabsContent>
 
         <TabsContent value='purchases' className='mt-6'>
