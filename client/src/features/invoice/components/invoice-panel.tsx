@@ -1611,9 +1611,11 @@ export function InvoicePanel({
             }
           }
 
-          // Fire-and-forget — save/print already completed, sending runs in the background
+          // Fire-and-forget — save/print already completed, sending runs in the background.
+          // WhatsApp is only offered for pending (goods handoff) invoices — the UI already
+          // disables that choice for other types, this is the belt-and-suspenders check.
           if (sendMethod === 'sms' || sendMethod === 'both') sendSmsNow()
-          if (sendMethod === 'whatsapp' || sendMethod === 'both') sendWhatsAppNow()
+          if ((sendMethod === 'whatsapp' || sendMethod === 'both') && isPendingHandoff) sendWhatsAppNow()
         } // end else (registered customer)
       }
 
@@ -3209,6 +3211,11 @@ export function InvoicePanel({
                   {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
                   {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
                   {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
+                </p>
+              )}
+              {(sendMethod === 'whatsapp' || sendMethod === 'both') && invoice.type !== 'pending' && (
+                <p className='text-xs text-amber-600 dark:text-amber-500'>
+                  This invoice is {t(invoice.type)}, not pending — WhatsApp won't be sent this time{sendMethod === 'both' ? ' (SMS still will be)' : ''}.
                 </p>
               )}
             </div>
