@@ -89,7 +89,7 @@ interface UnifiedInvoiceRow {
 // shop — everything else (Purchases, Expenses, customer/supplier ledger payments…)
 // stays out of a sales ledger.
 const SALE_MODULE_NAMES = new Set([
-  'Load', 'Sim Sale', 'Repairing', 'Services', 'Bill Payments', 'Installments', 'Cash Management',
+  'Load', 'Sim Sale', 'Repairing', 'Services', 'Bill Payments', 'Installments',
 ])
 
 const salesRowFromDetail = (inv: SalesInvoiceDetail): UnifiedInvoiceRow => ({
@@ -109,28 +109,33 @@ const salesRowFromDetail = (inv: SalesInvoiceDetail): UnifiedInvoiceRow => ({
   items: inv.items,
 })
 
-const activityEntryToRow = (entry: ActivitySummaryEntry): UnifiedInvoiceRow => ({
-  _id: entry.id,
-  invoiceNumber: entry.reference || entry.subType,
-  invoiceDate: entry.date,
-  customerName: entry.party,
-  customerPhone: entry.partyPhone,
-  type: entry.subType,
-  status: entry.status,
-  total: entry.totalAmount,
-  paidAmount: entry.paidAmount,
-  balance: entry.balance,
-  module: entry.module,
-  items: [
-    {
-      name: entry.description,
-      quantity: 1,
-      unitPrice: entry.totalAmount,
-      subtotal: entry.totalAmount,
-      note: entry.details || undefined,
-    },
-  ],
-})
+const activityEntryToRow = (entry: ActivitySummaryEntry): UnifiedInvoiceRow => {
+  // For Services, lead with the service name(s) and push the invoice reference to the
+  // note line instead — the invoice number isn't what a reader scans for here.
+  const isServices = entry.module === 'Services'
+  return {
+    _id: entry.id,
+    invoiceNumber: entry.reference || entry.subType,
+    invoiceDate: entry.date,
+    customerName: entry.party,
+    customerPhone: entry.partyPhone,
+    type: entry.subType,
+    status: entry.status,
+    total: entry.totalAmount,
+    paidAmount: entry.paidAmount,
+    balance: entry.balance,
+    module: entry.module,
+    items: [
+      {
+        name: isServices ? (entry.details || entry.description) : entry.description,
+        quantity: 1,
+        unitPrice: entry.totalAmount,
+        subtotal: entry.totalAmount,
+        note: (isServices ? entry.description : entry.details) || undefined,
+      },
+    ],
+  }
+}
 
 const agentBillToRow = (bill: AgentBillRecord): UnifiedInvoiceRow => ({
   _id: bill.id,
@@ -196,7 +201,6 @@ const moduleColors: Record<string, string> = {
   'Bill Payments':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
   'Installments':    'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
   'Agent Bills':     'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
-  'Cash Management': 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-400',
 }
 
 export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReportProps>(
@@ -227,7 +231,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       const salesRows = (detailData?.invoices || []).map(salesRowFromDetail)
       const moduleRows = isMobileShop
         ? (activityData?.entries || [])
-            .filter((entry) => SALE_MODULE_NAMES.has(entry.module))
+            .filter((entry) => SALE_MODULE_NAMES.has(entry.module) && entry.subType !== 'Load Purchase')
             .map(activityEntryToRow)
         : []
       const agentBillRows = isMobileShop && isAgentBillUser
