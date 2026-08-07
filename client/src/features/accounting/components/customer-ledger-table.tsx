@@ -7,7 +7,7 @@ import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
-import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
+import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { useLanguage } from '@/context/language-context'
@@ -97,6 +97,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                               whatsapp={customer.whatsapp}
                               name={customer.name}
                               message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                              {...getCustomerBalanceTemplate({ name: customer.name, balance: customer.balance })}
                             />
                             <SmsSendButton
                               phone={customer.phone}

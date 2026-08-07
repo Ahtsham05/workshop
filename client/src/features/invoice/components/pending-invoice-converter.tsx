@@ -17,32 +17,19 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Input } from '@/components/ui/input'
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { 
   ArrowLeft,
   // Calendar,
-  ChevronDown,
   Package,
   Receipt,
   Search,
-  User, 
-  Check,
+  User,
   Clock,
   Plus,
   // FileText,
@@ -50,9 +37,14 @@ import {
   CheckCircle,
   // History
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
-import { useGetInvoicesQuery, useCreateInvoiceMutation, useUpdateInvoiceMutation } from '@/stores/invoice.api'
+import {
+  useGetInvoicesQuery,
+  useCreateInvoiceMutation,
+  useUpdateInvoiceMutation,
+  useGetPendingInvoiceSummaryByCustomerQuery,
+} from '@/stores/invoice.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat, type PrintInvoiceData } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
@@ -75,6 +67,10 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
+import { SmsSendButton } from '@/components/sms/sms-send-button'
+import { useBranchName } from '@/hooks/use-branch-name'
+import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 
 interface ConvertedItem {
   id: string
@@ -103,9 +99,9 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const branchName = useBranchName()
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
-  const [customerSearchOpen, setCustomerSearchOpen] = useState(false)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   // const [invoiceDate, setInvoiceDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes] = useState('')
@@ -152,7 +148,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   }, [selectedCustomerId])
 
   // Fetch ALL invoices for selected customer (both pending and converted)
-  const { data: allInvoicesResponse, isLoading: loadingInvoices, refetch } = useGetInvoicesQuery(
+  const { data: allInvoicesResponse, isLoading: loadingInvoices, isFetching: fetchingInvoices, refetch } = useGetInvoicesQuery(
     {
       customerId: selectedCustomerId,
       // No type filter - we want ALL invoices (pending, credit, cash)
@@ -165,7 +161,20 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     }
   )
 
-  const allInvoices = allInvoicesResponse?.results || []
+  // RTK Query keeps serving the previous customer's cached `data` while a new
+  // customer's invoices are being fetched (arg change refetch) — without this guard
+  // the lists below flash the old customer's invoices under the new customer's header.
+  const invoicesLoading = loadingInvoices || fetchingInvoices
+  const allInvoices = invoicesLoading ? [] : (allInvoicesResponse?.results || [])
+
+  // Every customer carrying a balance and/or unconverted pending invoices, with their
+  // pending count/total and ledger balance — powers the customer picker list below.
+  // Falls back to showing balance-only customers when nobody currently has a pending
+  // invoice, so the page stays useful.
+  const { data: pendingSummaryResponse, isLoading: loadingPendingSummary } =
+    useGetPendingInvoiceSummaryByCustomerQuery()
+  const pendingSummary = pendingSummaryResponse?.results || []
+  const pendingSummaryTotals = pendingSummaryResponse?.totals
 
   // Get selected customer name
   const selectedCustomer = customers.find(c => (c._id || c.id) === selectedCustomerId)
@@ -266,9 +275,9 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
     }
   }, [selectedCustomerId, customers, selectedCustomer])
 
-  // Filter customers by search query (like invoice panel)
-  const filteredCustomers = customers.filter((customer) =>
-    matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
+  // Filter the pending-invoice customer list by search query
+  const filteredPendingSummary = pendingSummary.filter((row) =>
+    matchesBilingualSearch(customerSearchQuery, row.name, row.nameUrdu, row.phone),
   )
 
   // Convert and merge items from selected invoices
@@ -660,140 +669,217 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
           </CardHeader>
         </Card>
 
+        {!selectedCustomerId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                {t('customers_with_pending_invoices')}
+                {pendingSummary.length > 0 && (
+                  <Badge variant="secondary">{pendingSummary.length}</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder={t('search_customers_by_name_or_phone')}
+                      value={customerSearchQuery}
+                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+
+                  {loadingPendingSummary ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                      <p>{t('loading_invoices')}</p>
+                    </div>
+                  ) : filteredPendingSummary.length === 0 ? (
+                    <div className="text-center py-8">
+                      <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground">
+                        {pendingSummary.length === 0
+                          ? t('no_customer_balances_found')
+                          : t('no_customers_found')}
+                      </p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('select_customer')}</TableHead>
+                          <TableHead className="text-center">{t('pending_invoices')}</TableHead>
+                          <TableHead className="text-right">{t('pending_total')}</TableHead>
+                          <TableHead className="text-right">{t('previous_balance')}</TableHead>
+                          <TableHead className="text-right">{t('current_balance')}</TableHead>
+                          <TableHead>{t('last_bill_date')}</TableHead>
+                          <TableHead>{t('last_cash_received_date')}</TableHead>
+                          <TableHead className="text-right">{t('actions')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredPendingSummary.map((row) => (
+                          <TableRow
+                            key={row.customerId}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => {
+                              setSelectedCustomerId(row.customerId)
+                              setSelectedInvoices(new Set())
+                            }}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-3 min-w-0">
+                                <ContactPhotoCell
+                                  picture={row.picture}
+                                  name={row.name || ''}
+                                  className="h-8 w-8 shrink-0"
+                                />
+                                <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                                  <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0 min-w-0">
+                                    <span className="truncate font-medium shrink-0" title={row.name}>
+                                      {row.name}
+                                    </span>
+                                    {row.nameUrdu?.trim() ? (
+                                      <span
+                                        className={cn(
+                                          'min-w-0 truncate text-sm rtl',
+                                          getUrduSecondaryNameClasses(row.nameUrdu),
+                                        )}
+                                        dir="rtl"
+                                        title={row.nameUrdu.trim()}
+                                      >
+                                        {row.nameUrdu.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {row.phone && (
+                                    <span className="text-xs text-muted-foreground truncate" title={row.phone}>
+                                      {row.phone}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline">{row.pendingCount}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              Rs {row.pendingTotal.toFixed(2)}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                'text-right',
+                                row.previousBalance > 0 ? 'text-red-600' : row.previousBalance < 0 ? 'text-green-600' : '',
+                              )}
+                            >
+                              Rs {Math.abs(row.previousBalance).toFixed(2)}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                'text-right font-semibold',
+                                row.currentBalance > 0 ? 'text-red-600' : row.currentBalance < 0 ? 'text-green-600' : '',
+                              )}
+                            >
+                              Rs {Math.abs(row.currentBalance).toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {row.lastBillDate
+                                ? formatDistanceToNow(new Date(row.lastBillDate), { addSuffix: true })
+                                : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {row.lastCashReceivedDate
+                                ? formatDistanceToNow(new Date(row.lastCashReceivedDate), { addSuffix: true })
+                                : '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {(row.phone || row.whatsapp) && (
+                                <div className="flex items-center justify-end gap-1">
+                                  <WhatsAppSendButton
+                                    phone={row.phone}
+                                    whatsapp={row.whatsapp}
+                                    name={row.name}
+                                    message={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance })}
+                                    {...getCustomerBalanceTemplate({ name: row.name, balance: row.currentBalance })}
+                                  />
+                                  <SmsSendButton
+                                    phone={row.phone}
+                                    name={row.name}
+                                    defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance })}
+                                  />
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      {pendingSummaryTotals && (
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell className="font-semibold">{t('grand_total')}</TableCell>
+                            <TableCell className="text-center font-semibold">
+                              {pendingSummaryTotals.pendingCount}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              Rs {pendingSummaryTotals.pendingTotal.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              Rs {Math.abs(pendingSummaryTotals.previousBalance).toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              Rs {Math.abs(pendingSummaryTotals.currentBalance).toFixed(2)}
+                            </TableCell>
+                            <TableCell />
+                            <TableCell />
+                            <TableCell />
+                          </TableRow>
+                        </TableFooter>
+                      )}
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Panel - Customer Selection & Pending Invoices */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Customer Selection */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  {t('select_customer')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
-                  <PopoverTrigger asChild>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="flex items-center gap-2 min-w-0">
+                      <ContactPhotoCell
+                        picture={selectedCustomer?.picture}
+                        name={selectedCustomer?.name || ''}
+                        className="h-6 w-6 shrink-0 rounded-full"
+                      />
+                      <span className="truncate" title={selectedCustomer?.name}>{selectedCustomer?.name}</span>
+                      {selectedCustomer?.nameUrdu?.trim() ? (
+                        <span
+                          className={cn('truncate text-sm text-muted-foreground rtl', getUrduSecondaryNameClasses(selectedCustomer.nameUrdu))}
+                          dir="rtl"
+                        >
+                          {selectedCustomer.nameUrdu.trim()}
+                        </span>
+                      ) : null}
+                    </CardTitle>
                     <Button
                       variant="outline"
-                      role="combobox"
-                      aria-expanded={customerSearchOpen}
-                      className={`w-full justify-between min-h-[2.5rem] h-auto py-0 ${
-                        !selectedCustomerId ? 'border-red-500 bg-red-50' : ''
-                      }`}
+                      size="sm"
+                      onClick={() => {
+                        setSelectedCustomerId('')
+                        setSelectedInvoices(new Set())
+                      }}
                     >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Search className="w-4 h-4 flex-shrink-0" />
-                        {selectedCustomer ? (
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
-                              <ContactPhotoCell
-                                picture={selectedCustomer.picture}
-                                name={selectedCustomer.name || ''}
-                                className="h-5 w-5 shrink-0 rounded-full"
-                              />
-                              <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0">
-                                <span className="text-xs truncate shrink-0" title={selectedCustomer.name}>
-                                  {selectedCustomer.name}
-                                </span>
-                                {selectedCustomer.nameUrdu?.trim() ? (
-                                  <span
-                                    className={cn(
-                                      'min-w-0 truncate text-xs rtl',
-                                      getUrduSecondaryNameClasses(selectedCustomer.nameUrdu),
-                                    )}
-                                    dir="rtl"
-                                    title={selectedCustomer.nameUrdu.trim()}
-                                  >
-                                    {selectedCustomer.nameUrdu.trim()}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </Badge>
-                          </div>
-                        ) : (
-                          <span className="truncate text-muted-foreground" title={t('select_customer')}>
-                            {t('select_customer')} <span className="text-red-500">*</span>
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      <User className="mr-1.5 h-3.5 w-3.5" />
+                      {t('change_customer')}
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
-                    <Command shouldFilter={false}>
-                      <CommandInput 
-                        placeholder={t('search_customers_by_name_or_phone')} 
-                        value={customerSearchQuery}
-                        onValueChange={setCustomerSearchQuery}
-                      />
-                      <CommandEmpty>{t('no_customers_found')}</CommandEmpty>
-                      <CommandList className="max-h-[300px] overflow-y-auto">
-                        <CommandGroup>
-                          {filteredCustomers.map((customer) => {
-                            const customerId = customer._id || customer.id
-                            const isSelected = selectedCustomerId === customerId
-                            return (
-                              <CommandItem
-                                key={customerId}
-                                value={`${customerId}-${customer.name ?? ''}`}
-                                onSelect={() => {
-                                  setSelectedCustomerId(customerId)
-                                  setSelectedInvoices(new Set()) // Reset selections
-                                  setCustomerSearchOpen(false)
-                                  setCustomerSearchQuery('')
-                                }}
-                                className="flex items-center gap-3 cursor-pointer p-3"
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <ContactPhotoCell
-                                    picture={customer.picture}
-                                    name={customer.name || ''}
-                                    className="h-8 w-8 shrink-0"
-                                  />
-                                  <div className="flex flex-col flex-1 min-w-0 gap-0.5">
-                                    <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0 min-w-0">
-                                      <span className="truncate font-medium shrink-0" title={customer.name}>
-                                        {customer.name}
-                                      </span>
-                                      {customer.nameUrdu?.trim() ? (
-                                        <span
-                                          className={cn(
-                                            'min-w-0 truncate text-sm rtl',
-                                            getUrduSecondaryNameClasses(customer.nameUrdu),
-                                          )}
-                                          dir="rtl"
-                                          title={customer.nameUrdu.trim()}
-                                        >
-                                          {customer.nameUrdu.trim()}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    {customer.phone && (
-                                      <span className="text-xs text-muted-foreground truncate" title={customer.phone}>
-                                        {customer.phone}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
-                                    <Check className="w-3 h-3 text-black" />
-                                  </div>
-                                )}
-                              </CommandItem>
-                            )
-                          })}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardHeader>
+              </Card>
 
             {/* Pending Invoices - For Selection */}
-            {selectedCustomerId && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -816,7 +902,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {loadingInvoices ? (
+                  {invoicesLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                       <p>{t('loading_invoices')}</p>
@@ -878,10 +964,8 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   )}
                 </CardContent>
               </Card>
-            )}
 
             {/* Converted Invoices - Table View */}
-            {selectedCustomerId && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -895,7 +979,12 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {groupedConvertedBills.length === 0 ? (
+                  {invoicesLoading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                      <p>{t('loading_invoices')}</p>
+                    </div>
+                  ) : groupedConvertedBills.length === 0 ? (
                     <div className="text-center py-8">
                       <CheckCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                       <p className="text-muted-foreground">{t('no_converted_invoices_found')}</p>
@@ -961,7 +1050,6 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   )}
                 </CardContent>
               </Card>
-            )}
           </div>
 
           {/* Right Panel - Converted Items & Actions */}
@@ -1114,6 +1202,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   )

@@ -30,6 +30,10 @@ router
   .get(auth('viewInvoices'), validate(invoiceValidation.getOutstandingInvoices), invoiceController.getOutstandingInvoices);
 
 router
+  .route('/pending-summary')
+  .get(auth('viewInvoices'), invoiceController.getPendingInvoiceSummaryByCustomer);
+
+router
   .route('/customer/:customerId')
   .get(auth('viewInvoices'), validate(invoiceValidation.getInvoicesByCustomer), invoiceController.getInvoicesByCustomer);
 

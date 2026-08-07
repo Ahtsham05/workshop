@@ -269,6 +269,13 @@ export const invoiceApi = createApi({
         url: `/customer/${customerId}/product/${productId}/history`,
       }),
     }),
+
+    // Per-customer pending (goods-handoff) invoice summary — count, total, and
+    // previous/current ledger balance for every customer who has unconverted pending invoices.
+    getPendingInvoiceSummaryByCustomer: builder.query({
+      query: () => '/pending-summary',
+      providesTags: ['Invoice'],
+    }),
   }),
 })
 
@@ -290,4 +297,5 @@ export const {
   useGetInvoicesByCustomerQuery,
   useGenerateBillNumberQuery,
   useGetCustomerProductHistoryQuery,
+  useGetPendingInvoiceSummaryByCustomerQuery,
 } = invoiceApi

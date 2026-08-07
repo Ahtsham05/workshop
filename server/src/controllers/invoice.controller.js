@@ -317,6 +317,122 @@ const getCustomerProductHistory = catchAsync(async (req, res) => {
   res.send(history);
 });
 
+// One row per customer who currently has unconverted pending (goods-handoff) invoices —
+// feeds the customer-picker list on the Convert Pending Invoices page, so a cashier can see
+// at a glance who owes a bill and roughly how much before opening their invoice list.
+const getPendingInvoiceSummaryByCustomer = catchAsync(async (req, res) => {
+  const mongoose = require('mongoose');
+  const { Invoice, Customer, CustomerLedger } = require('../models');
+
+  // Model.aggregate() sends the pipeline to MongoDB as-is — unlike find()/paginate(),
+  // Mongoose does NOT cast query values against the schema first. req.organizationId/
+  // req.branchId come through as plain strings, so without this cast a $match against
+  // the (real) ObjectId fields on Invoice would silently match nothing.
+  const toObjectId = (id) =>
+    id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
+
+  const matchFilter = {
+    type: 'pending',
+    isConvertedToBill: { $ne: true },
+  };
+  if (req.organizationId) matchFilter.organizationId = toObjectId(req.organizationId);
+  if (req.branchId) matchFilter.branchId = toObjectId(req.branchId);
+
+  const grouped = await Invoice.aggregate([
+    { $match: matchFilter },
+    {
+      $group: {
+        _id: '$customerId',
+        pendingCount: { $sum: 1 },
+        pendingTotal: { $sum: '$total' },
+      },
+    },
+  ]);
+
+  // Walk-in / missing customerId can't be picked from this list — pending handoffs
+  // without a real customer record have nowhere to be billed to.
+  const pendingByCustomerId = new Map();
+  grouped.forEach((g) => {
+    if (g._id && mongoose.Types.ObjectId.isValid(g._id)) {
+      pendingByCustomerId.set(String(g._id), { pendingCount: g.pendingCount, pendingTotal: g.pendingTotal });
+    }
+  });
+
+  // The list isn't just "who has a pending invoice" — every customer carrying a balance
+  // is relevant here too, so the page stays useful even on a day nobody has a pending
+  // handoff waiting. Customers with neither a balance nor a pending invoice are noise
+  // and left out.
+  const customerFilter = {
+    isEmployeeAccount: { $ne: true },
+    $or: [{ balance: { $ne: 0 } }, { _id: { $in: [...pendingByCustomerId.keys()].map(toObjectId) } }],
+  };
+  applyBranchFilter(customerFilter, req);
+  const customerDocs = await Customer.find(customerFilter).select('name nameUrdu phone whatsapp picture balance');
+
+  // Pending invoices never post to the ledger (see invoice.service.js), so "last bill"
+  // has to come from CustomerLedger's 'sale' entries — those are only written once a
+  // pending handoff is actually converted to a bill (or for cash/credit invoices sold
+  // directly). 'payment_received' entries are cash collected against the balance.
+  const ledgerMatchFilter = { transactionType: { $in: ['sale', 'payment_received'] } };
+  if (req.organizationId) ledgerMatchFilter.organizationId = toObjectId(req.organizationId);
+  if (req.branchId) ledgerMatchFilter.branchId = toObjectId(req.branchId);
+
+  const lastLedgerDates = await CustomerLedger.aggregate([
+    { $match: ledgerMatchFilter },
+    {
+      $group: {
+        _id: { customer: '$customer', transactionType: '$transactionType' },
+        lastDate: { $max: '$transactionDate' },
+      },
+    },
+  ]);
+
+  const lastBillDateByCustomerId = new Map();
+  const lastCashReceivedDateByCustomerId = new Map();
+  lastLedgerDates.forEach((row) => {
+    const key = String(row._id.customer);
+    if (row._id.transactionType === 'sale') {
+      lastBillDateByCustomerId.set(key, row.lastDate);
+    } else if (row._id.transactionType === 'payment_received') {
+      lastCashReceivedDateByCustomerId.set(key, row.lastDate);
+    }
+  });
+
+  const summary = customerDocs
+    .map((customer) => {
+      const pending = pendingByCustomerId.get(String(customer._id)) || { pendingCount: 0, pendingTotal: 0 };
+      const previousBalance = customer.balance || 0;
+      return {
+        customerId: String(customer._id),
+        name: customer.name,
+        nameUrdu: customer.nameUrdu,
+        phone: customer.phone,
+        whatsapp: customer.whatsapp,
+        picture: customer.picture,
+        pendingCount: pending.pendingCount,
+        pendingTotal: pending.pendingTotal,
+        previousBalance,
+        currentBalance: previousBalance + pending.pendingTotal,
+        lastBillDate: lastBillDateByCustomerId.get(String(customer._id)) || null,
+        lastCashReceivedDate: lastCashReceivedDateByCustomerId.get(String(customer._id)) || null,
+      };
+    })
+    .sort((a, b) => b.pendingCount - a.pendingCount || b.pendingTotal - a.pendingTotal || b.currentBalance - a.currentBalance);
+
+  const totals = summary.reduce(
+    (acc, row) => {
+      acc.pendingCount += row.pendingCount;
+      acc.pendingTotal += row.pendingTotal;
+      acc.previousBalance += row.previousBalance;
+      acc.currentBalance += row.currentBalance;
+      return acc;
+    },
+    { pendingCount: 0, pendingTotal: 0, previousBalance: 0, currentBalance: 0 },
+  );
+
+  res.send({ results: summary, totals });
+});
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -333,5 +449,6 @@ module.exports = {
   duplicateInvoice,
   convertQuotation,
   generateBillNumber,
-  getCustomerProductHistory
+  getCustomerProductHistory,
+  getPendingInvoiceSummaryByCustomer,
 };

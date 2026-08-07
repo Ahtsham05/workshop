@@ -546,6 +546,16 @@ const en: Record<string, string> = {
     "create_and_print_receipt": "Create & Print Receipt",
     "create_and_print_a4": "Create & Print A4",
     "create_without_printing": "Create Without Printing",
+    "customers_with_pending_invoices": "Customer Balances & Pending Invoices",
+    "no_customers_with_pending_invoices": "No customers have pending invoices",
+    "no_customer_balances_found": "No customers with a balance or pending invoice",
+    "pending_total": "Pending Total",
+    "previous_balance": "Previous Balance",
+    "current_balance": "Current Balance",
+    "change_customer": "Change Customer",
+    "grand_total": "Grand Total",
+    "last_bill_date": "Last Bill Date",
+    "last_cash_received_date": "Last Cash Received",
 
     // Product History
     "product_price_history": "Product Sale Price History",
