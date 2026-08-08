@@ -16,6 +16,10 @@ const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 const customerRoute = require('./customer.route');
 const supplierRoute = require('./supplier.route');
+const salesmanProfileRoute = require('./salesmanProfile.route');
+const commissionRuleRoute = require('./commissionRule.route');
+const salesmanCommissionLedgerRoute = require('./salesmanCommissionLedger.route');
+const salesmanCommissionPaymentRoute = require('./salesmanCommissionPayment.route');
 const purchaseRoute = require('./purchase.route');
 const purchaseOrderRoute = require('./purchaseOrder.route');
 const invoiceRoute = require('./invoice.route');
@@ -188,6 +192,22 @@ const defaultRoutes = [
   {
     path: '/suppliers',
     route: supplierRoute,
+  },
+  {
+    path: '/salesmen',
+    route: salesmanProfileRoute,
+  },
+  {
+    path: '/commission-rules',
+    route: commissionRuleRoute,
+  },
+  {
+    path: '/commission-ledger',
+    route: salesmanCommissionLedgerRoute,
+  },
+  {
+    path: '/commission-payments',
+    route: salesmanCommissionPaymentRoute,
   },
   {
     path: '/purchases',
@@ -583,6 +603,10 @@ const protectedPaths = [
   '/system',
   '/customers',
   '/suppliers',
+  '/salesmen',
+  '/commission-rules',
+  '/commission-ledger',
+  '/commission-payments',
   '/purchases',
   '/purchase-orders',
   '/invoices',

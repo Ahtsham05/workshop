@@ -1079,10 +1079,50 @@ export interface DailySalesSummaryReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface SalesmanCommissionInvoiceRow {
+  transactionType: 'commission_earned' | 'commission_reversed'
+  date: string
+  reference: string
+  referenceId?: string
+  saleAmount: number
+  rate?: number
+  amount: number
+  notes: string
+}
+
+export interface SalesmanCommissionReportRow {
+  salesmanUserId: string
+  name: string
+  email: string
+  salesCount: number
+  salesAmount: number
+  earned: number
+  reversed: number
+  paid: number
+  currentBalance: number
+  invoices: SalesmanCommissionInvoiceRow[]
+}
+
+export interface SalesmanCommissionReport {
+  summary: {
+    totalEarned: number
+    totalReversed: number
+    totalPaid: number
+    netCommission: number
+    totalSalesAmount: number
+    totalSalesCount: number
+    activeSalesmenCount: number
+    totalOutstanding: number
+  }
+  trend: { date: string; earned: number; count: number }[]
+  salesmen: SalesmanCommissionReportRow[]
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport', 'SalesmanCommissionReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1455,6 +1495,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['DailySalesSummaryReport'],
     }),
+    getSalesmanCommissionReport: builder.query<SalesmanCommissionReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/salesman-commission?${searchParams.toString()}`
+      },
+      providesTags: ['SalesmanCommissionReport'],
+    }),
   }),
 })
 
@@ -1494,4 +1543,5 @@ export const {
   useGetActivitySummaryReportQuery,
   useGetSalesPurchaseSummaryReportQuery,
   useGetDailySalesSummaryReportQuery,
+  useGetSalesmanCommissionReportQuery,
 } = reportsApi

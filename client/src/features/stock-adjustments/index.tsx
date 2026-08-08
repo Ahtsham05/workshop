@@ -45,16 +45,13 @@ import { StatCard } from '@/features/dashboard/components/stat-card'
 import { AdjustmentTypeBadge } from './components/adjustment-type-badge'
 import { CreateAdjustmentDialog, type AdjustmentPrefill } from './components/create-adjustment-dialog'
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from './lib/adjustment-types'
+import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
 
 const LIMIT = 15
 
-function userName(ref: StockAdjustment['createdBy']): string {
-  if (!ref) return '—'
-  return typeof ref === 'string' ? ref : ref.name || '—'
-}
-
 export default function StockAdjustments() {
   const { t } = useLanguage()
+  const canViewCreatedBy = useCanViewCreatedBy()
   const search = useSearch({ strict: false }) as { productId?: string; productName?: string }
 
   const [typeFilter, setTypeFilter] = useState<AdjustmentType | 'all'>('all')
@@ -236,7 +233,7 @@ export default function StockAdjustments() {
                   <TableHead className='text-right'>{t('Qty')}</TableHead>
                   <TableHead className='text-right'>{t('Stock')}</TableHead>
                   <TableHead className='text-right'>{t('Value')}</TableHead>
-                  <TableHead>{t('By')}</TableHead>
+                  {canViewCreatedBy && <TableHead>{t('By')}</TableHead>}
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
                 </TableRow>
@@ -268,7 +265,11 @@ export default function StockAdjustments() {
                     <TableCell className='text-right text-sm whitespace-nowrap'>
                       {adj.totalValue ? `Rs ${adj.totalValue.toLocaleString()}` : '—'}
                     </TableCell>
-                    <TableCell className='text-sm text-muted-foreground'>{userName(adj.createdBy)}</TableCell>
+                    {canViewCreatedBy && (
+                      <TableCell>
+                        <CreatedByCell createdBy={adj.createdBy} />
+                      </TableCell>
+                    )}
                     <TableCell>
                       {adj.status === 'reversed' ? (
                         <Badge variant='outline' className='bg-slate-50 text-slate-500 border-slate-200'>
@@ -292,7 +293,7 @@ export default function StockAdjustments() {
                 ))}
                 {adjustments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className='text-center text-muted-foreground'>
+                    <TableCell colSpan={canViewCreatedBy ? 9 : 8} className='text-center text-muted-foreground'>
                       {t('No stock adjustments found')}
                     </TableCell>
                   </TableRow>

@@ -297,6 +297,7 @@ const CASH_MODULE_LABELS = {
   SupplierLedger: 'Supplier Payments',
   EmployeeLedger: 'Employee Payments',
   Payroll: 'Employee Payments',
+  SalesmanCommissionPayment: 'Salesman Commissions',
 };
 
 // Cash-only movement grouped by module (referenceModel), using the same

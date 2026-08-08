@@ -337,21 +337,23 @@ export function ProductCatalog({
                       <div
                         key={product.variantId || product._id}
                         onClick={() => {
-                          if (getDisplayStock(product) > 0) {
+                          // Simple (non-variant) products may sell into negative stock —
+                          // only variant/batch-tracked items still block at zero, since a
+                          // specific unit either exists or it doesn't.
+                          if (!product.hasVariants || getDisplayStock(product) > 0) {
                             handleQuickAdd(product, 1)
                           } else {
-                            // Show error toast for out of stock items
                             toast.error(`${product.name} is out of stock`)
                           }
                         }}
                         className={showImages
                           ? `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 space-y-2 transition-shadow bg-card ${
-                              getDisplayStock(product) > 0
+                              !product.hasVariants || getDisplayStock(product) > 0
                                 ? 'hover:shadow-sm cursor-pointer'
                                 : 'opacity-60 cursor-not-allowed bg-muted'
                             }`
                           : `min-w-0 max-w-full overflow-hidden border rounded-lg p-2 flex items-center gap-2 transition-colors ${
-                              getDisplayStock(product) > 0
+                              !product.hasVariants || getDisplayStock(product) > 0
                                 ? 'hover:bg-muted/30 cursor-pointer'
                                 : 'opacity-60 cursor-not-allowed bg-muted'
                             }`

@@ -42,7 +42,10 @@ export type PermissionKey =
   | 'viewSettings' | 'editSettings'
   | 'viewDashboard'
   | 'viewPayments' | 'createPayments' | 'editPayments' | 'deletePayments'
-  | 'viewAuditLogs';
+  | 'viewAuditLogs' | 'viewCreatedBy'
+  | 'viewSalesmen' | 'createSalesmen' | 'editSalesmen' | 'deleteSalesmen'
+  | 'viewCommissionRules' | 'manageCommissionRules'
+  | 'viewCommissionLedger' | 'manageCommissionPayments';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -102,7 +105,10 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'settings', label: 'Settings', permissions: ['viewSettings', 'editSettings'] },
   { id: 'dashboard', label: 'Dashboard', permissions: ['viewDashboard'] },
   { id: 'payments', label: 'Payments', permissions: ['viewPayments', 'createPayments', 'editPayments', 'deletePayments'] },
-  { id: 'audit_logs', label: 'Audit Logs', permissions: ['viewAuditLogs'] },
+  { id: 'audit_logs', label: 'Audit Logs', permissions: ['viewAuditLogs', 'viewCreatedBy'] },
+  { id: 'salesmen', label: 'Salesmen', permissions: ['viewSalesmen', 'createSalesmen', 'editSalesmen', 'deleteSalesmen'] },
+  { id: 'commission_rules', label: 'Commission Rules', permissions: ['viewCommissionRules', 'manageCommissionRules'] },
+  { id: 'commission_ledger', label: 'Commission Ledger', permissions: ['viewCommissionLedger', 'manageCommissionPayments'] },
 ];
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
@@ -118,7 +124,7 @@ export const PERMISSION_TAB_GROUPS = {
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
   ],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger'],
 } as const;
 
 export type PermissionTabId = keyof typeof PERMISSION_TAB_GROUPS;

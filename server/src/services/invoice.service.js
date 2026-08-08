@@ -11,6 +11,8 @@ const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
+const commissionEngineService = require('./commissionEngine.service');
+const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.service');
 const imeiService = require('./imei.service');
 const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
@@ -386,19 +388,9 @@ const createInvoice = async (invoiceBody, userId) => {
     }
 
     const conversion = toStockQuantity({ product, item, businessType });
-
-    // Check stock availability (quotations do not reserve stock)
-    if (!isQuotation && product.stockQuantity < conversion.stockQuantity) {
-      console.error('Insufficient stock:', {
-        product: product.name,
-        available: product.stockQuantity,
-        requested: conversion.stockQuantity
-      });
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
-      );
-    }
+    // Simple (non-variant, non-batch) products are allowed to sell into negative
+    // stock — a purchase entry brings the balance back up. Batch/variant items
+    // still enforce availability above since a specific unit either exists or not.
 
     // Prepare validated item
     const itemCost = item.cost || product.cost;
@@ -454,6 +446,8 @@ const createInvoice = async (invoiceBody, userId) => {
     discountType: overallDiscountType,
     discountValue: overallDiscountValue,
     discount: overallDiscount,
+    // '' from "no salesman selected" would fail the ObjectId cast — normalize to null.
+    salesmanId: invoiceBody.salesmanId || null,
     createdBy: userId,
     updatedBy: userId
   });
@@ -485,6 +479,7 @@ const createInvoice = async (invoiceBody, userId) => {
   console.log('Invoice saved with ID:', invoice._id);
   await syncWalkInInvoiceCashEntry(invoice);
   postInvoiceToAccounts(invoice);
+  commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
 
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending' && invoice.type !== 'quotation') {
@@ -616,7 +611,8 @@ const createInvoice = async (invoiceBody, userId) => {
   const populateOptions = [
     { path: 'items.productId', select: 'name nameUrdu barcode category' },
     { path: 'items.variantId' },
-    { path: 'createdBy', select: 'name email' }
+    { path: 'createdBy', select: 'name email' },
+    { path: 'salesmanId', select: 'name email' }
   ];
 
   // Only populate customer if it's not a walk-in customer
@@ -666,7 +662,14 @@ const createInvoice = async (invoiceBody, userId) => {
  */
 const queryInvoices = async (filter, options) => {
   // Get invoices with pagination
-  const invoices = await Invoice.paginate(filter, options);
+  const opts = {
+    ...options,
+    populate: [
+      { path: 'createdBy', select: 'name email' },
+      { path: 'salesmanId', select: 'name email' },
+    ],
+  };
+  const invoices = await Invoice.paginate(filter, opts);
 
   // Manually populate customer data for each invoice
   if (invoices.results && invoices.results.length > 0) {
@@ -731,7 +734,8 @@ const getInvoiceById = async (id) => {
     { path: 'items.productId', select: 'name nameUrdu barcode category description' },
     { path: 'items.variantId' },
     { path: 'items.batchId', select: 'batchNumber expiryDate' },
-    { path: 'createdBy updatedBy', select: 'name email' }
+    { path: 'createdBy updatedBy', select: 'name email' },
+    { path: 'salesmanId', select: 'name email' }
   ];
 
   // Only populate customer if it's not a walk-in customer
@@ -915,13 +919,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
       }
 
       const conversion = getStockQuantityFromItem({ product, item, businessType });
-
-      if (!willRemainQuotation && product.stockQuantity < conversion.stockQuantity) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${conversion.stockQuantity}`
-        );
-      }
+      // Simple products may go negative on sale — see createInvoice for rationale.
 
       const itemCost = item.cost || product.cost;
       const itemGross = item.quantity * item.unitPrice;
@@ -1034,6 +1032,10 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   updateBody.discountType = overallDiscountType;
   updateBody.discountValue = overallDiscountValue;
   updateBody.discount = computeDiscountAmount(overallNetSubtotal, overallDiscountType, overallDiscountValue);
+  // '' from "cleared the salesman" would fail the ObjectId cast — normalize to null.
+  if ('salesmanId' in updateBody) {
+    updateBody.salesmanId = updateBody.salesmanId || null;
+  }
 
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
@@ -1052,6 +1054,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   console.log('Invoice updated successfully');
   await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
   postInvoiceToAccounts(invoice);
+  commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
 
   const newCustomerId = invoice.customerId;
   const isConvertedPending =
@@ -1270,6 +1273,20 @@ const deleteInvoiceById = async (invoiceId) => {
     }
   }
 
+  // Reverse any commission earned on this invoice — the sale no longer exists.
+  try {
+    await salesmanCommissionLedgerService.reverseCommissionForInvoice({
+      invoiceId: invoice._id,
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+      salesmanUserId: invoice.salesmanId,
+      reason: 'Invoice deleted',
+      userId: invoice.updatedBy || invoice.createdBy,
+    });
+  } catch (err) {
+    console.error('Failed to reverse commission on invoice delete:', err);
+  }
+
   await invoice.deleteOne();
   return invoice;
 };
@@ -1328,13 +1345,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
     if (!product) {
       throw new ApiError(httpStatus.BAD_REQUEST, `Product not found for item ${item.name}`);
     }
-    const stockQty = getStockQuantityFromItem(item);
-    if (product.stockQuantity < stockQty) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Required: ${stockQty}`,
-      );
-    }
+    // Simple products may go negative on sale — see createInvoice for rationale.
   }
 
   const previousQuotationNumber = invoice.invoiceNumber;
@@ -1376,6 +1387,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   await invoice.save();
   await syncInvoiceCashAndWalletEntries(invoice, 'cash', '', 0);
   postInvoiceToAccounts(invoice);
+  commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
 
   for (const item of invoice.items) {
     const stockQty = getStockQuantityFromItem(item);
@@ -1487,6 +1499,7 @@ const finalizeInvoice = async (invoiceId, userId) => {
   invoice.updatedBy = userId;
   await invoice.save();
   postInvoiceToAccounts(invoice);
+  commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
 
   return invoice;
 };
@@ -1516,6 +1529,7 @@ const processPayment = async (invoiceId, paymentData, userId) => {
   await invoice.save();
   await syncWalkInInvoiceCashEntry(invoice);
   postInvoiceToAccounts(invoice);
+  commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
 
   return invoice;
 };

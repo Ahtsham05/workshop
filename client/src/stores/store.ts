@@ -15,6 +15,10 @@ import { reportsApi } from './reports.api';
 import { companyApi } from './company.api';
 import { rolesApi } from './roles.api';
 import { usersApi } from './users.api';
+import { salesmanProfileApi } from './salesmanProfile.api';
+import { commissionRuleApi } from './commissionRule.api';
+import { salesmanCommissionLedgerApi } from './salesmanCommissionLedger.api';
+import { salesmanCommissionPaymentApi } from './salesmanCommissionPayment.api';
 import { hrApi } from './hr.api';
 import { organizationApi } from './organization.api';
 import { branchApi } from './branch.api';
@@ -68,6 +72,10 @@ export const store = configureStore({
     [companyApi.reducerPath]: companyApi.reducer,
     [rolesApi.reducerPath]: rolesApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
+    [salesmanProfileApi.reducerPath]: salesmanProfileApi.reducer,
+    [commissionRuleApi.reducerPath]: commissionRuleApi.reducer,
+    [salesmanCommissionLedgerApi.reducerPath]: salesmanCommissionLedgerApi.reducer,
+    [salesmanCommissionPaymentApi.reducerPath]: salesmanCommissionPaymentApi.reducer,
     [hrApi.reducerPath]: hrApi.reducer,
     [organizationApi.reducerPath]: organizationApi.reducer,
     [branchApi.reducerPath]: branchApi.reducer,
@@ -114,6 +122,10 @@ export const store = configureStore({
       companyApi.middleware,
       rolesApi.middleware,
       usersApi.middleware,
+      salesmanProfileApi.middleware,
+      commissionRuleApi.middleware,
+      salesmanCommissionLedgerApi.middleware,
+      salesmanCommissionPaymentApi.middleware,
       hrApi.middleware,
       organizationApi.middleware,
       branchApi.middleware,

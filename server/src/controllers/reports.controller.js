@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger } = require('../models');
 const { cashBookService, stockAdjustmentService, mobileDashboardService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
@@ -4515,6 +4515,149 @@ const getDailySalesSummaryReport = catchAsync(async (req, res) => {
   });
 });
 
+/* ── Salesman Commission ───────────────────────────────────────────────────── */
+const getSalesmanCommissionReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const inRange = { $gte: start, $lte: end };
+
+  const [byType, bySalesmanType, trend, currentBalances, invoiceDetail] = await Promise.all([
+    // Overall totals within the period, one row per transaction type.
+    SalesmanCommissionLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange } },
+      { $group: { _id: '$transactionType', credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleAmount: { $sum: '$saleAmount' } } },
+    ]),
+    // Per-salesman breakdown within the period, one row per (salesman, type).
+    SalesmanCommissionLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange } },
+      { $group: { _id: { salesmanUserId: '$salesmanUserId', type: '$transactionType' }, credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleAmount: { $sum: '$saleAmount' } } },
+      { $lookup: { from: 'users', localField: '_id.salesmanUserId', foreignField: '_id', as: 'salesman' } },
+      { $unwind: { path: '$salesman', preserveNullAndEmptyArrays: true } },
+      { $project: { salesmanUserId: '$_id.salesmanUserId', type: '$_id.type', credit: 1, debit: 1, count: 1, saleAmount: 1, name: '$salesman.name', email: '$salesman.email' } },
+    ]),
+    // Daily trend of commission earned within the period, for the chart.
+    SalesmanCommissionLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange, transactionType: 'commission_earned' } },
+      { $group: { _id: businessDateGroup('$transactionDate'), earned: { $sum: '$credit' }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    // Current (all-time, not period-bound) outstanding balance per salesman — a
+    // salesman can owe money earned before this report's date range.
+    SalesmanCommissionLedger.aggregate([
+      { $match: scope },
+      { $sort: { salesmanUserId: 1, transactionDate: 1, createdAt: 1 } },
+      { $group: { _id: '$salesmanUserId', balance: { $last: '$balance' } } },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'salesman' } },
+      { $unwind: { path: '$salesman', preserveNullAndEmptyArrays: true } },
+      { $project: { salesmanUserId: '$_id', balance: 1, name: '$salesman.name', email: '$salesman.email' } },
+    ]),
+    // Invoice-level rows behind each salesman's totals, for the report's expandable
+    // detail — `reference`/`saleAmount`/`rate` are already denormalized onto the ledger
+    // entry at credit time, so no Invoice lookup is needed here.
+    SalesmanCommissionLedger.find({
+      ...scope,
+      transactionDate: inRange,
+      transactionType: { $in: ['commission_earned', 'commission_reversed'] },
+    })
+      .select('salesmanUserId transactionType transactionDate reference referenceId saleAmount rate credit debit notes')
+      .sort({ transactionDate: -1 })
+      .lean(),
+  ]);
+
+  const typeSummary = (type) => byType.find((b) => b._id === type) || { credit: 0, debit: 0, count: 0, saleAmount: 0 };
+  const earned = typeSummary('commission_earned');
+  const reversed = typeSummary('commission_reversed');
+  const paid = typeSummary('commission_payment');
+
+  const salesmenMap = new Map();
+  for (const row of bySalesmanType) {
+    const key = String(row.salesmanUserId);
+    if (!salesmenMap.has(key)) {
+      salesmenMap.set(key, {
+        salesmanUserId: key,
+        name: row.name || 'Unknown',
+        email: row.email || '',
+        salesCount: 0,
+        salesAmount: 0,
+        earned: 0,
+        reversed: 0,
+        paid: 0,
+        currentBalance: 0,
+        invoices: [],
+      });
+    }
+    const entry = salesmenMap.get(key);
+    if (row.type === 'commission_earned') {
+      entry.salesCount = row.count;
+      entry.salesAmount = roundReportAmount(row.saleAmount);
+      entry.earned = roundReportAmount(row.credit);
+    } else if (row.type === 'commission_reversed') {
+      entry.reversed = roundReportAmount(row.debit);
+    } else if (row.type === 'commission_payment') {
+      entry.paid = roundReportAmount(row.debit);
+    }
+  }
+
+  // Surface salesmen who owe a balance carried over from before this period, even if
+  // they had no activity within it — otherwise a "This Month" view could silently hide
+  // real outstanding money.
+  for (const b of currentBalances) {
+    const key = String(b.salesmanUserId);
+    const rounded = roundReportAmount(b.balance);
+    if (!salesmenMap.has(key)) {
+      if (rounded === 0) continue;
+      salesmenMap.set(key, {
+        salesmanUserId: key,
+        name: b.name || 'Unknown',
+        email: b.email || '',
+        salesCount: 0,
+        salesAmount: 0,
+        earned: 0,
+        reversed: 0,
+        paid: 0,
+        currentBalance: rounded,
+        invoices: [],
+      });
+    } else {
+      salesmenMap.get(key).currentBalance = rounded;
+    }
+  }
+
+  for (const row of invoiceDetail) {
+    const entry = salesmenMap.get(String(row.salesmanUserId));
+    if (!entry) continue;
+    entry.invoices.push({
+      transactionType: row.transactionType,
+      date: row.transactionDate,
+      reference: row.reference || '',
+      referenceId: row.referenceId,
+      saleAmount: roundReportAmount(row.saleAmount),
+      rate: row.rate,
+      amount: roundReportAmount(row.transactionType === 'commission_earned' ? row.credit : row.debit),
+      notes: row.notes || '',
+    });
+  }
+
+  const salesmen = Array.from(salesmenMap.values()).sort((a, b) => b.earned - a.earned);
+  const totalOutstanding = currentBalances.reduce((sum, b) => sum + (b.balance || 0), 0);
+
+  res.status(httpStatus.OK).send({
+    summary: {
+      totalEarned: roundReportAmount(earned.credit),
+      totalReversed: roundReportAmount(reversed.debit),
+      totalPaid: roundReportAmount(paid.debit),
+      netCommission: roundReportAmount(earned.credit - reversed.debit),
+      totalSalesAmount: roundReportAmount(earned.saleAmount),
+      totalSalesCount: earned.count,
+      activeSalesmenCount: salesmen.length,
+      totalOutstanding: roundReportAmount(totalOutstanding),
+    },
+    trend: trend.map((t) => ({ date: t._id, earned: roundReportAmount(t.earned), count: t.count })),
+    salesmen,
+    period: { startDate: start, endDate: end },
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -4529,4 +4672,5 @@ module.exports = {
   getActivitySummaryReport,
   getSalesPurchaseSummaryReport,
   getDailySalesSummaryReport,
+  getSalesmanCommissionReport,
 };

@@ -49,6 +49,7 @@ import { Route as AuthenticatedSubCategoriesIndexImport } from './routes/_authen
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSchoolIndexImport } from './routes/_authenticated/school/index'
+import { Route as AuthenticatedSalesmenIndexImport } from './routes/_authenticated/salesmen/index'
 import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authenticated/sales-returns/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedRestaurantIndexImport } from './routes/_authenticated/restaurant/index'
@@ -403,6 +404,14 @@ const AuthenticatedSchoolIndexRoute = AuthenticatedSchoolIndexImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedSchoolRoute,
 } as any)
+
+const AuthenticatedSalesmenIndexRoute = AuthenticatedSalesmenIndexImport.update(
+  {
+    id: '/salesmen/',
+    path: '/salesmen/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any,
+)
 
 const AuthenticatedSalesReturnsIndexRoute =
   AuthenticatedSalesReturnsIndexImport.update({
@@ -1762,6 +1771,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalesReturnsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/salesmen/': {
+      id: '/_authenticated/salesmen/'
+      path: '/salesmen'
+      fullPath: '/salesmen'
+      preLoaderRoute: typeof AuthenticatedSalesmenIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/school/': {
       id: '/_authenticated/school/'
       path: '/'
@@ -2483,6 +2499,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRestaurantIndexRoute: typeof AuthenticatedRestaurantIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
+  AuthenticatedSalesmenIndexRoute: typeof AuthenticatedSalesmenIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
   AuthenticatedSubCategoriesIndexRoute: typeof AuthenticatedSubCategoriesIndexRoute
   AuthenticatedSubscriptionIndexRoute: typeof AuthenticatedSubscriptionIndexRoute
@@ -2569,6 +2586,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedRestaurantIndexRoute: AuthenticatedRestaurantIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
+  AuthenticatedSalesmenIndexRoute: AuthenticatedSalesmenIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
   AuthenticatedSubCategoriesIndexRoute: AuthenticatedSubCategoriesIndexRoute,
   AuthenticatedSubscriptionIndexRoute: AuthenticatedSubscriptionIndexRoute,
@@ -2679,6 +2697,7 @@ export interface FileRoutesByFullPath {
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
+  '/salesmen': typeof AuthenticatedSalesmenIndexRoute
   '/school/': typeof AuthenticatedSchoolIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
@@ -2826,6 +2845,7 @@ export interface FileRoutesByTo {
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
+  '/salesmen': typeof AuthenticatedSalesmenIndexRoute
   '/school': typeof AuthenticatedSchoolIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
@@ -2977,6 +2997,7 @@ export interface FileRoutesById {
   '/_authenticated/restaurant/': typeof AuthenticatedRestaurantIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/sales-returns/': typeof AuthenticatedSalesReturnsIndexRoute
+  '/_authenticated/salesmen/': typeof AuthenticatedSalesmenIndexRoute
   '/_authenticated/school/': typeof AuthenticatedSchoolIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
@@ -3130,6 +3151,7 @@ export interface FileRouteTypes {
     | '/restaurant'
     | '/roles'
     | '/sales-returns'
+    | '/salesmen'
     | '/school/'
     | '/settings/'
     | '/staff'
@@ -3276,6 +3298,7 @@ export interface FileRouteTypes {
     | '/restaurant'
     | '/roles'
     | '/sales-returns'
+    | '/salesmen'
     | '/school'
     | '/settings'
     | '/staff'
@@ -3425,6 +3448,7 @@ export interface FileRouteTypes {
     | '/_authenticated/restaurant/'
     | '/_authenticated/roles/'
     | '/_authenticated/sales-returns/'
+    | '/_authenticated/salesmen/'
     | '/_authenticated/school/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
@@ -3610,6 +3634,7 @@ export const routeTree = rootRoute
         "/_authenticated/restaurant/",
         "/_authenticated/roles/",
         "/_authenticated/sales-returns/",
+        "/_authenticated/salesmen/",
         "/_authenticated/staff/",
         "/_authenticated/sub-categories/",
         "/_authenticated/subscription/",
@@ -4011,6 +4036,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/sales-returns/": {
       "filePath": "_authenticated/sales-returns/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/salesmen/": {
+      "filePath": "_authenticated/salesmen/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/school/": {

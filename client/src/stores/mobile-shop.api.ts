@@ -527,6 +527,7 @@ export interface SimSaleRecord {
   paymentWalletType?: string
   notes?: string
   createdAt?: string
+  createdBy?: { name?: string; email?: string } | string
 }
 
 export interface CreateSimSaleInput {

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -25,6 +26,7 @@ import { useLanguage } from '@/context/language-context'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
+import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, resolveSheetFormat, type PaperSize, type SheetSize, type PrintOrientation } from '../utils/paper-format'
@@ -187,6 +189,16 @@ export function InvoicePanel({
       ),
     [wallets, t],
   )
+  const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' })
+  const salesmanOptions = useMemo(
+    () =>
+      (salesmen || []).map((s) => ({
+        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
+        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
+        sublabel: s.salesmanCode,
+      })),
+    [salesmen],
+  )
   const [paidAmountInput, setPaidAmountInput] = useState('')
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
@@ -260,6 +272,32 @@ export function InvoicePanel({
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+
+  // New invoices default the salesman to the logged-in user, if they're themselves a
+  // tracked salesman — saves a click for the common case of a salesman billing their own
+  // sale. Never overrides an already-set value (edits, or a manual pick made this session,
+  // or a restored draft that already had one).
+  useEffect(() => {
+    if (isEditing || invoice.salesmanId || !user?.id || !salesmen) return
+    // String(...) both sides: populated userId can arrive as an ObjectId-shaped value
+    // before the API layer's JSON round-trip normalizes it to a plain string, and a
+    // strict === would silently never match in that window.
+    const ownProfile = salesmen.find((s) => {
+      const salesmanUserId = typeof s.userId === 'string' ? s.userId : s.userId?.id
+      return String(salesmanUserId) === String(user.id)
+    })
+    if (import.meta.env.DEV && !ownProfile && salesmen.length > 0) {
+      // eslint-disable-next-line no-console
+      console.debug('[salesman-autoselect] logged-in user has no matching active salesman profile', {
+        userId: user.id,
+        salesmen: salesmen.map((s) => ({ code: s.salesmanCode, userId: typeof s.userId === 'string' ? s.userId : s.userId?.id })),
+      })
+    }
+    if (ownProfile) {
+      setInvoice(prev => (prev.salesmanId ? prev : { ...prev, salesmanId: user.id }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, user?.id, salesmen])
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
 
@@ -612,8 +650,10 @@ export function InvoicePanel({
       return
     }
 
-    // Check if we have enough stock for the current quantity
-    if (lineValues.stockQuantity > currentStock) {
+    // Check if we have enough stock for the current quantity — variant/batch items
+    // only. Simple products may sell into negative stock; a purchase entry brings the
+    // balance back up.
+    if (variantId && lineValues.stockQuantity > currentStock) {
       toast.error(`${product.name} - Not enough stock available. Current stock: ${currentStock}, Required: ${lineValues.stockQuantity}`)
       console.log('ERROR: Not enough stock for current quantity')
       return
@@ -1314,6 +1354,7 @@ export function InvoicePanel({
         totalCost: invoice.totalCost,
         paidAmount: invoice.paidAmount,
         balance: invoice.balance,
+        salesmanId: invoice.salesmanId || undefined,
         notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
         receivedByName: invoice.type === 'pending' ? (invoice.receivedByName || '').trim() : undefined,
         deliveryCharge: invoice.deliveryCharge,
@@ -2048,6 +2089,20 @@ export function InvoicePanel({
             />
           </div>
 
+          {salesmanOptions.length > 0 && (
+            <div>
+              <Label htmlFor="salesmanId">{t('salesman') || 'Salesman'}</Label>
+              <SearchableSelect
+                id="salesmanId"
+                options={salesmanOptions}
+                value={invoice.salesmanId || ''}
+                onValueChange={(value) => setInvoice(prev => ({ ...prev, salesmanId: value }))}
+                placeholder={t('select_salesman') || 'Select a salesman...'}
+                clearLabel={t('none') || 'None'}
+              />
+            </div>
+          )}
+
           {invoice.type === 'pending' && (
             <div>
               <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
@@ -2614,7 +2669,10 @@ export function InvoicePanel({
                                 const previousStockQuantity = item.stockQuantity || item.quantity
                                 const stockDifference = lineValues.stockQuantity - previousStockQuantity
 
-                                if (stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
+                                // Simple products may sell into negative stock — variant/batch
+                                // items still enforce the cap (though unit conversion doesn't
+                                // apply to those today anyway).
+                                if (item.variantId && stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
                                   toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
                                   return
                                 }

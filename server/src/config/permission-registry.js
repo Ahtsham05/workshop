@@ -230,7 +230,22 @@ const PERMISSION_GROUPS = [
   {
     id: 'audit_logs',
     label: 'Audit Logs',
-    permissions: ['viewAuditLogs'],
+    permissions: ['viewAuditLogs', 'viewCreatedBy'],
+  },
+  {
+    id: 'salesmen',
+    label: 'Salesmen',
+    permissions: ['viewSalesmen', 'createSalesmen', 'editSalesmen', 'deleteSalesmen'],
+  },
+  {
+    id: 'commission_rules',
+    label: 'Commission Rules',
+    permissions: ['viewCommissionRules', 'manageCommissionRules'],
+  },
+  {
+    id: 'commission_ledger',
+    label: 'Commission Ledger',
+    permissions: ['viewCommissionLedger', 'manageCommissionPayments'],
   },
 ];
 
@@ -266,7 +281,7 @@ const PERMISSION_TAB_GROUPS = {
     'new_phones',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger'],
 };
 
 const sanitizePermissions = (input = {}) => {

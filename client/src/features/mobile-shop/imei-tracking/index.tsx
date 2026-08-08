@@ -46,6 +46,7 @@ const statusConfig: Record<ImeiStatus, { label: string; color: string }> = {
   scrapped: { label: 'Scrapped', color: 'bg-gray-100 text-gray-600' },
   lost: { label: 'Lost', color: 'bg-orange-100 text-orange-700' },
   stolen: { label: 'Stolen', color: 'bg-red-100 text-red-700' },
+  in_transit: { label: 'In Transit', color: 'bg-purple-100 text-purple-700' },
 }
 
 function warrantyBadge(record: ImeiRecord) {
@@ -288,7 +289,7 @@ export default function ImeiTrackingPage() {
                           {(typeof record.batchId === 'object' && record.batchId?.batchNumber) || '—'}
                         </TableCell>
                         <TableCell>
-                          <Badge className={`text-xs ${statusConfig[record.status].color}`}>{statusConfig[record.status].label}</Badge>
+                          <Badge className={`text-xs ${statusConfig[record.status]?.color ?? 'bg-gray-100 text-gray-600'}`}>{statusConfig[record.status]?.label ?? record.status}</Badge>
                         </TableCell>
                         <TableCell className='text-sm'>
                           {record.customerName ? (
@@ -334,7 +335,7 @@ export default function ImeiTrackingPage() {
                   {isMobileShop && (
                     <Badge className={`text-xs font-sans ${typeConfig[detailRecord.type ?? 'imei'].color}`}>{typeConfig[detailRecord.type ?? 'imei'].label}</Badge>
                   )}
-                  <Badge className={`text-xs font-sans ${statusConfig[detailRecord.status].color}`}>{statusConfig[detailRecord.status].label}</Badge>
+                  <Badge className={`text-xs font-sans ${statusConfig[detailRecord.status]?.color ?? 'bg-gray-100 text-gray-600'}`}>{statusConfig[detailRecord.status]?.label ?? detailRecord.status}</Badge>
                 </DialogTitle>
               </DialogHeader>
 

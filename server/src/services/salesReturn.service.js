@@ -8,6 +8,7 @@ const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
 const imeiService = require('./imei.service');
+const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -239,6 +240,9 @@ const createSalesReturn = async (returnBody) => {
 
     // 7. CashBook entry (inside transaction)
     await _createCashBookEntryInSession(salesReturn, session);
+
+    // 8. Claw back commission proportional to the returned amount (inside transaction)
+    await salesmanCommissionLedgerService.reverseCommissionForSalesReturn(salesReturn, invoice, session);
 
     await session.commitTransaction();
 

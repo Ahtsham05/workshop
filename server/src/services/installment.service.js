@@ -50,13 +50,6 @@ const createInstallmentPlan = async (body) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Quantity must be at least 1');
   }
 
-  if (product.stockQuantity < quantity) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${quantity}`
-    );
-  }
-
   const downPayment = Number(body.downPayment || 0);
   const totalAmount = Number(body.totalAmount);
   const remainingAmount = totalAmount - downPayment;
@@ -66,16 +59,15 @@ const createInstallmentPlan = async (body) => {
   const startDate = body.startDate ? new Date(body.startDate) : new Date();
   const nextDueDate = body.nextDueDate || computeNextDueDate(startDate, 0, installmentFrequency);
 
+  // Simple products may go negative on sale — a purchase entry brings the balance
+  // back up, so no $gte floor here (unlike batch/variant stock elsewhere).
   const stockReserved = await Product.findOneAndUpdate(
-    { _id: body.productId, stockQuantity: { $gte: quantity } },
+    { _id: body.productId },
     { $inc: { stockQuantity: -quantity } },
     { new: true }
   );
   if (!stockReserved) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${quantity}`
-    );
+    throw new ApiError(httpStatus.BAD_REQUEST, `Product ${product.name} not found`);
   }
 
   let plan;

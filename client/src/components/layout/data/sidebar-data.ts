@@ -36,7 +36,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -455,6 +455,13 @@ export const sidebarData: SidebarData = {
           url: '/staff',
           icon: IconUsersGroup,
           permission: 'viewStaff',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Salesmen',
+          url: '/salesmen',
+          icon: Handshake,
+          permission: 'viewSalesmen',
           excludedSchoolRoles: ['teacher'],
         },
         {
@@ -982,6 +989,7 @@ export const sidebarData: SidebarData = {
             { title: 'Sales Report', url: '/reports?tab=sales' as never, icon: ShoppingCart },
             { title: 'Purchases Report', url: '/reports?tab=purchases' as never, icon: Receipt },
             { title: 'Sale & Purchase Report', url: '/reports?tab=ledger' as never, icon: Scale },
+            { title: 'Salesman Commission Report', url: '/reports?tab=salesman-commission' as never, icon: Handshake },
             { title: 'Products Report', url: '/reports?tab=products' as never, icon: IconCategory },
             { title: 'Customers Report', url: '/reports?tab=customers' as never, icon: IconUsers },
             { title: 'Customer Aging Report', url: '/reports?tab=aging' as never, icon: AlarmClock },

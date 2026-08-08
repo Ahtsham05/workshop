@@ -81,6 +81,10 @@ router
   .route('/daily-sales-summary')
   .get(auth('viewReports'), reportsController.getDailySalesSummaryReport);
 
+router
+  .route('/salesman-commission')
+  .get(auth('viewReports'), reportsController.getSalesmanCommissionReport);
+
 module.exports = router;
 
 /**

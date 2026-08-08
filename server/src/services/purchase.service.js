@@ -482,7 +482,7 @@ const queryPurchases = async (filter, options) => {
   // overwrite each other's nested populate instead of merging. Passing an array calls
   // .populate() with each entry as-is, so flat dotted strings like 'items.variantId'
   // work the same way getPurchaseById already does it successfully.
-  opts.populate = ['supplier', 'items.product', 'items.variantId'];
+  opts.populate = ['supplier', 'items.product', 'items.variantId', { path: 'createdBy', select: 'name email' }];
   const purchases = await Purchase.paginate(filter, opts);
   return purchases;
 };
@@ -496,7 +496,8 @@ const getPurchaseById = async (id) => {
   return Purchase.findById(id)
     .populate('supplier') // Populate the 'supplier' field with the referenced supplier document
     .populate('items.product') // Populate the 'product' field within each item in the items array
-    .populate('items.variantId'); // Real-variant line items — lets views show "Toshiba — 12" not just "Toshiba"
+    .populate('items.variantId') // Real-variant line items — lets views show "Toshiba — 12" not just "Toshiba"
+    .populate('createdBy', 'name email');
 };
 
 /**

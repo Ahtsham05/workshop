@@ -73,6 +73,7 @@ import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
 import { Switch } from '@/components/ui/switch'
 import {
   Tooltip,
@@ -106,6 +107,11 @@ const typeColors: Record<string, string> = {
   'pending-converted': 'bg-green-500 text-white', // Converted pending invoices - bright green
 }
 
+function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
+  if (!ref) return '—'
+  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
+}
+
 export function InvoiceList({ onBack, onCreateNew, onEdit, 
   // onReturn, 
   onConvertPending,
@@ -117,6 +123,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const canEdit = hasExplicitPermission('editInvoices')
   const canDelete = hasExplicitPermission('deleteInvoices')
   const canPrint = hasExplicitPermission('printInvoices')
+  const canViewCreatedBy = useCanViewCreatedBy()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -686,6 +693,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead>{t('date')}</TableHead>
                   <TableHead>{t('amount')}</TableHead>
                   {/* <TableHead>{t('status')}</TableHead> */}
+                  {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
+                  <TableHead>{t('salesman') || 'Salesman'}</TableHead>
                   <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -773,6 +782,14 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                         {t(invoice.status || 'draft')}
                       </Badge>
                     </TableCell> */}
+                    {canViewCreatedBy && (
+                      <TableCell>
+                        <CreatedByCell createdBy={invoice.createdBy} />
+                      </TableCell>
+                    )}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {salesmanName(invoice.salesmanId)}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Dialog>

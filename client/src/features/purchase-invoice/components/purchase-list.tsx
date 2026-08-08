@@ -26,6 +26,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
+import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
@@ -42,6 +43,7 @@ interface PurchaseListProps {
 
 export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
   const { t } = useLanguage()
+  const canViewCreatedBy = useCanViewCreatedBy()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -242,6 +244,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                   <TableHead>{t('Payment Type')}</TableHead>
                   <TableHead>{t('Amount')}</TableHead>
                   {/* <TableHead>{t('Status')}</TableHead> */}
+                  {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
                   <TableHead>{t('Actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -295,6 +298,11 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                         {purchase.status ? t('Completed') : t('Pending')}
                       </Badge>
                     </TableCell> */}
+                    {canViewCreatedBy && (
+                      <TableCell>
+                        <CreatedByCell createdBy={purchase.createdBy} />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Dialog>

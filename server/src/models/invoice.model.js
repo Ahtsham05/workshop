@@ -170,6 +170,11 @@ const InvoiceSchema = new mongoose.Schema({
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     convertedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
+    // Salesman credited with this sale for commission purposes — a User ref (same
+    // identity CommissionRule.salesmanUserId and SalesmanProfile.userId key off), distinct
+    // from createdBy: the person entering the sale isn't always the one who made it.
+    salesmanId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+
     // Language preference (overrides user setting per invoice)
     language: { type: String, enum: ['en', 'ur'] },
     isUrduOnly: { type: Boolean, default: false },

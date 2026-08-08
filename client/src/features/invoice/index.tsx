@@ -127,6 +127,8 @@ export interface Invoice {
   customerId?: string
   customerName?: string
   walkInCustomerName?: string
+  /** Salesman credited with this sale for commission purposes — a User id. */
+  salesmanId?: string
   language?: 'en' | 'ur'
   isUrduOnly?: boolean
   type: 'cash' | 'credit' | 'pending' | 'quotation'
@@ -772,8 +774,9 @@ export default function InvoicePage() {
     console.log('Current stock from products state:', currentStock)
     console.log('Product stock from parameter:', product.stockQuantity)
     
-    // Check stock availability
-    if (currentStock <= 0) {
+    // Check stock availability — only for variant/batch-tracked items. Simple
+    // products may sell into negative stock; a purchase entry brings it back up.
+    if (variantId && currentStock <= 0) {
       toast.error(`${product.name} is out of stock`)
       return;
     }
@@ -814,8 +817,8 @@ export default function InvoicePage() {
       const totalAvailableStock = currentStock + (existingItem.stockQuantity || existingItem.quantity)
       console.log('Total available stock (current + existing):', totalAvailableStock)
       
-      // Check if new quantity exceeds total available stock
-      if (recalculatedLine.stockQuantity > totalAvailableStock) {
+      // Check if new quantity exceeds total available stock — variant/batch items only.
+      if (variantId && recalculatedLine.stockQuantity > totalAvailableStock) {
         const perUnitImpact = existingItem.quantity > 0
           ? (existingItem.stockQuantity || existingItem.quantity) / existingItem.quantity
           : 1
@@ -882,8 +885,8 @@ export default function InvoicePage() {
         }
       }
     } else {
-      // Add new item - check stock for requested quantity
-      if (defaultLine.stockQuantity > currentStock) {
+      // Add new item - check stock for requested quantity — variant/batch items only.
+      if (variantId && defaultLine.stockQuantity > currentStock) {
         toast.error(`${product.name} - Requested quantity (${quantity}) exceeds stock (${currentStock})`)
         if (currentStock > 0) {
           // Add available stock instead
@@ -1151,12 +1154,9 @@ export default function InvoicePage() {
         const existingStockQuantity = currentItem.stockQuantity || currentItem.quantity
         const stockDifference = recalculatedLine.stockQuantity - existingStockQuantity
 
-        // Increasing quantity - check if we have enough stock
-        if (stockDifference > product.stockQuantity) {
-          toast.error(`${currentItem.name} - Cannot increase by ${quantityDifference}. Only ${product.stockQuantity} units available`)
-          return
-        }
-        
+        // Simple products may sell into negative stock — a purchase entry brings the
+        // balance back up, so no cap here (variant/batch items already returned above).
+
         // Update stock (decrease)
         setProducts(prevProducts => prevProducts.map(p => 
           (p._id || p.id) === currentItem.productId 

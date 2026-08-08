@@ -169,13 +169,19 @@ const formatBatchDisplay = (item: Pick<LedgerItem, 'batchNumber' | 'batchAllocat
 // hands back the rows newest-first — matching how every other table in this app
 // lists its most recent activity at the top, while still reading top-to-bottom as
 // "balance as of this transaction" like a bank statement.
+//
+// The balance moves by `paidAmount`, not `total`: a credit purchase/sale that hasn't
+// been paid off yet hasn't actually moved any cash, so it shouldn't swing the balance
+// by its full invoiced amount — only the portion actually paid/received should. The
+// API already normalizes `paidAmount` per entry (full total for cash, the real amount
+// for credit — 0 until something is paid), so this falls out of using that field.
 const buildLedgerRows = (entries: LedgerEntry[]): LedgerRow[] => {
   const chronological = [...entries].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   )
   let running = 0
   const withBalance = chronological.map((entry) => {
-    const signedAmount = entry.direction === 'in' ? entry.total : -entry.total
+    const signedAmount = entry.direction === 'in' ? entry.paidAmount : -entry.paidAmount
     running += signedAmount
     return { ...entry, signedAmount, runningBalance: running }
   })
@@ -303,8 +309,10 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
     const toggleAll = () => setExpandedRows(allExpanded ? new Set() : new Set(allRowIds))
 
     const summary = useMemo(() => {
-      const totalSales = filteredRows.filter((r) => r.direction === 'in').reduce((s, r) => s + r.total, 0)
-      const totalPurchases = filteredRows.filter((r) => r.direction === 'out').reduce((s, r) => s + r.total, 0)
+      // Cash-basis, matching the table's Amount/Running Balance columns below — unpaid
+      // credit is tracked separately via each row's outstanding balance, not counted here.
+      const totalSales = filteredRows.filter((r) => r.direction === 'in').reduce((s, r) => s + r.paidAmount, 0)
+      const totalPurchases = filteredRows.filter((r) => r.direction === 'out').reduce((s, r) => s + r.paidAmount, 0)
       return {
         totalSales,
         totalPurchases,

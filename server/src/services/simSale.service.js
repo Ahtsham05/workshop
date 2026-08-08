@@ -137,22 +137,18 @@ const resolveLinkedProduct = async ({ productId, organizationId, branchId }) => 
   return product;
 };
 
-/** Reserve one unit from inventory (one SIM per sale). */
+/** Reserve one unit from inventory (one SIM per sale). Allowed to go negative — a
+ * purchase entry brings the balance back up, same as other simple-product sales. */
 const reserveProductStockForSimSale = async ({ productId, organizationId, branchId, productName }) => {
   const updated = await Product.findOneAndUpdate(
-    {
-      _id: productId,
-      organizationId,
-      branchId,
-      stockQuantity: { $gte: 1 },
-    },
+    { _id: productId, organizationId, branchId },
     { $inc: { stockQuantity: -1 } },
     { new: true }
   );
   if (!updated) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      `Insufficient stock for ${productName || 'this SIM product'}. Add stock or pick another item.`
+      `${productName || 'This SIM product'} not found`
     );
   }
   await inventorySyncService.recordStockChange({
@@ -330,13 +326,17 @@ const querySimSales = async (filter, options) => {
   }
 
   queryOptions.sortBy = queryOptions.sortBy || 'date:-1';
-  queryOptions.populate = 'productId,customerId';
+  queryOptions.populate = [
+    'productId',
+    'customerId',
+    { path: 'createdBy', select: 'name email' },
+  ];
 
   return SimSale.paginate(queryFilter, queryOptions);
 };
 
 const getSimSaleById = async (id) => {
-  const sale = await SimSale.findById(id).populate('productId customerId');
+  const sale = await SimSale.findById(id).populate('productId customerId').populate('createdBy', 'name email');
   if (!sale) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sim sale not found');
   }

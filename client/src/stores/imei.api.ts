@@ -1,7 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 
-export type ImeiStatus = 'in_stock' | 'sold' | 'returned' | 'scrapped' | 'lost' | 'stolen'
+export type ImeiStatus = 'in_stock' | 'sold' | 'returned' | 'scrapped' | 'lost' | 'stolen' | 'in_transit'
 
 /** One entry when submitting IMEIs to receive stock (product creation, purchases) — a
  *  plain string for a single-IMEI unit, or a pair for a dual-SIM phone's second number. */

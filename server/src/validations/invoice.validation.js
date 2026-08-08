@@ -107,7 +107,8 @@ const createInvoice = {
     billNumber: Joi.string().optional(),
     isConvertedToBill: Joi.boolean().optional(),
     convertedAt: Joi.date().optional(),
-    convertedTo: Joi.string().custom(objectId).optional()
+    convertedTo: Joi.string().custom(objectId).optional(),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   })
 };
 
@@ -183,7 +184,8 @@ const updateInvoice = {
     convertedAt: Joi.date().optional(),
     convertedTo: Joi.string().custom(objectId).optional(),
     billNumber: Joi.string().optional(),
-    allowUpdateFinalized: Joi.boolean().optional()
+    allowUpdateFinalized: Joi.boolean().optional(),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   })
 };
 

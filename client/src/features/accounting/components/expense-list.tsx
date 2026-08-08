@@ -46,6 +46,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api';
+import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell';
 
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
@@ -55,6 +56,7 @@ interface ExpenseListProps {
 
 export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
   const { t } = useLanguage();
+  const canViewCreatedBy = useCanViewCreatedBy();
   const { data: categoryData = [] } = useGetExpenseCategoriesQuery({
     transactionType: 'business_expense',
   });
@@ -282,13 +284,14 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                   <TableHead>{t('Amount')}</TableHead>
                   <TableHead>{t('Payment Method')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
+                  {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
                   <TableHead className="text-right">{t('Actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {expenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={canViewCreatedBy ? 10 : 9} className="text-center py-8 text-muted-foreground">
                       {t('No expenses found')}
                     </TableCell>
                   </TableRow>
@@ -328,6 +331,11 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                           </Badge>
                         )}
                       </TableCell>
+                      {canViewCreatedBy && (
+                        <TableCell>
+                          <CreatedByCell createdBy={expense.createdBy} />
+                        </TableCell>
+                      )}
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button

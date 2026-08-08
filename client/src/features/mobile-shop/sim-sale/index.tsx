@@ -32,6 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SimplePagination } from '@/components/ui/simple-pagination'
+import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
 import {
   useCreateSimSaleMutation,
   useGetSimSalesQuery,
@@ -104,6 +105,7 @@ const makeEmptyForm = (): SimSaleFormState => ({
 
 export default function SimSalePage({ initialCustomerId }: { initialCustomerId?: string }) {
   const dispatch = useDispatch()
+  const canViewCreatedBy = useCanViewCreatedBy()
   const [page, setPage] = useState(1)
   const limit = 10
   const [simSearch, setSimSearch] = useState('')
@@ -417,7 +419,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                     {...simEnter.enterProps('sim-product')}
                   />
                   {selectedProductRow && typeof selectedProductRow.stockQuantity === 'number' && selectedProductRow.stockQuantity < 1 && (
-                    <p className='text-sm text-destructive'>No stock left for this product. Add inventory or choose another SIM.</p>
+                    <p className='text-sm text-amber-600 dark:text-amber-400'>Low/negative stock for this product — sale is still allowed, stock will go negative until restocked.</p>
                   )}
                 </div>
 
@@ -699,6 +701,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                         <TableHead>Commission</TableHead>
                         <TableHead>Payment Method</TableHead>
                         <TableHead>Payment Wallet</TableHead>
+                        {canViewCreatedBy && <TableHead>Created By</TableHead>}
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -723,6 +726,11 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                           </TableCell>
                           <TableCell className='capitalize'>{sale.paymentMethod || 'cash'}</TableCell>
                           <TableCell>{sale.paymentWalletType || '—'}</TableCell>
+                          {canViewCreatedBy && (
+                            <TableCell>
+                              <CreatedByCell createdBy={sale.createdBy} />
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildSimSaleReceipt(sale))} />
