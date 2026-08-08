@@ -118,6 +118,41 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     enableHiding: true,
   },
   {
+    accessorKey: 'subCategories',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='sub categories' />,
+    cell: ({ row }) => {
+      const product = row.original
+      const subCategories = product.subCategories || []
+
+      if (subCategories.length === 0) {
+        return <span className="text-muted-foreground">-</span>
+      }
+
+      return (
+        <div className="flex flex-wrap gap-1">
+          {subCategories.slice(0, 2).map((subCategory) => (
+            <Badge key={subCategory._id} variant="outline" className="flex items-center gap-1">
+              {subCategory.image?.url && (
+                <img
+                  src={subCategory.image.url}
+                  alt={subCategory.name}
+                  className="w-3 h-3 rounded-full object-cover"
+                />
+              )}
+              <span className={getTextClasses(subCategory.name, "text-xs")}>{subCategory.name}</span>
+            </Badge>
+          ))}
+          {subCategories.length > 2 && (
+            <Badge variant="outline" className="text-xs">
+              +{subCategories.length - 2}
+            </Badge>
+          )}
+        </div>
+      )
+    },
+    enableHiding: true,
+  },
+  {
     id: 'brand',
     accessorFn: (product) => (typeof product.brandId === 'object' && product.brandId ? product.brandId.name : ''),
     header: ({ column }) => <DataTableColumnHeader column={column} title='brand' />,

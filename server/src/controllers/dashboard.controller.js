@@ -962,12 +962,136 @@ const getProductsByBrand = catchAsync(async (req, res) => {
 });
 
 /**
- * Get detailed product breakdown for a specific category
- * @route GET /v1/dashboard/category-products/:categoryId
+ * Get product sales grouped by sub-category
+ * @route GET /v1/dashboard/products-by-subcategory
  */
-const getCategoryProducts = catchAsync(async (req, res) => {
+const getProductsBySubCategory = catchAsync(async (req, res) => {
   const aggScope = buildAggregateScope(req);
-  const { categoryId } = req.params;
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  const subCategoryData = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    { $unwind: { path: '$product.subCategories', preserveNullAndEmptyArrays: true } },
+    // Resolve the parent category for each sub-category so the report can show a
+    // Category > Sub-Category breadcrumb — the embedded product.subCategories entry
+    // only carries {_id, name, image}, not its parent link.
+    {
+      $lookup: {
+        from: 'subcategories',
+        localField: 'product.subCategories._id',
+        foreignField: '_id',
+        as: 'subCategoryDoc'
+      }
+    },
+    { $unwind: { path: '$subCategoryDoc', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'categories',
+        localField: 'subCategoryDoc.category',
+        foreignField: '_id',
+        as: 'parentCategoryDoc'
+      }
+    },
+    { $unwind: { path: '$parentCategoryDoc', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: {
+          subCategoryId: '$product.subCategories._id',
+          subCategoryName: '$product.subCategories.name',
+          categoryId: '$parentCategoryDoc._id',
+          categoryName: '$parentCategoryDoc.name',
+        },
+        totalQuantity: { $sum: '$items.quantity' },
+        totalRevenue: { $sum: '$items.subtotal' },
+        totalCost: { $sum: { $multiply: ['$items.quantity', '$product.cost'] } },
+        productCount: { $addToSet: '$items.productId' },
+      }
+    },
+    {
+      $addFields: {
+        profit: { $subtract: ['$totalRevenue', '$totalCost'] },
+        productCount: { $size: '$productCount' },
+      }
+    },
+    { $sort: { totalRevenue: -1 } },
+    {
+      $project: {
+        _id: 0,
+        subCategoryId: '$_id.subCategoryId',
+        subCategoryName: { $ifNull: ['$_id.subCategoryName', 'Uncategorized'] },
+        categoryId: '$_id.categoryId',
+        categoryName: { $ifNull: ['$_id.categoryName', 'No Category'] },
+        totalQuantity: 1,
+        totalRevenue: 1,
+        totalCost: 1,
+        profit: 1,
+        productCount: 1,
+        margin: {
+          $cond: {
+            if: { $gt: ['$totalRevenue', 0] },
+            then: { $multiply: [{ $divide: ['$profit', '$totalRevenue'] }, 100] },
+            else: 0
+          }
+        }
+      }
+    }
+  ]);
+
+  res.status(httpStatus.OK).send(subCategoryData);
+});
+
+/**
+ * Get detailed product breakdown for a specific sub-category
+ * @route GET /v1/dashboard/subcategory-products/:subCategoryId
+ */
+const getSubCategoryProducts = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { subCategoryId } = req.params;
+  const isUncategorized = subCategoryId === 'uncategorized';
   const { startDate, endDate } = resolveDashboardDateRange(req.query);
 
   const products = await Invoice.aggregate([
@@ -1017,9 +1141,142 @@ const getCategoryProducts = catchAsync(async (req, res) => {
     },
     { $unwind: '$product' },
     {
-      $match: {
-        'product.categories._id': new mongoose.Types.ObjectId(categoryId)
+      $match: isUncategorized
+        ? {
+            $or: [
+              { 'product.subCategories': { $exists: false } },
+              { 'product.subCategories': { $size: 0 } },
+            ],
+          }
+        : {
+            'product.subCategories._id': new mongoose.Types.ObjectId(subCategoryId)
+          }
+    },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customer'
       }
+    },
+    {
+      $addFields: {
+        customerName: {
+          $cond: {
+            if: { $gt: [{ $size: '$customer' }, 0] },
+            then: { $arrayElemAt: ['$customer.name', 0] },
+            else: 'Walk-in Customer'
+          }
+        },
+        itemCost: { $multiply: ['$items.quantity', '$product.cost'] },
+        calculatedUnitPrice: {
+          $cond: {
+            if: { $and: [{ $gt: ['$items.price', 0] }, { $ne: ['$items.price', null] }] },
+            then: '$items.price',
+            else: {
+              $cond: {
+                if: { $gt: ['$items.quantity', 0] },
+                then: { $divide: ['$items.subtotal', '$items.quantity'] },
+                else: 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        invoiceId: '$_id',
+        invoiceNo: '$invoiceNumber',
+        invoiceDate: 1,
+        customerName: 1,
+        productId: '$items.productId',
+        productName: '$product.name',
+        productImage: '$product.image',
+        quantity: '$items.quantity',
+        unitPrice: '$calculatedUnitPrice',
+        revenue: '$items.subtotal',
+        cost: '$itemCost',
+        profit: { $subtract: ['$items.subtotal', '$itemCost'] },
+        trackImei: '$product.trackImei',
+        trackSerial: '$product.trackSerial',
+      }
+    },
+    { $sort: { invoiceDate: -1 } }
+  ]);
+
+  res.status(httpStatus.OK).send(products);
+});
+
+/**
+ * Get detailed product breakdown for a specific category
+ * @route GET /v1/dashboard/category-products/:categoryId
+ */
+const getCategoryProducts = catchAsync(async (req, res) => {
+  const aggScope = buildAggregateScope(req);
+  const { categoryId } = req.params;
+  const isUncategorized = categoryId === 'uncategorized';
+  const { startDate, endDate } = resolveDashboardDateRange(req.query);
+
+  const products = await Invoice.aggregate([
+    {
+      $match: {
+        ...aggScope,
+        ...buildDateMatch('invoiceDate', startDate, endDate),
+        status: { $ne: 'cancelled' },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $eq: [{ $type: '$items.productId' }, 'objectId'] },
+            {
+              $and: [
+                { $eq: [{ $type: '$items.productId' }, 'string'] },
+                { $regexMatch: { input: '$items.productId', regex: /^[a-fA-F0-9]{24}$/ } },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        productLookupId: {
+          $convert: {
+            input: '$items.productId',
+            to: 'objectId',
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    { $match: { productLookupId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productLookupId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
+      $match: isUncategorized
+        ? {
+            $or: [
+              { 'product.categories': { $exists: false } },
+              { 'product.categories': { $size: 0 } },
+            ],
+          }
+        : {
+            'product.categories._id': new mongoose.Types.ObjectId(categoryId)
+          }
     },
     {
       $lookup: {
@@ -1208,4 +1465,6 @@ module.exports = {
   getProductsByBrand,
   getCategoryProducts,
   getBrandProducts,
+  getProductsBySubCategory,
+  getSubCategoryProducts,
 };

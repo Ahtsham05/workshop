@@ -45,6 +45,16 @@ const createProduct = {
         }).optional(),
       })
     ).default([]),
+    subCategories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().required(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ).default([]),
     supplier: Joi.string().allow('').default(null),
     description: Joi.string().allow('').optional(),
     barcode: Joi.string().allow('').optional(),
@@ -122,6 +132,16 @@ const updateProduct = {
         }).optional(),
       })
     ),
+    subCategories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().required(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ),
     supplier: Joi.string().allow(''),
     image: Joi.object().keys({
       url: Joi.string(),
@@ -170,6 +190,16 @@ const bulkAddProducts = {
         description: Joi.string().allow('').optional(),
         category: Joi.string().allow('').optional(),
         categories: Joi.array().items(
+          Joi.object().keys({
+            _id: Joi.string().required(),
+            name: Joi.string().required(),
+            image: Joi.object().keys({
+              url: Joi.string(),
+              publicId: Joi.string(),
+            }).optional(),
+          })
+        ).optional(),
+        subCategories: Joi.array().items(
           Joi.object().keys({
             _id: Joi.string().required(),
             name: Joi.string().required(),

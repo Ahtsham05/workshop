@@ -23,7 +23,7 @@ interface ImageUploadProps {
   autoSearchFromText?: string
   /** Enables the banner when provided; used with “Find from name” for the search query. */
   getSearchQuery?: () => string
-  searchContext?: 'product' | 'category'
+  searchContext?: 'product' | 'category' | 'subcategory'
   /** When set, uploads to this path under VITE_BACKEND_URL (e.g. customers/upload-image). */
   uploadSlug?: string
   /** Alt text for the preview image */
@@ -69,7 +69,9 @@ export default function ImageUpload({
       const slug =
         searchContext === 'category'
           ? 'categories/fetch-image-from-search'
-          : 'products/fetch-image-from-search'
+          : searchContext === 'subcategory'
+            ? 'sub-categories/fetch-image-from-search'
+            : 'products/fetch-image-from-search'
 
       const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
         method: 'POST',
@@ -129,7 +131,11 @@ export default function ImageUpload({
 
         const slug =
           uploadSlug ??
-          (searchContext === 'category' ? 'categories/upload-image' : 'products/upload-image')
+          (searchContext === 'category'
+            ? 'categories/upload-image'
+            : searchContext === 'subcategory'
+              ? 'sub-categories/upload-image'
+              : 'products/upload-image')
 
         const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
           method: 'POST',

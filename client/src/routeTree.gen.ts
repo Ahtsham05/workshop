@@ -45,6 +45,7 @@ import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_auth
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSubscriptionIndexImport } from './routes/_authenticated/subscription/index'
+import { Route as AuthenticatedSubCategoriesIndexImport } from './routes/_authenticated/sub-categories/index'
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSchoolIndexImport } from './routes/_authenticated/school/index'
@@ -373,6 +374,13 @@ const AuthenticatedSubscriptionIndexRoute =
   AuthenticatedSubscriptionIndexImport.update({
     id: '/subscription/',
     path: '/subscription/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedSubCategoriesIndexRoute =
+  AuthenticatedSubCategoriesIndexImport.update({
+    id: '/sub-categories/',
+    path: '/sub-categories/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1775,6 +1783,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStaffIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/sub-categories/': {
+      id: '/_authenticated/sub-categories/'
+      path: '/sub-categories'
+      fullPath: '/sub-categories'
+      preLoaderRoute: typeof AuthenticatedSubCategoriesIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/subscription/': {
       id: '/_authenticated/subscription/'
       path: '/subscription'
@@ -2469,6 +2484,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
+  AuthenticatedSubCategoriesIndexRoute: typeof AuthenticatedSubCategoriesIndexRoute
   AuthenticatedSubscriptionIndexRoute: typeof AuthenticatedSubscriptionIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
@@ -2554,6 +2570,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
+  AuthenticatedSubCategoriesIndexRoute: AuthenticatedSubCategoriesIndexRoute,
   AuthenticatedSubscriptionIndexRoute: AuthenticatedSubscriptionIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
@@ -2665,6 +2682,7 @@ export interface FileRoutesByFullPath {
   '/school/': typeof AuthenticatedSchoolIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/sub-categories': typeof AuthenticatedSubCategoriesIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
@@ -2811,6 +2829,7 @@ export interface FileRoutesByTo {
   '/school': typeof AuthenticatedSchoolIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/sub-categories': typeof AuthenticatedSubCategoriesIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
@@ -2961,6 +2980,7 @@ export interface FileRoutesById {
   '/_authenticated/school/': typeof AuthenticatedSchoolIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
+  '/_authenticated/sub-categories/': typeof AuthenticatedSubCategoriesIndexRoute
   '/_authenticated/subscription/': typeof AuthenticatedSubscriptionIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
@@ -3113,6 +3133,7 @@ export interface FileRouteTypes {
     | '/school/'
     | '/settings/'
     | '/staff'
+    | '/sub-categories'
     | '/subscription'
     | '/suppliers'
     | '/tasks'
@@ -3258,6 +3279,7 @@ export interface FileRouteTypes {
     | '/school'
     | '/settings'
     | '/staff'
+    | '/sub-categories'
     | '/subscription'
     | '/suppliers'
     | '/tasks'
@@ -3406,6 +3428,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
+    | '/_authenticated/sub-categories/'
     | '/_authenticated/subscription/'
     | '/_authenticated/suppliers/'
     | '/_authenticated/tasks/'
@@ -3588,6 +3611,7 @@ export const routeTree = rootRoute
         "/_authenticated/roles/",
         "/_authenticated/sales-returns/",
         "/_authenticated/staff/",
+        "/_authenticated/sub-categories/",
         "/_authenticated/subscription/",
         "/_authenticated/suppliers/",
         "/_authenticated/tasks/",
@@ -3999,6 +4023,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/staff/": {
       "filePath": "_authenticated/staff/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/sub-categories/": {
+      "filePath": "_authenticated/sub-categories/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/subscription/": {

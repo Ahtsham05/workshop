@@ -7,12 +7,14 @@ import {
   useGetProductsByBrandQuery,
   useGetCategoryProductsQuery,
   useGetBrandProductsQuery,
+  useGetProductsBySubCategoryQuery,
+  useGetSubCategoryProductsQuery,
   type ProductDetail,
 } from '@/stores/dashboard.api'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye, Layers, Tag, Package, Smartphone, TrendingUp, ChevronDown, ChevronRight, ChevronsUpDown, ChevronsDownUp } from 'lucide-react'
+import { Eye, Layers, Tag, Package, Smartphone, TrendingUp, ChevronDown, ChevronRight, ChevronsUpDown, ChevronsDownUp, FolderTree } from 'lucide-react'
 import { Fragment, forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
@@ -44,12 +46,18 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
       startDate,
       endDate,
     })
-    
+    const { data: subCategoryData, isLoading: subCategoryLoading } = useGetProductsBySubCategoryQuery({
+      period: 'custom',
+      startDate,
+      endDate,
+    })
+
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
     const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
     const [expandedBrandIds, setExpandedBrandIds] = useState<Set<string>>(new Set())
+    const [expandedSubCategoryIds, setExpandedSubCategoryIds] = useState<Set<string>>(new Set())
     const [searchTerm, setSearchTerm] = useState('')
-    const [activeView, setActiveView] = useState<'products' | 'categories' | 'brands'>('products')
+    const [activeView, setActiveView] = useState<'products' | 'categories' | 'subcategories' | 'brands'>('products')
 
     const toggleCategoryRow = (id: string) => {
       setExpandedCategoryIds((prev) => {
@@ -65,9 +73,16 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
         return next
       })
     }
+    const toggleSubCategoryRow = (id: string) => {
+      setExpandedSubCategoryIds((prev) => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+    }
 
     const allCategoryIds = useMemo(
-      () => (categoryData ?? []).map((c) => c.categoryId).filter((id): id is string => !!id),
+      () => (categoryData ?? []).map((c) => c.categoryId || 'uncategorized'),
       [categoryData]
     )
     const allCategoriesExpanded = allCategoryIds.length > 0 && allCategoryIds.every((id) => expandedCategoryIds.has(id))
@@ -80,6 +95,15 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     )
     const allBrandsExpanded = allBrandIds.length > 0 && allBrandIds.every((id) => expandedBrandIds.has(id))
     const toggleAllBrands = () => setExpandedBrandIds(allBrandsExpanded ? new Set() : new Set(allBrandIds))
+
+    const allSubCategoryIds = useMemo(
+      () => (subCategoryData ?? []).map((s) => s.subCategoryId || 'uncategorized'),
+      [subCategoryData]
+    )
+    const allSubCategoriesExpanded =
+      allSubCategoryIds.length > 0 && allSubCategoryIds.every((id) => expandedSubCategoryIds.has(id))
+    const toggleAllSubCategories = () =>
+      setExpandedSubCategoryIds(allSubCategoriesExpanded ? new Set() : new Set(allSubCategoryIds))
 
     const filteredProducts = useMemo(() => {
       if (!data?.data) return []
@@ -113,6 +137,18 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
               [t('margin')]: `${cat.margin.toFixed(1)}%`,
             }))
             sheetName = 'Category Report'
+          } else if (activeView === 'subcategories' && subCategoryData) {
+            excelData = subCategoryData.map((sub) => ({
+              [t('Category')]: sub.categoryName,
+              [t('Sub-Category')]: sub.subCategoryName,
+              [t('products')]: sub.productCount,
+              [t('quantity_sold')]: sub.totalQuantity,
+              [t('revenue')]: sub.totalRevenue,
+              [t('cost')]: sub.totalCost,
+              [t('profit')]: sub.profit,
+              [t('margin')]: `${sub.margin.toFixed(1)}%`,
+            }))
+            sheetName = 'Sub-Category Report'
           } else if (activeView === 'brands' && brandData) {
             excelData = brandData.map((brand) => ({
               [t('brand')]: brand.brandName,
@@ -172,7 +208,14 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
     const totalBrandProfit = brandData?.reduce((sum, brand) => sum + brand.profit, 0) || 0
     const imeiBrandsCount = brandData?.filter(b => b.hasImeiProducts).length || 0
 
-    if (isLoading && categoryLoading && brandLoading) {
+    // Sub-category analytics
+    const totalSubCategoryRevenue = subCategoryData?.reduce((sum, sub) => sum + sub.totalRevenue, 0) || 0
+    const totalSubCategoryProfit = subCategoryData?.reduce((sum, sub) => sum + sub.profit, 0) || 0
+    const avgSubCategoryMargin = totalSubCategoryRevenue > 0
+      ? (totalSubCategoryProfit / totalSubCategoryRevenue) * 100
+      : 0
+
+    if (isLoading && categoryLoading && brandLoading && subCategoryLoading) {
       return <Skeleton className='h-[400px] w-full' />
     }
 
@@ -188,7 +231,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
           </CardHeader>
           <CardContent>
             <Tabs value={activeView} onValueChange={(v) => setActiveView(v as any)}>
-              <TabsList className='grid w-full grid-cols-3'>
+              <TabsList className='grid w-full grid-cols-2 sm:grid-cols-4'>
                 <TabsTrigger value='products'>
                   <Package className='h-4 w-4 mr-2' />
                   {t('By Products')}
@@ -196,6 +239,10 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                 <TabsTrigger value='categories'>
                   <Layers className='h-4 w-4 mr-2' />
                   {t('By Category')}
+                </TabsTrigger>
+                <TabsTrigger value='subcategories'>
+                  <FolderTree className='h-4 w-4 mr-2' />
+                  {t('By Sub-Category')}
                 </TabsTrigger>
                 <TabsTrigger value='brands'>
                   <Tag className='h-4 w-4 mr-2' />
@@ -434,21 +481,18 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                     <TableBody>
                       {categoryData && categoryData.length > 0 ? (
                         categoryData.map((category) => {
-                          const rowId = category.categoryId || category.categoryName
-                          const isExpandable = !!category.categoryId
+                          const rowId = category.categoryId || 'uncategorized'
                           const isOpen = expandedCategoryIds.has(rowId)
                           return (
                           <Fragment key={rowId}>
                           <TableRow
-                            className={isExpandable ? 'cursor-pointer hover:bg-muted/30' : undefined}
-                            onClick={() => isExpandable && toggleCategoryRow(rowId)}
+                            className='cursor-pointer hover:bg-muted/30'
+                            onClick={() => toggleCategoryRow(rowId)}
                           >
                             <TableCell className='w-8'>
-                              {isExpandable && (
-                                <Button variant='ghost' size='icon' className='h-6 w-6'>
-                                  {isOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
-                                </Button>
-                              )}
+                              <Button variant='ghost' size='icon' className='h-6 w-6'>
+                                {isOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
+                              </Button>
                             </TableCell>
                             <TableCell className='font-medium'>
                               <div className='flex items-center gap-2'>
@@ -482,12 +526,12 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                               </Badge>
                             </TableCell>
                           </TableRow>
-                          {isOpen && category.categoryId && (
+                          {isOpen && (
                             <TableRow className='bg-muted/20 hover:bg-muted/20'>
                               <TableCell />
                               <TableCell colSpan={7} className='py-2'>
                                 <CategoryTransactionsPanel
-                                  categoryId={category.categoryId}
+                                  categoryId={rowId}
                                   startDate={startDate}
                                   endDate={endDate}
                                 />
@@ -501,6 +545,169 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableRow>
                           <TableCell colSpan={8} className='text-center text-muted-foreground py-8'>
                             {t('No category data available')}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Sub-Category View */}
+        {activeView === 'subcategories' && (
+          <>
+            {/* Sub-Category Summary */}
+            <div className='grid gap-4 md:grid-cols-4'>
+              <Card className={kpiCardClass('sky')}>
+                <CardHeader>
+                  <CardTitle className='text-sm'>{t('Total Sub-Categories')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold'>{subCategoryData?.length || 0}</div>
+                  <p className='text-xs text-muted-foreground mt-1'>{t('Active product sub-categories')}</p>
+                </CardContent>
+              </Card>
+              <Card className={kpiCardClass('emerald')}>
+                <CardHeader>
+                  <CardTitle className='text-sm'>{t('Total Revenue')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold'>{formatCurrency(totalSubCategoryRevenue)}</div>
+                  <p className='text-xs text-muted-foreground mt-1'>{t('Across all sub-categories')}</p>
+                </CardContent>
+              </Card>
+              <Card className={kpiCardClass('emerald')}>
+                <CardHeader>
+                  <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSubCategoryProfit)}</div>
+                  <p className='text-xs text-muted-foreground mt-1'>{t('Sub-category profit')}</p>
+                </CardContent>
+              </Card>
+              <Card className={kpiCardClass('violet')}>
+                <CardHeader>
+                  <CardTitle className='text-sm'>{t('Avg Margin')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold text-violet-600'>{avgSubCategoryMargin.toFixed(1)}%</div>
+                  <p className='text-xs text-muted-foreground mt-1'>{t('Average profit margin')}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader className='flex flex-row items-center justify-between gap-4 space-y-0'>
+                <CardTitle className='flex items-center gap-2'>
+                  <FolderTree className='h-5 w-5 text-blue-600' />
+                  {t('Sales by Sub-Category')}
+                </CardTitle>
+                {!subCategoryLoading && allSubCategoryIds.length > 0 && (
+                  <Button variant='outline' size='sm' onClick={toggleAllSubCategories}>
+                    {allSubCategoriesExpanded ? (
+                      <ChevronsDownUp className='h-4 w-4 mr-2' />
+                    ) : (
+                      <ChevronsUpDown className='h-4 w-4 mr-2' />
+                    )}
+                    {allSubCategoriesExpanded ? t('Collapse All') : t('Expand All')}
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {subCategoryLoading ? (
+                  <Skeleton className='h-[300px]' />
+                ) : (
+                  <div className='overflow-x-auto'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className='w-8' />
+                        <TableHead>{t('Sub-Category')}</TableHead>
+                        <TableHead>{t('Category')}</TableHead>
+                        <TableHead className='text-right'>{t('Products')}</TableHead>
+                        <TableHead className='text-right'>{t('Quantity Sold')}</TableHead>
+                        <TableHead className='text-right'>{t('Revenue')}</TableHead>
+                        <TableHead className='text-right'>{t('Cost')}</TableHead>
+                        <TableHead className='text-right'>{t('Profit')}</TableHead>
+                        <TableHead className='text-right'>{t('Margin')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {subCategoryData && subCategoryData.length > 0 ? (
+                        subCategoryData.map((sub) => {
+                          const rowId = sub.subCategoryId || 'uncategorized'
+                          const isOpen = expandedSubCategoryIds.has(rowId)
+                          return (
+                          <Fragment key={rowId}>
+                          <TableRow
+                            className='cursor-pointer hover:bg-muted/30'
+                            onClick={() => toggleSubCategoryRow(rowId)}
+                          >
+                            <TableCell className='w-8'>
+                              <Button variant='ghost' size='icon' className='h-6 w-6'>
+                                {isOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
+                              </Button>
+                            </TableCell>
+                            <TableCell className='font-medium'>
+                              <div className='flex items-center gap-2'>
+                                <FolderTree className='h-4 w-4 text-blue-600' />
+                                {sub.subCategoryName}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant='secondary' className='font-normal'>
+                                {sub.categoryName}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className='text-right'>{sub.productCount}</TableCell>
+                            <TableCell className='text-right'>{sub.totalQuantity}</TableCell>
+                            <TableCell className='text-right font-semibold'>
+                              {formatCurrency(sub.totalRevenue)}
+                            </TableCell>
+                            <TableCell className='text-right text-orange-600'>
+                              {formatCurrency(sub.totalCost)}
+                            </TableCell>
+                            <TableCell className='text-right text-green-600 font-medium'>
+                              {formatCurrency(sub.profit)}
+                            </TableCell>
+                            <TableCell className='text-right'>
+                              <Badge
+                                variant='outline'
+                                className={`${
+                                  sub.margin > 30
+                                    ? 'bg-green-50 text-green-700'
+                                    : sub.margin > 15
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-amber-50 text-amber-700'
+                                }`}
+                              >
+                                {sub.margin.toFixed(1)}%
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                          {isOpen && (
+                            <TableRow className='bg-muted/20 hover:bg-muted/20'>
+                              <TableCell />
+                              <TableCell colSpan={8} className='py-2'>
+                                <SubCategoryTransactionsPanel
+                                  subCategoryId={rowId}
+                                  startDate={startDate}
+                                  endDate={endDate}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </Fragment>
+                          )
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={9} className='text-center text-muted-foreground py-8'>
+                            {t('No sub-category data available')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -829,6 +1036,20 @@ function CategoryTransactionsPanel({
   const { t } = useLanguage()
   const { data, isLoading } = useGetCategoryProductsQuery({ categoryId, period: 'custom', startDate, endDate })
   return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found in this category')} />
+}
+
+function SubCategoryTransactionsPanel({
+  subCategoryId,
+  startDate,
+  endDate,
+}: {
+  subCategoryId: string
+  startDate: string
+  endDate: string
+}) {
+  const { t } = useLanguage()
+  const { data, isLoading } = useGetSubCategoryProductsQuery({ subCategoryId, period: 'custom', startDate, endDate })
+  return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found in this sub-category')} />
 }
 
 function BrandTransactionsPanel({

@@ -189,6 +189,19 @@ export interface BrandProductData {
   margin: number
 }
 
+export interface SubCategoryProductData {
+  subCategoryId?: string
+  subCategoryName: string
+  categoryId?: string
+  categoryName: string
+  totalQuantity: number
+  totalRevenue: number
+  totalCost: number
+  profit: number
+  productCount: number
+  margin: number
+}
+
 export interface ProductDetail {
   invoiceId: string
   invoiceNo: string
@@ -209,7 +222,7 @@ export interface ProductDetail {
 export const dashboardApi = createApi({
   reducerPath: 'dashboardApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'CategoryProducts', 'BrandProducts'],
+  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({
       query: (params) => ({
@@ -278,6 +291,20 @@ export const dashboardApi = createApi({
       }),
       providesTags: ['BrandProducts'],
     }),
+    getProductsBySubCategory: builder.query<SubCategoryProductData[], DashboardDateParams>({
+      query: (params) => ({
+        url: '/products-by-subcategory',
+        params,
+      }),
+      providesTags: ['SubCategoryProducts'],
+    }),
+    getSubCategoryProducts: builder.query<ProductDetail[], { subCategoryId: string } & DashboardDateParams>({
+      query: ({ subCategoryId, ...params }) => ({
+        url: `/subcategory-products/${subCategoryId}`,
+        params,
+      }),
+      providesTags: ['SubCategoryProducts'],
+    }),
   }),
 })
 
@@ -292,4 +319,6 @@ export const {
   useGetProductsByBrandQuery,
   useGetCategoryProductsQuery,
   useGetBrandProductsQuery,
+  useGetProductsBySubCategoryQuery,
+  useGetSubCategoryProductsQuery,
 } = dashboardApi

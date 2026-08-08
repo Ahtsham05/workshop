@@ -74,15 +74,34 @@ function CommandInput({
 
 function CommandList({
   className,
+  style,
+  onWheel,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot='command-list'
       className={cn(
-        'max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto',
+        // Caps at 300px normally, but shrinks further when the popover has less
+        // room (flipped above the trigger, near a viewport edge, etc.) so the
+        // list never gets clipped — the available-height var is set by Radix's
+        // collision detection and is a no-op (falls back to 300px) outside a Popover.
+        'max-h-[min(300px,var(--radix-popover-content-available-height,300px))] scroll-py-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-1',
+        '[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/60',
         className
       )}
+      // A Popover portals its content to <body>, outside a parent Dialog's own DOM
+      // subtree. Dialog locks background scroll (react-remove-scroll) and only
+      // reliably recognizes its own content as a scrollable "shard" — wheel and
+      // two-finger trackpad gestures over a popover list nested in a Dialog can get
+      // swallowed by that lock. touchAction guarantees the browser allows vertical
+      // panning here, and stopping propagation keeps the gesture from ever reaching
+      // the document-level listener that would otherwise cancel it.
+      style={{ touchAction: 'pan-y', ...style }}
+      onWheel={(event) => {
+        event.stopPropagation()
+        onWheel?.(event)
+      }}
       {...props}
     />
   )

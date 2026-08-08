@@ -34,12 +34,13 @@ const queryCategories = async (filter, options) => {
  * @returns {Promise<Category[]>}
  */
 const getAllCategories = async (filter) => {
-  let query = {};
-  
-  if (filter.search && filter.fieldName) {
-    query[filter.fieldName] = { $regex: filter.search, $options: 'i' };
+  const { search, fieldName, ...rest } = filter;
+  let query = { ...rest };
+
+  if (search && fieldName) {
+    query[fieldName] = { $regex: search, $options: 'i' };
   }
-  
+
   return Category.find(query).sort({ name: 1 });
 };
 

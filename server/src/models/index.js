@@ -5,6 +5,7 @@ module.exports.Customer = require('./customer.model');
 module.exports.Supplier = require('./supplier.model');
 module.exports.Product = require('./product.model');
 module.exports.Category = require('./category.model');
+module.exports.SubCategory = require('./subCategory.model');
 module.exports.Brand = require('./brand.model');
 module.exports.Purchase = require('./purchase.model');
 module.exports.PurchaseOrder = require('./purchaseOrder.model');

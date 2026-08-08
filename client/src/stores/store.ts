@@ -5,6 +5,7 @@ import productReducer from './product.slice';
 import customerReducer from './customer.slice';
 import supplierReducer from './supplier.slice';
 import categoryReducer from './category.slice';
+import subCategoryReducer from './subCategory.slice';
 import { invoiceApi } from './invoice.api';
 import { customerApi } from './customer.api';
 import { purchaseApi } from './purchase.api';
@@ -57,6 +58,7 @@ export const store = configureStore({
     customer: customerReducer,
     supplier: supplierReducer,
     category: categoryReducer,
+    subCategory: subCategoryReducer,
     [invoiceApi.reducerPath]: invoiceApi.reducer,
     [customerApi.reducerPath]: customerApi.reducer,
     [purchaseApi.reducerPath]: purchaseApi.reducer,

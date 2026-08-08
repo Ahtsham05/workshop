@@ -23,7 +23,7 @@ import { toast } from 'sonner'
 import { useCategories } from '../context/categories-context'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { createCategory, updateCategory } from '@/stores/category.slice'
+import { createCategory, updateCategory, Category } from '@/stores/category.slice'
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
@@ -43,9 +43,13 @@ type CategoryFormValues = z.infer<typeof categoryFormSchema>
 
 interface CategoriesActionDialogProps {
   setFetch: Dispatch<SetStateAction<boolean>>
+  /** Pre-fills the name field when opened fresh (e.g. quick-create from another form's category picker). */
+  defaultName?: string
+  /** Fires with the newly created category — lets a caller (e.g. a picker) auto-select it. Not called on edit/update. */
+  onCreated?: (category: Category) => void
 }
 
-export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps) {
+export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: CategoriesActionDialogProps) {
   const { state, dispatch: contextDispatch } = useCategories()
   const reduxDispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
@@ -76,13 +80,13 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
       } else {
         // Create mode
         form.reset({
-          name: '',
+          name: defaultName || '',
           nameUrdu: '',
           image: undefined,
         })
       }
     }
-  }, [state.open, state.currentCategory, form])
+  }, [state.open, state.currentCategory, defaultName, form])
 
   async function onSubmit(data: CategoryFormValues) {
     setIsSubmitting(true)
@@ -96,8 +100,9 @@ export function CategoriesActionDialog({ setFetch }: CategoriesActionDialogProps
         toast.success(t('category_updated_successfully'))
       } else {
         // Create new category
-        await reduxDispatch(createCategory(data)).unwrap()
+        const created = await reduxDispatch(createCategory(data)).unwrap()
         toast.success(t('category_created_successfully'))
+        onCreated?.(created)
       }
 
       contextDispatch({ type: 'SET_OPEN', payload: false })

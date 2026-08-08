@@ -26,6 +26,7 @@ export function DataTableViewOptions<TData>({
     'name': 'product_name',
     'description': 'description',
     'categories': 'categories',
+    'subCategories': 'subcategories',
     'barcode': 'barcode',
     'price': 'price',
     'cost': 'cost',

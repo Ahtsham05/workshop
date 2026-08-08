@@ -4,6 +4,7 @@ const userRoute = require('./user.route');
 const roleRoute = require('./role.route');
 const productRoute = require('./product.route');
 const categoryRoute = require('./category.route');
+const subCategoryRoute = require('./subCategory.route');
 const brandRoute = require('./brand.route');
 const productAttributeRoute = require('./productAttribute.route');
 const productVariantRoute = require('./productVariant.route');
@@ -139,6 +140,10 @@ const defaultRoutes = [
   {
     path: '/categories',
     route: categoryRoute,
+  },
+  {
+    path: '/sub-categories',
+    route: subCategoryRoute,
   },
   {
     path: '/brands',
@@ -573,6 +578,7 @@ const protectedPaths = [
   '/roles',
   '/products',
   '/categories',
+  '/sub-categories',
   '/sync',
   '/system',
   '/customers',

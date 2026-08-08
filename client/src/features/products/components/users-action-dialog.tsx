@@ -27,6 +27,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { addProduct, updateProduct } from '@/stores/product.slice'
 import { fetchCategories, createCategory } from '@/stores/category.slice'
+import { fetchAllSubCategories, createSubCategory } from '@/stores/subCategory.slice'
 import toast from 'react-hot-toast'
 import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
@@ -120,6 +121,14 @@ const formSchema = z.object({
       publicId: z.string(),
     }).optional(),
   })).optional(),
+  subCategories: z.array(z.object({
+    _id: z.string(),
+    name: z.string(),
+    image: z.object({
+      url: z.string(),
+      publicId: z.string(),
+    }).optional(),
+  })).optional(),
 }).superRefine((data, ctx) => {
   if (data.hasVariants) return
   if (!data.price || data.price < 1) {
@@ -152,6 +161,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [categorySearchQuery, setCategorySearchQuery] = useState('')
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+  const [subCategoriesOpen, setSubCategoriesOpen] = useState(false)
+  const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('')
+  const [isCreatingSubCategory, setIsCreatingSubCategory] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
@@ -163,6 +175,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const dispatch = useDispatch<AppDispatch>()
   const [createProductVariant] = useCreateProductVariantMutation()
   const { categories } = useSelector((state: RootState) => state.category)
+  const { subCategories } = useSelector((state: RootState) => state.subCategory)
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showConversionRules = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
@@ -174,9 +187,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   useEffect(() => {
     if (open) {
       dispatch(fetchCategories({ page: 1, limit: 100 }))
+      dispatch(fetchAllSubCategories({}))
     }
   }, [open, dispatch, categories.length])
-  
+
   const form = useForm<productForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
@@ -202,6 +216,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unitConversions: currentRow?.unitConversions || [],
         image: currentRow?.image || undefined,
         categories: currentRow?.categories || [],
+        subCategories: currentRow?.subCategories || [],
       }
       : {
         name: '',
@@ -226,6 +241,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unitConversions: [],
         image: undefined,
         categories: [],
+        subCategories: [],
       },
   })
 
@@ -254,6 +270,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unitConversions: currentRow.unitConversions || [],
         image: currentRow.image || undefined,
         categories: currentRow.categories || [],
+        subCategories: currentRow.subCategories || [],
       })
     } else {
       form.reset({
@@ -278,6 +295,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unitConversions: [],
         image: undefined,
         categories: [],
+        subCategories: [],
       })
     }
     setImageRemoved(false)
@@ -458,6 +476,56 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       toast.error(`Failed to create category "${name}"`)
     } finally {
       setIsCreatingCategory(false)
+    }
+  }
+
+  // Sub-categories only make sense in the context of a category, so the picker is scoped
+  // to whichever categories are already selected on this product.
+  const categoriesWatch = form.watch('categories')
+  const selectedCategoryIds = (categoriesWatch || []).map((c) => c._id)
+  const availableSubCategories = subCategories.filter((sc) => {
+    const parentId = typeof sc.category === 'object' ? sc.category?.id : sc.category
+    return parentId && selectedCategoryIds.includes(parentId)
+  })
+
+  // If a category is removed, drop any of its sub-categories that were already selected
+  // on this product so the two fields never disagree.
+  useEffect(() => {
+    const current = form.getValues('subCategories') || []
+    if (current.length === 0) return
+    const validIds = new Set(availableSubCategories.map((sc) => sc.id))
+    const pruned = current.filter((sc) => validIds.has(sc._id))
+    if (pruned.length !== current.length) {
+      form.setValue('subCategories', pruned)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategoryIds.join(',')])
+
+  // Create a new sub-category inline, attached to the first selected category — mirrors
+  // handleCreateCategory above.
+  const handleCreateSubCategory = async () => {
+    const name = subCategorySearchQuery.trim()
+    const parentCategoryId = selectedCategoryIds[0]
+    if (!name || !parentCategoryId) return
+    if (availableSubCategories.some((sc) => sc.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(`"${name}" already exists`)
+      return
+    }
+    setIsCreatingSubCategory(true)
+    try {
+      const created = await dispatch(createSubCategory({ name, category: parentCategoryId })).unwrap()
+      toast.success(t('subcategory_created_successfully') || `Sub-category "${name}" created`)
+      const currentSubCategories = form.getValues('subCategories') || []
+      form.setValue('subCategories', [
+        ...currentSubCategories,
+        { _id: created.id, name: created.name, image: created.image },
+      ])
+      setSubCategorySearchQuery('')
+      setSubCategoriesOpen(false)
+    } catch {
+      toast.error(`Failed to create sub-category "${name}"`)
+    } finally {
+      setIsCreatingSubCategory(false)
     }
   }
 
@@ -711,6 +779,165 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                       : categories.some((c) => c.name.toLowerCase() === categorySearchQuery.trim().toLowerCase())
                                         ? `"${categorySearchQuery.trim()}" already exists — select it above`
                                         : `Create "${categorySearchQuery.trim()}"`}
+                                  </CommandItem>
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='subCategories'
+                render={({ field }) => (
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>{t('subcategories')}</FormLabel>
+                    <FormControl>
+                      <div className='space-y-2'>
+                        <Popover
+                          open={subCategoriesOpen}
+                          onOpenChange={(open) => {
+                            if (open && selectedCategoryIds.length === 0) return
+                            setSubCategoriesOpen(open)
+                            if (!open) setSubCategorySearchQuery('')
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              role='combobox'
+                              aria-expanded={subCategoriesOpen}
+                              disabled={selectedCategoryIds.length === 0}
+                              className='w-full justify-between min-h-[2.5rem] h-auto py-0'
+                            >
+                              <div className='flex items-center gap-2 flex-1'>
+                                <Search className='w-4 h-4 flex-shrink-0' />
+                                {field.value && field.value.length > 0 ? (
+                                  <div className='flex flex-wrap items-center gap-1 flex-1'>
+                                    {field.value.map((subCategory) => (
+                                      <Badge key={subCategory._id} variant='secondary' className='flex items-center gap-1'>
+                                        {subCategory.image?.url ? (
+                                          <img
+                                            src={subCategory.image.url}
+                                            alt={subCategory.name}
+                                            className='w-3 h-3 rounded-full object-cover'
+                                          />
+                                        ) : (
+                                          <div className='w-3 h-3 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0'>
+                                            <span className='text-[10px] font-medium text-white'>
+                                              {subCategory.name?.charAt(0).toUpperCase() || 'S'}
+                                            </span>
+                                          </div>
+                                        )}
+                                        <span className='text-xs'>{subCategory.name}</span>
+                                        <button
+                                          type='button'
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            const next = field.value?.filter((sc) => sc._id !== subCategory._id) || []
+                                            field.onChange(next)
+                                          }}
+                                          className='ml-1 hover:bg-gray-200 rounded-full p-0.5'
+                                        >
+                                          <X className='w-2 h-2' />
+                                        </button>
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className='text-muted-foreground'>
+                                    {selectedCategoryIds.length === 0
+                                      ? t('select_category_first_hint')
+                                      : t('select_subcategories')}
+                                  </span>
+                                )}
+                              </div>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className='w-[300px] p-0' align={isRTL ? 'end' : 'start'}>
+                            <Command>
+                              <CommandInput
+                                placeholder={t('search_subcategories')}
+                                value={subCategorySearchQuery}
+                                onValueChange={setSubCategorySearchQuery}
+                              />
+                              <CommandEmpty>{t('no_subcategories_found')}</CommandEmpty>
+                              <CommandList>
+                                <CommandGroup>
+                                  {availableSubCategories.map((subCategory) => {
+                                    const isSelected = field.value?.some((sc) => sc._id === subCategory.id) || false
+                                    return (
+                                      <CommandItem
+                                        key={subCategory.id}
+                                        onSelect={() => {
+                                          const current = field.value || []
+                                          if (isSelected) {
+                                            field.onChange(current.filter((sc) => sc._id !== subCategory.id))
+                                          } else {
+                                            field.onChange([
+                                              ...current,
+                                              { _id: subCategory.id, name: subCategory.name, image: subCategory.image },
+                                            ])
+                                          }
+                                        }}
+                                        className='flex items-center gap-2 cursor-pointer'
+                                      >
+                                        <div className='flex items-center gap-2 flex-1'>
+                                          {subCategory.image?.url ? (
+                                            <img
+                                              src={subCategory.image.url}
+                                              alt={subCategory.name}
+                                              className='w-6 h-6 rounded-full object-cover'
+                                            />
+                                          ) : (
+                                            <div className='w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0'>
+                                              <span className='text-sm font-medium text-muted-foreground'>
+                                                {subCategory.name?.charAt(0).toUpperCase() || 'S'}
+                                              </span>
+                                            </div>
+                                          )}
+                                          <span>{subCategory.name}</span>
+                                        </div>
+                                        {isSelected && (
+                                          <div className='w-4 h-4 rounded-sm flex items-center justify-center'>
+                                            <Check className='w-3 h-3 text-black' />
+                                          </div>
+                                        )}
+                                      </CommandItem>
+                                    )
+                                  })}
+                                </CommandGroup>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value={subCategorySearchQuery.trim() ? `create-subcategory-${subCategorySearchQuery.trim()}` : 'create-subcategory-prompt'}
+                                    onSelect={
+                                      subCategorySearchQuery.trim() &&
+                                      !availableSubCategories.some((sc) => sc.name.toLowerCase() === subCategorySearchQuery.trim().toLowerCase())
+                                        ? handleCreateSubCategory
+                                        : undefined
+                                    }
+                                    disabled={
+                                      isCreatingSubCategory ||
+                                      !subCategorySearchQuery.trim() ||
+                                      availableSubCategories.some((sc) => sc.name.toLowerCase() === subCategorySearchQuery.trim().toLowerCase())
+                                    }
+                                    className='cursor-pointer text-primary data-[disabled=true]:opacity-100'
+                                  >
+                                    <Plus className='mr-2 h-4 w-4' />
+                                    {!subCategorySearchQuery.trim()
+                                      ? t('type_a_name_to_create_subcategory')
+                                      : availableSubCategories.some((sc) => sc.name.toLowerCase() === subCategorySearchQuery.trim().toLowerCase())
+                                        ? `"${subCategorySearchQuery.trim()}" already exists — select it above`
+                                        : t('create_subcategory_under', {
+                                            name: subCategorySearchQuery.trim(),
+                                            category: categories.find((c) => c.id === selectedCategoryIds[0])?.name || '',
+                                          })}
                                   </CommandItem>
                                 </CommandGroup>
                               </CommandList>

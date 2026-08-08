@@ -33,6 +33,14 @@ export const productSchema = z.object({
       publicId: z.string(),
     }).optional(),
   })).optional(), // product categories is optional
+  subCategories: z.array(z.object({
+    _id: z.string(),
+    name: z.string(),
+    image: z.object({
+      url: z.string(),
+      publicId: z.string(),
+    }).optional(),
+  })).optional(), // product sub-categories is optional
   hasVariants: z.boolean().optional(),
   brandId: z.union([
     z.string(),

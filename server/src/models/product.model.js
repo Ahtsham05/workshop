@@ -82,6 +82,14 @@ const ProductSchema = new mongoose.Schema({
             publicId: { type: String }
         }
     }],
+    subCategories: [{
+        _id: { type: mongoose.Schema.Types.ObjectId, ref: 'SubCategory' },
+        name: { type: String, required: true },
+        image: {
+            url: { type: String },
+            publicId: { type: String }
+        }
+    }],
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' }, // Reference to supplier
     brandId: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', default: null, index: true },
     /**

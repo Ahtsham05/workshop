@@ -7,6 +7,7 @@ module.exports.userService = require('./user.service.js');
 module.exports.roleService = require('./role.service.js');
 module.exports.productService = require('./product.service.js');
 module.exports.categoryService = require('./category.service.js');
+module.exports.subCategoryService = require('./subCategory.service.js');
 module.exports.customerService = require('./customer.service.js');
 module.exports.supplierService = require('./supplier.service.js');
 module.exports.purchaseService = require('./purchase.service.js');
