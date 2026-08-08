@@ -19,6 +19,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { SalesReport } from './components/sales-report'
 import { PurchaseReport } from './components/purchase-report'
+import { LedgerReport } from './components/ledger-report'
 import { ProductReport } from './components/product-report'
 import { CustomerReport } from './components/customer-report'
 import { AgingReport } from './components/aging-report'
@@ -253,12 +254,13 @@ export default function ReportsPage() {
             )}
             <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
-            <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('products')}</TabsTrigger>
-            <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('customers')}</TabsTrigger>
+            <TabsTrigger value='ledger' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sale & Purchase')}</TabsTrigger>
+            <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Products')}</TabsTrigger>
+            <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customers')}</TabsTrigger>
             <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
-            <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('suppliers')}</TabsTrigger>
+            <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Suppliers')}</TabsTrigger>
             <TabsTrigger value='supplier-aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Supplier Aging')}</TabsTrigger>
-            <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('expenses')}</TabsTrigger>
+            <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Expenses')}</TabsTrigger>
             <TabsTrigger value='stock' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock')}</TabsTrigger>
             <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
             <TabsTrigger value='stock-adjustments' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Adjustments')}</TabsTrigger>
@@ -328,6 +330,10 @@ export default function ReportsPage() {
 
         <TabsContent value='purchases' className='mt-6'>
           <PurchaseReport ref={activeTab === 'purchases' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+        </TabsContent>
+
+        <TabsContent value='ledger' className='mt-6'>
+          <LedgerReport ref={activeTab === 'ledger' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='products' className='mt-6'>
