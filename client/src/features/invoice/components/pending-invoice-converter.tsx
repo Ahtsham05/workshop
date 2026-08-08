@@ -172,7 +172,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   // Falls back to showing balance-only customers when nobody currently has a pending
   // invoice, so the page stays useful.
   const { data: pendingSummaryResponse, isLoading: loadingPendingSummary } =
-    useGetPendingInvoiceSummaryByCustomerQuery()
+    useGetPendingInvoiceSummaryByCustomerQuery(undefined)
   const pendingSummary = pendingSummaryResponse?.results || []
   const pendingSummaryTotals = pendingSummaryResponse?.totals
 
@@ -276,7 +276,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   }, [selectedCustomerId, customers, selectedCustomer])
 
   // Filter the pending-invoice customer list by search query
-  const filteredPendingSummary = pendingSummary.filter((row) =>
+  const filteredPendingSummary = pendingSummary.filter((row: any) =>
     matchesBilingualSearch(customerSearchQuery, row.name, row.nameUrdu, row.phone),
   )
 
@@ -720,7 +720,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredPendingSummary.map((row) => (
+                        {filteredPendingSummary.map((row: any) => (
                           <TableRow
                             key={row.customerId}
                             className="cursor-pointer hover:bg-muted/50"
