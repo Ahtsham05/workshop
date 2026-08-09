@@ -122,14 +122,18 @@ export function createEmptyManualInvoiceItem(): InvoiceItem {
   }
 }
 
-/** A fresh invoice starts with this many empty rows pre-added so a cashier can jump
- * straight into selecting products instead of clicking "Add Row" repeatedly — more
- * rows are still appended automatically once these fill up (see addNewRowAndOpenProduct
- * in invoice-panel.tsx). */
+/** With the catalog hidden, a fresh invoice starts with this many empty rows pre-added
+ * so a cashier can jump straight into selecting products instead of clicking "Add Row"
+ * repeatedly — more rows are still appended automatically once these fill up (see
+ * addNewRowAndOpenProduct in invoice-panel.tsx). When the catalog is visible, clicking a
+ * tile always appends its own new row (see addToInvoice below) and never reuses one of
+ * these pre-seeded empty rows, so only one placeholder row is pre-added there. */
 const NEW_INVOICE_ROW_COUNT = 12
+const NEW_INVOICE_ROW_COUNT_WITH_CATALOG = 1
 
-function createInitialInvoiceItems(): InvoiceItem[] {
-  return Array.from({ length: NEW_INVOICE_ROW_COUNT }, () => createEmptyManualInvoiceItem())
+function createInitialInvoiceItems(showProductCatalog: boolean): InvoiceItem[] {
+  const count = showProductCatalog ? NEW_INVOICE_ROW_COUNT_WITH_CATALOG : NEW_INVOICE_ROW_COUNT
+  return Array.from({ length: count }, () => createEmptyManualInvoiceItem())
 }
 
 export interface Invoice {
@@ -246,7 +250,7 @@ export default function InvoicePage() {
 
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
-    items: createInitialInvoiceItems(),
+    items: createInitialInvoiceItems(getInitialShowProductCatalog()),
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: search.customerId?.trim() || 'walk-in',
@@ -361,7 +365,7 @@ export default function InvoicePage() {
   const resetSaleInvoiceForm = useCallback(() => {
     const preferredUrduOnly = getInitialUrduOnlyPreference()
     setInvoice({
-      items: createInitialInvoiceItems(),
+      items: createInitialInvoiceItems(showProductCatalog),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -385,7 +389,7 @@ export default function InvoicePage() {
       roundingAdjustment: 0,
       notes: '',
     })
-  }, [preferredLanguage])
+  }, [preferredLanguage, showProductCatalog])
 
   const saleHeldList = useMemo(() => listSaleHeld(), [heldUiEpoch])
 
@@ -1277,7 +1281,7 @@ export default function InvoicePage() {
     const preferredUrduOnly = getInitialUrduOnlyPreference()
     // Reset invoice state
     setInvoice({
-      items: createInitialInvoiceItems(),
+      items: createInitialInvoiceItems(showProductCatalog),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -1448,7 +1452,7 @@ export default function InvoicePage() {
     
     // Reset invoice state for new invoice
     setInvoice({
-      items: createInitialInvoiceItems(),
+      items: createInitialInvoiceItems(showProductCatalog),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -1478,7 +1482,7 @@ export default function InvoicePage() {
     
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
-  }, [preferredLanguage, refreshProducts])
+  }, [preferredLanguage, refreshProducts, showProductCatalog])
 
   const handleConvertPending = () => {
     clearSaleWorkspace()
